@@ -9,14 +9,14 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 
 # ----------------------------
-# Configurações do JWT
+# JWT Settings
 # ----------------------------
-SECRET_KEY = "YOUR_SECRET_KEY_CHANGE_THIS"  # muda para algo secreto
+SECRET_KEY = "YOUR_SECRET_KEY_CHANGE_THIS"  # change for something secret
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # ----------------------------
-# Passlib context para bcrypt
+# Passlib context for bcrypt
 # ----------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
