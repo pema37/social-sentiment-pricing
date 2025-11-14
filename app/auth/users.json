@@ -1,0 +1,14 @@
+[
+    {
+        "username": "nazir",
+        "email": "nazir@example.com",
+        "password_hash": "$2b$12$wrw8nZWYX1s1hsUdKVP2ieMerCwcixEJ0FXiV3bvYGv8xqBstGoUa",
+        "role": "USER"
+    },
+    {
+        "username": "IbnNuro",
+        "email": "ibnnur@sst.com",
+        "password_hash": "$2b$12$S0kEI.Mjplu5THBMnNUoZu4t./9ORbN8UAbpMWJoiBYLjjMCJ4eWu",
+        "role": "USER"
+    }
+]
