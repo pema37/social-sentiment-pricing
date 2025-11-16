@@ -10,5 +10,11 @@
         "email": "ibnnur@sst.com",
         "password_hash": "$2b$12$S0kEI.Mjplu5THBMnNUoZu4t./9ORbN8UAbpMWJoiBYLjjMCJ4eWu",
         "role": "USER"
+    },
+    {
+        "username": "ibn",
+        "email": "ibn@gmail.com",
+        "password_hash": "$2b$12$L1K.4t1zuZSotgW6FnsqzuO0ELExS8yp/R5DBwYowH.zbn8qLPXAy",
+        "role": "USER"
     }
 ]

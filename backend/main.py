@@ -5,11 +5,15 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional
-from app.auth.security import (
-    hash_password, verify_password, create_access_token, decode_access_token,
-    save_user, load_users
-)
 from pydantic import BaseModel, EmailStr
+from backend.auth.security import hash_password, verify_password, create_access_token
+from backend.auth.security import save_user, load_users
+
+# from app.auth.security import (
+#     hash_password, verify_password, create_access_token, decode_access_token,
+#     save_user, load_users
+# )
+
 
 # ----------------------------
 # Initialize FastAPI app
