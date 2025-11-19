@@ -3,6 +3,9 @@
 import os
 from sqlmodel import create_engine, Session
 from dotenv import load_dotenv
+from ..core.config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+
+
 
 # Load environment variables from the .env file
 load_dotenv()

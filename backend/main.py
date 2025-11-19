@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.v1.routes.auth import router as auth_router
 
+
+app = FastAPI()
+
+
+
 app = FastAPI(
     title="Social Sentiment Pricing API",
     version="0.1.0",
@@ -16,6 +21,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/teste")
+async def teste():
+    return {"mensagem": "Hello, Ibn!"}
 
 
 @app.get("/")
