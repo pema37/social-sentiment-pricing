@@ -14,7 +14,7 @@ const Sidebar = () => (
         <nav className="space-y-2">
             {[
                 { name: 'Dashboard', icon: '🏠', active: true, href: '/dashboard' },
-                { name: 'Products', icon: '📦', href: '/products' },
+                { name: 'Products', icon: '📦', href: '/dashboard/products' },
                 { name: 'Competitors', icon: '🤝', href: '/competitors' },
                 { name: 'Sentiment', icon: '📈', href: '/sentiment' },
                 { name: 'Price Suggestions', icon: '$', href: '/price-suggestions' },

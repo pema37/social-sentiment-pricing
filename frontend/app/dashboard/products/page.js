@@ -12,7 +12,7 @@ const Sidebar = () => (
         <nav className="space-y-2">
             {[
                 { name: 'Dashboard', icon: '🏠', active: false, href: '/dashboard' },
-                { name: 'Products', icon: '📦', active: true, href: '/products' }, // Active for this page
+                { name: 'Products', icon: '📦', active: true, href: '/dashboard/products' }, // Active for this page
                 { name: 'Competitors', icon: '🤝', active: false, href: '/competitors' },
                 { name: 'Sentiment', icon: '📈', active: false, href: '/sentiment' },
                 { name: 'Price Suggestions', icon: '$', active: false, href: '/price-suggestions' },
@@ -110,7 +110,11 @@ export default function ProductsPage() {
                                         </td>
                                         <td className="px-3 py-4 whitespace-nowrap text-sm">
                                             <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-1 px-3 rounded-md transition-colors text-xs flex items-center">
-                                                <span className="mr-1">👁️</span> View
+                                                <span className="mr-1">👁️</span>   
+ <Link href="/dashboard/products/productId" >
+                         view
+                    </Link>
+
                                             </button>
                                         </td>
                                     </tr>
