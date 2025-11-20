@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "app/components/ViewAllLink.js", "app/auth/login/page.js", "app/auth/register/page.js", "app/dashboard/page.js", "app/dashboard/suggestions/page.js", "app/dashboard/forgotpass/page.js"  ],
   "exclude": ["node_modules"]
 }
