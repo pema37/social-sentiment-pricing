@@ -1,6 +1,6 @@
 
 
-import React from 'react';
+//import React from 'react';
 
 import ViewAllLink from '../components/ViewAllLink.js';
 
@@ -22,8 +22,7 @@ const Sidebar = () => (
                 { name: 'API Keys', icon: '🔑', href: '/api-keys' },
                 { name: 'Admin', icon: '👤', href: '/admin' },
             ].map((item) => (
-                // Note: The Sidebar links should also ideally use a Client Component Link wrapper,
-                // but for simplicity in this combined file, we use plain <a> tags as a placeholder.
+                
                 <a 
                     key={item.name}
                     href={item.href}
