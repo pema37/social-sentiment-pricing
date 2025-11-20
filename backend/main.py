@@ -1,36 +1,34 @@
+# main.py
+
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from backend.api.v1.routes.auth import router as auth_router
+from backend.services.db import get_db_connection
 
+# -------------------------------------------------------------
+# Create the FastAPI instance.
+# The 'title' is optional but useful for documentation (Swagger UI).
+# -------------------------------------------------------------
+app = FastAPI(title="Social Sentiment Pricing API")
 
-app = FastAPI()
+# -------------------------------------------------------------
+# GET /db-test
+# Simple endpoint used to verify that the backend can connect to
+# the PostgreSQL database successfully.
+# This endpoint should NOT exist in production.
+# -------------------------------------------------------------
+@app.get("/db-test")
+def test_db():
+    """
+    Attempts to open and close a database connection.
+    If no exception is raised, the connection is considered valid.
+    """
+    conn = get_db_connection()  # Try to connect
+    conn.close()                # Close after successful connection
+    return {"status": "Database connection successful"}
 
-
-
-app = FastAPI(
-    title="Social Sentiment Pricing API",
-    version="0.1.0",
-)
-
-# CORS – for now allow everything (we’ll tighten later)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # TODO: restrict in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/teste")
-async def teste():
-    return {"mensagem": "Hello, Ibn!"}
-
-
-@app.get("/")
-def read_root():
-    return {"message": "SSP backend is running"}
-
-
-# Auth endpoints
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+# -------------------------------------------------------------
+# Include all API routes for authentication-related operations.
+# These routes will be accessible under the prefix /api/v1
+# Example: /api/v1/login
+# -------------------------------------------------------------
+app.include_router(auth_router, prefix="/api/v1")
