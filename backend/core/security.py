@@ -1,19 +1,16 @@
 # backend/core/security.py
 
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from dotenv import load_dotenv
 
-# Load variables from .env (JWT_SECRET_KEY)
-load_dotenv()
+from backend.core.config import settings
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+SECRET_KEY = settings.JWT_SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Password hashing context (bcrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
