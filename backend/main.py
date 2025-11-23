@@ -8,7 +8,6 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS – for now allow everything (we’ll tighten later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # TODO: restrict in production
@@ -23,5 +22,5 @@ def read_root():
     return {"message": "SSP backend is running"}
 
 
-# Auth endpoints
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+# ✅ Versioned API base: /api/v1
+app.include_router(auth_router, prefix="/api/v1")

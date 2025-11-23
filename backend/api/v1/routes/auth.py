@@ -1,55 +1,56 @@
+# backend/api/v1/routes/auth.py
+
+from typing import Callable
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session, select
 
-from backend.db.session import get_session
-from backend.models.user import User
 from backend.core.security import (
     hash_password,
     verify_password,
     create_access_token,
     decode_access_token,
 )
+from backend.db.session import get_session
+from backend.models import User
+from backend.schemas.auth import (
+    RegisterRequest,
+    LoginRequest,
+    UserResponse,
+    TokenResponse,
+)
 
-router = APIRouter()
+# Router prefix becomes /api/v1/auth once included in main.py
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
-
-class UserCreate(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
-    role: str = "USER"
-
-
-class UserRead(BaseModel):
-    id: int
-    username: str
-    email: EmailStr
-    role: str
+# Correct OAuth2 login endpoint after versioning
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
+# ───────────────────── Current user helpers ───────────────────── #
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     session: Session = Depends(get_session),
 ) -> User:
+    """Extract user from JWT."""
     payload = decode_access_token(token)
     if payload is None or "sub" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            detail="Invalid or expired token",
         )
 
-    email = payload["sub"]
-    user = session.exec(select(User).where(User.email == email)).first()
+    try:
+        user_id = int(payload["sub"])
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
 
+    user = session.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -59,7 +60,8 @@ def get_current_user(
     return user
 
 
-def require_role(required_role: str):
+def require_role(required_role: str) -> Callable[[User], User]:
+    """Restrict access based on user.role."""
     def role_checker(user: User = Depends(get_current_user)) -> User:
         if user.role != required_role:
             raise HTTPException(
@@ -71,14 +73,21 @@ def require_role(required_role: str):
     return role_checker
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+# ───────────────────────────── Auth Endpoints ───────────────────────────── #
+
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def register(
-    user_in: UserCreate,
+    payload: RegisterRequest,
     session: Session = Depends(get_session),
 ):
-    existing = session.exec(
-        select(User).where(User.email == user_in.email.lower())
-    ).first()
+    """Create a new user account."""
+    email = payload.email.lower()
+
+    existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -86,37 +95,43 @@ def register(
         )
 
     user = User(
-        username=user_in.username,
-        email=user_in.email.lower(),
-        password_hash=hash_password(user_in.password),
-        role=user_in.role,
+        email=email,
+        hashed_password=hash_password(payload.password),
     )
+
     session.add(user)
     session.commit()
     session.refresh(user)
+
     return user
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=TokenResponse)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    payload: LoginRequest,
     session: Session = Depends(get_session),
 ):
-    email = form_data.username.lower()
+    """Login and receive a JWT token."""
+    email = payload.email.lower()
     user = session.exec(select(User).where(User.email == email)).first()
 
-    if not user or not verify_password(form_data.password, user.password_hash):
+    if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
 
-    token = create_access_token({"sub": user.email, "role": user.role})
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role
+    })
+
+    return TokenResponse(access_token=token)
 
 
-@router.get("/me", response_model=UserRead)
+@router.get("/me", response_model=UserResponse)
 def read_me(current_user: User = Depends(get_current_user)):
+    """Return the authenticated user's info."""
     return current_user
 
 
