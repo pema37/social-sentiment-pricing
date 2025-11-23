@@ -1,0 +1,35 @@
+# backend/api/v1/routes/health.py
+
+from datetime import datetime
+from fastapi import APIRouter, Depends
+from sqlmodel import Session, text
+
+from backend.db.session import get_session
+from backend.schemas.health import HealthResponse
+
+router = APIRouter(prefix="/health", tags=["health"])
+
+START_TIME = datetime.utcnow()
+
+
+@router.get("/", response_model=HealthResponse)
+def health_check(session: Session = Depends(get_session)):
+    """Basic health check."""
+
+    # Test DB connection
+    try:
+        session.exec(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+
+    uptime_seconds = (datetime.utcnow() - START_TIME).total_seconds()
+
+    return HealthResponse(
+        status="ok",
+        api="Social Sentiment Pricing API",
+        version="v1",
+        database=db_status,
+        uptime_seconds=uptime_seconds,
+        timestamp_utc=datetime.utcnow().isoformat(),
+    )
