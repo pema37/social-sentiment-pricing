@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.v1.routes.auth import router as auth_router
 from backend.api.v1.routes.health import router as health_router
+from backend.api.v1.routes.users import router as users_router
 
 app = FastAPI(
     title="Social Sentiment Pricing API",
@@ -28,3 +29,4 @@ def read_root():
 # Versioned API base: /api/v1
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(health_router, prefix="/api/v1")
+app.include_router(users_router, prefix="/api/v1")

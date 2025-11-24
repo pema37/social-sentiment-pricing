@@ -3,14 +3,16 @@
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session, select
 
 from backend.core.security import (
     hash_password,
     verify_password,
     create_access_token,
-    decode_access_token,
+    get_current_user,
+    create_reset_token,
+    decode_reset_token,
+    get_password_hash,
 )
 from backend.db.session import get_session
 from backend.models import User
@@ -19,46 +21,14 @@ from backend.schemas.auth import (
     LoginRequest,
     UserResponse,
     TokenResponse,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 
-# Router prefix becomes /api/v1/auth once included in main.py
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Correct OAuth2 login endpoint after versioning
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-
-# ───────────────────── Current user helpers ───────────────────── #
-
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    session: Session = Depends(get_session),
-) -> User:
-    """Extract user from JWT."""
-    payload = decode_access_token(token)
-    if payload is None or "sub" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        )
-
-    try:
-        user_id = int(payload["sub"])
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-
-    user = session.get(User, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
-    return user
-
+# ───────────────────── Role helper ───────────────────── #
 
 def require_role(required_role: str) -> Callable[[User], User]:
     """Restrict access based on user.role."""
@@ -96,6 +66,7 @@ def register(
 
     user = User(
         email=email,
+        username=payload.username,
         hashed_password=hash_password(payload.password),
     )
 
@@ -123,7 +94,7 @@ def login(
 
     token = create_access_token({
         "sub": str(user.id),
-        "role": user.role
+        "role": user.role,
     })
 
     return TokenResponse(access_token=token)
@@ -143,3 +114,46 @@ def get_user_data(current_user: User = Depends(require_role("USER"))):
 @router.get("/admin/data")
 def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
     return {"message": f"Hello {current_user.email}! You have ADMIN access."}
+
+
+# ───────────────────────── PASSWORD RESET ───────────────────────── #
+
+@router.post("/forgot-password")
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    session: Session = Depends(get_session),
+):
+    """Send a password reset token (email not revealed)."""
+    email = payload.email.lower()
+    user = session.exec(select(User).where(User.email == email)).first()
+
+    # Always return success — do not reveal if the account exists
+    if user:
+        token = create_reset_token(user.id)
+        print("===== PASSWORD RESET TOKEN =====")
+        print(token)
+        print("================================")
+
+    return {"detail": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(
+    payload: ResetPasswordRequest,
+    session: Session = Depends(get_session),
+):
+    """Reset password using a valid reset token."""
+    user_id = decode_reset_token(payload.token)
+
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token",
+        )
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    session.add(user)
+    session.commit()
+
+    return {"detail": "Password reset successful"}
