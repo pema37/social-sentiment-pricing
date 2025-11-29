@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, FormEvent } from 'react';
 import {
     Settings, User, Bell, Cpu, Repeat, Mail, Globe, BarChart2, MessageSquare, AlertTriangle
