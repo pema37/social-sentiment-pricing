@@ -1,10 +1,13 @@
-// frontend/app/layout.tsx
-import type { Metadata } from "next";
-import "./globals.css";
+// Root Layout
+// Wraps the entire app with providers and global styles
 
+import type { Metadata } from 'next';
+import './globals.css';
+
+// SEO metadata
 export const metadata: Metadata = {
-  title: "Social Sentiment Pricing",
-  description: "AI-powered dynamic pricing based on social sentiment.",
+  title: 'Social Sentiment Pricing',
+  description: 'AI-powered pricing based on social sentiment analysis',
 };
 
 export default function RootLayout({
@@ -14,7 +17,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-slate-900">{children}</body>
+      <body>
+        {children}
+      </body>
     </html>
   );
 }
+

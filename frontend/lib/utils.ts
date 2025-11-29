@@ -1,6 +1,46 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+// Utility functions used throughout the app
 
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+// Merge Tailwind classes safely (handles conflicts like "p-2 p-4" → "p-4")
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
+
+// Format number as currency (e.g., 1234.56 → "$1,234.56")
+export function formatCurrency(amount: number, currency = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(amount);
+}
+
+// Format percentage with sign (e.g., 3.5 → "+3.5%", -2.1 → "-2.1%")
+export function formatPercentage(value: number, decimals = 1): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+}
+
+// Format date (e.g., "2024-01-15" → "Jan 15, 2024")
+export function formatDate(date: string | Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(date));
+}
+
+// Format relative time (e.g., "5m ago", "2h ago", "3d ago")
+export function formatRelativeTime(date: string | Date): string {
+  const now = new Date();
+  const then = new Date(date);
+  const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+  
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  
+  return formatDate(date);
+}
+

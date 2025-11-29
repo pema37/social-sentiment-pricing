@@ -1,23 +1,40 @@
-import React from "react";
+// SectionHeader Component
+// Used at the top of pages/sections with title and optional action button
 
-type SectionHeaderProps = {
-  title: string;
-  description?: string;
-  right?: React.ReactNode; // ex: button, link, dropdown
-};
+import { cn } from '@/lib/utils';
+import { ReactNode } from 'react';
 
-export function SectionHeader({ title, description, right }: SectionHeaderProps) {
+interface SectionHeaderProps {
+  title: string;              // Main heading text
+  description?: string;       // Optional subtitle/description
+  action?: ReactNode;         // Optional action button on the right
+  className?: string;
+}
+
+export function SectionHeader({ 
+  title, 
+  description, 
+  action, 
+  className 
+}: SectionHeaderProps) {
   return (
-    <div className="flex items-start justify-between mb-4">
+    <div className={cn('flex items-center justify-between mb-6', className)}>
+      {/* Left side - Title and description */}
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        <h1 className="text-2xl font-semibold text-gray-900">
+          {title}
+        </h1>
         {description && (
-          <p className="text-sm text-slate-500 mt-1">{description}</p>
+          <p className="mt-1 text-sm text-gray-500">
+            {description}
+          </p>
         )}
       </div>
-
-      {right && <div>{right}</div>}
+      
+      {/* Right side - Action button */}
+      {action && (
+        <div>{action}</div>
+      )}
     </div>
   );
 }
-

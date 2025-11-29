@@ -1,30 +1,32 @@
-// frontend/components/layout/AuthShell.tsx
-import React from "react";
+// AuthShell Component
+// Wraps login/register pages with centered card layout
 
-type AuthShellProps = {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-};
+interface AuthShellProps {
+  children: React.ReactNode;  // Form content goes here
+}
 
-export function AuthShell({ title, description, children }: AuthShellProps) {
+export function AuthShell({ children }: AuthShellProps) {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      {/* Centered container */}
       <div className="w-full max-w-md">
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 px-6 py-8 md:px-8">
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
-            {description && (
-              <p className="mt-2 text-sm text-slate-500">{description}</p>
-            )}
+        {/* Logo / Brand */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-600 rounded-xl mb-4">
+            <span className="text-white font-bold text-lg">SSP</span>
           </div>
-
-          {children}
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Social Sentiment Pricing
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">
+            AI-powered pricing based on social sentiment
+          </p>
         </div>
 
-        <p className="mt-4 text-center text-xs text-slate-400">
-          Social Sentiment Pricing · v0.1
-        </p>
+        {/* Card with form content */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8">
+          {children}
+        </div>
       </div>
     </div>
   );

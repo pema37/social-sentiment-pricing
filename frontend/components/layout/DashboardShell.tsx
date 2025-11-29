@@ -1,28 +1,30 @@
+// DashboardShell Component
+// Wraps all dashboard pages with Sidebar + Topbar + content area
 
-import Sidebar from "./Sidebar"; 
-import { Topbar } from "./Topbar";
+import { Sidebar } from './Sidebar';
+import { Topbar } from './Topbar';
 
-type DashboardShellProps = {
-	title?: string;
-	children: React.ReactNode;
-};
-
-export function DashboardShell({ title, children }: DashboardShellProps) {
-	return (
-		<div className="min-h-screen bg-slate-50 text-slate-900 flex">
-			{/* Sidebar */}
-			<Sidebar />
-
-			{/* Main area */}
-			<div className="flex-1 flex flex-col">
-				{/* Topbar */}
-				<Topbar title={title ?? "Dashboard"} />
-
-				{/* Page content */}
-				<main className="flex-1 px-4 md:px-8 py-6 md:py-8">
-					<div className="max-w-6xl mx-auto">{children}</div>
-				</main>
-			</div>
-		</div>
-	);
+interface DashboardShellProps {
+  children: React.ReactNode;  // Page content goes here
 }
+
+export function DashboardShell({ children }: DashboardShellProps) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Sidebar - fixed on the left */}
+      <Sidebar />
+
+      {/* Main content area - offset by sidebar width (240px = w-60) */}
+      <div className="ml-60">
+        {/* Topbar - at the top */}
+        <Topbar />
+
+        {/* Page content - with padding */}
+        <main className="p-10">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+

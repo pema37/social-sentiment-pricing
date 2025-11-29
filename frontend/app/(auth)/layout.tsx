@@ -1,18 +1,12 @@
-// frontend/app/(auth)/layout.tsx
-import React from "react";
-import { AuthShell } from "@/components/layout/AuthShell";
+// Auth Layout
+// Wraps all auth pages (login, register, forgot-password)
+
+import { AuthShell } from '@/components/layout';
 
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AuthShell
-      title="Welcome to SSP"
-      description="Log in or create an account to manage your pricing."
-    >
-      {children}
-    </AuthShell>
-  );
+  return <AuthShell>{children}</AuthShell>;
 }
