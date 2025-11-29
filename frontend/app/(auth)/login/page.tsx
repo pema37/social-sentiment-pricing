@@ -1,16 +1,30 @@
+
 "use client";
 
-import { useState } from "react";
+import { useState, FormEvent, ChangeEvent } from "react";
 import Link from "next/link";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+export default function LoginPage(): JSX.Element {
+  // Explicitly defining the type for state variables as string
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
-  const handleLogin = (e) => {
+  // Explicitly defining the type for the event object (FormEvent)
+  const handleLogin = (e: FormEvent) => {
     e.preventDefault();
-    console.log("Email:", email);
-    console.log("Password:", password);
+    // 🎯 Integration Point: Authenticate user here
+    console.log("Attempting login with Email:", email);
+    // verify credentials and redirect.
+    //  router.push('/dashboard'); 
+  };
+
+  // Explicitly defining the type for the change event
+  const handleEmailChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+  };
+
+  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
   };
 
   return (
@@ -33,7 +47,7 @@ export default function LoginPage() {
               placeholder="Enter your email"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={handleEmailChange}
             />
           </div>
 
@@ -48,7 +62,7 @@ export default function LoginPage() {
               placeholder="Enter your password"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={handlePasswordChange}
             />
 
             {/* Forgot Password link (right side) */}
@@ -69,13 +83,14 @@ export default function LoginPage() {
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-200 shadow-md"
           >
             Login
+           
           </button>
         </form>
 
         {/* Sign up link */}
         <p className="text-center text-gray-600 mt-5">
           Don't have an account?{" "}
-          <Link href="/auth/register" className="text-blue-600 font-semibold hover:underline">
+          <Link href="/register" className="text-blue-600 font-semibold hover:underline">
             Sign up
           </Link>
         </p>
