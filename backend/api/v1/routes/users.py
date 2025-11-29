@@ -1,114 +1,208 @@
 # backend/api/v1/routes/users.py
 
-from typing import List
+from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
+from sqlmodel import Session, select
 
-from backend.db.session import get_db
-from backend.models.user import User
-from backend.schemas.user import UserRead, UserUpdateMe
-from backend.core.security import get_current_user, get_password_hash
-from backend.core.deps import require_admin
+from backend.core.security import hash_password, verify_password
+from backend.db.session import get_session
+from backend.models import User
+from backend.api.v1.routes.auth import get_current_user, require_role
+
+router = APIRouter(prefix="/users", tags=["users"])
 
 
-router = APIRouter(prefix="/users", tags=["Users"])
+# ───────────────────── Schemas ───────────────────── #
+
+class UserUpdateRequest(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
-# ============================
-# GET /users/me
-# ============================
-@router.get("/me", response_model=UserRead)
-def read_current_user(
-    current_user: User = Depends(get_current_user),
-) -> User:
-    """
-    Return the currently authenticated user's profile.
-    """
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class UserDetailResponse(BaseModel):
+    id: UUID
+    email: str
+    username: Optional[str]
+    role: str
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+# ───────────────────── User Self-Management ───────────────────── #
+
+@router.get("/me", response_model=UserDetailResponse)
+def get_my_profile(current_user: User = Depends(get_current_user)):
+    """Get current user's profile."""
     return current_user
 
 
-# ============================
-# PATCH /users/me
-# ============================
-@router.patch("/me", response_model=UserRead)
-def update_current_user(
-    payload: UserUpdateMe,
-    db: Session = Depends(get_db),
+@router.patch("/me", response_model=UserDetailResponse)
+def update_my_profile(
+    payload: UserUpdateRequest,
     current_user: User = Depends(get_current_user),
-) -> User:
-    """
-    Update current user's profile.
-
-    - username (must be unique)
-    - email (must be unique)
-    - full_name
-    - password (will be hashed)
-    """
-
-    # 1) Username uniqueness check
-    if payload.username and payload.username != current_user.username:
-        existing = db.query(User).filter(User.username == payload.username).first()
+    session: Session = Depends(get_session),
+):
+    """Update current user's profile (username, email)."""
+    
+    if payload.email is not None:
+        email = payload.email.lower()
+        # Check if email is taken by another user
+        existing = session.exec(
+            select(User).where(User.email == email, User.id != current_user.id)
+        ).first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken",
+                detail="Email already in use",
+            )
+        current_user.email = email
+
+    if payload.username is not None:
+        # Check if username is taken by another user
+        existing = session.exec(
+            select(User).where(User.username == payload.username, User.id != current_user.id)
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already in use",
             )
         current_user.username = payload.username
 
-    # 2) Email uniqueness check
-    if payload.email and payload.email != current_user.email:
-        existing = db.query(User).filter(User.email == payload.email).first()
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
-        current_user.email = payload.email
-
-    # 3) Full name
-    if payload.full_name is not None:
-        current_user.full_name = payload.full_name
-
-    # 4) Password (hash it before saving)
-    if payload.password:
-        current_user.hashed_password = get_password_hash(payload.password)
-
-    db.add(current_user)
-    db.commit()
-    db.refresh(current_user)
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
 
     return current_user
 
 
-# ============================
-# DELETE /users/me
-# ============================
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-def delete_current_user(
-    db: Session = Depends(get_db),
+@router.post("/me/change-password", status_code=status.HTTP_200_OK)
+def change_my_password(
+    payload: PasswordChangeRequest,
     current_user: User = Depends(get_current_user),
-) -> None:
-    """
-    Delete the currently authenticated user.
+    session: Session = Depends(get_session),
+):
+    """Change current user's password."""
+    
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
 
-    NOTE: This is a hard delete. In a real product you might want a soft delete.
-    """
-    db.delete(current_user)
-    db.commit()
-    return
+    if len(payload.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters",
+        )
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    session.add(current_user)
+    session.commit()
+
+    return {"message": "Password changed successfully"}
 
 
-# ============================
-# GET /users  (admin only)
-# ============================
-@router.get("/", response_model=List[UserRead])
-def list_users(
+@router.delete("/me", status_code=status.HTTP_200_OK)
+def delete_my_account(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Delete current user's account (soft delete - deactivates)."""
+    current_user.is_active = False
+    session.add(current_user)
+    session.commit()
+
+    return {"message": "Account deactivated successfully"}
+
+
+# ───────────────────── Admin Endpoints ───────────────────── #
+
+@router.get("/", response_model=list[UserDetailResponse])
+def list_all_users(
     skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),  # ADMIN ROLE CHECK
-) -> List[User]:
-    users = db.query(User).offset(skip).limit(limit).all()
+    limit: int = 50,
+    current_user: User = Depends(require_role("ADMIN")),
+    session: Session = Depends(get_session),
+):
+    """List all users (Admin only)."""
+    users = session.exec(
+        select(User).offset(skip).limit(limit)
+    ).all()
     return users
+
+
+@router.get("/{user_id}", response_model=UserDetailResponse)
+def get_user_by_id(
+    user_id: UUID,
+    current_user: User = Depends(require_role("ADMIN")),
+    session: Session = Depends(get_session),
+):
+    """Get a specific user by ID (Admin only)."""
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return user
+
+
+@router.patch("/{user_id}/deactivate", status_code=status.HTTP_200_OK)
+def deactivate_user(
+    user_id: UUID,
+    current_user: User = Depends(require_role("ADMIN")),
+    session: Session = Depends(get_session),
+):
+    """Deactivate a user account (Admin only)."""
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate your own account",
+        )
+
+    user.is_active = False
+    session.add(user)
+    session.commit()
+
+    return {"message": f"User {user.email} deactivated"}
+
+
+@router.patch("/{user_id}/activate", status_code=status.HTTP_200_OK)
+def activate_user(
+    user_id: UUID,
+    current_user: User = Depends(require_role("ADMIN")),
+    session: Session = Depends(get_session),
+):
+    """Reactivate a user account (Admin only)."""
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.is_active = True
+    session.add(user)
+    session.commit()
+
+    return {"message": f"User {user.email} activated"}
+
 

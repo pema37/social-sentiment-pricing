@@ -1,8 +1,9 @@
 # backend/api/v1/routes/products.py
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
@@ -41,7 +42,7 @@ def create_product(
         sku=payload.sku,
         description=payload.description,
         base_price=payload.base_price,
-        current_price=payload.base_price,  # Start at base price
+        current_price=payload.base_price,
         min_price=payload.min_price,
         max_price=payload.max_price,
         sentiment_multiplier=payload.sentiment_multiplier,
@@ -69,7 +70,7 @@ def list_products(
 
 @router.get("/{product_id}", response_model=ProductRead)
 def get_product(
-    product_id: str,
+    product_id: UUID,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -93,7 +94,7 @@ def get_product(
 
 @router.patch("/{product_id}", response_model=ProductRead)
 def update_product(
-    product_id: str,
+    product_id: UUID,
     payload: ProductUpdate,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -113,12 +114,11 @@ def update_product(
             detail="Not authorized to update this product",
         )
 
-    # Update only provided fields
     update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(product, key, value)
 
-    product.updated_at = datetime.utcnow()
+    product.updated_at = datetime.now(timezone.utc)
 
     session.add(product)
     session.commit()
@@ -129,7 +129,7 @@ def update_product(
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
-    product_id: str,
+    product_id: UUID,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -158,7 +158,7 @@ def delete_product(
 
 @router.get("/{product_id}/price-suggestion", response_model=PriceSuggestion)
 def get_price_suggestion(
-    product_id: str,
+    product_id: UUID,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -177,11 +177,9 @@ def get_price_suggestion(
             detail="Not authorized to access this product",
         )
 
-    # Get recent sentiments for this product
     statement = select(Sentiment).where(Sentiment.product_id == product_id)
     sentiments = session.exec(statement).all()
 
-    # Calculate aggregate sentiment
     if sentiments:
         sentiment_data = [
             {
@@ -199,7 +197,6 @@ def get_price_suggestion(
         sentiment_score = Decimal("0")
         mention_volume = 0
 
-    # Calculate price suggestion
     suggestion = pricing_engine.calculate_suggestion(
         product=product,
         sentiment_score=sentiment_score,
@@ -207,5 +204,4 @@ def get_price_suggestion(
     )
 
     return suggestion
-
 

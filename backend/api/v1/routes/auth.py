@@ -1,6 +1,7 @@
 # backend/api/v1/routes/auth.py
 
 from typing import Callable
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -13,7 +14,6 @@ from backend.core.security import (
     decode_access_token,
     create_reset_token,
     decode_reset_token,
-    get_password_hash,
 )
 from backend.db.session import get_session
 from backend.models import User
@@ -29,6 +29,14 @@ from backend.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login/oauth")
+
+
+# ───────────────────── Role hierarchy ───────────────────── #
+
+ROLE_HIERARCHY = {
+    "ADMIN": 100,
+    "USER": 10,
+}
 
 
 # ───────────────────── Current user helpers ───────────────────── #
@@ -52,22 +60,37 @@ def get_current_user(
             detail="Invalid token payload",
         )
 
-    user = session.get(User, user_id)
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID format",
+        )
+
+    user = session.get(User, user_uuid)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated",
+        )
+
     return user
 
 
-# ───────────────────── Role helper ───────────────────── #
-
-def require_role(required_role: str) -> Callable[[User], User]:
-    """Restrict access based on user.role."""
+def require_role(min_role: str) -> Callable[[User], User]:
+    """Restrict access based on role hierarchy. ADMIN can access everything."""
     def role_checker(user: User = Depends(get_current_user)) -> User:
-        if user.role != required_role:
+        user_level = ROLE_HIERARCHY.get(user.role, 0)
+        required_level = ROLE_HIERARCHY.get(min_role, 0)
+
+        if user_level < required_level:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Forbidden: insufficient permissions",
@@ -100,7 +123,6 @@ def register(
 
     user = User(
         email=email,
-        username=payload.username,
         hashed_password=hash_password(payload.password),
     )
 
@@ -126,6 +148,12 @@ def login(
             detail="Incorrect email or password",
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated",
+        )
+
     token = create_access_token({
         "sub": str(user.id),
         "role": user.role,
@@ -149,9 +177,15 @@ def login_oauth(
             detail="Incorrect email or password",
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated",
+        )
+
     token = create_access_token({
         "sub": str(user.id),
-        "role": user.role
+        "role": user.role,
     })
 
     return TokenResponse(access_token=token)
@@ -165,36 +199,48 @@ def read_me(current_user: User = Depends(get_current_user)):
 
 @router.get("/user/data")
 def get_user_data(current_user: User = Depends(require_role("USER"))):
+    """Example endpoint requiring USER role (or higher)."""
     return {"message": f"Hello {current_user.email}! You have USER access."}
 
 
 @router.get("/admin/data")
 def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
+    """Example endpoint requiring ADMIN role."""
     return {"message": f"Hello {current_user.email}! You have ADMIN access."}
 
 
-# ───────────────────────── PASSWORD RESET ───────────────────────── #
+# ───────────────────────────── Password Reset ───────────────────────────── #
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
 def forgot_password(
     payload: ForgotPasswordRequest,
     session: Session = Depends(get_session),
 ):
-    """Send a password reset token (email not revealed)."""
+    """
+    Request a password reset token.
+    In production, this would send an email. For dev, it prints the token.
+    """
     email = payload.email.lower()
     user = session.exec(select(User).where(User.email == email)).first()
 
-    # Always return success — do not reveal if the account exists
-    if user:
-        token = create_reset_token(user.id)
-        print("===== PASSWORD RESET TOKEN =====")
-        print(token)
-        print("================================")
+    if not user:
+        return {"message": "If that email exists, a reset link has been sent"}
 
-    return {"detail": "If that email exists, a reset link has been sent."}
+    if not user.is_active:
+        return {"message": "If that email exists, a reset link has been sent"}
+
+    reset_token = create_reset_token(str(user.id))
+
+    # TODO: In production, send this via email
+    print(f"\n{'='*50}")
+    print(f"PASSWORD RESET TOKEN FOR: {email}")
+    print(f"Token: {reset_token}")
+    print(f"{'='*50}\n")
+
+    return {"message": "If that email exists, a reset link has been sent"}
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
 def reset_password(
     payload: ResetPasswordRequest,
     session: Session = Depends(get_session),
@@ -202,15 +248,37 @@ def reset_password(
     """Reset password using a valid reset token."""
     user_id = decode_reset_token(payload.token)
 
-    user = session.exec(select(User).where(User.id == user_id)).first()
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token format",
+        )
+
+    user = session.get(User, user_uuid)
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid token",
+            detail="Invalid or expired reset token",
         )
 
-    user.hashed_password = get_password_hash(payload.new_password)
+    if len(payload.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+
+    user.hashed_password = hash_password(payload.new_password)
     session.add(user)
     session.commit()
 
-    return {"detail": "Password reset successful"}
+    return {"message": "Password reset successfully"}
+

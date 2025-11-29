@@ -3,6 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ class ProductCreate(BaseModel):
     base_price: Decimal = Field(..., gt=0)
     min_price: Optional[Decimal] = Field(default=None, gt=0)
     max_price: Optional[Decimal] = Field(default=None, gt=0)
-    sentiment_multiplier: Decimal = Field(default=0.1, ge=0, le=1)
+    sentiment_multiplier: Decimal = Field(default=Decimal("0.1"), ge=0, le=1)
     auto_pricing_enabled: bool = False
     keywords: List[str] = []
 
@@ -37,8 +38,8 @@ class ProductUpdate(BaseModel):
 # ============== Response Schemas ==============
 
 class ProductRead(BaseModel):
-    id: str
-    user_id: str
+    id: UUID
+    user_id: UUID
     name: str
     sku: Optional[str]
     description: Optional[str]
@@ -59,7 +60,7 @@ class ProductRead(BaseModel):
 # ============== Price Suggestion Schema ==============
 
 class PriceSuggestion(BaseModel):
-    product_id: str
+    product_id: UUID
     current_price: Decimal
     suggested_price: Decimal
     change_percent: Decimal

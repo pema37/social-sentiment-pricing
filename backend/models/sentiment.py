@@ -1,42 +1,40 @@
 # backend/models/sentiment.py
 
-import uuid
-from datetime import datetime
+import uuid as uuid_lib
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 
 class Sentiment(SQLModel, table=True):
     __tablename__ = "sentiments"
 
-    # Primary key (UUID)
-    id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()),
-        primary_key=True,
-        max_length=36
+    id: uuid_lib.UUID = Field(
+        default_factory=uuid_lib.uuid4,
+        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
     )
 
-    # Foreign key to Product
-    product_id: str = Field(foreign_key="products.id", index=True, max_length=36)
+    product_id: uuid_lib.UUID = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True),
+    )
 
-    # Source of the sentiment data
-    source: str = Field(max_length=50)  # twitter, reddit, tiktok, manual
-
-    # The actual text that was analyzed
+    source: str = Field(max_length=50)
     raw_text: str
 
-    # VADER sentiment scores (-1.0 to 1.0)
-    compound_score: Decimal = Field(max_digits=4, decimal_places=3)  # -1.000 to 1.000
-    positive_score: Decimal = Field(max_digits=4, decimal_places=3)  # 0.000 to 1.000
-    negative_score: Decimal = Field(max_digits=4, decimal_places=3)  # 0.000 to 1.000
-    neutral_score: Decimal = Field(max_digits=4, decimal_places=3)   # 0.000 to 1.000
+    compound_score: Decimal = Field(max_digits=4, decimal_places=3)
+    positive_score: Decimal = Field(max_digits=4, decimal_places=3)
+    negative_score: Decimal = Field(max_digits=4, decimal_places=3)
+    neutral_score: Decimal = Field(max_digits=4, decimal_places=3)
 
-    # Optional metadata
     author: Optional[str] = Field(default=None, max_length=255)
     url: Optional[str] = Field(default=None)
 
-    # Timestamp
-    analyzed_at: datetime = Field(default_factory=datetime.utcnow)
+    analyzed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
 

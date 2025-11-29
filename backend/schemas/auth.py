@@ -1,17 +1,13 @@
 # backend/schemas/auth.py
 
+from uuid import UUID
+from datetime import datetime
 from pydantic import BaseModel, EmailStr
-from typing import Optional
 
-
-# -----------------------------
-# AUTH: REGISTER / LOGIN
-# -----------------------------
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    username: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -20,10 +16,13 @@ class LoginRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: str  # Changed from int to str for UUID
+    id: UUID
     email: EmailStr
     username: str | None = None
     role: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -34,10 +33,6 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-# -----------------------------
-# PASSWORD RESET
-# -----------------------------
-
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -45,4 +40,4 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
-      
+

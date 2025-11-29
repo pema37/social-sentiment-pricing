@@ -1,44 +1,42 @@
 # backend/models/price_history.py
 
-import uuid
-from datetime import datetime
+import uuid as uuid_lib
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 
 class PriceHistory(SQLModel, table=True):
     __tablename__ = "price_history"
 
-    # Primary key (UUID)
-    id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()),
-        primary_key=True,
-        max_length=36
+    id: uuid_lib.UUID = Field(
+        default_factory=uuid_lib.uuid4,
+        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
     )
 
-    # Foreign key to Product
-    product_id: str = Field(foreign_key="products.id", index=True, max_length=36)
+    product_id: uuid_lib.UUID = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True),
+    )
 
-    # Price change details
     old_price: Decimal = Field(max_digits=10, decimal_places=2)
     new_price: Decimal = Field(max_digits=10, decimal_places=2)
-    change_percent: Decimal = Field(max_digits=5, decimal_places=2)  # e.g., +5.25 or -3.50
+    change_percent: Decimal = Field(max_digits=5, decimal_places=2)
 
-    # Why the price changed
-    change_reason: str = Field(max_length=50)  # sentiment_adjustment, manual, competitor_response
+    change_reason: str = Field(max_length=50)
 
-    # Sentiment context at time of change
     sentiment_score_at_change: Optional[Decimal] = Field(
         default=None, max_digits=4, decimal_places=3
     )
-    sentiment_volume: Optional[int] = Field(default=None)  # Number of mentions analyzed
+    sentiment_volume: Optional[int] = Field(default=None)
 
-    # Who/what triggered the change
-    triggered_by: str = Field(max_length=50)  # system, user, api
+    triggered_by: str = Field(max_length=50)
 
-    # Timestamp
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
 

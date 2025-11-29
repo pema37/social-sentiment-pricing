@@ -7,3 +7,4 @@ passlib[bcrypt]
 psycopg2-binary
 python-dotenv
 vaderSentiment==3.3.2
+pydantic-settings
