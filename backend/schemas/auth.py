@@ -1,4 +1,5 @@
 # backend/schemas/auth.py
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -13,7 +14,7 @@ class LoginRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: int
+    id: str  # Changed from int to str for UUID
     email: EmailStr
     username: str | None = None
     role: str

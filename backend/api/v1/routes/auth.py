@@ -3,7 +3,7 @@
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from backend.core.security import (
@@ -21,11 +21,9 @@ from backend.schemas.auth import (
     TokenResponse,
 )
 
-# Router prefix becomes /api/v1/auth once included in main.py
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Correct OAuth2 login endpoint after versioning
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login/oauth")
 
 
 # ───────────────────── Current user helpers ───────────────────── #
@@ -42,9 +40,8 @@ def get_current_user(
             detail="Invalid or expired token",
         )
 
-    try:
-        user_id = int(payload["sub"])
-    except (TypeError, ValueError):
+    user_id = payload["sub"]
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
@@ -111,11 +108,34 @@ def login(
     payload: LoginRequest,
     session: Session = Depends(get_session),
 ):
-    """Login and receive a JWT token."""
+    """Login and receive a JWT token (JSON body)."""
     email = payload.email.lower()
     user = session.exec(select(User).where(User.email == email)).first()
 
     if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role
+    })
+
+    return TokenResponse(access_token=token)
+
+
+@router.post("/login/oauth", response_model=TokenResponse)
+def login_oauth(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_session),
+):
+    """Login via OAuth2 form (for Swagger UI)."""
+    email = form_data.username.lower()
+    user = session.exec(select(User).where(User.email == email)).first()
+
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -143,3 +163,4 @@ def get_user_data(current_user: User = Depends(require_role("USER"))):
 @router.get("/admin/data")
 def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
     return {"message": f"Hello {current_user.email}! You have ADMIN access."}
+
