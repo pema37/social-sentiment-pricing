@@ -32,4 +32,3 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(sentiment_router, prefix="/api/v1")
-
