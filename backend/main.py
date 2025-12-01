@@ -1,4 +1,5 @@
 # backend/main.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.config import settings
@@ -8,6 +9,8 @@ from backend.api.v1.routes.users import router as users_router
 from backend.api.v1.routes.products import router as products_router
 from backend.api.v1.routes.sentiment import router as sentiment_router
 from backend.api.v1.routes.competitors import router as competitors_router
+from backend.api.v1.routes.integrations import router as integrations_router 
+from backend.api.v1.routes.webhooks import router as webhooks_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -39,4 +42,6 @@ app.include_router(users_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(sentiment_router, prefix="/api/v1")
 app.include_router(competitors_router, prefix="/api/v1")
+app.include_router(integrations_router, prefix="/api/v1")  
+app.include_router(webhooks_router, prefix="/api/v1")
 

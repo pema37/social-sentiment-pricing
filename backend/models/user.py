@@ -2,11 +2,14 @@
 
 import uuid as uuid_lib
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
 
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+if TYPE_CHECKING:
+    from models.integration import Integration
 
 
 class User(SQLModel, table=True):
@@ -33,4 +36,7 @@ class User(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc)),
     )
+
+    # Relationships
+    integrations: List["Integration"] = Relationship(back_populates="user")
 

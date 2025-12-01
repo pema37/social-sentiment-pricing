@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     # OpenAI API
     OPENAI_API_KEY: Optional[str] = None
     
+    # Shopify OAuth
+    SHOPIFY_CLIENT_ID: Optional[str] = None
+    SHOPIFY_CLIENT_SECRET: Optional[str] = None
+    
+    # Encryption
+    ENCRYPTION_KEY: str  # Generate with: from cryptography.fernet import Fernet; Fernet.generate_key()
+
     class Config:
         env_file = ".env"
         extra = "ignore"

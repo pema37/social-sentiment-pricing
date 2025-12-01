@@ -1,0 +1,228 @@
+# backend/schemas/integration.py
+
+"""
+Integration Schemas
+
+Request/Response DTOs for e-commerce integration endpoints.
+"""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional, List
+from uuid import UUID
+from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator
+
+
+# ==================== Enums ====================
+
+class EcommercePlatform(str, Enum):
+    SHOPIFY = "shopify"
+    WOOCOMMERCE = "woocommerce"
+
+
+class IntegrationStatus(str, Enum):
+    ACTIVE = "active"
+    ERROR = "error"
+    PAUSED = "paused"
+    DISCONNECTED = "disconnected"
+
+
+# ==================== OAuth Schemas ====================
+
+class OAuthInitRequest(BaseModel):
+    """Request to start OAuth flow"""
+    platform: EcommercePlatform
+    store_url: str = Field(..., min_length=3, max_length=255)
+    
+    @field_validator("store_url")
+    @classmethod
+    def validate_store_url(cls, v: str) -> str:
+        v = v.strip().lower()
+        # Remove protocol if present
+        for prefix in ["https://", "http://"]:
+            if v.startswith(prefix):
+                v = v[len(prefix):]
+        return v.rstrip("/")
+
+
+class OAuthInitResponse(BaseModel):
+    """Response with OAuth authorization URL"""
+    authorization_url: str
+    state: str  # For CSRF verification on callback
+
+
+class OAuthCallbackRequest(BaseModel):
+    """OAuth callback data"""
+    code: str
+    state: str
+    shop: Optional[str] = None  # Shopify includes this
+
+
+# ==================== Integration CRUD Schemas ====================
+
+class IntegrationCreate(BaseModel):
+    """Manual integration creation (for WooCommerce API keys)"""
+    platform: EcommercePlatform
+    store_url: str = Field(..., min_length=3, max_length=255)
+    store_name: Optional[str] = Field(None, max_length=255)
+    # For WooCommerce manual setup
+    consumer_key: Optional[str] = None
+    consumer_secret: Optional[str] = None
+
+
+class IntegrationUpdate(BaseModel):
+    """Update integration settings"""
+    store_name: Optional[str] = Field(None, max_length=255)
+    status: Optional[IntegrationStatus] = None
+    settings: Optional[dict] = None
+
+
+class IntegrationResponse(BaseModel):
+    """Integration response (public fields only - no secrets)"""
+    id: UUID
+    platform: EcommercePlatform
+    store_url: str
+    store_name: Optional[str]
+    status: IntegrationStatus
+    error_message: Optional[str]
+    scopes: List[str]
+    last_sync_at: Optional[datetime]
+    sync_status: str
+    products_synced: int
+    settings: dict
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class IntegrationListResponse(BaseModel):
+    """List of integrations"""
+    integrations: List[IntegrationResponse]
+    total: int
+
+
+# ==================== Sync Schemas ====================
+
+class SyncTriggerRequest(BaseModel):
+    """Request to trigger a product sync"""
+    sync_type: str = Field(default="full", pattern="^(full|incremental)$")
+
+
+class SyncStatusResponse(BaseModel):
+    """Current sync status"""
+    integration_id: UUID
+    sync_status: str  # idle, syncing, error
+    last_sync_at: Optional[datetime]
+    products_synced: int
+    current_progress: Optional[int] = None  # For ongoing syncs
+
+
+class SyncLogResponse(BaseModel):
+    """Sync log entry"""
+    id: UUID
+    sync_type: str
+    started_at: datetime
+    completed_at: Optional[datetime]
+    duration_seconds: Optional[float]
+    success: bool
+    products_created: int
+    products_updated: int
+    products_deleted: int
+    error_details: Optional[str]
+    
+    class Config:
+        from_attributes = True
+
+
+class SyncLogsListResponse(BaseModel):
+    """List of sync logs"""
+    logs: List[SyncLogResponse]
+    total: int
+
+
+# ==================== Product Link Schemas ====================
+
+class ProductLinkCreate(BaseModel):
+    """Link an SSP product to an external platform product"""
+    product_id: UUID
+    external_product_id: str = Field(..., max_length=100)
+    external_variant_id: Optional[str] = Field(None, max_length=100)
+
+
+class ProductLinkResponse(BaseModel):
+    """Product link response"""
+    id: UUID
+    product_id: UUID
+    integration_id: UUID
+    external_product_id: str
+    external_variant_id: Optional[str]
+    external_price: Optional[float]
+    external_compare_at_price: Optional[float]
+    last_price_push_at: Optional[datetime]
+    last_price_pull_at: Optional[datetime]
+    sync_enabled: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ProductLinkListResponse(BaseModel):
+    """List of product links"""
+    links: List[ProductLinkResponse]
+    total: int
+
+
+# ==================== Price Push Schemas ====================
+
+class PricePushRequest(BaseModel):
+    """Request to push a price update to the platform"""
+    product_link_id: UUID
+    new_price: Decimal = Field(..., gt=0, decimal_places=2)
+    compare_at_price: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+
+
+class PricePushResponse(BaseModel):
+    """Result of price push operation"""
+    success: bool
+    product_link_id: UUID
+    old_price: Optional[Decimal]
+    new_price: Decimal
+    error: Optional[str] = None
+
+
+class BulkPricePushRequest(BaseModel):
+    """Push multiple price updates"""
+    updates: List[PricePushRequest] = Field(..., min_length=1, max_length=100)
+
+
+class BulkPricePushResponse(BaseModel):
+    """Results of bulk price push"""
+    results: List[PricePushResponse]
+    success_count: int
+    failure_count: int
+
+
+# ==================== Webhook Schemas ====================
+
+class WebhookPayload(BaseModel):
+    """Generic webhook payload wrapper"""
+    topic: str
+    shop: str
+    payload: dict
+
+
+# ==================== Health Check ====================
+
+class IntegrationHealthResponse(BaseModel):
+    """Health check response for an integration"""
+    integration_id: UUID
+    platform: EcommercePlatform
+    store_url: str
+    status: str  # healthy, unhealthy, rate_limited, unauthorized
+    checked_at: datetime
+
