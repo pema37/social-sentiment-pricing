@@ -16,6 +16,9 @@ from backend.models.competitor import Competitor
 from backend.models.competitor_product import CompetitorProduct
 from backend.models.competitor_price_history import CompetitorPriceHistory
 
+# Phase 3: Social Media Ingestion
+from backend.models.social_mention import SocialMention
+
 
 __all__ = [
     # Core models (Phase 1)
@@ -27,5 +30,7 @@ __all__ = [
     "Competitor",
     "CompetitorProduct",
     "CompetitorPriceHistory",
+    # Social ingestion models (Phase 3)
+    "SocialMention",
 ]
 

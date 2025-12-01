@@ -340,3 +340,110 @@ def delete_sentiment(
 
     return None
 
+# ───────────────────────────── Social Ingestion Endpoints ───────────────────────────── #
+
+@router.post("/fetch/{product_id}")
+def fetch_social_mentions_for_product(
+    product_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch social mentions for a product from Reddit (and other sources).
+    Uses product keywords to search.
+    """
+    from backend.workers.tasks.ingestion_tasks import fetch_for_product
+    
+    # Verify product exists and belongs to user
+    product = session.get(Product, product_id)
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    
+    if product.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this product",
+        )
+    
+    # Run the fetch task directly (not async via Celery for now)
+    result = fetch_for_product(
+        product_id=str(product_id),
+        user_id=str(current_user.id),
+        keywords=product.keywords or [product.name],
+        mock_mode=True  # Change to False when Reddit API is approved
+    )
+    
+    return result
+
+
+@router.post("/process")
+def process_mentions(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Process all pending mentions (run sentiment analysis).
+    """
+    from backend.workers.tasks.ingestion_tasks import process_pending_mentions
+    
+    result = process_pending_mentions()
+    return result
+
+
+@router.get("/mentions/{product_id}")
+def get_social_mentions(
+    product_id: str,
+    limit: int = Query(default=50, le=100),
+    processed_only: bool = Query(default=False),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get social mentions for a product.
+    """
+    from backend.models.social_mention import SocialMention
+    
+    # Verify product exists and belongs to user
+    product = session.get(Product, product_id)
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    
+    if product.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this product",
+        )
+    
+    # Build query
+    query = select(SocialMention).where(SocialMention.product_id == product_id)
+    
+    if processed_only:
+        query = query.where(SocialMention.processed == True)
+    
+    query = query.order_by(SocialMention.collected_at.desc()).limit(limit)
+    
+    mentions = session.exec(query).all()
+    
+    # Format response
+    return [
+        {
+            "id": str(m.id),
+            "source": m.source,
+            "content": m.content,
+            "author": m.author,
+            "engagement_count": m.engagement_count,
+            "url": m.url,
+            "published_at": m.published_at.isoformat() if m.published_at else None,
+            "processed": m.processed,
+            "sentiment": m.raw_data.get("sentiment") if m.raw_data else None,
+        }
+        for m in mentions
+    ]
+
