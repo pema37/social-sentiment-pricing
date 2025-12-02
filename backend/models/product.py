@@ -33,6 +33,7 @@ class Product(SQLModel, table=True):
     current_price: Decimal = Field(default=0, max_digits=10, decimal_places=2)
     min_price: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
     max_price: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
+    cost: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2, description="Cost to acquire/produce")
 
     sentiment_multiplier: Decimal = Field(default=Decimal("0.1"), max_digits=3, decimal_places=2)
     auto_pricing_enabled: bool = Field(default=False)

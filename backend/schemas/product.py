@@ -15,6 +15,7 @@ class ProductCreate(BaseModel):
     sku: Optional[str] = Field(default=None, max_length=100)
     description: Optional[str] = None
     base_price: Decimal = Field(..., gt=0)
+    cost: Optional[Decimal] = Field(default=None, ge=0, description="Cost to acquire/produce")  # NEW
     min_price: Optional[Decimal] = Field(default=None, gt=0)
     max_price: Optional[Decimal] = Field(default=None, gt=0)
     sentiment_multiplier: Decimal = Field(default=Decimal("0.1"), ge=0, le=1)
@@ -28,6 +29,7 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     base_price: Optional[Decimal] = Field(default=None, gt=0)
     current_price: Optional[Decimal] = Field(default=None, gt=0)
+    cost: Optional[Decimal] = Field(default=None, ge=0)  # NEW
     min_price: Optional[Decimal] = Field(default=None, gt=0)
     max_price: Optional[Decimal] = Field(default=None, gt=0)
     sentiment_multiplier: Optional[Decimal] = Field(default=None, ge=0, le=1)
@@ -45,6 +47,7 @@ class ProductRead(BaseModel):
     description: Optional[str]
     base_price: Decimal
     current_price: Decimal
+    cost: Optional[Decimal]  # NEW
     min_price: Optional[Decimal]
     max_price: Optional[Decimal]
     sentiment_multiplier: Decimal
