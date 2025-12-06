@@ -1,0 +1,398 @@
+# backend/services/notification/alert_generator.py
+"""
+Alert Generator Service.
+
+Creates alerts from system events (sentiment drops, price recommendations,
+competitor changes, trend detection) and triggers notifications.
+"""
+
+import logging
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone, timedelta
+from uuid import UUID
+
+from sqlmodel import Session, select, func
+
+from backend.models.alert import (
+    Alert,
+    AlertConfiguration,
+    AlertType,
+    AlertSeverity,
+    AlertStatus,
+    AlertChannel,
+)
+from backend.services.notification.notification_dispatcher import (
+    NotificationDispatcher,
+    DispatchResult,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class AlertGenerator:
+    """
+    Generates alerts from system events and dispatches notifications.
+    
+    Usage:
+        generator = AlertGenerator(session)
+        alert = await generator.generate_sentiment_alert(
+            user_id=user.id,
+            product_id=product.id,
+            sentiment_score=-0.45,
+            previous_score=0.12,
+            mention_count=847
+        )
+    """
+    
+    def __init__(self, session: Session):
+        self.session = session
+        self.dispatcher = NotificationDispatcher()
+    
+    async def generate_sentiment_alert(
+        self,
+        user_id: UUID,
+        product_id: UUID,
+        product_name: str,
+        sentiment_score: float,
+        previous_score: float,
+        mention_count: int = 0,
+    ) -> Optional[Alert]:
+        """
+        Generate alert for significant sentiment change.
+        
+        Args:
+            user_id: Owner of the product
+            product_id: Product with sentiment change
+            product_name: Product name for message
+            sentiment_score: Current sentiment score
+            previous_score: Previous sentiment score
+            mention_count: Number of mentions in period
+            
+        Returns:
+            Created Alert or None if suppressed
+        """
+        change = sentiment_score - previous_score
+        change_pct = abs(change) * 100
+        
+        # Determine severity based on change magnitude
+        if abs(change) >= 0.5:
+            severity = AlertSeverity.CRITICAL
+        elif abs(change) >= 0.3:
+            severity = AlertSeverity.HIGH
+        elif abs(change) >= 0.15:
+            severity = AlertSeverity.MEDIUM
+        else:
+            severity = AlertSeverity.LOW
+        
+        direction = "dropped" if change < 0 else "improved"
+        
+        title = f"Sentiment {direction.title()} for {product_name}"
+        message = (
+            f"Sentiment {direction} from {previous_score:.2f} to {sentiment_score:.2f} "
+            f"({change_pct:.1f}% change) based on {mention_count} mentions."
+        )
+        
+        alert_data = {
+            "product_name": product_name,
+            "current_score": sentiment_score,
+            "previous_score": previous_score,
+            "change": change,
+            "change_percent": change_pct,
+            "mention_count": mention_count,
+        }
+        
+        return await self._create_and_dispatch(
+            user_id=user_id,
+            alert_type=AlertType.SENTIMENT_DROP if change < 0 else AlertType.SENTIMENT_SPIKE,
+            severity=severity,
+            title=title,
+            message=message,
+            alert_data=alert_data,
+            product_id=product_id,
+        )
+    
+    async def generate_price_recommendation_alert(
+        self,
+        user_id: UUID,
+        product_id: UUID,
+        product_name: str,
+        current_price: float,
+        recommended_price: float,
+        confidence: float,
+        recommendation_id: UUID,
+        reasoning: str,
+    ) -> Optional[Alert]:
+        """
+        Generate alert for new price recommendation.
+        """
+        change_pct = ((recommended_price - current_price) / current_price) * 100
+        direction = "increase" if change_pct > 0 else "decrease"
+        
+        # Severity based on confidence and change size
+        if confidence >= 0.8 and abs(change_pct) >= 10:
+            severity = AlertSeverity.HIGH
+        elif confidence >= 0.6:
+            severity = AlertSeverity.MEDIUM
+        else:
+            severity = AlertSeverity.LOW
+        
+        title = f"Price {direction.title()} Recommended for {product_name}"
+        message = (
+            f"Recommended {direction} from ${current_price:.2f} to ${recommended_price:.2f} "
+            f"({change_pct:+.1f}%) with {confidence:.0%} confidence.\n\n{reasoning}"
+        )
+        
+        alert_data = {
+            "product_name": product_name,
+            "current_price": current_price,
+            "recommended_price": recommended_price,
+            "change_percent": change_pct,
+            "confidence": confidence,
+        }
+        
+        return await self._create_and_dispatch(
+            user_id=user_id,
+            alert_type=AlertType.PRICE_RECOMMENDATION,
+            severity=severity,
+            title=title,
+            message=message,
+            alert_data=alert_data,
+            product_id=product_id,
+            recommendation_id=recommendation_id,
+        )
+    
+    async def generate_competitor_alert(
+        self,
+        user_id: UUID,
+        competitor_id: UUID,
+        competitor_name: str,
+        product_id: Optional[UUID],
+        product_name: str,
+        old_price: float,
+        new_price: float,
+    ) -> Optional[Alert]:
+        """
+        Generate alert for competitor price change.
+        """
+        change_pct = ((new_price - old_price) / old_price) * 100
+        direction = "increased" if change_pct > 0 else "decreased"
+        
+        # Larger changes are more important
+        if abs(change_pct) >= 20:
+            severity = AlertSeverity.HIGH
+        elif abs(change_pct) >= 10:
+            severity = AlertSeverity.MEDIUM
+        else:
+            severity = AlertSeverity.LOW
+        
+        title = f"Competitor Price Change: {competitor_name}"
+        message = (
+            f"{competitor_name} {direction} price for {product_name} "
+            f"from ${old_price:.2f} to ${new_price:.2f} ({change_pct:+.1f}%)."
+        )
+        
+        alert_data = {
+            "competitor_name": competitor_name,
+            "product_name": product_name,
+            "old_price": old_price,
+            "new_price": new_price,
+            "change_percent": change_pct,
+        }
+        
+        return await self._create_and_dispatch(
+            user_id=user_id,
+            alert_type=AlertType.COMPETITOR_PRICE_CHANGE,
+            severity=severity,
+            title=title,
+            message=message,
+            alert_data=alert_data,
+            product_id=product_id,
+            competitor_id=competitor_id,
+        )
+    
+    async def generate_trend_alert(
+        self,
+        user_id: UUID,
+        product_id: Optional[UUID],
+        product_name: str,
+        trend_type: str,
+        description: str,
+        impact_score: float,
+    ) -> Optional[Alert]:
+        """
+        Generate alert for detected trend (viral content, seasonal, etc).
+        """
+        if impact_score >= 0.7:
+            severity = AlertSeverity.HIGH
+        elif impact_score >= 0.4:
+            severity = AlertSeverity.MEDIUM
+        else:
+            severity = AlertSeverity.LOW
+        
+        title = f"Trend Detected: {trend_type.replace('_', ' ').title()}"
+        message = f"{description}\n\nImpact score: {impact_score:.2f}"
+        
+        alert_data = {
+            "product_name": product_name,
+            "trend_type": trend_type,
+            "impact_score": impact_score,
+        }
+        
+        return await self._create_and_dispatch(
+            user_id=user_id,
+            alert_type=AlertType.VIRAL_TREND,
+            severity=severity,
+            title=title,
+            message=message,
+            alert_data=alert_data,
+            product_id=product_id,
+        )
+    
+    async def _create_and_dispatch(
+        self,
+        user_id: UUID,
+        alert_type: AlertType,
+        severity: AlertSeverity,
+        title: str,
+        message: str,
+        alert_data: Dict[str, Any],
+        product_id: Optional[UUID] = None,
+        competitor_id: Optional[UUID] = None,
+        recommendation_id: Optional[UUID] = None,
+    ) -> Optional[Alert]:
+        """
+        Create alert in database and dispatch to configured channels.
+        """
+        # Find matching alert configuration
+        config = await self._find_matching_config(
+            user_id=user_id,
+            alert_type=alert_type,
+            product_id=product_id,
+        )
+        
+        # Check if alert should be suppressed
+        if config:
+            if not await self._check_limits(config):
+                logger.debug(f"Alert suppressed due to limits: {title}")
+                return None
+        
+        # Create alert record
+        alert = Alert(
+            user_id=user_id,
+            configuration_id=config.id if config else None,
+            alert_type=alert_type,
+            severity=severity,
+            title=title,
+            message=message,
+            product_id=product_id,
+            competitor_id=competitor_id,
+            recommendation_id=recommendation_id,
+            data=alert_data,
+            status=AlertStatus.PENDING,
+        )
+        
+        self.session.add(alert)
+        self.session.commit()
+        self.session.refresh(alert)
+        
+        logger.info(f"Alert created: {alert.id} - {title}")
+        
+        # Dispatch to external channels if configured
+        if config and config.channels:
+            await self._dispatch_alert(alert, config)
+        
+        return alert
+    
+    async def _find_matching_config(
+        self,
+        user_id: UUID,
+        alert_type: AlertType,
+        product_id: Optional[UUID],
+    ) -> Optional[AlertConfiguration]:
+        """Find active alert configuration matching this alert."""
+        stmt = select(AlertConfiguration).where(
+            AlertConfiguration.user_id == user_id,
+            AlertConfiguration.alert_type == alert_type,
+            AlertConfiguration.is_active == True,
+        )
+        
+        configs = self.session.exec(stmt).all()
+        
+        for config in configs:
+            # Check product filter
+            if config.product_ids and product_id:
+                if str(product_id) not in [str(p) for p in config.product_ids]:
+                    continue
+            return config
+        
+        return None
+    
+    async def _check_limits(self, config: AlertConfiguration) -> bool:
+        """Check cooldown and daily limits."""
+        now = datetime.now(timezone.utc)
+        
+        # Check cooldown
+        if config.last_triggered_at:
+            cooldown_end = config.last_triggered_at + timedelta(minutes=config.cooldown_minutes)
+            if now < cooldown_end:
+                logger.debug(f"Config {config.id} in cooldown until {cooldown_end}")
+                return False
+        
+        # Check daily limit
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = select(func.count(Alert.id)).where(
+            Alert.configuration_id == config.id,
+            Alert.created_at >= today_start,
+        )
+        today_count = self.session.exec(stmt).one()
+        
+        if today_count >= config.max_per_day:
+            logger.debug(f"Config {config.id} hit daily limit: {today_count}/{config.max_per_day}")
+            return False
+        
+        return True
+    
+    async def _dispatch_alert(
+        self,
+        alert: Alert,
+        config: AlertConfiguration,
+    ) -> None:
+        """Dispatch alert to configured channels."""
+        # Get user email from database
+        from backend.models.user import User
+        user = self.session.get(User, alert.user_id)
+        
+        channels = [AlertChannel(c) for c in config.channels]
+        
+        # Get channel-specific settings
+        settings = config.channel_settings or {}
+        slack_webhook = settings.get("slack_webhook_url")
+        
+        result: DispatchResult = await self.dispatcher.dispatch(
+            channels=channels,
+            alert_title=alert.title,
+            alert_message=alert.message,
+            severity=alert.severity.value,
+            alert_data=alert.data,
+            recipient_email=user.email if user else None,
+            slack_webhook_url=slack_webhook,
+        )
+        
+        # Update alert with dispatch results
+        alert.channels_sent = result.channels_sent
+        alert.channels_failed = result.channels_failed
+        
+        if result.success:
+            alert.status = AlertStatus.SENT
+            alert.sent_at = datetime.now(timezone.utc)
+        
+        # Update config last_triggered_at
+        config.last_triggered_at = datetime.now(timezone.utc)
+        
+        self.session.add(alert)
+        self.session.add(config)
+        self.session.commit()
+        
+        logger.info(
+            f"Alert {alert.id} dispatched: sent={result.channels_sent}, failed={result.channels_failed}"
+        )

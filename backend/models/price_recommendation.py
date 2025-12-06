@@ -92,7 +92,7 @@ class PriceRecommendation(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         nullable=False
     )
 

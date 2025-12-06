@@ -4,12 +4,13 @@ Rule Evaluator - Evaluates pricing rules against market signals.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.models.pricing_rule import PricingRule, RuleType
 from backend.models.product import Product
@@ -48,10 +49,10 @@ class MarketSignals:
 class RuleEvaluator:
     """Evaluates pricing rules against market signals."""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def get_active_rules(self, product_id: UUID, user_id: UUID) -> list[PricingRule]:
+    async def get_active_rules(self, product_id: UUID, user_id: UUID) -> list[PricingRule]:
         """Get all active rules for a product, ordered by priority."""
         
         stmt = select(PricingRule).where(
@@ -60,9 +61,10 @@ class RuleEvaluator:
             PricingRule.is_active == True
         ).order_by(PricingRule.priority.desc())
         
-        return list(self.db.exec(stmt).all())
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
     
-    def find_matching_rule(
+    async def find_matching_rule(
         self,
         product: Product,
         user_id: UUID,
@@ -70,7 +72,7 @@ class RuleEvaluator:
     ) -> tuple[Optional[PricingRule], Optional[dict]]:
         """Find the highest priority rule that matches current signals."""
         
-        rules = self.get_active_rules(product.id, user_id)
+        rules = await self.get_active_rules(product.id, user_id)
         
         for rule in rules:
             # Check cooldown
@@ -122,6 +124,9 @@ class RuleEvaluator:
             return None
         
         threshold = rule.sentiment_threshold
+        if threshold is None:
+            return None  # Cannot evaluate without a threshold
+            
         direction = rule.sentiment_direction or "above"
         
         triggered = False
@@ -235,3 +240,4 @@ class RuleEvaluator:
             }
         
         return None
+    

@@ -11,9 +11,10 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException, status, Depends, Header
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
-from backend.core.deps import get_db
+from backend.db.session import get_session
 from backend.core.encryption import decrypt_token
 from backend.models.integration import Integration, EcommercePlatform, IntegrationStatus
 from backend.services.integration.shopify_service import ShopifyService
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 async def shopify_webhook(
     integration_id: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     x_shopify_topic: Optional[str] = Header(None),
     x_shopify_hmac_sha256: Optional[str] = Header(None),
     x_shopify_shop_domain: Optional[str] = Header(None),
@@ -48,12 +49,12 @@ async def shopify_webhook(
     body = await request.body()
     
     # Find integration
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.platform == EcommercePlatform.SHOPIFY,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.platform == EcommercePlatform.SHOPIFY,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         logger.warning(f"Shopify webhook for unknown integration: {integration_id}")
@@ -138,7 +139,7 @@ async def shopify_webhook(
 async def woocommerce_webhook(
     integration_id: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     x_wc_webhook_topic: Optional[str] = Header(None),
     x_wc_webhook_signature: Optional[str] = Header(None),
     x_wc_webhook_source: Optional[str] = Header(None),
@@ -155,12 +156,12 @@ async def woocommerce_webhook(
     body = await request.body()
     
     # Find integration
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.platform == EcommercePlatform.WOOCOMMERCE,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.platform == EcommercePlatform.WOOCOMMERCE,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         logger.warning(f"WooCommerce webhook for unknown integration: {integration_id}")
@@ -244,7 +245,7 @@ async def woocommerce_webhook(
 @router.post("/{integration_id}/register")
 async def register_webhooks(
     integration_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Register webhooks with the e-commerce platform.
@@ -252,9 +253,9 @@ async def register_webhooks(
     This should be called after OAuth is complete to set up
     automatic product sync via webhooks.
     """
-    integration = db.exec(
-        select(Integration).where(Integration.id == integration_id)
-    ).first()
+    stmt = select(Integration).where(Integration.id == integration_id)
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -309,4 +310,3 @@ async def register_webhooks(
             for r in results
         ],
     }
-

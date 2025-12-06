@@ -3,12 +3,13 @@
 Outcome Service - Records and analyzes recommendation outcomes.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
 from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
@@ -22,10 +23,10 @@ class OutcomeService:
     NEGATIVE_THRESHOLD = Decimal("-0.02")  # 2% decline
     MIN_DATA_THRESHOLD = 3                  # Minimum sales to be conclusive
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def record_outcome(
+    async def record_outcome(
         self,
         recommendation_id: UUID,
         user_id: UUID,
@@ -40,7 +41,7 @@ class OutcomeService:
         """Record the outcome of an applied recommendation."""
         
         # Get recommendation
-        recommendation = self.db.get(PriceRecommendation, recommendation_id)
+        recommendation = await self.db.get(PriceRecommendation, recommendation_id)
         if not recommendation:
             raise ValueError("Recommendation not found")
         if recommendation.user_id != user_id:
@@ -49,17 +50,18 @@ class OutcomeService:
             raise ValueError("Recommendation was not applied")
         
         # Check if outcome already recorded
-        existing = self.db.exec(
-            select(RecommendationOutcome)
-            .where(RecommendationOutcome.recommendation_id == recommendation_id)
-        ).first()
+        stmt = select(RecommendationOutcome).where(
+            RecommendationOutcome.recommendation_id == recommendation_id
+        )
+        result = await self.db.execute(stmt)
+        existing = result.scalars().first()
         if existing:
             raise ValueError("Outcome already recorded for this recommendation")
         
         # Get rule info if available
         rule_type = None
         if recommendation.triggered_rule_id:
-            rule = self.db.get(PricingRule, recommendation.triggered_rule_id)
+            rule = await self.db.get(PricingRule, recommendation.triggered_rule_id)
             if rule:
                 rule_type = rule.rule_type.value if hasattr(rule.rule_type, 'value') else str(rule.rule_type)
         
@@ -85,6 +87,9 @@ class OutcomeService:
             units_sold_before, units_sold_after,
             recommendation.change_percent
         )
+        
+        # Current timestamp for measured_at
+        now = datetime.utcnow()
         
         outcome = RecommendationOutcome(
             user_id=user_id,
@@ -116,13 +121,14 @@ class OutcomeService:
             outcome_label=outcome_label,
             original_confidence=recommendation.confidence_score,
             
-            price_applied_at=recommendation.applied_at,
+            price_applied_at=recommendation.applied_at or now,
             measurement_window_hours=measurement_window_hours,
+            measured_at=now,  # Add measured_at field
         )
         
         self.db.add(outcome)
-        self.db.commit()
-        self.db.refresh(outcome)
+        await self.db.commit()
+        await self.db.refresh(outcome)
         
         return outcome
     
@@ -169,7 +175,7 @@ class OutcomeService:
         
         return score, label
     
-    def get_outcomes(
+    async def get_outcomes(
         self,
         user_id: UUID,
         product_id: Optional[UUID] = None,
@@ -181,7 +187,7 @@ class OutcomeService:
     ) -> list[RecommendationOutcome]:
         """List outcomes with filters."""
         
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.utcnow() - timedelta(days=days)
         
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.user_id == user_id,
@@ -198,24 +204,24 @@ class OutcomeService:
         stmt = stmt.order_by(RecommendationOutcome.created_at.desc())
         stmt = stmt.offset(offset).limit(limit)
         
-        return list(self.db.exec(stmt).all())
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
     
-    def get_rule_performance(self, rule_id: UUID, user_id: UUID, days: int = 90) -> dict:
+    async def get_rule_performance(self, rule_id: UUID, user_id: UUID, days: int = 90) -> dict:
         """Get performance statistics for a specific rule."""
         
-        rule = self.db.get(PricingRule, rule_id)
+        rule = await self.db.get(PricingRule, rule_id)
         if not rule or rule.user_id != user_id:
             raise ValueError("Rule not found")
         
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.utcnow() - timedelta(days=days)
         
-        outcomes = self.db.exec(
-            select(RecommendationOutcome)
-            .where(
-                RecommendationOutcome.rule_id == rule_id,
-                RecommendationOutcome.created_at >= cutoff
-            )
-        ).all()
+        stmt = select(RecommendationOutcome).where(
+            RecommendationOutcome.rule_id == rule_id,
+            RecommendationOutcome.created_at >= cutoff
+        )
+        result = await self.db.execute(stmt)
+        outcomes = list(result.scalars().all())
         
         if not outcomes:
             return {
@@ -269,18 +275,17 @@ class OutcomeService:
             "confidence_accuracy_correlation": None,  # TODO: Calculate correlation
         }
     
-    def get_accuracy_stats(self, user_id: UUID, days: int = 30) -> dict:
+    async def get_accuracy_stats(self, user_id: UUID, days: int = 30) -> dict:
         """Get overall accuracy statistics."""
         
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.utcnow() - timedelta(days=days)
         
-        outcomes = self.db.exec(
-            select(RecommendationOutcome)
-            .where(
-                RecommendationOutcome.user_id == user_id,
-                RecommendationOutcome.created_at >= cutoff
-            )
-        ).all()
+        stmt = select(RecommendationOutcome).where(
+            RecommendationOutcome.user_id == user_id,
+            RecommendationOutcome.created_at >= cutoff
+        )
+        result = await self.db.execute(stmt)
+        outcomes = list(result.scalars().all())
         
         if not outcomes:
             return {
@@ -321,7 +326,7 @@ class OutcomeService:
             avg_revenue_change = (sum(revenue_changes) / len(revenue_changes)).quantize(Decimal("0.01"))
         
         # Group by rule type
-        by_rule_type = {}
+        by_rule_type: dict = {}
         for o in outcomes:
             rt = o.rule_type or "unknown"
             if rt not in by_rule_type:
@@ -337,17 +342,17 @@ class OutcomeService:
             stats["revenue_impact"] = float(stats["revenue_impact"])
         
         # Get rule performance rankings
-        rule_scores = {}
+        rule_scores: dict = {}
         for o in outcomes:
             if o.rule_id:
                 if o.rule_id not in rule_scores:
                     rule_scores[o.rule_id] = {"scores": [], "rule_type": o.rule_type}
                 rule_scores[o.rule_id]["scores"].append(o.outcome_score)
         
-        rule_averages = []
+        rule_averages: list[dict] = []
         for rule_id, data in rule_scores.items():
             avg = sum(data["scores"]) / len(data["scores"])
-            rule = self.db.get(PricingRule, rule_id)
+            rule = await self.db.get(PricingRule, rule_id)
             rule_averages.append({
                 "rule_id": str(rule_id),
                 "rule_name": rule.name if rule else "Unknown",
@@ -374,20 +379,19 @@ class OutcomeService:
             "worst_performing_rules": rule_averages[-5:][::-1] if len(rule_averages) > 5 else [],
         }
     
-    def get_historical_accuracy_for_rule_type(self, user_id: UUID, rule_type: str, days: int = 90) -> Decimal:
+    async def get_historical_accuracy_for_rule_type(self, user_id: UUID, rule_type: str, days: int = 90) -> Decimal:
         """Get historical success rate for a rule type (used by confidence calculator)."""
         
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.utcnow() - timedelta(days=days)
         
-        outcomes = self.db.exec(
-            select(RecommendationOutcome)
-            .where(
-                RecommendationOutcome.user_id == user_id,
-                RecommendationOutcome.rule_type == rule_type,
-                RecommendationOutcome.created_at >= cutoff,
-                RecommendationOutcome.outcome_label != OutcomeLabel.INCONCLUSIVE
-            )
-        ).all()
+        stmt = select(RecommendationOutcome).where(
+            RecommendationOutcome.user_id == user_id,
+            RecommendationOutcome.rule_type == rule_type,
+            RecommendationOutcome.created_at >= cutoff,
+            RecommendationOutcome.outcome_label != OutcomeLabel.INCONCLUSIVE
+        )
+        result = await self.db.execute(stmt)
+        outcomes = list(result.scalars().all())
         
         if len(outcomes) < 5:
             # Not enough data, return neutral
@@ -395,4 +399,4 @@ class OutcomeService:
         
         positive = sum(1 for o in outcomes if o.outcome_label == OutcomeLabel.POSITIVE)
         return Decimal(str(positive / len(outcomes))).quantize(Decimal("0.01"))
-
+    

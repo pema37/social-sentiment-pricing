@@ -11,9 +11,12 @@ from backend.api.v1.routes.auth import router as auth_router
 from backend.api.v1.routes.users import router as users_router
 from backend.api.v1.routes.products import router as products_router
 from backend.api.v1.routes.sentiment import router as sentiment_router
-
-# Phase 2: Competitor Routes
 from backend.api.v1.routes.competitors import router as competitors_router
+from backend.api.v1.routes.alerts import router as alerts_router
+from backend.api.v1.routes.analytics import router as analytics_router
+from backend.api.v1.routes.integrations import router as integrations_router
+from backend.api.v1.routes.pricing import router as pricing_router
+from backend.api.v1.routes.webhooks import router as webhooks_router
 
 
 __all__ = [
@@ -23,5 +26,9 @@ __all__ = [
     "products_router",
     "sentiment_router",
     "competitors_router",
+    "alerts_router",
+    "analytics_router",
+    "integrations_router",
+    "pricing_router",
+    "webhooks_router",
 ]
-

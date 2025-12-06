@@ -8,7 +8,8 @@ from uuid import UUID
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.db.session import get_session
 from backend.core.deps import get_current_user
@@ -50,15 +51,15 @@ router = APIRouter(prefix="/pricing", tags=["pricing"])
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/rules", response_model=PricingRuleResponse, status_code=status.HTTP_201_CREATED)
-def create_rule(
+async def create_rule(
     data: PricingRuleCreate,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new pricing rule."""
     
     # Verify product ownership
-    product = db.get(Product, data.product_id)
+    product = await db.get(Product, data.product_id)
     if not product or product.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Product not found")
     
@@ -68,17 +69,17 @@ def create_rule(
     )
     
     db.add(rule)
-    db.commit()
-    db.refresh(rule)
+    await db.commit()
+    await db.refresh(rule)
     
     return rule
 
 
 @router.get("/rules", response_model=list[PricingRuleResponse])
-def list_rules(
+async def list_rules(
     product_id: Optional[UUID] = Query(default=None),
     is_active: Optional[bool] = Query(default=None),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List pricing rules."""
@@ -92,18 +93,19 @@ def list_rules(
     
     stmt = stmt.order_by(PricingRule.priority.desc())
     
-    return list(db.exec(stmt).all())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 @router.get("/rules/{rule_id}", response_model=PricingRuleResponse)
-def get_rule(
+async def get_rule(
     rule_id: UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific pricing rule."""
     
-    rule = db.get(PricingRule, rule_id)
+    rule = await db.get(PricingRule, rule_id)
     if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
     
@@ -111,15 +113,15 @@ def get_rule(
 
 
 @router.patch("/rules/{rule_id}", response_model=PricingRuleResponse)
-def update_rule(
+async def update_rule(
     rule_id: UUID,
     data: PricingRuleUpdate,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Update a pricing rule."""
     
-    rule = db.get(PricingRule, rule_id)
+    rule = await db.get(PricingRule, rule_id)
     if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
     
@@ -128,26 +130,26 @@ def update_rule(
         setattr(rule, key, value)
     
     db.add(rule)
-    db.commit()
-    db.refresh(rule)
+    await db.commit()
+    await db.refresh(rule)
     
     return rule
 
 
 @router.delete("/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_rule(
+async def delete_rule(
     rule_id: UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a pricing rule."""
     
-    rule = db.get(PricingRule, rule_id)
+    rule = await db.get(PricingRule, rule_id)
     if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
     
-    db.delete(rule)
-    db.commit()
+    await db.delete(rule)
+    await db.commit()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -155,19 +157,19 @@ def delete_rule(
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/recommendations/generate/{product_id}", response_model=Optional[PriceRecommendationResponse])
-def generate_recommendation(
+async def generate_recommendation(
     product_id: UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Manually trigger recommendation generation for a product."""
     
-    product = db.get(Product, product_id)
+    product = await db.get(Product, product_id)
     if not product or product.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Product not found")
     
     service = RecommendationService(db)
-    recommendation = service.generate_recommendation(product, current_user.id)
+    recommendation = await service.generate_recommendation(product, current_user.id)
     
     if not recommendation:
         return None
@@ -176,12 +178,12 @@ def generate_recommendation(
 
 
 @router.get("/recommendations", response_model=list[PriceRecommendationResponse])
-def list_recommendations(
+async def list_recommendations(
     status: Optional[RecommendationStatus] = Query(default=None),
     product_id: Optional[UUID] = Query(default=None),
     limit: int = Query(default=20, le=100),
     offset: int = Query(default=0),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List price recommendations."""
@@ -198,34 +200,35 @@ def list_recommendations(
     stmt = stmt.order_by(PriceRecommendation.created_at.desc())
     stmt = stmt.offset(offset).limit(limit)
     
-    return list(db.exec(stmt).all())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 @router.get("/recommendations/pending", response_model=list[PriceRecommendationResponse])
-def list_pending_recommendations(
+async def list_pending_recommendations(
     product_id: Optional[UUID] = Query(default=None),
     limit: int = Query(default=20, le=100),
     offset: int = Query(default=0),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List pending recommendations (approval queue)."""
     
     service = RecommendationService(db)
-    return service.get_pending_recommendations(
+    return await service.get_pending_recommendations(
         current_user.id, product_id, limit, offset
     )
 
 
 @router.get("/recommendations/{recommendation_id}", response_model=PriceRecommendationResponse)
-def get_recommendation(
+async def get_recommendation(
     recommendation_id: UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific recommendation."""
     
-    recommendation = db.get(PriceRecommendation, recommendation_id)
+    recommendation = await db.get(PriceRecommendation, recommendation_id)
     if not recommendation or recommendation.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recommendation not found")
     
@@ -233,10 +236,10 @@ def get_recommendation(
 
 
 @router.post("/recommendations/{recommendation_id}/approve", response_model=PriceRecommendationResponse)
-def approve_recommendation(
+async def approve_recommendation(
     recommendation_id: UUID,
     data: RecommendationApprove = None,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Approve a pending recommendation."""
@@ -244,16 +247,16 @@ def approve_recommendation(
     service = ApprovalService(db)
     
     try:
-        return service.approve(recommendation_id, current_user.id)
+        return await service.approve(recommendation_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/recommendations/{recommendation_id}/reject", response_model=PriceRecommendationResponse)
-def reject_recommendation(
+async def reject_recommendation(
     recommendation_id: UUID,
     data: RecommendationReject,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Reject a pending recommendation."""
@@ -261,15 +264,15 @@ def reject_recommendation(
     service = ApprovalService(db)
     
     try:
-        return service.reject(recommendation_id, current_user.id, data.reason)
+        return await service.reject(recommendation_id, current_user.id, data.reason)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/recommendations/{recommendation_id}/apply", response_model=PriceRecommendationResponse)
-def apply_recommendation(
+async def apply_recommendation(
     recommendation_id: UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Apply an approved recommendation (push price to e-commerce)."""
@@ -277,7 +280,7 @@ def apply_recommendation(
     service = ApprovalService(db)
     
     try:
-        return service.apply_price(recommendation_id, current_user.id)
+        return await service.apply_price(recommendation_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -287,35 +290,37 @@ def apply_recommendation(
 # ═══════════════════════════════════════════════════════════════
 
 @router.get("/settings", response_model=PricingSettingsResponse)
-def get_settings(
-    db: Session = Depends(get_session),
+async def get_settings(
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get pricing settings for current user."""
     
     stmt = select(PricingSettings).where(PricingSettings.user_id == current_user.id)
-    settings = db.exec(stmt).first()
+    result = await db.execute(stmt)
+    settings = result.scalars().first()
     
     # Create default settings if none exist
     if not settings:
         settings = PricingSettings(user_id=current_user.id)
         db.add(settings)
-        db.commit()
-        db.refresh(settings)
+        await db.commit()
+        await db.refresh(settings)
     
     return settings
 
 
 @router.patch("/settings", response_model=PricingSettingsResponse)
-def update_settings(
+async def update_settings(
     data: PricingSettingsUpdate,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Update pricing settings."""
     
     stmt = select(PricingSettings).where(PricingSettings.user_id == current_user.id)
-    settings = db.exec(stmt).first()
+    result = await db.execute(stmt)
+    settings = result.scalars().first()
     
     if not settings:
         settings = PricingSettings(user_id=current_user.id)
@@ -325,8 +330,8 @@ def update_settings(
         setattr(settings, key, value)
     
     db.add(settings)
-    db.commit()
-    db.refresh(settings)
+    await db.commit()
+    await db.refresh(settings)
     
     return settings
 
@@ -336,15 +341,15 @@ def update_settings(
 # ═══════════════════════════════════════════════════════════════
 
 @router.get("/stats")
-def get_pricing_stats(
+async def get_pricing_stats(
     days: int = Query(default=30, le=365),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get pricing statistics."""
     
     service = ApprovalService(db)
-    return service.get_approval_stats(current_user.id, days)
+    return await service.get_approval_stats(current_user.id, days)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -352,10 +357,10 @@ def get_pricing_stats(
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/rules/{rule_id}/test", response_model=RuleTestResponse)
-def test_rule(
+async def test_rule(
     rule_id: UUID,
     data: RuleTestRequest = None,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -364,12 +369,12 @@ def test_rule(
     Use mock_signals to test with specific values, or leave empty to use real data.
     """
     # Get rule
-    rule = db.get(PricingRule, rule_id)
+    rule = await db.get(PricingRule, rule_id)
     if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
     
     # Get product
-    product = db.get(Product, rule.product_id)
+    product = await db.get(Product, rule.product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
@@ -399,9 +404,9 @@ def test_rule(
     else:
         # Use real signals
         signal_processor = SignalProcessor(db)
-        signals = signal_processor.gather_signals(product)
+        signals = await signal_processor.gather_signals(product)
 
-    # Evaluate rule
+    # Evaluate rule (sync method - no await)
     rule_evaluator = RuleEvaluator(db)
     match_details = rule_evaluator._evaluate_rule(rule, product, signals)
     
@@ -424,14 +429,14 @@ def test_rule(
     
     # Build signals dict for response
     signals_used = {
-        "sentiment_score": float(signals.sentiment_score) if signals.sentiment_score else None,
-        "sentiment_change_24h": float(signals.sentiment_change_24h) if signals.sentiment_change_24h else None,
+        "sentiment_score": float(signals.sentiment_score) if signals.sentiment_score is not None else None,
+        "sentiment_change_24h": float(signals.sentiment_change_24h) if signals.sentiment_change_24h is not None else None,
         "mention_count_24h": signals.mention_count_24h,
         "mention_baseline": signals.mention_baseline,
         "viral_detected": signals.viral_detected,
         "viral_reach": signals.viral_reach,
         "viral_engagement": signals.viral_engagement,
-        "viral_sentiment": float(signals.viral_sentiment) if signals.viral_sentiment else None,
+        "viral_sentiment": float(signals.viral_sentiment) if signals.viral_sentiment is not None else None,
         "competitor_prices": {str(k): float(v) for k, v in signals.competitor_prices.items()},
     }
     
@@ -448,9 +453,9 @@ def test_rule(
 
 
 @router.post("/simulate", response_model=SimulationResponse)
-def simulate_pricing(
+async def simulate_pricing(
     data: SimulationRequest,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -459,7 +464,7 @@ def simulate_pricing(
     Returns which rules would trigger and what the resulting price would be.
     """
     # Get product
-    product = db.get(Product, data.product_id)
+    product = await db.get(Product, data.product_id)
     if not product or product.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Product not found")
     
@@ -487,11 +492,11 @@ def simulate_pricing(
         )
     else:
         signal_processor = SignalProcessor(db)
-        signals = signal_processor.gather_signals(product)
+        signals = await signal_processor.gather_signals(product)
     
     # Get all active rules
     rule_evaluator = RuleEvaluator(db)
-    all_rules = rule_evaluator.get_active_rules(product.id, current_user.id)
+    all_rules = await rule_evaluator.get_active_rules(product.id, current_user.id)
     
     rec_service = RecommendationService(db)
     triggered_rules = []
@@ -509,6 +514,7 @@ def simulate_pricing(
     }
     
     for rule in all_rules:
+        # Evaluate rule (sync method - no await)
         match_details = rule_evaluator._evaluate_rule(rule, product, signals)
         
         calculated_price = None
@@ -564,10 +570,10 @@ def simulate_pricing(
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/outcomes/{recommendation_id}/record", response_model=OutcomeResponse)
-def record_outcome(
+async def record_outcome(
     recommendation_id: UUID,
     data: OutcomeRecordRequest,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Record the outcome/performance of an applied recommendation."""
@@ -575,7 +581,7 @@ def record_outcome(
     service = OutcomeService(db)
     
     try:
-        return service.record_outcome(
+        return await service.record_outcome(
             recommendation_id=recommendation_id,
             user_id=current_user.id,
             sales_count_before=data.sales_count_before,
@@ -591,20 +597,20 @@ def record_outcome(
 
 
 @router.get("/outcomes", response_model=list[OutcomeResponse])
-def list_outcomes(
+async def list_outcomes(
     product_id: Optional[UUID] = Query(default=None),
     rule_id: Optional[UUID] = Query(default=None),
     outcome_label: Optional[OutcomeLabel] = Query(default=None),
     days: int = Query(default=30, le=365),
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List recommendation outcomes."""
     
     service = OutcomeService(db)
-    return service.get_outcomes(
+    return await service.get_outcomes(
         user_id=current_user.id,
         product_id=product_id,
         rule_id=rule_id,
@@ -616,22 +622,22 @@ def list_outcomes(
 
 
 @router.get("/outcomes/accuracy", response_model=AccuracyStatsResponse)
-def get_accuracy_stats(
+async def get_accuracy_stats(
     days: int = Query(default=30, le=365),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get overall accuracy statistics for recommendations."""
     
     service = OutcomeService(db)
-    return service.get_accuracy_stats(current_user.id, days)
+    return await service.get_accuracy_stats(current_user.id, days)
 
 
 @router.get("/rules/{rule_id}/performance", response_model=RulePerformanceResponse)
-def get_rule_performance(
+async def get_rule_performance(
     rule_id: UUID,
     days: int = Query(default=90, le=365),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get performance statistics for a specific pricing rule."""
@@ -639,6 +645,6 @@ def get_rule_performance(
     service = OutcomeService(db)
     
     try:
-        return service.get_rule_performance(rule_id, current_user.id, days)
+        return await service.get_rule_performance(rule_id, current_user.id, days)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

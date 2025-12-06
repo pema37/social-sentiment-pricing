@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.models.integration import (
     Integration,
@@ -39,7 +40,7 @@ class SyncService:
     - Webhook sync: Processes single product updates from webhooks
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
     def get_service(self, integration: Integration) -> EcommerceService:
@@ -75,7 +76,8 @@ class SyncService:
         if user_id:
             query = query.where(Integration.user_id == user_id)
         
-        integration = self.db.exec(query).first()
+        result = await self.db.execute(query)
+        integration = result.scalars().first()
         
         if not integration:
             raise ValueError("Integration not found")
@@ -94,7 +96,7 @@ class SyncService:
         # Update integration status
         integration.sync_status = "syncing"
         self.db.add(integration)
-        self.db.commit()
+        await self.db.commit()
         
         try:
             # Run the sync
@@ -146,8 +148,8 @@ class SyncService:
         
         self.db.add(sync_log)
         self.db.add(integration)
-        self.db.commit()
-        self.db.refresh(sync_log)
+        await self.db.commit()
+        await self.db.refresh(sync_log)
         
         return sync_log
     
@@ -209,7 +211,7 @@ class SyncService:
             # Save cursor progress
             integration.sync_cursor = cursor
             self.db.add(integration)
-            self.db.commit()
+            await self.db.commit()
         
         # Handle deletions (only for full sync)
         if sync_type == "full":
@@ -232,18 +234,18 @@ class SyncService:
             Tuple of (created, updated) - one will be 1, other 0
         """
         # Check if we already have a link for this external product
-        existing_link = self.db.exec(
-            select(ProductIntegrationLink).where(
-                ProductIntegrationLink.integration_id == integration.id,
-                ProductIntegrationLink.external_product_id == external_product.id,
-            )
-        ).first()
+        stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration.id,
+            ProductIntegrationLink.external_product_id == external_product.id,
+        )
+        result = await self.db.execute(stmt)
+        existing_link = result.scalars().first()
         
         if existing_link:
             # Update existing product
-            product = self.db.exec(
-                select(Product).where(Product.id == existing_link.product_id)
-            ).first()
+            stmt = select(Product).where(Product.id == existing_link.product_id)
+            result = await self.db.execute(stmt)
+            product = result.scalars().first()
             
             if product:
                 self._update_product_from_external(product, external_product)
@@ -256,7 +258,7 @@ class SyncService:
                 existing_link.updated_at = datetime.now(timezone.utc)
                 self.db.add(existing_link)
                 
-                self.db.commit()
+                await self.db.commit()
                 return 0, 1
         
         # Create new product - generate SKU if not provided
@@ -271,8 +273,8 @@ class SyncService:
             cost=None,  # External platforms don't expose cost
         )
         self.db.add(product)
-        self.db.commit()
-        self.db.refresh(product)
+        await self.db.commit()
+        await self.db.refresh(product)
         
         # Create link
         link = ProductIntegrationLink(
@@ -285,7 +287,7 @@ class SyncService:
             last_price_pull_at=datetime.now(timezone.utc),
         )
         self.db.add(link)
-        self.db.commit()
+        await self.db.commit()
         
         return 1, 0
     
@@ -320,12 +322,12 @@ class SyncService:
         deleted_count = 0
         
         # Get all links for this integration
-        links = self.db.exec(
-            select(ProductIntegrationLink).where(
-                ProductIntegrationLink.integration_id == integration.id,
-                ProductIntegrationLink.sync_enabled == True,
-            )
-        ).all()
+        stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration.id,
+            ProductIntegrationLink.sync_enabled == True,
+        )
+        result = await self.db.execute(stmt)
+        links = result.scalars().all()
         
         for link in links:
             if link.external_product_id not in seen_external_ids:
@@ -336,18 +338,18 @@ class SyncService:
                 deleted_count += 1
         
         if deleted_count > 0:
-            self.db.commit()
+            await self.db.commit()
         
         return deleted_count
     
     async def _count_linked_products(self, integration_id: UUID) -> int:
         """Count the number of linked products for an integration."""
-        links = self.db.exec(
-            select(ProductIntegrationLink).where(
-                ProductIntegrationLink.integration_id == integration_id,
-                ProductIntegrationLink.sync_enabled == True,
-            )
-        ).all()
+        stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration_id,
+            ProductIntegrationLink.sync_enabled == True,
+        )
+        result = await self.db.execute(stmt)
+        links = result.scalars().all()
         return len(links)
     
     async def sync_single_product(
@@ -367,9 +369,9 @@ class SyncService:
         Returns:
             The updated ProductIntegrationLink, or None if deleted
         """
-        integration = self.db.exec(
-            select(Integration).where(Integration.id == integration_id)
-        ).first()
+        stmt = select(Integration).where(Integration.id == integration_id)
+        result = await self.db.execute(stmt)
+        integration = result.scalars().first()
         
         if not integration or integration.status != IntegrationStatus.ACTIVE:
             logger.warning(f"Integration {integration_id} not found or not active")
@@ -380,18 +382,18 @@ class SyncService:
         
         if action == "delete":
             # Handle deletion
-            link = self.db.exec(
-                select(ProductIntegrationLink).where(
-                    ProductIntegrationLink.integration_id == integration_id,
-                    ProductIntegrationLink.external_product_id == external_product_id,
-                )
-            ).first()
+            stmt = select(ProductIntegrationLink).where(
+                ProductIntegrationLink.integration_id == integration_id,
+                ProductIntegrationLink.external_product_id == external_product_id,
+            )
+            result = await self.db.execute(stmt)
+            link = result.scalars().first()
             
             if link:
                 link.sync_enabled = False
                 link.updated_at = datetime.now(timezone.utc)
                 self.db.add(link)
-                self.db.commit()
+                await self.db.commit()
                 
                 # Create a sync log for the deletion
                 sync_log = IntegrationSyncLog(
@@ -404,7 +406,7 @@ class SyncService:
                     products_deleted=1,
                 )
                 self.db.add(sync_log)
-                self.db.commit()
+                await self.db.commit()
             
             return None
         
@@ -437,15 +439,15 @@ class SyncService:
             products_updated=updated,
         )
         self.db.add(sync_log)
-        self.db.commit()
+        await self.db.commit()
         
         # Return the link
-        link = self.db.exec(
-            select(ProductIntegrationLink).where(
-                ProductIntegrationLink.integration_id == integration_id,
-                ProductIntegrationLink.external_product_id == external_product_id,
-            )
-        ).first()
+        stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration_id,
+            ProductIntegrationLink.external_product_id == external_product_id,
+        )
+        result = await self.db.execute(stmt)
+        link = result.scalars().first()
         
         return link
 
@@ -453,7 +455,7 @@ class SyncService:
 # ==================== Background Task Function ====================
 
 async def run_product_sync(
-    db: Session,
+    db: AsyncSession,
     integration_id: UUID,
     sync_type: str = "full",
 ) -> IntegrationSyncLog:
@@ -467,5 +469,3 @@ async def run_product_sync(
         integration_id=integration_id,
         sync_type=sync_type,
     )
-
-

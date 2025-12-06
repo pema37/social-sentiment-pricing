@@ -29,12 +29,12 @@ class User(SQLModel, table=True):
     is_active: bool = Field(default=True)
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: Optional[datetime] = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc)),
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True), onupdate=datetime.utcnow),
     )
 
     # Relationships

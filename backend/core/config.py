@@ -34,11 +34,17 @@ class Settings(BaseSettings):
     SHOPIFY_CLIENT_SECRET: Optional[str] = None
     
     # Encryption
-    ENCRYPTION_KEY: str  # Generate with: from cryptography.fernet import Fernet; Fernet.generate_key()
+    ENCRYPTION_KEY: str
+    
+    # SendGrid (Email Notifications)
+    SENDGRID_API_KEY: Optional[str] = None
+    SENDGRID_FROM_EMAIL: Optional[str] = None
+    
+    # Slack (Webhook Notifications)
+    SLACK_WEBHOOK_URL: Optional[str] = None
 
     class Config:
         env_file = ".env"
         extra = "ignore"
 
 settings = Settings()
-

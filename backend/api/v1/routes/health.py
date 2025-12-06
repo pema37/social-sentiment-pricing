@@ -2,7 +2,8 @@
 
 from datetime import datetime
 from fastapi import APIRouter, Depends
-from sqlmodel import Session, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from backend.db.session import get_session
 from backend.schemas.health import HealthResponse
@@ -13,12 +14,12 @@ START_TIME = datetime.utcnow()
 
 
 @router.get("/", response_model=HealthResponse)
-def health_check(session: Session = Depends(get_session)):
+async def health_check(session: AsyncSession = Depends(get_session)):
     """Basic health check."""
 
     # Test DB connection
     try:
-        session.exec(text("SELECT 1"))
+        await session.execute(text("SELECT 1"))
         db_status = "ok"
     except Exception:
         db_status = "error"

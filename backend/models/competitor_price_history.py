@@ -69,7 +69,7 @@ class CompetitorPriceHistory(SQLModel, table=True):
 
     # Timestamp of when this price was observed
     observed_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
     )
 

@@ -1,10 +1,11 @@
 # backend/services/openai_sentiment.py
 
+import asyncio
 import json
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from backend.core.config import settings
 
@@ -16,14 +17,14 @@ class OpenAISentimentAnalyzer:
     """
     
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
+        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
         self.model = "gpt-4o-mini"
     
     def is_available(self) -> bool:
         """Check if OpenAI is configured."""
         return self.client is not None
     
-    def analyze(self, text: str, context: Optional[str] = None) -> Dict:
+    async def analyze(self, text: str, context: Optional[str] = None) -> Dict:
         """
         Analyze sentiment of a single text.
         
@@ -67,7 +68,7 @@ The three scores (positive, negative, neutral) should roughly sum to 1.0."""
             user_message += f"\n\nContext: {context}"
         
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -108,9 +109,38 @@ The three scores (positive, negative, neutral) should roughly sum to 1.0."""
             print(f"OpenAI API error: {e}")
             return self._fallback_response()
     
-    def analyze_batch(self, texts: List[str]) -> List[Dict]:
-        """Analyze multiple texts."""
-        return [self.analyze(text) for text in texts]
+    async def analyze_batch(self, texts: List[str], max_concurrent: int = 10) -> List[Dict]:
+        """
+        Analyze multiple texts concurrently.
+        
+        Args:
+            texts: List of texts to analyze
+            max_concurrent: Maximum concurrent API calls (to avoid rate limits)
+        
+        Returns:
+            List of sentiment analysis results in same order as input
+        """
+        if not texts:
+            return []
+        
+        # Use semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def analyze_with_limit(text: str) -> Dict:
+            async with semaphore:
+                return await self.analyze(text)
+        
+        # Run all analyses concurrently (with limit)
+        results = await asyncio.gather(
+            *[analyze_with_limit(text) for text in texts],
+            return_exceptions=True
+        )
+        
+        # Replace exceptions with fallback responses
+        return [
+            result if isinstance(result, dict) else self._fallback_response()
+            for result in results
+        ]
     
     def _fallback_response(self) -> Dict:
         """Return neutral response when analysis fails."""
@@ -127,6 +157,5 @@ The three scores (positive, negative, neutral) should roughly sum to 1.0."""
         }
 
 
-# Singleton instance
+# Singleton instance for convenience (still works with async)
 openai_sentiment_analyzer = OpenAISentimentAnalyzer()
-

@@ -78,6 +78,7 @@ class CompetitorProductCreate(CompetitorProductBase):
     """Schema for creating a competitor product mapping."""
     product_id: uuid.UUID  # Your product
     competitor_id: uuid.UUID  # Which competitor
+    current_price: Optional[Decimal] = Field(None, ge=0, description="Current competitor price")
 
 
 class CompetitorProductUpdate(BaseModel):
@@ -89,6 +90,7 @@ class CompetitorProductUpdate(BaseModel):
     match_confidence: Optional[Decimal] = Field(None, ge=0, le=1)
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+    current_price: Optional[Decimal] = Field(None, ge=0, description="Current competitor price")
 
 
 class CompetitorProductResponse(CompetitorProductBase):
@@ -199,4 +201,3 @@ class CompetitorTrendAnalysis(BaseModel):
     trend_direction: str  # "increasing", "decreasing", "stable", "volatile"
     trend_strength: Decimal  # 0-1 confidence
     promotion_frequency: int
-

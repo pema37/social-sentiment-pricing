@@ -8,14 +8,16 @@ syncing products, and pushing price updates.
 """
 
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
-from backend.core.deps import get_current_user, get_db
+from backend.core.deps import get_current_user
+from backend.db.session import get_session
 from backend.core.encryption import encrypt_token, decrypt_token
 from backend.models.user import User
 from backend.models.integration import (
@@ -47,7 +49,7 @@ from backend.schemas.integration import (
     BulkPricePushResponse,
     IntegrationHealthResponse,
 )
-from backend.services.integration.base import PriceUpdateRequest, EcommerceService
+from backend.services.integration.base import PriceUpdateRequest, PriceUpdateResult, EcommerceService
 from backend.services.integration.shopify_service import ShopifyService
 from backend.services.integration.woocommerce_service import WooCommerceService
 
@@ -75,7 +77,7 @@ def get_ecommerce_service(platform: EcommercePlatform) -> EcommerceService:
 @router.post("/oauth/init", response_model=OAuthInitResponse)
 async def init_oauth(
     request: OAuthInitRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -83,13 +85,13 @@ async def init_oauth(
     Returns authorization URL to redirect user to.
     """
     # Check if integration already exists
-    existing = db.exec(
-        select(Integration).where(
-            Integration.user_id == current_user.id,
-            Integration.platform == request.platform,
-            Integration.store_url == request.store_url,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.user_id == current_user.id,
+        Integration.platform == request.platform,
+        Integration.store_url == request.store_url,
+    )
+    result = await db.execute(stmt)
+    existing = result.scalars().first()
     
     if existing and existing.status == IntegrationStatus.ACTIVE:
         raise HTTPException(
@@ -128,7 +130,7 @@ async def init_oauth(
         )
         db.add(integration)
     
-    db.commit()
+    await db.commit()
     
     return OAuthInitResponse(
         authorization_url=auth_url,
@@ -141,16 +143,16 @@ async def oauth_callback(
     code: str,
     state: str,
     shop: str = None,  # Shopify includes this
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     OAuth callback endpoint.
     Shopify redirects here after user approves.
     """
     # Find integration by state
-    integration = db.exec(
-        select(Integration).where(Integration.oauth_state == state)
-    ).first()
+    stmt = select(Integration).where(Integration.oauth_state == state)
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -163,38 +165,38 @@ async def oauth_callback(
     
     redirect_uri = "http://localhost:8000/api/v1/integrations/oauth/callback"
     
-    result = await service.exchange_oauth_code(
+    oauth_result = await service.exchange_oauth_code(
         store_url=integration.store_url,
         code=code,
         redirect_uri=redirect_uri,
     )
     
-    if not result.success:
+    if not oauth_result.success:
         integration.status = IntegrationStatus.ERROR
-        integration.error_message = result.error
+        integration.error_message = oauth_result.error
         integration.oauth_state = None
         db.add(integration)
-        db.commit()
+        await db.commit()
         
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OAuth failed: {result.error}"
+            detail=f"OAuth failed: {oauth_result.error}"
         )
     
     # Store encrypted credentials
-    integration.access_token_encrypted = encrypt_token(result.access_token)
-    if result.refresh_token:
-        integration.refresh_token_encrypted = encrypt_token(result.refresh_token)
-    if result.scope:
-        integration.scopes = result.scope.split(",")
+    integration.access_token_encrypted = encrypt_token(oauth_result.access_token)
+    if oauth_result.refresh_token:
+        integration.refresh_token_encrypted = encrypt_token(oauth_result.refresh_token)
+    if oauth_result.scope:
+        integration.scopes = oauth_result.scope.split(",")
     
     integration.status = IntegrationStatus.ACTIVE
     integration.oauth_state = None
     integration.error_message = None
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.utcnow()
     
     db.add(integration)
-    db.commit()
+    await db.commit()
     
     # TODO: Redirect to frontend success page
     return {"message": "Successfully connected!", "integration_id": str(integration.id)}
@@ -204,13 +206,13 @@ async def oauth_callback(
 
 @router.get("", response_model=IntegrationListResponse)
 async def list_integrations(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List all integrations for current user"""
-    integrations = db.exec(
-        select(Integration).where(Integration.user_id == current_user.id)
-    ).all()
+    stmt = select(Integration).where(Integration.user_id == current_user.id)
+    result = await db.execute(stmt)
+    integrations = list(result.scalars().all())
     
     return IntegrationListResponse(
         integrations=[IntegrationResponse.model_validate(i) for i in integrations],
@@ -221,16 +223,16 @@ async def list_integrations(
 @router.get("/{integration_id}", response_model=IntegrationResponse)
 async def get_integration(
     integration_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific integration"""
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -245,16 +247,16 @@ async def get_integration(
 async def update_integration(
     integration_id: UUID,
     data: IntegrationUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Update integration settings"""
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -270,10 +272,10 @@ async def update_integration(
     if data.settings is not None:
         integration.settings = data.settings
     
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.utcnow()
     db.add(integration)
-    db.commit()
-    db.refresh(integration)
+    await db.commit()
+    await db.refresh(integration)
     
     return IntegrationResponse.model_validate(integration)
 
@@ -281,16 +283,16 @@ async def update_integration(
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect_integration(
     integration_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Disconnect an integration"""
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -300,9 +302,9 @@ async def disconnect_integration(
     
     # Mark as disconnected (soft delete)
     integration.status = IntegrationStatus.DISCONNECTED
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.utcnow()
     db.add(integration)
-    db.commit()
+    await db.commit()
 
 
 # ==================== Sync Operations ====================
@@ -312,16 +314,16 @@ async def trigger_sync(
     integration_id: UUID,
     request: SyncTriggerRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Trigger a product sync from the e-commerce platform"""
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -344,7 +346,7 @@ async def trigger_sync(
     # Update sync status
     integration.sync_status = "syncing"
     db.add(integration)
-    db.commit()
+    await db.commit()
     
     # TODO: Add background task for actual sync
     # background_tasks.add_task(run_product_sync, integration_id, request.sync_type)
@@ -360,16 +362,16 @@ async def trigger_sync(
 @router.get("/{integration_id}/sync/status", response_model=SyncStatusResponse)
 async def get_sync_status(
     integration_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get current sync status"""
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -389,17 +391,17 @@ async def get_sync_status(
 async def get_sync_logs(
     integration_id: UUID,
     limit: int = 20,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get sync history for an integration"""
     # First verify ownership
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -407,12 +409,14 @@ async def get_sync_logs(
             detail="Integration not found"
         )
     
-    logs = db.exec(
+    stmt = (
         select(IntegrationSyncLog)
         .where(IntegrationSyncLog.integration_id == integration_id)
         .order_by(IntegrationSyncLog.started_at.desc())
         .limit(limit)
-    ).all()
+    )
+    result = await db.execute(stmt)
+    logs = list(result.scalars().all())
     
     return SyncLogsListResponse(
         logs=[SyncLogResponse.model_validate(log) for log in logs],
@@ -426,17 +430,17 @@ async def get_sync_logs(
 async def create_product_link(
     integration_id: UUID,
     data: ProductLinkCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Link an SSP product to an external platform product"""
     # Verify integration ownership
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -445,12 +449,12 @@ async def create_product_link(
         )
     
     # Verify product ownership
-    product = db.exec(
-        select(Product).where(
-            Product.id == data.product_id,
-            Product.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Product).where(
+        Product.id == data.product_id,
+        Product.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    product = result.scalars().first()
     
     if not product:
         raise HTTPException(
@@ -459,12 +463,12 @@ async def create_product_link(
         )
     
     # Check for existing link
-    existing = db.exec(
-        select(ProductIntegrationLink).where(
-            ProductIntegrationLink.integration_id == integration_id,
-            ProductIntegrationLink.external_product_id == data.external_product_id,
-        )
-    ).first()
+    stmt = select(ProductIntegrationLink).where(
+        ProductIntegrationLink.integration_id == integration_id,
+        ProductIntegrationLink.external_product_id == data.external_product_id,
+    )
+    result = await db.execute(stmt)
+    existing = result.scalars().first()
     
     if existing:
         raise HTTPException(
@@ -480,8 +484,8 @@ async def create_product_link(
     )
     
     db.add(link)
-    db.commit()
-    db.refresh(link)
+    await db.commit()
+    await db.refresh(link)
     
     return ProductLinkResponse.model_validate(link)
 
@@ -489,17 +493,17 @@ async def create_product_link(
 @router.get("/{integration_id}/links", response_model=ProductLinkListResponse)
 async def list_product_links(
     integration_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List all product links for an integration"""
     # Verify integration ownership
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -507,10 +511,11 @@ async def list_product_links(
             detail="Integration not found"
         )
     
-    links = db.exec(
-        select(ProductIntegrationLink)
-        .where(ProductIntegrationLink.integration_id == integration_id)
-    ).all()
+    stmt = select(ProductIntegrationLink).where(
+        ProductIntegrationLink.integration_id == integration_id
+    )
+    result = await db.execute(stmt)
+    links = list(result.scalars().all())
     
     return ProductLinkListResponse(
         links=[ProductLinkResponse.model_validate(link) for link in links],
@@ -522,17 +527,17 @@ async def list_product_links(
 async def delete_product_link(
     integration_id: UUID,
     link_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Remove a product link"""
     # Verify integration ownership
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -540,12 +545,12 @@ async def delete_product_link(
             detail="Integration not found"
         )
     
-    link = db.exec(
-        select(ProductIntegrationLink).where(
-            ProductIntegrationLink.id == link_id,
-            ProductIntegrationLink.integration_id == integration_id,
-        )
-    ).first()
+    stmt = select(ProductIntegrationLink).where(
+        ProductIntegrationLink.id == link_id,
+        ProductIntegrationLink.integration_id == integration_id,
+    )
+    result = await db.execute(stmt)
+    link = result.scalars().first()
     
     if not link:
         raise HTTPException(
@@ -553,8 +558,8 @@ async def delete_product_link(
             detail="Product link not found"
         )
     
-    db.delete(link)
-    db.commit()
+    await db.delete(link)
+    await db.commit()
 
 
 # ==================== Price Push ====================
@@ -563,17 +568,17 @@ async def delete_product_link(
 async def push_price(
     integration_id: UUID,
     request: PricePushRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Push a price update to the e-commerce platform"""
     # Verify integration
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    db_result = await db.execute(stmt)
+    integration = db_result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -588,12 +593,12 @@ async def push_price(
         )
     
     # Get product link
-    link = db.exec(
-        select(ProductIntegrationLink).where(
-            ProductIntegrationLink.id == request.product_link_id,
-            ProductIntegrationLink.integration_id == integration_id,
-        )
-    ).first()
+    stmt = select(ProductIntegrationLink).where(
+        ProductIntegrationLink.id == request.product_link_id,
+        ProductIntegrationLink.integration_id == integration_id,
+    )
+    link_result = await db.execute(stmt)
+    link = link_result.scalars().first()
     
     if not link:
         raise HTTPException(
@@ -612,28 +617,34 @@ async def push_price(
         compare_at_price=request.compare_at_price,
     )
     
-    result = await service.update_price(
+    price_response = await service.update_price(
         store_url=integration.store_url,
         access_token=access_token,
         request=update_request,
     )
     
-    # Update link with new price info
-    if result.result.value == "success":
+    # Check result with defensive coding
+    is_success = False
+    if price_response and price_response.result is not None:
+        # Compare using enum value
+        is_success = price_response.result == PriceUpdateResult.SUCCESS
+    
+    # Update link with new price info on success
+    if is_success:
         link.external_price = float(request.new_price)
         if request.compare_at_price:
             link.external_compare_at_price = float(request.compare_at_price)
-        link.last_price_push_at = datetime.now(timezone.utc)
-        link.updated_at = datetime.now(timezone.utc)
+        link.last_price_push_at = datetime.utcnow()
+        link.updated_at = datetime.utcnow()
         db.add(link)
-        db.commit()
+        await db.commit()
     
     return PricePushResponse(
-        success=result.result.value == "success",
+        success=is_success,
         product_link_id=link.id,
-        old_price=result.old_price,
+        old_price=price_response.old_price if price_response else None,
         new_price=request.new_price,
-        error=result.error,
+        error=price_response.error if price_response else "No response from service",
     )
 
 
@@ -642,16 +653,16 @@ async def push_price(
 @router.get("/{integration_id}/health", response_model=IntegrationHealthResponse)
 async def check_integration_health(
     integration_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Check if an integration connection is healthy"""
-    integration = db.exec(
-        select(Integration).where(
-            Integration.id == integration_id,
-            Integration.user_id == current_user.id,
-        )
-    ).first()
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
     
     if not integration:
         raise HTTPException(
@@ -673,6 +684,5 @@ async def check_integration_health(
         platform=integration.platform,
         store_url=integration.store_url,
         status=status_result.value,
-        checked_at=datetime.now(timezone.utc),
+        checked_at=datetime.utcnow(),
     )
-

@@ -1,449 +1,366 @@
 # backend/api/v1/routes/sentiment.py
 
-from datetime import datetime, timedelta
-from decimal import Decimal
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import Session, select
+from uuid import UUID
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+from celery.result import AsyncResult  
 
 from backend.db.session import get_session
-from backend.models import User, Product, Sentiment
+from backend.models import Sentiment, Product, SocialMention
 from backend.schemas.sentiment import (
     SentimentAnalyzeRequest,
+    SentimentResponse,
     SentimentBulkRequest,
-    SentimentRead,
-    SentimentScores,
-    SentimentAnalyzeResponse,
     SentimentSummary,
 )
-from backend.api.v1.routes.auth import get_current_user
-from backend.services.sentiment_analyzer import sentiment_analyzer
+from backend.services.sentiment_analyzer import SentimentAnalyzer
+from backend.core.security import get_current_user
+from backend.models import User
 
-router = APIRouter(prefix="/sentiment", tags=["sentiment"])
+# Import Celery tasks
+from backend.workers.tasks.ingestion_tasks import fetch_for_product, process_pending_mentions
+
+router = APIRouter(prefix="/sentiment", tags=["Sentiment Analysis"])
 
 
-# ───────────────────────────── Analyze Endpoints ───────────────────────────── #
+# =============================================================================
+# SENTIMENT ANALYSIS ENDPOINTS (sync - immediate response)
+# =============================================================================
 
-@router.post("/analyze", response_model=SentimentAnalyzeResponse)
-def analyze_text(
-    payload: SentimentAnalyzeRequest,
+@router.post("/analyze", response_model=SentimentResponse)
+async def analyze_text(
+    request: SentimentAnalyzeRequest,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """
-    Analyze sentiment of any text.
-    Does NOT save to database - use for testing/preview.
-    """
-    result = sentiment_analyzer.analyze(payload.text)
-
-    return SentimentAnalyzeResponse(
-        text=payload.text,
-        scores=SentimentScores(
-            compound=result["compound"],
-            positive=result["positive"],
-            negative=result["negative"],
-            neutral=result["neutral"],
-        ),
-        label=result["label"],
-        saved=False,
+    """Analyze sentiment of provided text."""
+    analyzer = SentimentAnalyzer()
+    result = await analyzer.analyze(request.text)
+    
+    return SentimentResponse(
+        text=request.text,
+        sentiment_score=result.score,
+        sentiment_label=result.label,
+        confidence=result.confidence,
+        emotions=result.emotions,
     )
 
 
-@router.post(
-    "/analyze/{product_id}",
-    response_model=SentimentAnalyzeResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def analyze_and_save(
-    product_id: str,
-    payload: SentimentAnalyzeRequest,
-    session: Session = Depends(get_session),
+@router.post("/analyze/{product_id}", response_model=SentimentResponse)
+async def analyze_and_save(
+    product_id: UUID,
+    request: SentimentAnalyzeRequest,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """
-    Analyze sentiment and save to database for a specific product.
-    """
-    # Verify product exists and belongs to user
-    product = session.get(Product, product_id)
-
+    """Analyze sentiment and save to database linked to a product."""
+    # Verify product exists
+    result = await session.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-
-    # Analyze the text
-    result = sentiment_analyzer.analyze(payload.text)
-
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    analyzer = SentimentAnalyzer()
+    analysis = await analyzer.analyze(request.text)
+    
     # Save to database
-    sentiment = Sentiment(
+    sentiment_record = Sentiment(
         product_id=product_id,
-        source=payload.source,
-        raw_text=payload.text,
-        compound_score=result["compound"],
-        positive_score=result["positive"],
-        negative_score=result["negative"],
-        neutral_score=result["neutral"],
-        author=payload.author,
-        url=payload.url,
+        source=request.source or "manual",
+        raw_text=request.text,
+        compound_score=analysis.score,
+        positive_score=analysis.emotions["positive"],
+        negative_score=analysis.emotions["negative"],
+        neutral_score=analysis.emotions["neutral"],
+        author=request.author,
+        url=request.url,
     )
-
-    session.add(sentiment)
-    session.commit()
-    session.refresh(sentiment)
-
-    return SentimentAnalyzeResponse(
-        text=payload.text,
-        scores=SentimentScores(
-            compound=result["compound"],
-            positive=result["positive"],
-            negative=result["negative"],
-            neutral=result["neutral"],
-        ),
-        label=result["label"],
-        saved=True,
-        sentiment_id=sentiment.id,
+    session.add(sentiment_record)
+    await session.commit()
+    await session.refresh(sentiment_record)
+    
+    return SentimentResponse(
+        sentiment_id=sentiment_record.id,
+        text=request.text,
+        sentiment_score=analysis.score,
+        sentiment_label=analysis.label,
+        confidence=analysis.confidence,
+        emotions=analysis.emotions,
     )
 
 
-@router.post(
-    "/analyze/{product_id}/bulk",
-    response_model=List[SentimentAnalyzeResponse],
-    status_code=status.HTTP_201_CREATED,
-)
-def analyze_bulk(
-    product_id: str,
-    payload: SentimentBulkRequest,
-    session: Session = Depends(get_session),
+@router.post("/analyze/{product_id}/bulk")
+async def analyze_bulk(
+    product_id: UUID,
+    request: SentimentBulkRequest,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """
-    Analyze and save multiple texts at once for a product.
-    """
-    # Verify product exists and belongs to user
-    product = session.get(Product, product_id)
-
+    """Analyze multiple texts and save all to database."""
+    # Verify product exists
+    result = await session.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-
-    responses = []
-
-    for item in payload.items:
-        # Analyze
-        result = sentiment_analyzer.analyze(item.text)
-
-        # Save
-        sentiment = Sentiment(
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    analyzer = SentimentAnalyzer()
+    results = []
+    
+    for item in request.items:
+        analysis = await analyzer.analyze(item.text)
+        
+        sentiment_record = Sentiment(
             product_id=product_id,
-            source=item.source,
-            raw_text=item.text,
-            compound_score=result["compound"],
-            positive_score=result["positive"],
-            negative_score=result["negative"],
-            neutral_score=result["neutral"],
-            author=item.author,
-            url=item.url,
+            organization_id=product.organization_id,
+            sentiment_score=analysis.score,
+            sentiment_label=analysis.label,
+            confidence=analysis.confidence,
+            emotions=analysis.emotions,
         )
-
-        session.add(sentiment)
-        session.flush()  # Get ID without committing
-
-        responses.append(
-            SentimentAnalyzeResponse(
-                text=item.text,
-                scores=SentimentScores(
-                    compound=result["compound"],
-                    positive=result["positive"],
-                    negative=result["negative"],
-                    neutral=result["neutral"],
-                ),
-                label=result["label"],
-                saved=True,
-                sentiment_id=sentiment.id,
-            )
-        )
-
-    session.commit()
-
-    return responses
+        session.add(sentiment_record)
+        await session.flush()  # Get the ID
+        
+        results.append({
+            "sentiment_id": str(sentiment_record.id),
+            "text": item.text,
+            "sentiment_score": analysis.score,
+            "sentiment_label": analysis.label,
+            "confidence": analysis.confidence,
+        })
+    
+    await session.commit()
+    return {"results": results, "count": len(results)}
 
 
-# ───────────────────────────── Read Endpoints ───────────────────────────── #
+# =============================================================================
+# SENTIMENT RETRIEVAL ENDPOINTS
+# =============================================================================
 
-@router.get("/product/{product_id}", response_model=List[SentimentRead])
-def list_sentiments(
-    product_id: str,
-    limit: int = Query(default=50, le=100),
-    session: Session = Depends(get_session),
+@router.get("/{sentiment_id}", response_model=SentimentResponse)
+async def get_sentiment(
+    sentiment_id: UUID,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """Get all sentiment records for a product."""
-    # Verify product exists and belongs to user
-    product = session.get(Product, product_id)
+    """Get a specific sentiment record by ID."""
+    result = await session.execute(
+        select(Sentiment).where(Sentiment.id == sentiment_id)
+    )
+    record = result.scalar_one_or_none()
+    
+    if not record:
+        raise HTTPException(status_code=404, detail="Sentiment record not found")
+    
+    return SentimentResponse(
+        sentiment_id=record.id,
+        sentiment_score=record.sentiment_score,
+        sentiment_label=record.sentiment_label,
+        confidence=record.confidence,
+        emotions=record.emotions,
+    )
 
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
 
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-
-    statement = (
+@router.get("/product/{product_id}")
+async def get_product_sentiments(
+    product_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get sentiment history for a product."""
+    result = await session.execute(
         select(Sentiment)
         .where(Sentiment.product_id == product_id)
         .order_by(Sentiment.analyzed_at.desc())
+        .offset(offset)
         .limit(limit)
     )
-    sentiments = session.exec(statement).all()
-
-    return sentiments
+    records = result.scalars().all()
+    
+    return {
+        "product_id": str(product_id),
+        "records": records,
+        "count": len(records),
+    }
 
 
 @router.get("/product/{product_id}/summary", response_model=SentimentSummary)
-def get_sentiment_summary(
-    product_id: str,
-    days: int = Query(default=7, ge=1, le=90),
-    session: Session = Depends(get_session),
+async def get_product_sentiment_summary(
+    product_id: UUID,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
     """Get aggregated sentiment summary for a product."""
-    # Verify product exists and belongs to user
-    product = session.get(Product, product_id)
-
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-
-    # Get sentiments from the specified period
-    period_start = datetime.utcnow() - timedelta(days=days)
-    period_end = datetime.utcnow()
-
-    statement = (
-        select(Sentiment)
-        .where(Sentiment.product_id == product_id)
-        .where(Sentiment.analyzed_at >= period_start)
+    result = await session.execute(
+        select(Sentiment).where(Sentiment.product_id == product_id)
     )
-    sentiments = session.exec(statement).all()
-
-    # Calculate summary
-    if not sentiments:
-        return SentimentSummary(
-            product_id=product_id,
-            total_mentions=0,
-            average_compound=Decimal("0"),
-            positive_count=0,
-            negative_count=0,
-            neutral_count=0,
-            trend="stable",
-            period_start=period_start,
-            period_end=period_end,
-        )
-
-    # Build sentiment data for aggregation
-    sentiment_data = [
-        {
-            "compound": s.compound_score,
-            "label": "positive" if s.compound_score > Decimal("0.05")
-                     else "negative" if s.compound_score < Decimal("-0.05")
-                     else "neutral"
-        }
-        for s in sentiments
-    ]
-
-    aggregate = sentiment_analyzer.calculate_aggregate(sentiment_data)
-
-    # Determine trend based on recent vs older sentiments
-    mid_point = len(sentiments) // 2
-    if mid_point > 0:
-        recent = sentiments[:mid_point]
-        older = sentiments[mid_point:]
-
-        recent_avg = sum(s.compound_score for s in recent) / len(recent)
-        older_avg = sum(s.compound_score for s in older) / len(older)
-
-        if recent_avg > older_avg + Decimal("0.1"):
-            trend = "rising"
-        elif recent_avg < older_avg - Decimal("0.1"):
-            trend = "falling"
-        else:
-            trend = "stable"
-    else:
-        trend = "stable"
-
+    records = result.scalars().all()
+    
+    if not records:
+        raise HTTPException(status_code=404, detail="No sentiment data found")
+    
+    scores = [r.sentiment_score for r in records]
+    avg_score = sum(scores) / len(scores)
+    
+    # Count by label
+    label_counts = {}
+    for r in records:
+        label_counts[r.sentiment_label] = label_counts.get(r.sentiment_label, 0) + 1
+    
     return SentimentSummary(
         product_id=product_id,
-        total_mentions=aggregate["total_count"],
-        average_compound=aggregate["average_compound"],
-        positive_count=aggregate["positive_count"],
-        negative_count=aggregate["negative_count"],
-        neutral_count=aggregate["neutral_count"],
-        trend=trend,
-        period_start=period_start,
-        period_end=period_end,
+        total_records=len(records),
+        average_score=avg_score,
+        label_distribution=label_counts,
     )
 
 
-@router.delete("/{sentiment_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_sentiment(
-    sentiment_id: str,
-    session: Session = Depends(get_session),
+@router.delete("/{sentiment_id}")
+async def delete_sentiment(
+    sentiment_id: UUID,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
     """Delete a sentiment record."""
-    sentiment = session.get(Sentiment, sentiment_id)
-
-    if not sentiment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Sentiment not found",
-        )
-
-    # Verify the sentiment belongs to a product owned by the user
-    product = session.get(Product, sentiment.product_id)
-
-    if not product or product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this sentiment",
-        )
-
-    session.delete(sentiment)
-    session.commit()
-
-    return None
-
-# ───────────────────────────── Social Ingestion Endpoints ───────────────────────────── #
-
-@router.post("/fetch/{product_id}")
-def fetch_social_mentions_for_product(
-    product_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Fetch social mentions for a product from Reddit (and other sources).
-    Uses product keywords to search.
-    """
-    from backend.workers.tasks.ingestion_tasks import fetch_for_product
-    
-    # Verify product exists and belongs to user
-    product = session.get(Product, product_id)
-    
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-    
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-    
-    # Run the fetch task directly (not async via Celery for now)
-    result = fetch_for_product(
-        product_id=str(product_id),
-        user_id=str(current_user.id),
-        keywords=product.keywords or [product.name],
-        mock_mode=True  # Change to False when Reddit API is approved
+    result = await session.execute(
+        select(Sentiment).where(Sentiment.id == sentiment_id)
     )
+    record = result.scalar_one_or_none()
     
-    return result
-
-
-@router.post("/process")
-def process_mentions(
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Process all pending mentions (run sentiment analysis).
-    """
-    from backend.workers.tasks.ingestion_tasks import process_pending_mentions
+    if not record:
+        raise HTTPException(status_code=404, detail="Sentiment record not found")
     
-    result = process_pending_mentions()
-    return result
+    await session.delete(record)
+    await session.commit()
+    
+    return {"status": "deleted", "sentiment_id": str(sentiment_id)}
 
 
 @router.get("/mentions/{product_id}")
-def get_social_mentions(
-    product_id: str,
-    limit: int = Query(default=50, le=100),
-    processed_only: bool = Query(default=False),
-    session: Session = Depends(get_session),
+async def get_product_mentions(
+    product_id: UUID,
+    processed: Optional[bool] = None,
+    limit: int = 50,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """
-    Get social mentions for a product.
-    """
-    from backend.models.social_mention import SocialMention
-    
-    # Verify product exists and belongs to user
-    product = session.get(Product, product_id)
-    
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
-    
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-    
-    # Build query
+    """Get social mentions for a product."""
     query = select(SocialMention).where(SocialMention.product_id == product_id)
     
-    if processed_only:
-        query = query.where(SocialMention.processed == True)
+    if processed is not None:
+        query = query.where(SocialMention.processed == processed)
     
     query = query.order_by(SocialMention.collected_at.desc()).limit(limit)
     
-    mentions = session.exec(query).all()
+    result = await session.execute(query)
+    mentions = result.scalars().all()
     
-    # Format response
-    return [
-        {
-            "id": str(m.id),
-            "source": m.source,
-            "content": m.content,
-            "author": m.author,
-            "engagement_count": m.engagement_count,
-            "url": m.url,
-            "published_at": m.published_at.isoformat() if m.published_at else None,
-            "processed": m.processed,
-            "sentiment": m.raw_data.get("sentiment") if m.raw_data else None,
-        }
-        for m in mentions
-    ]
+    return {"product_id": str(product_id), "mentions": mentions, "count": len(mentions)}
 
+
+# =============================================================================
+# BACKGROUND TASK ENDPOINTS (async via Celery - returns task_id)
+# =============================================================================
+
+@router.post("/fetch/{product_id}")
+async def fetch_product_mentions(
+    product_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Queue a background task to fetch social mentions for a product.
+    Returns a task_id to check status.
+    """
+    # Verify product exists
+    result = await session.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Queue the task with .delay() - returns immediately
+    task = fetch_for_product.delay(str(product_id))
+    
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "product_id": str(product_id),
+        "message": "Fetch task has been queued. Use task_id to check status.",
+        "check_status_url": f"/api/v1/sentiment/tasks/{task.id}",
+    }
+
+
+@router.post("/process")
+async def process_mentions(
+    batch_size: int = 100,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Queue a background task to process pending mentions through sentiment analysis.
+    Returns a task_id to check status.
+    """
+    # Queue the task with .delay() - returns immediately
+    task = process_pending_mentions.delay(batch_size)
+    
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "batch_size": batch_size,
+        "message": "Process task has been queued. Use task_id to check status.",
+        "check_status_url": f"/api/v1/sentiment/tasks/{task.id}",
+    }
+
+
+@router.get("/tasks/{task_id}")
+async def get_task_status(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Check the status of a background task.
+    
+    States:
+    - PENDING: Task is waiting to be picked up
+    - STARTED: Task has started (requires track_started=True on task)
+    - LOADING_PRODUCT, FETCHING, SAVING, PROCESSING: Custom progress states
+    - SUCCESS: Task completed successfully
+    - FAILURE: Task failed
+    """
+    result = AsyncResult(task_id)
+    
+    response = {
+        "task_id": task_id,
+        "status": result.status,
+    }
+    
+    if result.status == "PENDING":
+        response["message"] = "Task is waiting to be picked up by a worker"
+    
+    elif result.status == "STARTED":
+        response["message"] = "Task has started"
+        if result.info:
+            response["progress"] = result.info
+    
+    elif result.status in ["LOADING_PRODUCT", "FETCHING", "SAVING", "PROCESSING", "LOADING"]:
+        response["message"] = f"Task is {result.status.lower()}"
+        if result.info:
+            response["progress"] = result.info
+    
+    elif result.status == "SUCCESS":
+        response["message"] = "Task completed successfully"
+        response["result"] = result.result
+    
+    elif result.status == "FAILURE":
+        response["message"] = "Task failed"
+        response["error"] = str(result.result) if result.result else "Unknown error"
+    
+    return response

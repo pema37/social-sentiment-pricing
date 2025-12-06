@@ -51,6 +51,19 @@ from backend.schemas.competitor import (
     CompetitorTrendAnalysis,
 )
 
+# Phase 6: Alert Schemas
+from backend.schemas.alert import (
+    AlertConfigurationCreate,
+    AlertConfigurationUpdate,
+    AlertConfigurationRead,
+    AlertCreate,
+    AlertRead,
+    AlertAcknowledge,
+    AlertResolve,
+    AlertStats,
+    AlertListResponse,
+)
+
 
 __all__ = [
     # User
@@ -93,5 +106,14 @@ __all__ = [
     "CompetitorPriceComparison",
     "CompetitorAlert",
     "CompetitorTrendAnalysis",
+    # Alert (Phase 6)
+    "AlertConfigurationCreate",
+    "AlertConfigurationUpdate",
+    "AlertConfigurationRead",
+    "AlertCreate",
+    "AlertRead",
+    "AlertAcknowledge",
+    "AlertResolve",
+    "AlertStats",
+    "AlertListResponse",
 ]
-

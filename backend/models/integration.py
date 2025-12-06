@@ -96,10 +96,10 @@ class Integration(SQLModel, table=True):
     
     # ========== Timestamps ==========
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=datetime.utcnow
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=datetime.utcnow
     )
     
     # ========== Relationships ==========
@@ -127,7 +127,7 @@ class IntegrationSyncLog(SQLModel, table=True):
     # Sync details
     sync_type: str = Field(max_length=50)  # "full", "incremental", "webhook"
     started_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         index=True
     )
     completed_at: Optional[datetime] = Field(default=None)
@@ -179,10 +179,10 @@ class ProductIntegrationLink(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=datetime.utcnow
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=datetime.utcnow
     )
 
     # Relationships

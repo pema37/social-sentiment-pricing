@@ -12,14 +12,16 @@ from backend.models.price_recommendation import PriceRecommendation, Recommendat
 from backend.models.pricing_settings import PricingSettings
 from backend.models.price_history import PriceHistory, ChangeReason
 from backend.models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
-
+from backend.models.alert import Alert, AlertConfiguration, AlertType, AlertSeverity, AlertChannel, AlertStatus
 
 
 __all__ = [
     "User",
     "Product",
     "Sentiment",
+    "SocialMention",           
     "PriceHistory",
+    "ChangeReason",            
     "PricingRule",
     "RuleType",
     "RuleAction",
@@ -27,6 +29,15 @@ __all__ = [
     "RecommendationStatus",
     "PricingSettings",
     "Competitor",
+    "CompetitorProduct",       
+    "CompetitorPriceHistory",  
+    "RecommendationOutcome",   
+    "OutcomeLabel",            
     "Integration",
+    "Alert",
+    "AlertConfiguration", 
+    "AlertType",
+    "AlertSeverity",
+    "AlertChannel",
+    "AlertStatus",
 ]
-

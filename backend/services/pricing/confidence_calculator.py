@@ -3,7 +3,7 @@
 Confidence Calculator - Calculates confidence scores for price recommendations.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -212,7 +212,7 @@ class ConfidenceCalculator:
         """
         from backend.models.price_history import PriceHistory
         
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.utcnow() - timedelta(days=days)
         
         history = self.db.exec(
             select(PriceHistory)
@@ -251,7 +251,7 @@ class ConfidenceCalculator:
         """
         from backend.models.sentiment import Sentiment
         
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.utcnow() - timedelta(days=days)
         
         sentiments = self.db.exec(
             select(Sentiment)

@@ -1,6 +1,5 @@
 # backend/models/social_mention.py
 
-
 import uuid as uuid_lib
 from datetime import datetime, timezone
 from typing import Optional
@@ -48,7 +47,7 @@ class SocialMention(SQLModel, table=True):
     
     # Timestamps
     collected_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 

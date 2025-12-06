@@ -11,7 +11,10 @@ from backend.api.v1.routes.sentiment import router as sentiment_router
 from backend.api.v1.routes.competitors import router as competitors_router
 from backend.api.v1.routes.integrations import router as integrations_router
 from backend.api.v1.routes.webhooks import router as webhooks_router
-from backend.api.v1.routes.pricing import router as pricing_router  
+from backend.api.v1.routes.pricing import router as pricing_router
+from backend.api.v1.routes.alerts import router as alerts_router  
+from backend.api.v1.routes.analytics import router as analytics_router
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -45,5 +48,6 @@ app.include_router(sentiment_router, prefix="/api/v1")
 app.include_router(competitors_router, prefix="/api/v1")
 app.include_router(integrations_router, prefix="/api/v1")
 app.include_router(webhooks_router, prefix="/api/v1")
-app.include_router(pricing_router, prefix="/api/v1")  
-
+app.include_router(pricing_router, prefix="/api/v1")
+app.include_router(alerts_router, prefix="/api/v1")  
+app.include_router(analytics_router, prefix="/api/v1")

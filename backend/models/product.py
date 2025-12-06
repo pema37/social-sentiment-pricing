@@ -41,11 +41,11 @@ class Product(SQLModel, table=True):
     keywords: List[str] = Field(default=[], sa_column=Column(JSON))
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 

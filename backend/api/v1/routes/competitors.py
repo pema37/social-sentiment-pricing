@@ -4,6 +4,10 @@
 Competitor Tracking API Routes
 
 Endpoints for managing competitors, their products, and price analysis.
+
+IMPORTANT: Route ordering matters in FastAPI!
+Static routes (like /products) MUST come BEFORE dynamic routes (like /{competitor_id})
+otherwise /products will be matched as /{competitor_id} with competitor_id="products"
 """
 
 import uuid as uuid_lib
@@ -12,7 +16,9 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
-from sqlmodel import Session, select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
+from sqlmodel import select
 
 from backend.api.v1.routes.auth import get_current_user
 from backend.db.session import get_session
@@ -45,13 +51,13 @@ router = APIRouter(prefix="/competitors", tags=["competitors"])
 
 
 # ============================================================
-# Competitor CRUD
+# Competitor CRUD - Base routes (no path params)
 # ============================================================
 
 @router.post("", response_model=CompetitorResponse, status_code=status.HTTP_201_CREATED)
 async def create_competitor(
     competitor_in: CompetitorCreate,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new competitor to track."""
@@ -65,8 +71,8 @@ async def create_competitor(
         scrape_frequency_minutes=competitor_in.scrape_frequency_minutes,
     )
     db.add(competitor)
-    db.commit()
-    db.refresh(competitor)
+    await db.commit()
+    await db.refresh(competitor)
     return competitor
 
 
@@ -75,7 +81,7 @@ async def list_competitors(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List all competitors for the current user."""
@@ -86,11 +92,13 @@ async def list_competitors(
     
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
-    total = db.exec(count_query).one()
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
     
     # Paginate
     query = query.offset((page - 1) * size).limit(size)
-    competitors = db.exec(query).all()
+    result = await db.execute(query)
+    competitors = result.scalars().all()
     
     return CompetitorListResponse(
         items=competitors,
@@ -100,119 +108,35 @@ async def list_competitors(
     )
 
 
-@router.get("/{competitor_id}", response_model=CompetitorResponse)
-async def get_competitor(
-    competitor_id: uuid_lib.UUID,
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Get a specific competitor."""
-    competitor = db.exec(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
-    ).first()
-    
-    if not competitor:
-        raise HTTPException(status_code=404, detail="Competitor not found")
-    
-    return competitor
-
-
-@router.patch("/{competitor_id}", response_model=CompetitorResponse)
-async def update_competitor(
-    competitor_id: uuid_lib.UUID,
-    competitor_in: CompetitorUpdate,
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Update a competitor."""
-    competitor = db.exec(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
-    ).first()
-    
-    if not competitor:
-        raise HTTPException(status_code=404, detail="Competitor not found")
-    
-    update_data = competitor_in.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(competitor, field, value)
-    
-    competitor.updated_at = datetime.now(timezone.utc)
-    db.add(competitor)
-    db.commit()
-    db.refresh(competitor)
-    return competitor
-
-
-@router.delete("/{competitor_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_competitor(
-    competitor_id: uuid_lib.UUID,
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Delete a competitor and all associated data."""
-    competitor = db.exec(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
-    ).first()
-    
-    if not competitor:
-        raise HTTPException(status_code=404, detail="Competitor not found")
-    
-    # Delete associated competitor products and their history
-    competitor_products = db.exec(
-        select(CompetitorProduct).where(CompetitorProduct.competitor_id == competitor_id)
-    ).all()
-    
-    for cp in competitor_products:
-        # Delete price history
-        db.exec(
-            select(CompetitorPriceHistory)
-            .where(CompetitorPriceHistory.competitor_product_id == cp.id)
-        )
-        histories = db.exec(
-            select(CompetitorPriceHistory)
-            .where(CompetitorPriceHistory.competitor_product_id == cp.id)
-        ).all()
-        for h in histories:
-            db.delete(h)
-        db.delete(cp)
-    
-    db.delete(competitor)
-    db.commit()
-
-
 # ============================================================
-# Competitor Product CRUD
+# Competitor Product CRUD - MUST come BEFORE /{competitor_id}
 # ============================================================
 
 @router.post("/products", response_model=CompetitorProductResponse, status_code=status.HTTP_201_CREATED)
 async def create_competitor_product(
     product_in: CompetitorProductCreate,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Link a competitor product to your product."""
     # Verify product belongs to user
-    product = db.exec(
+    result = await db.execute(
         select(Product)
         .where(Product.id == product_in.product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    product = result.scalars().first()
     
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
     # Verify competitor belongs to user
-    competitor = db.exec(
+    result = await db.execute(
         select(Competitor)
         .where(Competitor.id == product_in.competitor_id)
         .where(Competitor.user_id == current_user.id)
-    ).first()
+    )
+    competitor = result.scalars().first()
     
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
@@ -223,14 +147,15 @@ async def create_competitor_product(
         competitor_product_name=product_in.competitor_product_name,
         competitor_product_url=product_in.competitor_product_url,
         competitor_sku=product_in.competitor_sku,
+        current_price=product_in.current_price,  
         currency=product_in.currency,
         match_confidence=product_in.match_confidence,
         notes=product_in.notes,
         is_active=product_in.is_active,
     )
     db.add(competitor_product)
-    db.commit()
-    db.refresh(competitor_product)
+    await db.commit()
+    await db.refresh(competitor_product)
     return competitor_product
 
 
@@ -241,7 +166,7 @@ async def list_competitor_products(
     is_active: Optional[bool] = None,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List competitor product mappings."""
@@ -261,11 +186,13 @@ async def list_competitor_products(
     
     # Count
     count_query = select(func.count()).select_from(query.subquery())
-    total = db.exec(count_query).one()
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
     
     # Paginate
     query = query.offset((page - 1) * size).limit(size)
-    items = db.exec(query).all()
+    result = await db.execute(query)
+    items = result.scalars().all()
     
     return CompetitorProductListResponse(
         items=items,
@@ -278,23 +205,27 @@ async def list_competitor_products(
 @router.get("/products/{competitor_product_id}", response_model=CompetitorProductWithDetails)
 async def get_competitor_product(
     competitor_product_id: uuid_lib.UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get a competitor product with full details."""
-    cp = db.exec(
+    result = await db.execute(
         select(CompetitorProduct)
         .join(Product)
         .where(CompetitorProduct.id == competitor_product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    cp = result.scalars().first()
     
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
     
     # Fetch related entities
-    product = db.exec(select(Product).where(Product.id == cp.product_id)).first()
-    competitor = db.exec(select(Competitor).where(Competitor.id == cp.competitor_id)).first()
+    prod_result = await db.execute(select(Product).where(Product.id == cp.product_id))
+    product = prod_result.scalars().first()
+    
+    comp_result = await db.execute(select(Competitor).where(Competitor.id == cp.competitor_id))
+    competitor = comp_result.scalars().first()
     
     # Calculate price difference
     price_diff = None
@@ -318,16 +249,17 @@ async def get_competitor_product(
 async def update_competitor_product(
     competitor_product_id: uuid_lib.UUID,
     product_in: CompetitorProductUpdate,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Update a competitor product mapping."""
-    cp = db.exec(
+    result = await db.execute(
         select(CompetitorProduct)
         .join(Product)
         .where(CompetitorProduct.id == competitor_product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    cp = result.scalars().first()
     
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
@@ -336,106 +268,110 @@ async def update_competitor_product(
     for field, value in update_data.items():
         setattr(cp, field, value)
     
-    cp.updated_at = datetime.now(timezone.utc)
+    cp.updated_at = datetime.utcnow()
     db.add(cp)
-    db.commit()
-    db.refresh(cp)
+    await db.commit()
+    await db.refresh(cp)
     return cp
 
 
 @router.delete("/products/{competitor_product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_competitor_product(
     competitor_product_id: uuid_lib.UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a competitor product mapping."""
-    cp = db.exec(
+    result = await db.execute(
         select(CompetitorProduct)
         .join(Product)
         .where(CompetitorProduct.id == competitor_product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    cp = result.scalars().first()
     
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
     
     # Delete price history
-    histories = db.exec(
+    hist_result = await db.execute(
         select(CompetitorPriceHistory)
         .where(CompetitorPriceHistory.competitor_product_id == cp.id)
-    ).all()
+    )
+    histories = hist_result.scalars().all()
     for h in histories:
-        db.delete(h)
+        await db.delete(h)
     
-    db.delete(cp)
-    db.commit()
+    await db.delete(cp)
+    await db.commit()
 
 
 # ============================================================
-# Price Scraping & History
+# Price Scraping & History - Static paths with /products prefix
 # ============================================================
 
 @router.post("/products/{competitor_product_id}/scrape", response_model=CompetitorPriceHistoryResponse)
 async def scrape_competitor_price(
     competitor_product_id: uuid_lib.UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Manually trigger a price scrape for a competitor product."""
     # Get competitor product with access check
-    cp = db.exec(
+    result = await db.execute(
         select(CompetitorProduct)
         .join(Product)
         .where(CompetitorProduct.id == competitor_product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    cp = result.scalars().first()
     
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
     
     # Get competitor for scraping config
-    competitor = db.exec(
+    comp_result = await db.execute(
         select(Competitor).where(Competitor.id == cp.competitor_id)
-    ).first()
+    )
+    competitor = comp_result.scalars().first()
     
     # Perform scrape
-    result = await competitor_scraper.scrape_price(cp, competitor)
+    scrape_result = await competitor_scraper.scrape_price(cp, competitor)
     
-    if not result.success:
+    if not scrape_result.success:
         # Update competitor error tracking
         competitor.consecutive_failures += 1
-        competitor.last_error = result.error
+        competitor.last_error = scrape_result.error
         db.add(competitor)
-        db.commit()
+        await db.commit()
         raise HTTPException(
             status_code=502,
-            detail=f"Scrape failed: {result.error}"
+            detail=f"Scrape failed: {scrape_result.error}"
         )
     
     # Reset error tracking on success
     competitor.consecutive_failures = 0
     competitor.last_error = None
-    competitor.last_scraped_at = datetime.now(timezone.utc)
+    competitor.last_scraped_at = datetime.utcnow()
     
     # Create history record if price changed
-    history = competitor_scraper.create_price_history_record(cp, result)
+    history = competitor_scraper.create_price_history_record(cp, scrape_result)
     
     if history:
         db.add(history)
         
         # Update competitor product with new price
-        cp.current_price = result.price
-        cp.last_price_update = result.scraped_at
-        cp.price_available = result.is_available
-        cp.updated_at = datetime.now(timezone.utc)
+        cp.current_price = scrape_result.price
+        cp.last_price_update = scrape_result.scraped_at
+        cp.price_available = scrape_result.is_available
+        cp.updated_at = datetime.utcnow()
         db.add(cp)
     
     db.add(competitor)
-    db.commit()
+    await db.commit()
     
     if history:
-        db.refresh(history)
+        await db.refresh(history)
         return history
     
     # Return a "no change" response
@@ -450,8 +386,8 @@ async def scrape_competitor_price(
         change_type="no_change",
         detected_promotion=False,
         was_available=cp.price_available,
-        is_available=result.is_available,
-        observed_at=result.scraped_at,
+        is_available=scrape_result.is_available,
+        observed_at=scrape_result.scraped_at,
     )
 
 
@@ -459,29 +395,31 @@ async def scrape_competitor_price(
 async def get_price_history(
     competitor_product_id: uuid_lib.UUID,
     days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get price history for a competitor product."""
     # Access check
-    cp = db.exec(
+    result = await db.execute(
         select(CompetitorProduct)
         .join(Product)
         .where(CompetitorProduct.id == competitor_product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    cp = result.scalars().first()
     
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
     
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.utcnow() - timedelta(days=days)
     
-    history = db.exec(
+    hist_result = await db.execute(
         select(CompetitorPriceHistory)
         .where(CompetitorPriceHistory.competitor_product_id == competitor_product_id)
         .where(CompetitorPriceHistory.observed_at >= cutoff)
         .order_by(CompetitorPriceHistory.observed_at.desc())
-    ).all()
+    )
+    history = hist_result.scalars().all()
     
     return CompetitorPriceHistoryListResponse(
         items=history,
@@ -490,33 +428,35 @@ async def get_price_history(
 
 
 # ============================================================
-# Analysis & Comparison
+# Analysis & Comparison - Static paths
 # ============================================================
 
 @router.get("/compare/{product_id}", response_model=CompetitorPriceComparison)
 async def compare_prices(
     product_id: uuid_lib.UUID,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Compare your product price against all tracked competitors."""
     # Get product
-    product = db.exec(
+    result = await db.execute(
         select(Product)
         .where(Product.id == product_id)
         .where(Product.user_id == current_user.id)
-    ).first()
+    )
+    product = result.scalars().first()
     
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
     # Get all competitor products for this product
-    competitor_products = db.exec(
+    cp_result = await db.execute(
         select(CompetitorProduct)
         .where(CompetitorProduct.product_id == product_id)
         .where(CompetitorProduct.is_active == True)
         .where(CompetitorProduct.current_price.is_not(None))
-    ).all()
+    )
+    competitor_products = cp_result.scalars().all()
     
     if not competitor_products:
         return CompetitorPriceComparison(
@@ -531,9 +471,10 @@ async def compare_prices(
     # Build competitor price list
     competitor_prices = []
     for cp in competitor_products:
-        competitor = db.exec(
+        comp_result = await db.execute(
             select(Competitor).where(Competitor.id == cp.competitor_id)
-        ).first()
+        )
+        competitor = comp_result.scalars().first()
         
         diff = product.current_price - cp.current_price
         competitor_prices.append({
@@ -583,14 +524,14 @@ async def compare_prices(
 @router.get("/alerts", response_model=List[CompetitorAlert])
 async def get_competitor_alerts(
     hours: int = Query(24, ge=1, le=168),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get recent significant competitor price changes."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
     
     # Get recent price changes for user's tracked competitors
-    histories = db.exec(
+    result = await db.execute(
         select(CompetitorPriceHistory)
         .join(CompetitorProduct)
         .join(Product)
@@ -599,22 +540,28 @@ async def get_competitor_alerts(
         .where(
             (CompetitorPriceHistory.change_type == "promotion") |
             (CompetitorPriceHistory.change_type == "restock") |
-            (func.abs(CompetitorPriceHistory.change_percent) > 5)  # >5% change
+            (func.abs(CompetitorPriceHistory.change_percent) > 5)
         )
         .order_by(CompetitorPriceHistory.observed_at.desc())
-    ).all()
+    )
+    histories = result.scalars().all()
     
     alerts = []
     for h in histories:
-        cp = db.exec(
+        cp_result = await db.execute(
             select(CompetitorProduct).where(CompetitorProduct.id == h.competitor_product_id)
-        ).first()
-        competitor = db.exec(
+        )
+        cp = cp_result.scalars().first()
+        
+        comp_result = await db.execute(
             select(Competitor).where(Competitor.id == cp.competitor_id)
-        ).first()
-        product = db.exec(
+        )
+        competitor = comp_result.scalars().first()
+        
+        prod_result = await db.execute(
             select(Product).where(Product.id == cp.product_id)
-        ).first()
+        )
+        product = prod_result.scalars().first()
         
         # Determine alert type
         if h.change_type == "promotion":
@@ -646,3 +593,94 @@ async def get_competitor_alerts(
     
     return alerts
 
+
+# ============================================================
+# Single Competitor CRUD - Dynamic routes MUST come LAST
+# ============================================================
+
+@router.get("/{competitor_id}", response_model=CompetitorResponse)
+async def get_competitor(
+    competitor_id: uuid_lib.UUID,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a specific competitor."""
+    result = await db.execute(
+        select(Competitor)
+        .where(Competitor.id == competitor_id)
+        .where(Competitor.user_id == current_user.id)
+    )
+    competitor = result.scalars().first()
+    
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+    
+    return competitor
+
+
+@router.patch("/{competitor_id}", response_model=CompetitorResponse)
+async def update_competitor(
+    competitor_id: uuid_lib.UUID,
+    competitor_in: CompetitorUpdate,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a competitor."""
+    result = await db.execute(
+        select(Competitor)
+        .where(Competitor.id == competitor_id)
+        .where(Competitor.user_id == current_user.id)
+    )
+    competitor = result.scalars().first()
+    
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+    
+    update_data = competitor_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(competitor, field, value)
+    
+    competitor.updated_at = datetime.utcnow()
+    db.add(competitor)
+    await db.commit()
+    await db.refresh(competitor)
+    return competitor
+
+
+@router.delete("/{competitor_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_competitor(
+    competitor_id: uuid_lib.UUID,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a competitor and all associated data."""
+    result = await db.execute(
+        select(Competitor)
+        .where(Competitor.id == competitor_id)
+        .where(Competitor.user_id == current_user.id)
+    )
+    competitor = result.scalars().first()
+    
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+    
+    # Delete associated competitor products and their history
+    cp_result = await db.execute(
+        select(CompetitorProduct).where(CompetitorProduct.competitor_id == competitor_id)
+    )
+    competitor_products = cp_result.scalars().all()
+    
+    for cp in competitor_products:
+        # Delete price history
+        hist_result = await db.execute(
+            select(CompetitorPriceHistory)
+            .where(CompetitorPriceHistory.competitor_product_id == cp.id)
+        )
+        histories = hist_result.scalars().all()
+        for h in histories:
+            await db.delete(h)
+        await db.delete(cp)
+    
+    await db.delete(competitor)
+    await db.commit()
+    

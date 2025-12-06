@@ -385,3 +385,4 @@ class AccuracyStatsResponse(BaseModel):
     by_rule_type: dict
     top_performing_rules: list[dict]
     worst_performing_rules: list[dict]
+    

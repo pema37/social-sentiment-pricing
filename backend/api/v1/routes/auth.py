@@ -5,7 +5,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.core.security import (
     hash_password,
@@ -41,9 +42,9 @@ ROLE_HIERARCHY = {
 
 # ───────────────────── Current user helpers ───────────────────── #
 
-def get_current_user(
+async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ) -> User:
     """Extract user from JWT."""
     payload = decode_access_token(token)
@@ -68,7 +69,7 @@ def get_current_user(
             detail="Invalid user ID format",
         )
 
-    user = session.get(User, user_uuid)
+    user = await session.get(User, user_uuid)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -86,7 +87,7 @@ def get_current_user(
 
 def require_role(min_role: str) -> Callable[[User], User]:
     """Restrict access based on role hierarchy. ADMIN can access everything."""
-    def role_checker(user: User = Depends(get_current_user)) -> User:
+    async def role_checker(user: User = Depends(get_current_user)) -> User:
         user_level = ROLE_HIERARCHY.get(user.role, 0)
         required_level = ROLE_HIERARCHY.get(min_role, 0)
 
@@ -107,14 +108,15 @@ def require_role(min_role: str) -> Callable[[User], User]:
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def register(
+async def register(
     payload: RegisterRequest,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Create a new user account."""
     email = payload.email.lower()
 
-    existing = session.exec(select(User).where(User.email == email)).first()
+    result = await session.execute(select(User).where(User.email == email))
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -127,20 +129,21 @@ def register(
     )
 
     session.add(user)
-    session.commit()
-    session.refresh(user)
+    await session.commit()
+    await session.refresh(user)
 
     return user
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(
+async def login(
     payload: LoginRequest,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Login and receive a JWT token (JSON body)."""
     email = payload.email.lower()
-    user = session.exec(select(User).where(User.email == email)).first()
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
 
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
@@ -163,13 +166,14 @@ def login(
 
 
 @router.post("/login/oauth", response_model=TokenResponse)
-def login_oauth(
+async def login_oauth(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Login via OAuth2 form (for Swagger UI)."""
     email = form_data.username.lower()
-    user = session.exec(select(User).where(User.email == email)).first()
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -192,19 +196,19 @@ def login_oauth(
 
 
 @router.get("/me", response_model=UserResponse)
-def read_me(current_user: User = Depends(get_current_user)):
+async def read_me(current_user: User = Depends(get_current_user)):
     """Return the authenticated user's info."""
     return current_user
 
 
 @router.get("/user/data")
-def get_user_data(current_user: User = Depends(require_role("USER"))):
+async def get_user_data(current_user: User = Depends(require_role("USER"))):
     """Example endpoint requiring USER role (or higher)."""
     return {"message": f"Hello {current_user.email}! You have USER access."}
 
 
 @router.get("/admin/data")
-def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
+async def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
     """Example endpoint requiring ADMIN role."""
     return {"message": f"Hello {current_user.email}! You have ADMIN access."}
 
@@ -212,16 +216,17 @@ def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
 # ───────────────────────────── Password Reset ───────────────────────────── #
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
-def forgot_password(
+async def forgot_password(
     payload: ForgotPasswordRequest,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Request a password reset token.
     In production, this would send an email. For dev, it prints the token.
     """
     email = payload.email.lower()
-    user = session.exec(select(User).where(User.email == email)).first()
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
 
     if not user:
         return {"message": "If that email exists, a reset link has been sent"}
@@ -241,9 +246,9 @@ def forgot_password(
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
-def reset_password(
+async def reset_password(
     payload: ResetPasswordRequest,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Reset password using a valid reset token."""
     user_id = decode_reset_token(payload.token)
@@ -262,7 +267,7 @@ def reset_password(
             detail="Invalid token format",
         )
 
-    user = session.get(User, user_uuid)
+    user = await session.get(User, user_uuid)
 
     if not user:
         raise HTTPException(
@@ -278,7 +283,6 @@ def reset_password(
 
     user.hashed_password = hash_password(payload.new_password)
     session.add(user)
-    session.commit()
+    await session.commit()
 
     return {"message": "Password reset successfully"}
-

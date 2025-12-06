@@ -3,14 +3,14 @@
 Price History Model - Tracks all price changes with audit trail.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column
+from sqlalchemy import Column, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 
@@ -45,8 +45,11 @@ class PriceHistory(SQLModel, table=True):
     new_price: Decimal = Field(decimal_places=2)
     change_percent: Decimal = Field(decimal_places=2)
     
-    # Audit trail
-    change_reason: ChangeReason = Field(default=ChangeReason.MANUAL)
+    # Audit trail - store as string to avoid PostgreSQL enum issues
+    change_reason: str = Field(
+        default=ChangeReason.MANUAL.value,
+        sa_column=Column(String(50), nullable=False)
+    )
     recommendation_id: Optional[UUID] = Field(
         default=None,
         sa_column=Column(PG_UUID(as_uuid=True), nullable=True),
@@ -58,12 +61,11 @@ class PriceHistory(SQLModel, table=True):
     revenue_after: Optional[Decimal] = Field(default=None, decimal_places=2)
     revenue_impact: Optional[Decimal] = Field(default=None, decimal_places=2)
     
-    # Timestamps
+    # Timestamps - use naive datetime for TIMESTAMP WITHOUT TIME ZONE
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         nullable=False
     )
 
     class Config:
         use_enum_values = True
-

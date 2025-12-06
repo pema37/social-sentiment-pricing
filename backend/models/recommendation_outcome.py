@@ -71,8 +71,8 @@ class RecommendationOutcome(SQLModel, table=True):
     
     price_applied_at: datetime = Field(index=True)
     measurement_window_hours: int = Field(default=48)
-    measured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    measured_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
         use_enum_values = True

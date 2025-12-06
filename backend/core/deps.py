@@ -6,14 +6,14 @@ FastAPI Dependencies
 Common dependencies for authentication and database access.
 """
 
-from typing import Generator
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import Session, select
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.session import engine, get_session
+from backend.db.session import get_session
 from backend.core.security import decode_access_token
 from backend.models.user import User
 
@@ -21,18 +21,9 @@ from backend.models.user import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login/oauth")
 
 
-def get_db() -> Generator[Session, None, None]:
-    """
-    Database session dependency.
-    Yields a SQLModel session and ensures it's closed after use.
-    """
-    with Session(engine) as session:
-        yield session
-
-
-def get_current_user(
+async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> User:
     """
     Get the current authenticated user from JWT token.
@@ -59,8 +50,9 @@ def get_current_user(
     except ValueError:
         raise credentials_exception
     
-    # Fetch user from database
-    user = db.exec(select(User).where(User.id == user_id)).first()
+    # Fetch user from database (async)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
     
     if user is None:
         raise credentials_exception
@@ -74,7 +66,7 @@ def get_current_user(
     return user
 
 
-def require_admin(
+async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     """
@@ -87,4 +79,3 @@ def require_admin(
             detail="Not enough permissions",
         )
     return current_user
-

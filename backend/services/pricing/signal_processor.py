@@ -3,12 +3,13 @@
 Signal Processor - Gathers and processes market signals for pricing decisions.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from sqlmodel import Session, select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select, func
 
 from backend.models.product import Product
 from backend.models.sentiment import Sentiment
@@ -25,19 +26,19 @@ class SignalProcessor:
     TRENDING_GROWTH_THRESHOLD = Decimal("0.5")  # 50% growth = trending
     STRONG_TREND_THRESHOLD = Decimal("1.0")     # 100% growth = strong trend
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def gather_signals(self, product: Product) -> MarketSignals:
+    async def gather_signals(self, product: Product) -> MarketSignals:
         """Gather all market signals for a product."""
         
-        sentiment_score, sentiment_change = self._get_sentiment_signals(product.id)
-        mention_count, mention_baseline = self._get_volume_signals(product.id)
-        viral_detected, viral_reach, viral_engagement, viral_sentiment = self._get_viral_signals(product.id)
-        competitor_prices = self._get_competitor_prices(product.id)
+        sentiment_score, sentiment_change = await self._get_sentiment_signals(product.id)
+        mention_count, mention_baseline = await self._get_volume_signals(product.id)
+        viral_detected, viral_reach, viral_engagement, viral_sentiment = await self._get_viral_signals(product.id)
+        competitor_prices = await self._get_competitor_prices(product.id)
         
         # Get trend signals
-        trend_data = self._get_trend_signals(product.id)
+        trend_data = await self._get_trend_signals(product.id)
         
         return MarketSignals(
             sentiment_score=sentiment_score,
@@ -58,10 +59,10 @@ class SignalProcessor:
             is_trending=trend_data["is_trending"],
         )
     
-    def _get_sentiment_signals(self, product_id: UUID) -> tuple[Optional[Decimal], Optional[Decimal]]:
+    async def _get_sentiment_signals(self, product_id: UUID) -> tuple[Optional[Decimal], Optional[Decimal]]:
         """Get current sentiment and 24h change."""
         
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         last_24h = now - timedelta(hours=24)
         last_48h = now - timedelta(hours=48)
         
@@ -70,7 +71,8 @@ class SignalProcessor:
             Sentiment.product_id == product_id,
             Sentiment.analyzed_at >= last_24h
         )
-        current_avg = self.db.exec(current_stmt).first()
+        result = await self.db.execute(current_stmt)
+        current_avg = result.scalar()
         
         if current_avg is None:
             return None, None
@@ -83,7 +85,8 @@ class SignalProcessor:
             Sentiment.analyzed_at >= last_48h,
             Sentiment.analyzed_at < last_24h
         )
-        prev_avg = self.db.exec(prev_stmt).first()
+        result = await self.db.execute(prev_stmt)
+        prev_avg = result.scalar()
         
         if prev_avg is None:
             return current_score, None
@@ -118,10 +121,10 @@ class SignalProcessor:
         
         return impacts
 
-    def _get_volume_signals(self, product_id: UUID) -> tuple[int, int]:
+    async def _get_volume_signals(self, product_id: UUID) -> tuple[int, int]:
         """Get mention count and baseline."""
         
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         last_24h = now - timedelta(hours=24)
         last_7d = now - timedelta(days=7)
         
@@ -130,7 +133,8 @@ class SignalProcessor:
             SocialMention.product_id == product_id,
             SocialMention.published_at >= last_24h
         )
-        count_24h = self.db.exec(count_stmt).first() or 0
+        result = await self.db.execute(count_stmt)
+        count_24h = result.scalar() or 0
         
         # Average daily count over last 7 days
         baseline_stmt = select(func.count(SocialMention.id)).where(
@@ -138,15 +142,16 @@ class SignalProcessor:
             SocialMention.published_at >= last_7d,
             SocialMention.published_at < last_24h
         )
-        total_6d = self.db.exec(baseline_stmt).first() or 0
+        result = await self.db.execute(baseline_stmt)
+        total_6d = result.scalar() or 0
         baseline = total_6d // 6 if total_6d > 0 else 0
         
         return count_24h, baseline
     
-    def _get_viral_signals(self, product_id: UUID) -> tuple[bool, int, int, Optional[Decimal]]:
+    async def _get_viral_signals(self, product_id: UUID) -> tuple[bool, int, int, Optional[Decimal]]:
         """Detect viral content."""
         
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         last_24h = now - timedelta(hours=24)
         
         # Find high-engagement posts
@@ -155,7 +160,8 @@ class SignalProcessor:
             SocialMention.published_at >= last_24h
         ).order_by(SocialMention.engagement_count.desc()).limit(10)
         
-        top_posts = list(self.db.exec(stmt).all())
+        result = await self.db.execute(stmt)
+        top_posts = list(result.scalars().all())
         
         if not top_posts:
             return False, 0, 0, None
@@ -174,7 +180,8 @@ class SignalProcessor:
                 sent_stmt = select(Sentiment).where(
                     Sentiment.product_id == product_id
                 ).order_by(Sentiment.analyzed_at.desc()).limit(1)
-                sent = self.db.exec(sent_stmt).first()
+                result = await self.db.execute(sent_stmt)
+                sent = result.scalars().first()
                 if sent:
                     sentiments.append(sent.compound_score)
             
@@ -183,7 +190,7 @@ class SignalProcessor:
         
         return viral_detected, total_reach, total_engagement, viral_sentiment
     
-    def _get_competitor_prices(self, product_id: UUID) -> dict[UUID, Decimal]:
+    async def _get_competitor_prices(self, product_id: UUID) -> dict[UUID, Decimal]:
         """Get current competitor prices for the product."""
         
         stmt = select(CompetitorProduct).where(
@@ -191,7 +198,8 @@ class SignalProcessor:
             CompetitorProduct.is_active == True
         )
         
-        competitor_products = self.db.exec(stmt).all()
+        result = await self.db.execute(stmt)
+        competitor_products = result.scalars().all()
         
         prices = {}
         for cp in competitor_products:
@@ -200,7 +208,7 @@ class SignalProcessor:
         
         return prices
     
-    def _get_trend_signals(self, product_id: UUID) -> dict:
+    async def _get_trend_signals(self, product_id: UUID) -> dict:
         """
         Calculate trend signals for a product.
         
@@ -211,10 +219,10 @@ class SignalProcessor:
         """
         
         # Get mentions by day for the last 7 days
-        daily_mentions = self._get_daily_mention_counts(product_id, days=7)
+        daily_mentions = await self._get_daily_mention_counts(product_id, days=7)
         
         # Get sentiment by day
-        daily_sentiment = self._get_daily_sentiment(product_id, days=7)
+        daily_sentiment = await self._get_daily_sentiment(product_id, days=7)
         
         # Calculate mention growth rate
         mention_growth_rate = self._calculate_growth_rate(daily_mentions)
@@ -242,10 +250,10 @@ class SignalProcessor:
             "is_trending": is_trending,
         }
     
-    def _get_daily_mention_counts(self, product_id: UUID, days: int = 7) -> list[int]:
+    async def _get_daily_mention_counts(self, product_id: UUID, days: int = 7) -> list[int]:
         """Get mention counts for each of the last N days."""
         
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         counts = []
         
         for i in range(days):
@@ -257,16 +265,17 @@ class SignalProcessor:
                 SocialMention.published_at >= day_start,
                 SocialMention.published_at < day_end
             )
-            count = self.db.exec(stmt).first() or 0
+            result = await self.db.execute(stmt)
+            count = result.scalar() or 0
             counts.append(count)
         
         # Reverse so oldest is first
         return list(reversed(counts))
     
-    def _get_daily_sentiment(self, product_id: UUID, days: int = 7) -> list[Optional[Decimal]]:
+    async def _get_daily_sentiment(self, product_id: UUID, days: int = 7) -> list[Optional[Decimal]]:
         """Get average sentiment for each of the last N days."""
         
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         sentiments = []
         
         for i in range(days):
@@ -278,7 +287,8 @@ class SignalProcessor:
                 Sentiment.analyzed_at >= day_start,
                 Sentiment.analyzed_at < day_end
             )
-            avg = self.db.exec(stmt).first()
+            result = await self.db.execute(stmt)
+            avg = result.scalar()
             
             if avg is not None:
                 sentiments.append(Decimal(str(avg)).quantize(Decimal("0.001")))

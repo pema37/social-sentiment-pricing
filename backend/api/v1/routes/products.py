@@ -6,7 +6,8 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.db.session import get_session
 from backend.models import User, Product, Sentiment
@@ -30,9 +31,9 @@ router = APIRouter(prefix="/products", tags=["products"])
     response_model=ProductRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_product(
+async def create_product(
     payload: ProductCreate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new product."""
@@ -51,31 +52,32 @@ def create_product(
     )
 
     session.add(product)
-    session.commit()
-    session.refresh(product)
+    await session.commit()
+    await session.refresh(product)
 
     return product
 
 
 @router.get("", response_model=List[ProductRead])
-def list_products(
-    session: Session = Depends(get_session),
+async def list_products(
+    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List all products for the current user."""
     statement = select(Product).where(Product.user_id == current_user.id)
-    products = session.exec(statement).all()
+    result = await session.execute(statement)
+    products = result.scalars().all()
     return products
 
 
 @router.get("/{product_id}", response_model=ProductRead)
-def get_product(
+async def get_product(
     product_id: UUID,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific product by ID."""
-    product = session.get(Product, product_id)
+    product = await session.get(Product, product_id)
 
     if not product:
         raise HTTPException(
@@ -93,14 +95,14 @@ def get_product(
 
 
 @router.patch("/{product_id}", response_model=ProductRead)
-def update_product(
+async def update_product(
     product_id: UUID,
     payload: ProductUpdate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Update a product."""
-    product = session.get(Product, product_id)
+    product = await session.get(Product, product_id)
 
     if not product:
         raise HTTPException(
@@ -121,20 +123,20 @@ def update_product(
     product.updated_at = datetime.now(timezone.utc)
 
     session.add(product)
-    session.commit()
-    session.refresh(product)
+    await session.commit()
+    await session.refresh(product)
 
     return product
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_product(
+async def delete_product(
     product_id: UUID,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a product."""
-    product = session.get(Product, product_id)
+    product = await session.get(Product, product_id)
 
     if not product:
         raise HTTPException(
@@ -148,8 +150,8 @@ def delete_product(
             detail="Not authorized to delete this product",
         )
 
-    session.delete(product)
-    session.commit()
+    await session.delete(product)
+    await session.commit()
 
     return None
 
@@ -157,13 +159,13 @@ def delete_product(
 # ───────────────────────────── Price Suggestion ───────────────────────────── #
 
 @router.get("/{product_id}/price-suggestion", response_model=PriceSuggestion)
-def get_price_suggestion(
+async def get_price_suggestion(
     product_id: UUID,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Get AI-powered price suggestion based on sentiment analysis."""
-    product = session.get(Product, product_id)
+    product = await session.get(Product, product_id)
 
     if not product:
         raise HTTPException(
@@ -178,7 +180,8 @@ def get_price_suggestion(
         )
 
     statement = select(Sentiment).where(Sentiment.product_id == product_id)
-    sentiments = session.exec(statement).all()
+    result = await session.execute(statement)
+    sentiments = result.scalars().all()
 
     if sentiments:
         sentiment_data = [
@@ -204,4 +207,3 @@ def get_price_suggestion(
     )
 
     return suggestion
-

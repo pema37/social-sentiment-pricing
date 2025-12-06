@@ -72,3 +72,16 @@ class SentimentSummary(BaseModel):
     period_start: datetime
     period_end: datetime
 
+
+
+class SentimentResponse(BaseModel):
+    """Response matching route expectations"""
+    sentiment_id: Optional[UUID] = None
+    text: Optional[str] = None
+    sentiment_score: Decimal = Field(ge=-1, le=1)
+    sentiment_label: str
+    confidence: Decimal = Field(ge=0, le=1)
+    emotions: Optional[dict] = None
+
+    class Config:
+        from_attributes = True

@@ -1,13 +1,12 @@
 # backend/services/analysis/sentiment_aggregator.py
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from sqlmodel import Session, select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
-from backend.db.session import engine
 from backend.models.social_mention import SocialMention
 
 
@@ -17,7 +16,10 @@ class SentimentAggregator:
     trends, and velocity metrics used by the pricing engine.
     """
     
-    def get_product_sentiment(
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def get_product_sentiment(
         self,
         product_id: UUID,
         hours: int = 24
@@ -44,20 +46,20 @@ class SentimentAggregator:
         """
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         
-        with Session(engine) as session:
-            mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.processed == True)
-                .where(SocialMention.collected_at >= cutoff)
-            ).all()
-            
-            if not mentions:
-                return self._empty_aggregation(product_id, hours)
-            
-            return self._calculate_aggregation(mentions, product_id, hours)
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.processed == True)
+            .where(SocialMention.collected_at >= cutoff)
+        )
+        mentions = list(result.scalars().all())
+        
+        if not mentions:
+            return self._empty_aggregation(product_id, hours)
+        
+        return self._calculate_aggregation(mentions, product_id, hours)
     
-    def get_user_sentiment(
+    async def get_user_sentiment(
         self,
         user_id: UUID,
         hours: int = 24
@@ -65,20 +67,20 @@ class SentimentAggregator:
         """Get aggregated sentiment across all products for a user."""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         
-        with Session(engine) as session:
-            mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.user_id == user_id)
-                .where(SocialMention.processed == True)
-                .where(SocialMention.collected_at >= cutoff)
-            ).all()
-            
-            if not mentions:
-                return self._empty_aggregation(None, hours)
-            
-            return self._calculate_aggregation(mentions, None, hours)
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.user_id == user_id)
+            .where(SocialMention.processed == True)
+            .where(SocialMention.collected_at >= cutoff)
+        )
+        mentions = list(result.scalars().all())
+        
+        if not mentions:
+            return self._empty_aggregation(None, hours)
+        
+        return self._calculate_aggregation(mentions, None, hours)
     
-    def get_sentiment_velocity(
+    async def get_sentiment_velocity(
         self,
         product_id: UUID,
         current_hours: int = 6,
@@ -102,23 +104,24 @@ class SentimentAggregator:
         current_start = now - timedelta(hours=current_hours)
         previous_start = current_start - timedelta(hours=previous_hours)
         
-        with Session(engine) as session:
-            # Current period
-            current_mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.processed == True)
-                .where(SocialMention.collected_at >= current_start)
-            ).all()
-            
-            # Previous period
-            previous_mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.processed == True)
-                .where(SocialMention.collected_at >= previous_start)
-                .where(SocialMention.collected_at < current_start)
-            ).all()
+        # Current period
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.processed == True)
+            .where(SocialMention.collected_at >= current_start)
+        )
+        current_mentions = list(result.scalars().all())
+        
+        # Previous period
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.processed == True)
+            .where(SocialMention.collected_at >= previous_start)
+            .where(SocialMention.collected_at < current_start)
+        )
+        previous_mentions = list(result.scalars().all())
         
         current_sentiment = self._avg_sentiment(current_mentions)
         previous_sentiment = self._avg_sentiment(previous_mentions)
@@ -138,8 +141,8 @@ class SentimentAggregator:
             trend = "stable"
         
         # Volume change
-        prev_count = len(previous_mentions) if previous_mentions else 0
-        curr_count = len(current_mentions) if current_mentions else 0
+        prev_count = len(previous_mentions)
+        curr_count = len(current_mentions)
         
         if prev_count > 0:
             volume_change = (curr_count - prev_count) / prev_count
@@ -156,7 +159,7 @@ class SentimentAggregator:
             "volume_change": round(volume_change, 2)
         }
     
-    def get_sentiment_by_source(
+    async def get_sentiment_by_source(
         self,
         product_id: UUID,
         hours: int = 24
@@ -164,16 +167,16 @@ class SentimentAggregator:
         """Get sentiment breakdown by source (reddit, twitter, etc.)."""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         
-        with Session(engine) as session:
-            mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.processed == True)
-                .where(SocialMention.collected_at >= cutoff)
-            ).all()
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.processed == True)
+            .where(SocialMention.collected_at >= cutoff)
+        )
+        mentions = list(result.scalars().all())
         
         # Group by source
-        by_source = {}
+        by_source: Dict[str, List[SocialMention]] = {}
         for mention in mentions:
             source = mention.source
             if source not in by_source:
@@ -181,16 +184,18 @@ class SentimentAggregator:
             by_source[source].append(mention)
         
         # Calculate per-source metrics
-        result = {}
+        source_results = {}
         for source, source_mentions in by_source.items():
             agg = self._calculate_aggregation(source_mentions, product_id, hours)
-            result[source] = {
+            source_results[source] = {
                 "mention_count": agg["mention_count"],
                 "avg_sentiment": agg["avg_sentiment"],
                 "sentiment_label": agg["sentiment_label"]
             }
         
-        return result
+        return source_results
+    
+    # === SYNC HELPER METHODS (pure computation, no I/O) ===
     
     def _calculate_aggregation(
         self,
@@ -245,7 +250,7 @@ class SentimentAggregator:
             sentiment_label = "neutral"
         
         # Get top topics
-        topic_counts = {}
+        topic_counts: Dict[str, int] = {}
         for topic in all_topics:
             topic_counts[topic] = topic_counts.get(topic, 0) + 1
         top_topics = sorted(topic_counts.keys(), key=lambda x: topic_counts[x], reverse=True)[:5]
@@ -297,8 +302,4 @@ class SentimentAggregator:
             scores.append(score)
         
         return sum(scores) / len(scores) if scores else None
-
-
-# Singleton instance
-sentiment_aggregator = SentimentAggregator()
-
+    

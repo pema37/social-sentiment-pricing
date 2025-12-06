@@ -5,7 +5,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from backend.core.security import hash_password, verify_password
 from backend.db.session import get_session
@@ -41,25 +42,25 @@ class UserDetailResponse(BaseModel):
 # ───────────────────── User Self-Management ───────────────────── #
 
 @router.get("/me", response_model=UserDetailResponse)
-def get_my_profile(current_user: User = Depends(get_current_user)):
+async def get_my_profile(current_user: User = Depends(get_current_user)):
     """Get current user's profile."""
     return current_user
 
 
 @router.patch("/me", response_model=UserDetailResponse)
-def update_my_profile(
+async def update_my_profile(
     payload: UserUpdateRequest,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Update current user's profile (username, email)."""
     
     if payload.email is not None:
         email = payload.email.lower()
         # Check if email is taken by another user
-        existing = session.exec(
-            select(User).where(User.email == email, User.id != current_user.id)
-        ).first()
+        stmt = select(User).where(User.email == email, User.id != current_user.id)
+        result = await session.execute(stmt)
+        existing = result.scalars().first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -69,9 +70,9 @@ def update_my_profile(
 
     if payload.username is not None:
         # Check if username is taken by another user
-        existing = session.exec(
-            select(User).where(User.username == payload.username, User.id != current_user.id)
-        ).first()
+        stmt = select(User).where(User.username == payload.username, User.id != current_user.id)
+        result = await session.execute(stmt)
+        existing = result.scalars().first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -80,48 +81,58 @@ def update_my_profile(
         current_user.username = payload.username
 
     session.add(current_user)
-    session.commit()
-    session.refresh(current_user)
+    await session.commit()
+    await session.refresh(current_user)
 
     return current_user
 
 
 @router.post("/me/change-password", status_code=status.HTTP_200_OK)
-def change_my_password(
+async def change_my_password(
     payload: PasswordChangeRequest,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Change current user's password."""
     
+    # Verify current password is correct
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
 
+    # Ensure new password is different from current
+    if payload.current_password == payload.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password",
+        )
+
+    # Validate minimum password length
     if len(payload.new_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be at least 8 characters",
         )
 
+    # Update password
     current_user.hashed_password = hash_password(payload.new_password)
     session.add(current_user)
-    session.commit()
+    await session.commit()
 
     return {"message": "Password changed successfully"}
 
 
 @router.delete("/me", status_code=status.HTTP_200_OK)
-def delete_my_account(
+async def delete_my_account(
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Delete current user's account (soft delete - deactivates)."""
     current_user.is_active = False
     session.add(current_user)
-    session.commit()
+    await session.commit()
 
     return {"message": "Account deactivated successfully"}
 
@@ -129,27 +140,27 @@ def delete_my_account(
 # ───────────────────── Admin Endpoints ───────────────────── #
 
 @router.get("/", response_model=list[UserDetailResponse])
-def list_all_users(
+async def list_all_users(
     skip: int = 0,
     limit: int = 50,
     current_user: User = Depends(require_role("ADMIN")),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """List all users (Admin only)."""
-    users = session.exec(
-        select(User).offset(skip).limit(limit)
-    ).all()
+    stmt = select(User).offset(skip).limit(limit)
+    result = await session.execute(stmt)
+    users = result.scalars().all()
     return users
 
 
 @router.get("/{user_id}", response_model=UserDetailResponse)
-def get_user_by_id(
+async def get_user_by_id(
     user_id: UUID,
     current_user: User = Depends(require_role("ADMIN")),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Get a specific user by ID (Admin only)."""
-    user = session.get(User, user_id)
+    user = await session.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -159,13 +170,13 @@ def get_user_by_id(
 
 
 @router.patch("/{user_id}/deactivate", status_code=status.HTTP_200_OK)
-def deactivate_user(
+async def deactivate_user(
     user_id: UUID,
     current_user: User = Depends(require_role("ADMIN")),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Deactivate a user account (Admin only)."""
-    user = session.get(User, user_id)
+    user = await session.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -180,19 +191,19 @@ def deactivate_user(
 
     user.is_active = False
     session.add(user)
-    session.commit()
+    await session.commit()
 
     return {"message": f"User {user.email} deactivated"}
 
 
 @router.patch("/{user_id}/activate", status_code=status.HTTP_200_OK)
-def activate_user(
+async def activate_user(
     user_id: UUID,
     current_user: User = Depends(require_role("ADMIN")),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ):
     """Reactivate a user account (Admin only)."""
-    user = session.get(User, user_id)
+    user = await session.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -201,8 +212,6 @@ def activate_user(
 
     user.is_active = True
     session.add(user)
-    session.commit()
+    await session.commit()
 
     return {"message": f"User {user.email} activated"}
-
-

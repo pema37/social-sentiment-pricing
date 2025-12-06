@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
-from backend.db.session import engine
 from backend.models.social_mention import SocialMention
-from backend.services.analysis.sentiment_aggregator import sentiment_aggregator
+from backend.services.analysis.sentiment_aggregator import SentimentAggregator
 
 
 class TrendDetector:
@@ -17,13 +17,16 @@ class TrendDetector:
     that should trigger pricing decisions or alerts.
     """
     
-    def __init__(self):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.aggregator = SentimentAggregator(db)
+        
         # Thresholds for detection
         self.volume_spike_threshold = 2.0  # 2x normal volume
         self.sentiment_shift_threshold = 0.3  # 0.3 point shift
         self.viral_engagement_threshold = 1000  # High engagement count
     
-    def detect_all(self, product_id: UUID) -> Dict:
+    async def detect_all(self, product_id: UUID) -> Dict:
         """
         Run all trend detection checks for a product.
         
@@ -45,22 +48,22 @@ class TrendDetector:
         alerts = []
         
         # Check for volume spike
-        volume_alert = self.detect_volume_spike(product_id)
+        volume_alert = await self.detect_volume_spike(product_id)
         if volume_alert:
             alerts.append(volume_alert)
         
         # Check for sentiment shift
-        sentiment_alert = self.detect_sentiment_shift(product_id)
+        sentiment_alert = await self.detect_sentiment_shift(product_id)
         if sentiment_alert:
             alerts.append(sentiment_alert)
         
         # Check for viral mentions
-        viral_alert = self.detect_viral_mentions(product_id)
+        viral_alert = await self.detect_viral_mentions(product_id)
         if viral_alert:
             alerts.append(viral_alert)
         
         # Get current metrics
-        velocity = sentiment_aggregator.get_sentiment_velocity(product_id)
+        velocity = await self.aggregator.get_sentiment_velocity(product_id)
         
         return {
             "product_id": str(product_id),
@@ -75,7 +78,7 @@ class TrendDetector:
             "checked_at": datetime.now(timezone.utc).isoformat()
         }
     
-    def detect_volume_spike(
+    async def detect_volume_spike(
         self,
         product_id: UUID,
         current_hours: int = 6,
@@ -93,23 +96,25 @@ class TrendDetector:
         current_start = now - timedelta(hours=current_hours)
         baseline_start = now - timedelta(hours=baseline_hours)
         
-        with Session(engine) as session:
-            # Current period count
-            current_count = len(session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.collected_at >= current_start)
-            ).all())
-            
-            # Baseline average (per equivalent period)
-            baseline_mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.collected_at >= baseline_start)
-                .where(SocialMention.collected_at < current_start)
-            ).all()
+        # Current period count
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.collected_at >= current_start)
+        )
+        current_mentions = list(result.scalars().all())
+        current_count = len(current_mentions)
         
+        # Baseline period count
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.collected_at >= baseline_start)
+            .where(SocialMention.collected_at < current_start)
+        )
+        baseline_mentions = list(result.scalars().all())
         baseline_count = len(baseline_mentions)
+        
         baseline_periods = (baseline_hours - current_hours) / current_hours
         baseline_avg = baseline_count / baseline_periods if baseline_periods > 0 else 0
         
@@ -130,7 +135,7 @@ class TrendDetector:
         
         return None
     
-    def detect_sentiment_shift(
+    async def detect_sentiment_shift(
         self,
         product_id: UUID,
         current_hours: int = 12,
@@ -149,7 +154,7 @@ class TrendDetector:
         - Influencer endorsement
         - Successful campaign
         """
-        velocity_data = sentiment_aggregator.get_sentiment_velocity(
+        velocity_data = await self.aggregator.get_sentiment_velocity(
             product_id,
             current_hours=current_hours,
             previous_hours=previous_hours
@@ -187,7 +192,7 @@ class TrendDetector:
         
         return None
     
-    def detect_viral_mentions(
+    async def detect_viral_mentions(
         self,
         product_id: UUID,
         hours: int = 24
@@ -200,12 +205,12 @@ class TrendDetector:
         """
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         
-        with Session(engine) as session:
-            mentions = session.exec(
-                select(SocialMention)
-                .where(SocialMention.product_id == product_id)
-                .where(SocialMention.collected_at >= cutoff)
-            ).all()
+        result = await self.db.execute(
+            select(SocialMention)
+            .where(SocialMention.product_id == product_id)
+            .where(SocialMention.collected_at >= cutoff)
+        )
+        mentions = list(result.scalars().all())
         
         viral_mentions = [
             m for m in mentions
@@ -242,7 +247,7 @@ class TrendDetector:
         
         return None
     
-    def get_pricing_signal(self, product_id: UUID) -> Dict:
+    async def get_pricing_signal(self, product_id: UUID) -> Dict:
         """
         Generate a pricing signal based on trend analysis.
         
@@ -256,13 +261,13 @@ class TrendDetector:
                 "recommended_adjustment_pct": float
             }
         """
-        detection = self.detect_all(product_id)
-        aggregation = sentiment_aggregator.get_product_sentiment(product_id, hours=24)
-        velocity = sentiment_aggregator.get_sentiment_velocity(product_id)
+        detection = await self.detect_all(product_id)
+        aggregation = await self.aggregator.get_product_sentiment(product_id, hours=24)
+        velocity = await self.aggregator.get_sentiment_velocity(product_id)
         
         signal = "hold"
         strength = 0.0
-        reasons = []
+        reasons: List[str] = []
         adjustment = 0.0
         
         # Factor 1: Current sentiment level
@@ -323,7 +328,4 @@ class TrendDetector:
             "recommended_adjustment_pct": round(adjustment, 1),
             "generated_at": datetime.now(timezone.utc).isoformat()
         }
-
-
-# Singleton instance
-trend_detector = TrendDetector()
+    

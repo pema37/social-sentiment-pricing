@@ -6,7 +6,7 @@ Rule Types: sentiment_threshold, competitor_relative, time_based, volume_surge, 
 Actions: increase_percent, decrease_percent, set_absolute, match_competitor, undercut_competitor
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -94,13 +94,12 @@ class PricingRule(SQLModel, table=True):
     cooldown_hours: int = Field(default=24)
     last_triggered_at: Optional[datetime] = Field(default=None)
     
-    # Timestamps
+    # Timestamps - use naive UTC datetimes for asyncpg compatibility
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=datetime.utcnow,
         nullable=False
     )
     updated_at: Optional[datetime] = Field(default=None)
 
     class Config:
         use_enum_values = True
-
