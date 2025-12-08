@@ -17,6 +17,7 @@ from backend.schemas.product import (
     ProductRead,
     PriceSuggestion,
 )
+from backend.schemas.common import PaginatedResponse, PaginationParams
 from backend.api.v1.routes.auth import get_current_user
 from backend.services.sentiment_analyzer import sentiment_analyzer
 from backend.services.pricing_engine import pricing_engine
@@ -42,8 +43,12 @@ async def create_product(
         name=payload.name,
         sku=payload.sku,
         description=payload.description,
+        category=payload.category,
+        image_url=payload.image_url,
+        is_active=payload.is_active,
         base_price=payload.base_price,
         current_price=payload.base_price,
+        cost=payload.cost,
         min_price=payload.min_price,
         max_price=payload.max_price,
         sentiment_multiplier=payload.sentiment_multiplier,
@@ -58,16 +63,37 @@ async def create_product(
     return product
 
 
-@router.get("", response_model=List[ProductRead])
+@router.get("", response_model=PaginatedResponse[ProductRead])
 async def list_products(
+    pagination: PaginationParams = Depends(),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """List all products for the current user."""
-    statement = select(Product).where(Product.user_id == current_user.id)
+    """List all products for the current user with pagination."""
+    # Count total
+    count_stmt = select(Product).where(Product.user_id == current_user.id)
+    count_result = await session.execute(count_stmt)
+    total = len(count_result.scalars().all())
+    
+    # Get paginated items
+    statement = (
+        select(Product)
+        .where(Product.user_id == current_user.id)
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    )
     result = await session.execute(statement)
     products = result.scalars().all()
-    return products
+    
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=products,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/{product_id}", response_model=ProductRead)

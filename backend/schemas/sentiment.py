@@ -63,15 +63,17 @@ class SentimentAnalyzeResponse(BaseModel):
 class SentimentSummary(BaseModel):
     """Aggregated sentiment for a product"""
     product_id: UUID
-    total_mentions: int
-    average_compound: Decimal
-    positive_count: int
-    negative_count: int
-    neutral_count: int
-    trend: str
-    period_start: datetime
-    period_end: datetime
-
+    total_mentions: int = 0
+    total_records: int = 0
+    average_compound: Optional[Decimal] = None
+    average_score: Optional[Decimal] = None
+    positive_count: int = 0
+    negative_count: int = 0
+    neutral_count: int = 0
+    label_distribution: Optional[dict] = None
+    trend: Optional[str] = None
+    period_start: Optional[datetime] = None
+    period_end: Optional[datetime] = None
 
 
 class SentimentResponse(BaseModel):
@@ -85,3 +87,23 @@ class SentimentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SocialMentionResponse(BaseModel):
+    """Response for social mention data"""
+    id: UUID
+    product_id: UUID
+    source: str
+    source_id: Optional[str] = None
+    content: str
+    author: Optional[str] = None
+    author_followers: Optional[int] = None
+    engagement_count: Optional[int] = None
+    url: Optional[str] = None
+    published_at: Optional[datetime] = None
+    collected_at: datetime
+    processed: bool = False
+
+    class Config:
+        from_attributes = True
+        

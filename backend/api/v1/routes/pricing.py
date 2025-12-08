@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select
 
 from backend.db.session import get_session
@@ -18,12 +19,13 @@ from backend.models.product import Product
 from backend.models.pricing_rule import PricingRule
 from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
 from backend.models.pricing_settings import PricingSettings
+from backend.models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
 from backend.services.pricing.recommendation_service import RecommendationService
 from backend.services.pricing.approval_service import ApprovalService
 from backend.services.pricing.signal_processor import SignalProcessor
 from backend.services.pricing.rule_evaluator import RuleEvaluator, MarketSignals
-from backend.services.pricing.outcome_service import OutcomeService 
-from backend.models.recommendation_outcome import OutcomeLabel
+from backend.services.pricing.outcome_service import OutcomeService
+from backend.schemas.common import PaginatedResponse, PaginationParams
 from backend.schemas.pricing import (
     PricingRuleCreate,
     PricingRuleUpdate,
@@ -177,46 +179,85 @@ async def generate_recommendation(
     return recommendation
 
 
-@router.get("/recommendations", response_model=list[PriceRecommendationResponse])
+@router.get("/recommendations", response_model=PaginatedResponse[PriceRecommendationResponse])
 async def list_recommendations(
     status: Optional[RecommendationStatus] = Query(default=None),
     product_id: Optional[UUID] = Query(default=None),
-    limit: int = Query(default=20, le=100),
-    offset: int = Query(default=0),
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List price recommendations."""
     
-    stmt = select(PriceRecommendation).where(
+    query = select(PriceRecommendation).where(
         PriceRecommendation.user_id == current_user.id
     )
     
     if status:
-        stmt = stmt.where(PriceRecommendation.status == status)
+        query = query.where(PriceRecommendation.status == status)
     if product_id:
-        stmt = stmt.where(PriceRecommendation.product_id == product_id)
+        query = query.where(PriceRecommendation.product_id == product_id)
     
-    stmt = stmt.order_by(PriceRecommendation.created_at.desc())
-    stmt = stmt.offset(offset).limit(limit)
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
     
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
+    # Paginate
+    query = query.order_by(PriceRecommendation.created_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
+    
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+    
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
+    )
 
 
-@router.get("/recommendations/pending", response_model=list[PriceRecommendationResponse])
+@router.get("/recommendations/pending", response_model=PaginatedResponse[PriceRecommendationResponse])
 async def list_pending_recommendations(
     product_id: Optional[UUID] = Query(default=None),
-    limit: int = Query(default=20, le=100),
-    offset: int = Query(default=0),
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List pending recommendations (approval queue)."""
     
-    service = RecommendationService(db)
-    return await service.get_pending_recommendations(
-        current_user.id, product_id, limit, offset
+    query = select(PriceRecommendation).where(
+        PriceRecommendation.user_id == current_user.id,
+        PriceRecommendation.status == RecommendationStatus.PENDING,
+    )
+    
+    if product_id:
+        query = query.where(PriceRecommendation.product_id == product_id)
+    
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Paginate
+    query = query.order_by(PriceRecommendation.created_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
+    
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+    
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
     )
 
 
@@ -596,28 +637,56 @@ async def record_outcome(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/outcomes", response_model=list[OutcomeResponse])
+@router.get("/outcomes", response_model=PaginatedResponse[OutcomeResponse])
 async def list_outcomes(
     product_id: Optional[UUID] = Query(default=None),
     rule_id: Optional[UUID] = Query(default=None),
     outcome_label: Optional[OutcomeLabel] = Query(default=None),
     days: int = Query(default=30, le=365),
-    limit: int = Query(default=50, le=100),
-    offset: int = Query(default=0),
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List recommendation outcomes."""
     
-    service = OutcomeService(db)
-    return await service.get_outcomes(
-        user_id=current_user.id,
-        product_id=product_id,
-        rule_id=rule_id,
-        outcome_label=outcome_label,
-        days=days,
-        limit=limit,
-        offset=offset,
+    from datetime import datetime, timedelta
+    
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    query = (
+        select(RecommendationOutcome)
+        .join(PriceRecommendation)
+        .where(PriceRecommendation.user_id == current_user.id)
+        .where(RecommendationOutcome.measured_at >= cutoff)
+    )
+    
+    if product_id:
+        query = query.where(PriceRecommendation.product_id == product_id)
+    if rule_id:
+        query = query.where(PriceRecommendation.rule_id == rule_id)
+    if outcome_label:
+        query = query.where(RecommendationOutcome.outcome_label == outcome_label)
+    
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Paginate
+    query = query.order_by(RecommendationOutcome.measured_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
+    
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+    
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
     )
 
 
@@ -648,3 +717,4 @@ async def get_rule_performance(
         return await service.get_rule_performance(rule_id, current_user.id, days)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    

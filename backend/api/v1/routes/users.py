@@ -6,12 +6,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select
 
 from backend.core.security import hash_password, verify_password
 from backend.db.session import get_session
 from backend.models import User
 from backend.api.v1.routes.auth import get_current_user, require_role
+from backend.schemas.common import PaginatedResponse, PaginationParams
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -139,18 +141,32 @@ async def delete_my_account(
 
 # ───────────────────── Admin Endpoints ───────────────────── #
 
-@router.get("/", response_model=list[UserDetailResponse])
+@router.get("/", response_model=PaginatedResponse[UserDetailResponse])
 async def list_all_users(
-    skip: int = 0,
-    limit: int = 50,
+    pagination: PaginationParams = Depends(),
     current_user: User = Depends(require_role("ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     """List all users (Admin only)."""
-    stmt = select(User).offset(skip).limit(limit)
+    # Count total
+    count_query = select(func.count()).select_from(User)
+    count_result = await session.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Paginate
+    stmt = select(User).offset(pagination.offset).limit(pagination.page_size)
     result = await session.execute(stmt)
-    users = result.scalars().all()
-    return users
+    users = list(result.scalars().all())
+    
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=users,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/{user_id}", response_model=UserDetailResponse)

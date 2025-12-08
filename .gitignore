@@ -54,11 +54,6 @@ out/
 .yarn/*
 .pnp.*
 
-# dotenv environment files
-.env
-.env.*
-!.env.example
-
 ##############################################
 # Python / FastAPI
 ##############################################
@@ -79,6 +74,26 @@ dist/
 *.egg-info/
 
 ##############################################
+# Database files
+##############################################
+
+*.db
+*.sqlite
+*.sqlite3
+
+##############################################
+# Environment files (ALL projects)
+##############################################
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+!.env.example
+
+##############################################
 # OS / Editor files
 ##############################################
 
@@ -86,5 +101,3 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
-
-dummy.db

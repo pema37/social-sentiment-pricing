@@ -126,6 +126,7 @@ async def register(
     user = User(
         email=email,
         hashed_password=hash_password(payload.password),
+        full_name=payload.full_name,
     )
 
     session.add(user)

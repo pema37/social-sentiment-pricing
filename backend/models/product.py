@@ -29,6 +29,10 @@ class Product(SQLModel, table=True):
     sku: Optional[str] = Field(default=None, max_length=100, unique=True)
     description: Optional[str] = Field(default=None)
 
+    category: Optional[str] = Field(default=None, max_length=100) 
+    image_url: Optional[str] = Field(default=None)                 
+    is_active: bool = Field(default=True)                          
+
     base_price: Decimal = Field(default=0, max_digits=10, decimal_places=2)
     current_price: Decimal = Field(default=0, max_digits=10, decimal_places=2)
     min_price: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)

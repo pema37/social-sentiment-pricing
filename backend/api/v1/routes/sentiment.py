@@ -2,8 +2,9 @@
 
 from uuid import UUID
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select
 from celery.result import AsyncResult  
 
@@ -14,7 +15,9 @@ from backend.schemas.sentiment import (
     SentimentResponse,
     SentimentBulkRequest,
     SentimentSummary,
+    SocialMentionResponse,
 )
+from backend.schemas.common import PaginatedResponse, PaginationParams
 from backend.services.sentiment_analyzer import SentimentAnalyzer
 from backend.core.security import get_current_user
 from backend.models import User
@@ -166,29 +169,50 @@ async def get_sentiment(
     )
 
 
-@router.get("/product/{product_id}")
+@router.get("/product/{product_id}", response_model=PaginatedResponse[SentimentResponse])
 async def get_product_sentiments(
     product_id: UUID,
-    limit: int = 50,
-    offset: int = 0,
+    pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """Get sentiment history for a product."""
-    result = await session.execute(
-        select(Sentiment)
-        .where(Sentiment.product_id == product_id)
-        .order_by(Sentiment.analyzed_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    records = result.scalars().all()
+    # Build base query
+    query = select(Sentiment).where(Sentiment.product_id == product_id)
     
-    return {
-        "product_id": str(product_id),
-        "records": records,
-        "count": len(records),
-    }
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await session.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Paginate
+    query = query.order_by(Sentiment.analyzed_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
+    
+    result = await session.execute(query)
+    records = list(result.scalars().all())
+    
+    # Convert to response objects
+    items = [
+        SentimentResponse(
+            sentiment_id=r.id,
+            sentiment_score=r.sentiment_score,
+            sentiment_label=r.sentiment_label,
+            confidence=r.confidence,
+            emotions=r.emotions,
+        )
+        for r in records
+    ]
+    
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/product/{product_id}/summary", response_model=SentimentSummary)
@@ -243,26 +267,42 @@ async def delete_sentiment(
     return {"status": "deleted", "sentiment_id": str(sentiment_id)}
 
 
-@router.get("/mentions/{product_id}")
+@router.get("/mentions/{product_id}", response_model=PaginatedResponse[SocialMentionResponse])
 async def get_product_mentions(
     product_id: UUID,
-    processed: Optional[bool] = None,
-    limit: int = 50,
+    processed: Optional[bool] = Query(default=None),
+    pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """Get social mentions for a product."""
+    # Build base query
     query = select(SocialMention).where(SocialMention.product_id == product_id)
     
     if processed is not None:
         query = query.where(SocialMention.processed == processed)
     
-    query = query.order_by(SocialMention.collected_at.desc()).limit(limit)
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await session.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Paginate
+    query = query.order_by(SocialMention.collected_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
     
     result = await session.execute(query)
-    mentions = result.scalars().all()
+    items = list(result.scalars().all())
     
-    return {"product_id": str(product_id), "mentions": mentions, "count": len(mentions)}
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
+    )
 
 
 # =============================================================================

@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
+    full_name: str | None = None 
 
 
 class LoginRequest(BaseModel):
@@ -19,6 +20,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     username: str | None = None
+    full_name: str | None = None 
     role: str
     is_active: bool
     created_at: datetime

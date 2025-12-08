@@ -1,30 +1,73 @@
 // DashboardShell Component
 // Wraps all dashboard pages with Sidebar + Topbar + content area
 
+'use client';
+
+import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { Menu, X } from 'lucide-react';
 
 interface DashboardShellProps {
-  children: React.ReactNode;  // Page content goes here
+  children: React.ReactNode;
 }
 
 export function DashboardShell({ children }: DashboardShellProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar - fixed on the left */}
-      <Sidebar />
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      {/* Main content area - offset by sidebar width (240px = w-60) */}
-      <div className="ml-60">
-        {/* Topbar - at the top */}
-        <Topbar />
+      {/* Sidebar - hidden on mobile, shown on lg+ */}
+      <div className={`
+        fixed inset-y-0 left-0 z-50 w-60 transform transition-transform duration-200 ease-in-out
+        lg:translate-x-0
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <Sidebar />
+      </div>
 
-        {/* Page content - with padding */}
-        <main className="p-10">
+      {/* Mobile close button */}
+      {sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="fixed top-4 right-4 z-50 p-2 bg-white rounded-lg shadow-lg lg:hidden"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Main content area */}
+      <div className="lg:ml-60">
+        {/* Mobile header with hamburger */}
+        <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-lg hover:bg-gray-100"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <span className="font-semibold text-gray-900">Social Sentiment</span>
+          <div className="w-10" /> {/* Spacer for centering */}
+        </div>
+
+        {/* Topbar - hidden on mobile */}
+        <div className="hidden lg:block">
+          <Topbar />
+        </div>
+
+        {/* Page content */}
+        <main className="p-4 lg:p-10">
           {children}
         </main>
       </div>
     </div>
   );
 }
-

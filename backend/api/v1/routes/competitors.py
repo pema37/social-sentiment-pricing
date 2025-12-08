@@ -31,18 +31,17 @@ from backend.schemas.competitor import (
     CompetitorCreate,
     CompetitorUpdate,
     CompetitorResponse,
-    CompetitorListResponse,
     CompetitorProductCreate,
     CompetitorProductUpdate,
     CompetitorProductResponse,
     CompetitorProductWithDetails,
-    CompetitorProductListResponse,
     CompetitorPriceHistoryResponse,
     CompetitorPriceHistoryListResponse,
     CompetitorPriceComparison,
     CompetitorAlert,
     CompetitorTrendAnalysis,
 )
+from backend.schemas.common import PaginatedResponse, PaginationParams
 from backend.services.competitor_scraper import competitor_scraper, ScrapeResult
 from backend.services.pricing_engine import pricing_engine, CompetitorPriceData
 
@@ -76,11 +75,10 @@ async def create_competitor(
     return competitor
 
 
-@router.get("", response_model=CompetitorListResponse)
+@router.get("", response_model=PaginatedResponse[CompetitorResponse])
 async def list_competitors(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
     is_active: Optional[bool] = None,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -96,15 +94,18 @@ async def list_competitors(
     total = count_result.scalar_one()
     
     # Paginate
-    query = query.offset((page - 1) * size).limit(size)
+    query = query.offset(pagination.offset).limit(pagination.page_size)
     result = await db.execute(query)
-    competitors = result.scalars().all()
+    competitors = list(result.scalars().all())
     
-    return CompetitorListResponse(
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
         items=competitors,
         total=total,
-        page=page,
-        size=size,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
     )
 
 
@@ -159,13 +160,12 @@ async def create_competitor_product(
     return competitor_product
 
 
-@router.get("/products", response_model=CompetitorProductListResponse)
+@router.get("/products", response_model=PaginatedResponse[CompetitorProductResponse])
 async def list_competitor_products(
     product_id: Optional[uuid_lib.UUID] = None,
     competitor_id: Optional[uuid_lib.UUID] = None,
     is_active: Optional[bool] = None,
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -190,15 +190,18 @@ async def list_competitor_products(
     total = count_result.scalar_one()
     
     # Paginate
-    query = query.offset((page - 1) * size).limit(size)
+    query = query.offset(pagination.offset).limit(pagination.page_size)
     result = await db.execute(query)
-    items = result.scalars().all()
+    items = list(result.scalars().all())
     
-    return CompetitorProductListResponse(
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
         items=items,
         total=total,
-        page=page,
-        size=size,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
     )
 
 

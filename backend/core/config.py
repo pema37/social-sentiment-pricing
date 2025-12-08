@@ -1,50 +1,87 @@
 # backend/core/config.py
 
-import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
-from typing import Optional
+from typing import Optional, List
 
 load_dotenv()
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str
-    
-    # JWT
-    JWT_SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    RESET_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    # App
+    # ===================
+    # Application
+    # ===================
     APP_NAME: str = "Social Sentiment Pricing API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     
-    # Reddit API
-    REDDIT_CLIENT_ID: Optional[str] = None
-    REDDIT_CLIENT_SECRET: Optional[str] = None
+    # ===================
+    # Database
+    # ===================
+    DATABASE_URL: str
     
-    # OpenAI API
+    # ===================
+    # Security / JWT
+    # ===================
+    JWT_SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    ENCRYPTION_KEY: str
+    
+    # ===================
+    # CORS
+    # ===================
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse comma-separated CORS origins into a list."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+    
+    # ===================
+    # Redis / Celery
+    # ===================
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    
+    # ===================
+    # External APIs
+    # ===================
+    # OpenAI
     OPENAI_API_KEY: Optional[str] = None
     
-    # Shopify OAuth
+    # Reddit
+    REDDIT_CLIENT_ID: Optional[str] = None
+    REDDIT_CLIENT_SECRET: Optional[str] = None
+    REDDIT_USER_AGENT: str = "SocialSentimentPricing/1.0"
+    
+    # Twitter/X (future)
+    TWITTER_BEARER_TOKEN: Optional[str] = None
+    
+    # ===================
+    # E-commerce Integrations
+    # ===================
+    # Shopify
     SHOPIFY_CLIENT_ID: Optional[str] = None
     SHOPIFY_CLIENT_SECRET: Optional[str] = None
     
-    # Encryption
-    ENCRYPTION_KEY: str
+    # WooCommerce (future)
+    WOOCOMMERCE_CONSUMER_KEY: Optional[str] = None
+    WOOCOMMERCE_CONSUMER_SECRET: Optional[str] = None
     
-    # SendGrid (Email Notifications)
+    # ===================
+    # Notifications
+    # ===================
+    # SendGrid
     SENDGRID_API_KEY: Optional[str] = None
     SENDGRID_FROM_EMAIL: Optional[str] = None
     
-    # Slack (Webhook Notifications)
+    # Slack
     SLACK_WEBHOOK_URL: Optional[str] = None
 
     class Config:
         env_file = ".env"
         extra = "ignore"
+
 
 settings = Settings()

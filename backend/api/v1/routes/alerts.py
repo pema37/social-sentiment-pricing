@@ -26,8 +26,8 @@ from backend.schemas.alert import (
     AlertConfigurationRead,
     AlertRead,
     AlertStats,
-    AlertListResponse,
 )
+from backend.schemas.common import PaginatedResponse, PaginationParams
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -162,14 +162,13 @@ async def delete_alert_configuration(
 
 # ============== Alert Endpoints ==============
 
-@router.get("", response_model=AlertListResponse)
+@router.get("", response_model=PaginatedResponse[AlertRead])
 async def list_alerts(
     status_filter: Optional[AlertStatus] = Query(None, alias="status"),
     severity: Optional[AlertSeverity] = None,
     alert_type: Optional[AlertType] = None,
     product_id: Optional[UUID] = None,
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    pagination: PaginationParams = Depends(),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -192,17 +191,19 @@ async def list_alerts(
     
     # Apply pagination and ordering
     query = query.order_by(Alert.created_at.desc())
-    query = query.offset((page - 1) * per_page).limit(per_page)
+    query = query.offset(pagination.offset).limit(pagination.page_size)
     
     result = await session.execute(query)
     alerts = list(result.scalars().all())
     
-    return AlertListResponse(
-        alerts=alerts,
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=alerts,
         total=total,
-        page=page,
-        per_page=per_page,
-        has_more=(page * per_page) < total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
     )
 
 

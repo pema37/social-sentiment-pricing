@@ -14,6 +14,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select
 
 from backend.core.deps import get_current_user
@@ -49,6 +50,7 @@ from backend.schemas.integration import (
     BulkPricePushResponse,
     IntegrationHealthResponse,
 )
+from backend.schemas.common import PaginatedResponse, PaginationParams
 from backend.services.integration.base import PriceUpdateRequest, PriceUpdateResult, EcommerceService
 from backend.services.integration.shopify_service import ShopifyService
 from backend.services.integration.woocommerce_service import WooCommerceService
@@ -387,10 +389,10 @@ async def get_sync_status(
     )
 
 
-@router.get("/{integration_id}/sync/logs", response_model=SyncLogsListResponse)
+@router.get("/{integration_id}/sync/logs", response_model=PaginatedResponse[SyncLogResponse])
 async def get_sync_logs(
     integration_id: UUID,
-    limit: int = 20,
+    pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -409,18 +411,32 @@ async def get_sync_logs(
             detail="Integration not found"
         )
     
-    stmt = (
-        select(IntegrationSyncLog)
-        .where(IntegrationSyncLog.integration_id == integration_id)
-        .order_by(IntegrationSyncLog.started_at.desc())
-        .limit(limit)
+    # Build base query
+    query = select(IntegrationSyncLog).where(
+        IntegrationSyncLog.integration_id == integration_id
     )
-    result = await db.execute(stmt)
+    
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
+    
+    # Paginate
+    query = query.order_by(IntegrationSyncLog.started_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
+    
+    result = await db.execute(query)
     logs = list(result.scalars().all())
     
-    return SyncLogsListResponse(
-        logs=[SyncLogResponse.model_validate(log) for log in logs],
-        total=len(logs),
+    items = [SyncLogResponse.model_validate(log) for log in logs]
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
     )
 
 

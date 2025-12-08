@@ -22,6 +22,7 @@ class User(SQLModel, table=True):
 
     email: str = Field(index=True, unique=True)
     username: Optional[str] = Field(default=None, index=True)
+    full_name: Optional[str] = Field(default=None, max_length=255) 
 
     hashed_password: str
 
