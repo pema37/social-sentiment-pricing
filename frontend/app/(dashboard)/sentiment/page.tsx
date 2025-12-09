@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { SectionHeader, Card } from '@/components/ui';
 import { useSentimentTrend, useDashboardOverview } from '@/lib/hooks/use-analytics';
+import { useProducts } from '@/lib/hooks/use-products';
 import {
   LineChart,
   Line,
@@ -105,17 +106,54 @@ function PeriodSelector({
   );
 }
 
+// Product selector dropdown
+function ProductSelector({
+  value,
+  onChange,
+  products,
+  isLoading,
+}: {
+  value: string | null;
+  onChange: (productId: string | null) => void;
+  products: { id: string; name: string }[];
+  isLoading: boolean;
+}) {
+  return (
+    <select
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      disabled={isLoading}
+    >
+      <option value="">All Products</option>
+      {products.map((product) => (
+        <option key={product.id} value={product.id}>
+          {product.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function SentimentPage() {
   const [days, setDays] = useState(30);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   
-  // Fetch sentiment trend data
+  // Fetch products for dropdown
+  const { data: productsData, isLoading: productsLoading } = useProducts({ page: 1, page_size: 100 });
+  
+  // Fetch sentiment trend data (filtered by product if selected)
   const { data: trendData, isLoading: trendLoading, error: trendError } = useSentimentTrend({ 
     days, 
-    bucket: days <= 7 ? 'day' : 'day' 
+    bucket: 'day',
+    product_id: selectedProductId || undefined,
   });
   
   // Fetch dashboard overview for additional context
   const { data: dashboardData } = useDashboardOverview();
+  
+  // Get selected product name
+  const selectedProduct = productsData?.items.find(p => p.id === selectedProductId);
   
   // Prepare chart data
   const chartData = trendData?.timeline.map((point) => ({
@@ -140,12 +178,20 @@ export default function SentimentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <SectionHeader
           title="Sentiment Analysis"
-          description="Track social media sentiment for your products"
+          description={selectedProduct ? `Showing data for ${selectedProduct.name}` : 'Track social media sentiment for your products'}
         />
-        <PeriodSelector value={days} onChange={setDays} />
+        <div className="flex flex-wrap items-center gap-3">
+          <ProductSelector
+            value={selectedProductId}
+            onChange={setSelectedProductId}
+            products={productsData?.items || []}
+            isLoading={productsLoading}
+          />
+          <PeriodSelector value={days} onChange={setDays} />
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -170,7 +216,7 @@ export default function SentimentPage() {
         <KpiCard
           title="Mentions (24h)"
           value={dashboardData?.total_mentions_24h ?? 0}
-          subtitle="Today"
+          subtitle="Today (all products)"
         />
       </div>
 
@@ -281,7 +327,11 @@ export default function SentimentPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
             <p className="text-lg font-medium">No sentiment data yet</p>
-            <p className="text-sm mt-1">Sentiment data will appear here once you start analyzing content</p>
+            <p className="text-sm mt-1">
+              {selectedProductId 
+                ? 'No sentiment data for this product yet' 
+                : 'Sentiment data will appear here once you start analyzing content'}
+            </p>
           </div>
         </Card>
       )}
