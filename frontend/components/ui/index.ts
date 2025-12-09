@@ -1,7 +1,8 @@
-// Re-export all UI components from a single entry point
-// Usage: import { Button, Input, Card } from '@/components/ui'
+// components/ui/index.ts
 
+export { Badge } from './Badge';
 export { Button } from './Button';
-export { Input } from './Input';
 export { Card, CardHeader, CardTitle } from './Card';
+export { Input } from './Input';
+export { Pagination } from './Pagination';
 export { SectionHeader } from './SectionHeader';

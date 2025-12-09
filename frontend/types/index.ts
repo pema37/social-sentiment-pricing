@@ -1,7 +1,6 @@
-// Re-export all types from a single entry point
-// Usage: import { User, Product, Sentiment } from '@/types'
-
+// types/index.ts
+export * from './api';
 export * from './user';
 export * from './product';
 export * from './sentiment';
-export * from './api';
+export * from './analytics';  
