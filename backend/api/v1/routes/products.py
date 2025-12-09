@@ -9,18 +9,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.db.session import get_session
-from backend.models import User, Product, Sentiment
-from backend.schemas.product import (
+from db.session import get_session
+from models import User, Product, Sentiment
+from schemas.product import (
     ProductCreate,
     ProductUpdate,
     ProductRead,
     PriceSuggestion,
 )
-from backend.schemas.common import PaginatedResponse, PaginationParams
-from backend.api.v1.routes.auth import get_current_user
-from backend.services.sentiment_analyzer import sentiment_analyzer
-from backend.services.pricing_engine import pricing_engine
+from schemas.common import PaginatedResponse, PaginationParams
+from api.v1.routes.auth import get_current_user
+from services.sentiment_analyzer import sentiment_analyzer
+from services.pricing_engine import pricing_engine
 
 router = APIRouter(prefix="/products", tags=["products"])
 

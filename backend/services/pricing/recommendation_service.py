@@ -11,10 +11,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.models.product import Product
-from backend.models.pricing_rule import PricingRule, RuleAction
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.pricing_settings import PricingSettings
+from models.product import Product
+from models.pricing_rule import PricingRule, RuleAction
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.pricing_settings import PricingSettings
 from .rule_evaluator import RuleEvaluator, MarketSignals
 from .signal_processor import SignalProcessor
 from .confidence_calculator import ConfidenceCalculator

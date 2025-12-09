@@ -10,13 +10,13 @@ from datetime import datetime, timedelta
 from typing import Optional
 from decimal import Decimal
 
-from backend.models.product import Product
-from backend.models.competitor import Competitor
-from backend.models.sentiment import Sentiment
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.price_history import PriceHistory
-from backend.models.alert import Alert, AlertStatus
-from backend.schemas.analytics import (
+from models.product import Product
+from models.competitor import Competitor
+from models.sentiment import Sentiment
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.price_history import PriceHistory
+from models.alert import Alert, AlertStatus
+from schemas.analytics import (
     DashboardOverview,
     ProductSummary,
     RecommendationStats,

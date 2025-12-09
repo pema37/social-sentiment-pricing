@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from backend.models.alert import AlertType, AlertSeverity, AlertChannel, AlertStatus
+from models.alert import AlertType, AlertSeverity, AlertChannel, AlertStatus
 
 
 # ============== AlertConfiguration Schemas ==============

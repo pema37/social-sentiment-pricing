@@ -11,10 +11,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func
 
-from backend.models.product import Product
-from backend.models.sentiment import Sentiment
-from backend.models.social_mention import SocialMention
-from backend.models.competitor_product import CompetitorProduct
+from models.product import Product
+from models.sentiment import Sentiment
+from models.social_mention import SocialMention
+from models.competitor_product import CompetitorProduct
 
 from .rule_evaluator import MarketSignals
 

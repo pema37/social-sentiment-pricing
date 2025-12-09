@@ -20,14 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
-from backend.api.v1.routes.auth import get_current_user
-from backend.db.session import get_session
-from backend.models.user import User
-from backend.models.product import Product
-from backend.models.competitor import Competitor
-from backend.models.competitor_product import CompetitorProduct
-from backend.models.competitor_price_history import CompetitorPriceHistory
-from backend.schemas.competitor import (
+from api.v1.routes.auth import get_current_user
+from db.session import get_session
+from models.user import User
+from models.product import Product
+from models.competitor import Competitor
+from models.competitor_product import CompetitorProduct
+from models.competitor_price_history import CompetitorPriceHistory
+from schemas.competitor import (
     CompetitorCreate,
     CompetitorUpdate,
     CompetitorResponse,
@@ -41,9 +41,9 @@ from backend.schemas.competitor import (
     CompetitorAlert,
     CompetitorTrendAnalysis,
 )
-from backend.schemas.common import PaginatedResponse, PaginationParams
-from backend.services.competitor_scraper import competitor_scraper, ScrapeResult
-from backend.services.pricing_engine import pricing_engine, CompetitorPriceData
+from schemas.common import PaginatedResponse, PaginationParams
+from services.competitor_scraper import competitor_scraper, ScrapeResult
+from services.pricing_engine import pricing_engine, CompetitorPriceData
 
 
 router = APIRouter(prefix="/competitors", tags=["competitors"])

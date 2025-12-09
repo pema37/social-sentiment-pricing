@@ -13,7 +13,7 @@ from uuid import UUID
 
 from sqlmodel import Session, select, func
 
-from backend.models.alert import (
+from models.alert import (
     Alert,
     AlertConfiguration,
     AlertType,
@@ -21,7 +21,7 @@ from backend.models.alert import (
     AlertStatus,
     AlertChannel,
 )
-from backend.services.notification.notification_dispatcher import (
+from services.notification.notification_dispatcher import (
     NotificationDispatcher,
     DispatchResult,
 )
@@ -359,7 +359,7 @@ class AlertGenerator:
     ) -> None:
         """Dispatch alert to configured channels."""
         # Get user email from database
-        from backend.models.user import User
+        from models.user import User
         user = self.session.get(User, alert.user_id)
         
         channels = [AlertChannel(c) for c in config.channels]

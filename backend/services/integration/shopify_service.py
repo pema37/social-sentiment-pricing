@@ -17,8 +17,8 @@ from urllib.parse import urlencode
 
 import httpx
 
-from backend.core.config import settings
-from backend.services.integration.base import (
+from core.config import settings
+from services.integration.base import (
     EcommerceService,
     OAuthResult,
     ExternalProduct,

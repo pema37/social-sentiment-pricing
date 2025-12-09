@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from backend.core.config import settings
+from core.config import settings
 
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = settings.ALGORITHM
@@ -102,8 +102,8 @@ async def get_current_user(
     """
     FastAPI dependency to get current authenticated user from JWT token.
     """
-    from backend.db.session import async_session
-    from backend.models.user import User
+    from db.session import async_session
+    from models.user import User
     
     token = credentials.credentials
     payload = decode_access_token(token)

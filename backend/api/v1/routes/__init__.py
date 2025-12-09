@@ -6,17 +6,17 @@ API v1 Routes
 All route modules for the v1 API.
 """
 
-from backend.api.v1.routes.health import router as health_router
-from backend.api.v1.routes.auth import router as auth_router
-from backend.api.v1.routes.users import router as users_router
-from backend.api.v1.routes.products import router as products_router
-from backend.api.v1.routes.sentiment import router as sentiment_router
-from backend.api.v1.routes.competitors import router as competitors_router
-from backend.api.v1.routes.alerts import router as alerts_router
-from backend.api.v1.routes.analytics import router as analytics_router
-from backend.api.v1.routes.integrations import router as integrations_router
-from backend.api.v1.routes.pricing import router as pricing_router
-from backend.api.v1.routes.webhooks import router as webhooks_router
+from api.v1.routes.health import router as health_router
+from api.v1.routes.auth import router as auth_router
+from api.v1.routes.users import router as users_router
+from api.v1.routes.products import router as products_router
+from api.v1.routes.sentiment import router as sentiment_router
+from api.v1.routes.competitors import router as competitors_router
+from api.v1.routes.alerts import router as alerts_router
+from api.v1.routes.analytics import router as analytics_router
+from api.v1.routes.integrations import router as integrations_router
+from api.v1.routes.pricing import router as pricing_router
+from api.v1.routes.webhooks import router as webhooks_router
 
 
 __all__ = [

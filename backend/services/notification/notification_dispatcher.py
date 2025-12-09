@@ -9,9 +9,9 @@ import logging
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 
-from backend.services.notification.email_service import EmailService, EmailResult
-from backend.services.notification.slack_service import SlackService, SlackResult
-from backend.models.alert import AlertChannel
+from services.notification.email_service import EmailService, EmailResult
+from services.notification.slack_service import SlackService, SlackResult
+from models.alert import AlertChannel
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ async def send_quick_alert(
     Quick way to send an alert without creating a dispatcher.
     
     Usage:
-        from backend.services.notification import send_quick_alert
+        from services.notification import send_quick_alert
         
         result = await send_quick_alert(
             title="Sentiment Drop",

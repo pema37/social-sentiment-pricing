@@ -12,8 +12,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.models.pricing_rule import PricingRule, RuleType
-from backend.models.product import Product
+from models.pricing_rule import PricingRule, RuleType
+from models.product import Product
 
 
 @dataclass

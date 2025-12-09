@@ -14,12 +14,12 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func
 
-from backend.models.product import Product
-from backend.models.pricing_rule import PricingRule
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.price_history import PriceHistory, ChangeReason
-from backend.models.pricing_settings import PricingSettings
-from backend.models.integration import Integration, ProductIntegrationLink, IntegrationStatus
+from models.product import Product
+from models.pricing_rule import PricingRule
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.price_history import PriceHistory, ChangeReason
+from models.pricing_settings import PricingSettings
+from models.integration import Integration, ProductIntegrationLink, IntegrationStatus
 
 
 class ApprovalService:
@@ -260,10 +260,10 @@ class ApprovalService:
     
     async def _push_to_ecommerce(self, product: Product, user_id: UUID) -> dict:
         """Push price update to connected e-commerce platform."""
-        from backend.core.encryption import decrypt_token
-        from backend.services.integration.shopify_service import ShopifyService
-        from backend.services.integration.woocommerce_service import WooCommerceService
-        from backend.services.integration.base import PriceUpdateRequest, PriceUpdateResult
+        from core.encryption import decrypt_token
+        from services.integration.shopify_service import ShopifyService
+        from services.integration.woocommerce_service import WooCommerceService
+        from services.integration.base import PriceUpdateRequest, PriceUpdateResult
         
         try:
             # Get product integration link

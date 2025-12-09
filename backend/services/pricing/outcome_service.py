@@ -11,9 +11,9 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.pricing_rule import PricingRule
+from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.pricing_rule import PricingRule
 
 
 class OutcomeService:

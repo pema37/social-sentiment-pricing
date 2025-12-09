@@ -1,18 +1,18 @@
 # backend/models/__init__.py
-from backend.models.user import User
-from backend.models.product import Product
-from backend.models.integration import Integration
-from backend.models.social_mention import SocialMention
-from backend.models.sentiment import Sentiment
-from backend.models.competitor import Competitor
-from backend.models.competitor_product import CompetitorProduct
-from backend.models.competitor_price_history import CompetitorPriceHistory
-from backend.models.pricing_rule import PricingRule, RuleType, RuleAction
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.pricing_settings import PricingSettings
-from backend.models.price_history import PriceHistory, ChangeReason
-from backend.models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
-from backend.models.alert import Alert, AlertConfiguration, AlertType, AlertSeverity, AlertChannel, AlertStatus
+from models.user import User
+from models.product import Product
+from models.integration import Integration
+from models.social_mention import SocialMention
+from models.sentiment import Sentiment
+from models.competitor import Competitor
+from models.competitor_product import CompetitorProduct
+from models.competitor_price_history import CompetitorPriceHistory
+from models.pricing_rule import PricingRule, RuleType, RuleAction
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.pricing_settings import PricingSettings
+from models.price_history import PriceHistory, ChangeReason
+from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
+from models.alert import Alert, AlertConfiguration, AlertType, AlertSeverity, AlertChannel, AlertStatus
 
 
 __all__ = [

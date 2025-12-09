@@ -6,13 +6,13 @@ Multi-channel alert delivery: Email (SendGrid), Slack (Webhooks), In-App.
 Alert generation from system events.
 """
 
-from backend.services.notification.email_service import EmailService
-from backend.services.notification.slack_service import SlackService
-from backend.services.notification.notification_dispatcher import (
+from services.notification.email_service import EmailService
+from services.notification.slack_service import SlackService
+from services.notification.notification_dispatcher import (
     NotificationDispatcher,
     send_quick_alert,
 )
-from backend.services.notification.alert_generator import AlertGenerator
+from services.notification.alert_generator import AlertGenerator
 
 __all__ = [
     "EmailService",

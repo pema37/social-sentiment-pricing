@@ -10,9 +10,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.models.pricing_rule import RuleType, RuleAction
-from backend.models.price_recommendation import RecommendationStatus
-from backend.models.recommendation_outcome import OutcomeLabel
+from models.pricing_rule import RuleType, RuleAction
+from models.price_recommendation import RecommendationStatus
+from models.recommendation_outcome import OutcomeLabel
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -10,24 +10,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
-from backend.db.session import get_session
-from backend.core.security import get_current_user
-from backend.models.user import User
-from backend.models.alert import (
+from db.session import get_session
+from core.security import get_current_user
+from models.user import User
+from models.alert import (
     Alert,
     AlertConfiguration,
     AlertType,
     AlertSeverity,
     AlertStatus,
 )
-from backend.schemas.alert import (
+from schemas.alert import (
     AlertConfigurationCreate,
     AlertConfigurationUpdate,
     AlertConfigurationRead,
     AlertRead,
     AlertStats,
 )
-from backend.schemas.common import PaginatedResponse, PaginationParams
+from schemas.common import PaginatedResponse, PaginationParams
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 

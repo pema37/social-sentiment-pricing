@@ -9,7 +9,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 
-from backend.core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

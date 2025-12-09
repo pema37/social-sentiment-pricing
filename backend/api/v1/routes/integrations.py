@@ -17,19 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
-from backend.core.deps import get_current_user
-from backend.db.session import get_session
-from backend.core.encryption import encrypt_token, decrypt_token
-from backend.models.user import User
-from backend.models.integration import (
+from core.deps import get_current_user
+from db.session import get_session
+from core.encryption import encrypt_token, decrypt_token
+from models.user import User
+from models.integration import (
     Integration,
     IntegrationSyncLog,
     ProductIntegrationLink,
     EcommercePlatform,
     IntegrationStatus,
 )
-from backend.models.product import Product
-from backend.schemas.integration import (
+from models.product import Product
+from schemas.integration import (
     OAuthInitRequest,
     OAuthInitResponse,
     OAuthCallbackRequest,
@@ -50,10 +50,10 @@ from backend.schemas.integration import (
     BulkPricePushResponse,
     IntegrationHealthResponse,
 )
-from backend.schemas.common import PaginatedResponse, PaginationParams
-from backend.services.integration.base import PriceUpdateRequest, PriceUpdateResult, EcommerceService
-from backend.services.integration.shopify_service import ShopifyService
-from backend.services.integration.woocommerce_service import WooCommerceService
+from schemas.common import PaginatedResponse, PaginationParams
+from services.integration.base import PriceUpdateRequest, PriceUpdateResult, EcommerceService
+from services.integration.shopify_service import ShopifyService
+from services.integration.woocommerce_service import WooCommerceService
 
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])

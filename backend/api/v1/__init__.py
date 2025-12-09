@@ -8,7 +8,7 @@ Aggregates all v1 route modules into a single router.
 
 from fastapi import APIRouter
 
-from backend.api.v1.routes import (
+from api.v1.routes import (
     health_router,
     auth_router,
     users_router,

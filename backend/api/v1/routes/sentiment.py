@@ -8,22 +8,22 @@ from sqlalchemy import func
 from sqlmodel import select
 from celery.result import AsyncResult  
 
-from backend.db.session import get_session
-from backend.models import Sentiment, Product, SocialMention
-from backend.schemas.sentiment import (
+from db.session import get_session
+from models import Sentiment, Product, SocialMention
+from schemas.sentiment import (
     SentimentAnalyzeRequest,
     SentimentResponse,
     SentimentBulkRequest,
     SentimentSummary,
     SocialMentionResponse,
 )
-from backend.schemas.common import PaginatedResponse, PaginationParams
-from backend.services.sentiment_analyzer import SentimentAnalyzer
-from backend.core.security import get_current_user
-from backend.models import User
+from schemas.common import PaginatedResponse, PaginationParams
+from services.sentiment_analyzer import SentimentAnalyzer
+from core.security import get_current_user
+from models import User
 
 # Import Celery tasks
-from backend.workers.tasks.ingestion_tasks import fetch_for_product, process_pending_mentions
+from workers.tasks.ingestion_tasks import fetch_for_product, process_pending_mentions
 
 router = APIRouter(prefix="/sentiment", tags=["Sentiment Analysis"])
 

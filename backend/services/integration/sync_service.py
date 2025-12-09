@@ -15,17 +15,17 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.models.integration import (
+from models.integration import (
     Integration,
     IntegrationSyncLog,
     ProductIntegrationLink,
     IntegrationStatus,
 )
-from backend.models.product import Product
-from backend.core.encryption import decrypt_token
-from backend.services.integration.base import EcommerceService, ExternalProduct
-from backend.services.integration.shopify_service import ShopifyService
-from backend.services.integration.woocommerce_service import WooCommerceService
+from models.product import Product
+from core.encryption import decrypt_token
+from services.integration.base import EcommerceService, ExternalProduct
+from services.integration.shopify_service import ShopifyService
+from services.integration.woocommerce_service import WooCommerceService
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class SyncService:
     
     def get_service(self, integration: Integration) -> EcommerceService:
         """Get the appropriate e-commerce service for the integration."""
-        from backend.models.integration import EcommercePlatform
+        from models.integration import EcommercePlatform
         
         if integration.platform == EcommercePlatform.SHOPIFY:
             return ShopifyService()

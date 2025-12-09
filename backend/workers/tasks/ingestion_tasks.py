@@ -1,15 +1,15 @@
 # backend/workers/tasks/ingestion_tasks.py
 
 from datetime import datetime, timezone
-from backend.workers.celery_app import celery_app
+from workers.celery_app import celery_app
 
-from backend.db.session import run_async, get_session_context
+from db.session import run_async, get_session_context
 
 
 @celery_app.task(bind=True, name="ingestion.fetch_for_product", track_started=True)
 def fetch_for_product(self, product_id: str):
     """Fetch social mentions for a specific product using its keywords."""
-    from backend.models import Product
+    from models import Product
     from sqlmodel import select
     
     async def _fetch():
@@ -31,8 +31,8 @@ def fetch_for_product(self, product_id: str):
             mentions = []
             
             # TODO: Import and use actual services
-            # from backend.services.ingestion.twitter_service import TwitterService
-            # from backend.services.ingestion.reddit_service import RedditService
+            # from services.ingestion.twitter_service import TwitterService
+            # from services.ingestion.reddit_service import RedditService
             
             self.update_state(state="SAVING", meta={"count": len(mentions)})
             
@@ -53,7 +53,7 @@ def fetch_for_product(self, product_id: str):
 @celery_app.task(bind=True, name="ingestion.process_pending_mentions", track_started=True)
 def process_pending_mentions(self, batch_size: int = 100):
     """Process unprocessed social mentions through sentiment analysis."""
-    from backend.models import SocialMention, Sentiment
+    from models import SocialMention, Sentiment
     from sqlmodel import select
     
     async def _process():
@@ -78,7 +78,7 @@ def process_pending_mentions(self, batch_size: int = 100):
             self.update_state(state="PROCESSING", meta={"total": len(mentions)})
             
             # TODO: Import actual analyzer
-            # from backend.services.analysis.sentiment_analyzer import SentimentAnalyzer
+            # from services.analysis.sentiment_analyzer import SentimentAnalyzer
             # analyzer = SentimentAnalyzer()
             
             processed_count = 0

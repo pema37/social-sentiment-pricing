@@ -14,12 +14,12 @@ from fastapi import APIRouter, Request, HTTPException, status, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.db.session import get_session
-from backend.core.encryption import decrypt_token
-from backend.models.integration import Integration, EcommercePlatform, IntegrationStatus
-from backend.services.integration.shopify_service import ShopifyService
-from backend.services.integration.woocommerce_service import WooCommerceService
-from backend.services.integration.sync_service import SyncService
+from db.session import get_session
+from core.encryption import decrypt_token
+from models.integration import Integration, EcommercePlatform, IntegrationStatus
+from services.integration.shopify_service import ShopifyService
+from services.integration.woocommerce_service import WooCommerceService
+from services.integration.sync_service import SyncService
 
 logger = logging.getLogger(__name__)
 

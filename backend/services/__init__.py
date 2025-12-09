@@ -6,18 +6,18 @@ Business Logic Services
 Core services for sentiment analysis, pricing, and competitor tracking.
 """
 
-from backend.services.sentiment_analyzer import (
+from services.sentiment_analyzer import (
     SentimentAnalyzer,
     sentiment_analyzer,
 )
-from backend.services.pricing_engine import (
+from services.pricing_engine import (
     PricingEngine,
     pricing_engine,
     CompetitorPriceData,
 )
 
 # Phase 2: Competitor Scraping
-from backend.services.competitor_scraper import (
+from services.competitor_scraper import (
     CompetitorScraperService,
     competitor_scraper,
     ScrapeResult,

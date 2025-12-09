@@ -1,10 +1,12 @@
 # backend/core/config.py
 
 from pydantic_settings import BaseSettings
-from dotenv import load_dotenv
+from pathlib import Path
 from typing import Optional, List
 
-load_dotenv()
+# Get absolute path to backend/.env
+BACKEND_DIR = Path(__file__).parent.parent
+ENV_FILE = BACKEND_DIR / ".env"
 
 class Settings(BaseSettings):
     # ===================
@@ -80,7 +82,7 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: Optional[str] = None
 
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_FILE)  # Absolute path to backend/.env
         extra = "ignore"
 
 

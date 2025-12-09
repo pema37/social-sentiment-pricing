@@ -23,9 +23,9 @@ from dataclasses import dataclass
 import httpx
 from bs4 import BeautifulSoup
 
-from backend.models.competitor import Competitor
-from backend.models.competitor_product import CompetitorProduct
-from backend.models.competitor_price_history import CompetitorPriceHistory
+from models.competitor import Competitor
+from models.competitor_product import CompetitorProduct
+from models.competitor_price_history import CompetitorPriceHistory
 
 
 logger = logging.getLogger(__name__)

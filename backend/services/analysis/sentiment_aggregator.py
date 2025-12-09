@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.models.social_mention import SocialMention
+from models.social_mention import SocialMention
 
 
 class SentimentAggregator:

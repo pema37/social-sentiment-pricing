@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.core.security import (
+from core.security import (
     hash_password,
     verify_password,
     create_access_token,
@@ -16,9 +16,9 @@ from backend.core.security import (
     create_reset_token,
     decode_reset_token,
 )
-from backend.db.session import get_session
-from backend.models import User
-from backend.schemas.auth import (
+from db.session import get_session
+from models import User
+from schemas.auth import (
     RegisterRequest,
     LoginRequest,
     UserResponse,

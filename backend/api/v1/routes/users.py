@@ -9,11 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
-from backend.core.security import hash_password, verify_password
-from backend.db.session import get_session
-from backend.models import User
-from backend.api.v1.routes.auth import get_current_user, require_role
-from backend.schemas.common import PaginatedResponse, PaginationParams
+from core.security import hash_password, verify_password
+from db.session import get_session
+from models import User
+from api.v1.routes.auth import get_current_user, require_role
+from schemas.common import PaginatedResponse, PaginationParams
 
 router = APIRouter(prefix="/users", tags=["users"])
 

@@ -4,12 +4,12 @@
 Pydantic Schemas for API validation.
 """
 
-from backend.schemas.user import (
+from schemas.user import (
     UserCreate,
     UserRead,
     UserUpdateMe,
 )
-from backend.schemas.auth import (
+from schemas.auth import (
     TokenResponse,
     LoginRequest,
     RegisterRequest,
@@ -17,13 +17,13 @@ from backend.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
-from backend.schemas.product import (
+from schemas.product import (
     ProductCreate,
     ProductUpdate,
     ProductRead,
     PriceSuggestion,
 )
-from backend.schemas.sentiment import (
+from schemas.sentiment import (
     SentimentAnalyzeRequest,
     SentimentBulkRequest,
     SentimentScores,
@@ -31,10 +31,10 @@ from backend.schemas.sentiment import (
     SentimentAnalyzeResponse,
     SentimentSummary,
 )
-from backend.schemas.health import HealthResponse
+from schemas.health import HealthResponse
 
 # Phase 2: Competitor Schemas
-from backend.schemas.competitor import (
+from schemas.competitor import (
     CompetitorCreate,
     CompetitorUpdate,
     CompetitorResponse,
@@ -52,7 +52,7 @@ from backend.schemas.competitor import (
 )
 
 # Phase 6: Alert Schemas
-from backend.schemas.alert import (
+from schemas.alert import (
     AlertConfigurationCreate,
     AlertConfigurationUpdate,
     AlertConfigurationRead,

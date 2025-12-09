@@ -6,11 +6,11 @@ Analytics API routes for dashboard metrics.
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.session import get_session
-from backend.core.security import get_current_user
-from backend.models.user import User
-from backend.services.analytics.analytics_service import AnalyticsService
-from backend.schemas.analytics import (
+from db.session import get_session
+from core.security import get_current_user
+from models.user import User
+from services.analytics.analytics_service import AnalyticsService
+from schemas.analytics import (
     DashboardOverview,
     ProductSummary,
     RecommendationStats,

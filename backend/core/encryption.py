@@ -5,7 +5,7 @@ Token encryption utilities using Fernet symmetric encryption.
 """
 
 from cryptography.fernet import Fernet
-from backend.core.config import settings
+from core.config import settings
 
 
 def get_fernet() -> Fernet:

@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel
 
-from backend.db.session import engine
-from backend.models.user import User  # noqa: F401
+from db.session import engine
+from models.user import User  # noqa: F401
 
 
 def init_db() -> None:

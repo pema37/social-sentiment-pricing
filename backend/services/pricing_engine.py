@@ -15,7 +15,7 @@ from typing import Optional, Dict, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from backend.models.product import Product
+from models.product import Product
 
 
 @dataclass

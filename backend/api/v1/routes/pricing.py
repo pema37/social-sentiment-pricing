@@ -12,21 +12,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
-from backend.db.session import get_session
-from backend.core.deps import get_current_user
-from backend.models.user import User
-from backend.models.product import Product
-from backend.models.pricing_rule import PricingRule
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.pricing_settings import PricingSettings
-from backend.models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
-from backend.services.pricing.recommendation_service import RecommendationService
-from backend.services.pricing.approval_service import ApprovalService
-from backend.services.pricing.signal_processor import SignalProcessor
-from backend.services.pricing.rule_evaluator import RuleEvaluator, MarketSignals
-from backend.services.pricing.outcome_service import OutcomeService
-from backend.schemas.common import PaginatedResponse, PaginationParams
-from backend.schemas.pricing import (
+from db.session import get_session
+from core.deps import get_current_user
+from models.user import User
+from models.product import Product
+from models.pricing_rule import PricingRule
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.pricing_settings import PricingSettings
+from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
+from services.pricing.recommendation_service import RecommendationService
+from services.pricing.approval_service import ApprovalService
+from services.pricing.signal_processor import SignalProcessor
+from services.pricing.rule_evaluator import RuleEvaluator, MarketSignals
+from services.pricing.outcome_service import OutcomeService
+from schemas.common import PaginatedResponse, PaginationParams
+from schemas.pricing import (
     PricingRuleCreate,
     PricingRuleUpdate,
     PricingRuleResponse,

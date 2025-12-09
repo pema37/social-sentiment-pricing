@@ -16,7 +16,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from backend.services.integration.base import (
+from services.integration.base import (
     EcommerceService,
     OAuthResult,
     ExternalProduct,

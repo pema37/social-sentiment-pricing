@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 from openai import AsyncOpenAI
 
-from backend.core.config import settings
+from core.config import settings
 
 
 class OpenAISentimentAnalyzer:

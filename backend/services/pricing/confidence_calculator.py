@@ -169,7 +169,7 @@ class ConfidenceCalculator:
         if not self.db or not rule_type or not user_id:
             return Decimal("0.5")
         
-        from backend.services.pricing.outcome_service import OutcomeService
+        from services.pricing.outcome_service import OutcomeService
         
         service = OutcomeService(self.db)
         return service.get_historical_accuracy_for_rule_type(user_id, rule_type)
@@ -210,7 +210,7 @@ class ConfidenceCalculator:
         Calculate price volatility as coefficient of variation.
         Returns value between 0 and 1 (capped).
         """
-        from backend.models.price_history import PriceHistory
+        from models.price_history import PriceHistory
         
         cutoff = datetime.utcnow() - timedelta(days=days)
         
@@ -249,7 +249,7 @@ class ConfidenceCalculator:
         Calculate sentiment volatility from recent sentiment scores.
         Returns value between 0 and 1 (capped).
         """
-        from backend.models.sentiment import Sentiment
+        from models.sentiment import Sentiment
         
         cutoff = datetime.utcnow() - timedelta(days=days)
         

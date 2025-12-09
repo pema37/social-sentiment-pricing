@@ -4,8 +4,8 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from backend.core.config import settings
-from backend.services.ingestion.base import BaseCollector, CollectedMention, SocialSource
+from core.config import settings
+from services.ingestion.base import BaseCollector, CollectedMention, SocialSource
 
 
 class RedditCollector(BaseCollector):

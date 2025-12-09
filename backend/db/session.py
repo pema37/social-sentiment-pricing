@@ -4,7 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlmodel import SQLModel
-from backend.core.config import settings
+from core.config import settings
 
 # =============================================================================
 # ASYNC DATABASE ENGINE
