@@ -21,6 +21,8 @@ from schemas.analytics import (
     ProductSummary,
     RecommendationStats,
     AlertAnalytics,
+    SentimentAnalytics,
+    SentimentDataPoint,
 )
 
 
@@ -286,6 +288,86 @@ class AnalyticsService:
             avg_resolution_time_hours=None  # Would need resolved_at tracking
         )
     
+    async def get_sentiment_trend(
+        self, 
+        product_id: Optional[str] = None, 
+        days: int = 30,
+        bucket: str = "day"
+    ) -> SentimentAnalytics:
+        """Get sentiment timeline data for charts."""
+        now = datetime.utcnow()
+        start = now - timedelta(days=days)
+        
+        # Build base query - join through Product to filter by user
+        query = (
+            select(
+                func.date_trunc(bucket, Sentiment.analyzed_at).label("bucket_time"),
+                func.avg(Sentiment.compound_score).label("avg_score"),
+                func.count(Sentiment.id).label("mention_count")
+            )
+            .join(Product, Sentiment.product_id == Product.id)
+            .where(
+                and_(
+                    Product.user_id == self.user_id,
+                    Sentiment.analyzed_at >= start
+                )
+            )
+        )
+        
+        # Filter by product if specified
+        if product_id:
+            query = query.where(Sentiment.product_id == product_id)
+        
+        # Group and order
+        query = query.group_by("bucket_time").order_by("bucket_time")
+        
+        result = await self.session.execute(query)
+        rows = result.all()
+        
+        # Build timeline
+        timeline = [
+            SentimentDataPoint(
+                timestamp=row.bucket_time,
+                score=round(float(row.avg_score), 3) if row.avg_score else 0.0,
+                mention_count=row.mention_count
+            )
+            for row in rows
+        ]
+        
+        # Calculate current vs previous period
+        current_score = None
+        previous_score = None
+        
+        if timeline:
+            mid = len(timeline) // 2
+            recent = timeline[mid:] if mid > 0 else timeline
+            earlier = timeline[:mid] if mid > 0 else []
+            
+            if recent:
+                current_score = sum(p.score for p in recent) / len(recent)
+            if earlier:
+                previous_score = sum(p.score for p in earlier) / len(earlier)
+        
+        # Determine trend
+        change = None
+        trend = "stable"
+        if current_score is not None and previous_score is not None:
+            change = round(current_score - previous_score, 3)
+            if change > 0.05:
+                trend = "up"
+            elif change < -0.05:
+                trend = "down"
+        
+        return SentimentAnalytics(
+            product_id=product_id,
+            period_days=days,
+            current_score=round(current_score, 3) if current_score else None,
+            previous_score=round(previous_score, 3) if previous_score else None,
+            change=change,
+            trend=trend,
+            timeline=timeline
+        )
+
     async def _get_average_sentiment(
         self, hours: int = 24, offset_hours: int = 0
     ) -> Optional[float]:

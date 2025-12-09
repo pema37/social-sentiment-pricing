@@ -10,11 +10,14 @@ from db.session import get_session
 from core.security import get_current_user
 from models.user import User
 from services.analytics.analytics_service import AnalyticsService
+from typing import Optional
+
 from schemas.analytics import (
     DashboardOverview,
     ProductSummary,
     RecommendationStats,
     AlertAnalytics,
+    SentimentAnalytics,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -61,3 +64,19 @@ async def get_alert_analytics(
     """Get alert statistics."""
     service = AnalyticsService(session, str(current_user.id))
     return await service.get_alert_analytics(days=days)
+
+@router.get("/sentiment-trend", response_model=SentimentAnalytics)
+async def get_sentiment_trend(
+    product_id: Optional[str] = Query(None, description="Filter by product ID"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+    bucket: str = Query("day", regex="^(hour|day|week)$", description="Time bucket size"),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get sentiment trend data for charts."""
+    service = AnalyticsService(session, str(current_user.id))
+    return await service.get_sentiment_trend(
+        product_id=product_id,
+        days=days,
+        bucket=bucket
+    )
