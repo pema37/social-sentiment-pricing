@@ -217,6 +217,22 @@ export interface AlertAnalytics {
   by_status: Record<string, number>;
 }
 
+export interface SentimentDataPoint {
+  timestamp: string;
+  score: number;
+  mention_count: number;
+}
+
+export interface SentimentTrend {
+  product_id: string | null;
+  period_days: number;
+  current_score: number | null;
+  previous_score: number | null;
+  change: number | null;
+  trend: 'up' | 'down' | 'stable';
+  timeline: SentimentDataPoint[];
+}
+
 export const analyticsApi = {
   getDashboard: () => 
     apiClient<DashboardOverview>('/api/v1/analytics/dashboard'),
@@ -229,6 +245,15 @@ export const analyticsApi = {
   
   getAlertAnalytics: (days: number = 30) =>
     apiClient<AlertAnalytics>(`/api/v1/analytics/alerts/stats?days=${days}`),
+
+  getSentimentTrend: (params?: { product_id?: string; days?: number; bucket?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.product_id) query.set('product_id', params.product_id);
+    if (params?.days) query.set('days', params.days.toString());
+    if (params?.bucket) query.set('bucket', params.bucket);
+    const queryString = query.toString();
+    return apiClient<SentimentTrend>(`/api/v1/analytics/sentiment-trend${queryString ? `?${queryString}` : ''}`);
+  },
 };
 
 // ============================================

@@ -1,7 +1,7 @@
 // lib/hooks/use-analytics.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { analyticsApi, alertsApi } from '@/lib/api/client';
-import type { DashboardOverview, ProductSummary, Alert, AlertStats } from '@/lib/api/client';
+import type { DashboardOverview, ProductSummary, Alert, AlertStats, SentimentTrend } from '@/lib/api/client';
 
 // Query keys for cache management
 export const queryKeys = {
@@ -9,6 +9,8 @@ export const queryKeys = {
   productSummaries: (limit: number) => ['product-summaries', limit] as const,
   recommendationStats: (days: number) => ['recommendation-stats', days] as const,
   alertAnalytics: (days: number) => ['alert-analytics', days] as const,
+  sentimentTrend: (params?: { product_id?: string; days?: number; bucket?: string }) => 
+    ['sentiment-trend', params] as const,
   alerts: (params?: Record<string, unknown>) => ['alerts', params] as const,
   alertStats: ['alert-stats'] as const,
   unreadCount: ['unread-count'] as const,
@@ -67,6 +69,23 @@ export function useAlertAnalytics(days: number = 30) {
       return response.data!;
     },
     staleTime: 60 * 1000,
+  });
+}
+
+// Sentiment trend for charts
+export function useSentimentTrend(params?: { 
+  product_id?: string; 
+  days?: number; 
+  bucket?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.sentimentTrend(params),
+    queryFn: async (): Promise<SentimentTrend> => {
+      const response = await analyticsApi.getSentimentTrend(params);
+      if (response.error) throw new Error(response.error);
+      return response.data!;
+    },
+    staleTime: 60 * 1000, // Fresh for 1 minute
   });
 }
 
