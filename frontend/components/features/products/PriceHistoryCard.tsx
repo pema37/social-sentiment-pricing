@@ -155,9 +155,9 @@ export function PriceHistoryCard({ productId }: PriceHistoryCardProps) {
         {history.map((item, index) => (
           <PriceHistoryItem
             key={item.id || index}
-            price={item.price}
+            price={parseFloat(item.price)}
             date={item.created_at}
-            previousPrice={history[index + 1]?.price}
+            previousPrice={history[index + 1] ? parseFloat(history[index + 1].price) : undefined}
             source={item.change_reason || undefined}
           />
         ))}

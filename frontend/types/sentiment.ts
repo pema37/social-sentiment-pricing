@@ -1,32 +1,80 @@
-// Sentiment can only be one of these three values
-export type SentimentType = 'positive' | 'negative' | 'neutral';
+// Sentiment domain types
 
-// Sentiment type - represents a single sentiment analysis result
-export interface Sentiment {
-  id: string;                   // Unique identifier
-  product_id: string;           // Which product this sentiment is for
-  score: number;                // Sentiment score (-1 to 1, or 0 to 100)
-  sentiment_type: SentimentType; // positive, negative, or neutral
-  source: string;               // Where it came from (e.g., "twitter", "reddit")
-  content: string;              // The actual text that was analyzed
-  analyzed_at: string;          // When the analysis was performed
-  created_at: string;           // When this record was created
+export type SentimentLabel = 'very_negative' | 'negative' | 'neutral' | 'positive' | 'very_positive';
+export type SentimentTrendDirection = 'up' | 'down' | 'stable';
+export type SentimentSource = 'twitter' | 'reddit' | 'manual' | 'news' | 'instagram' | 'facebook' | 'youtube';
+
+// Social mention from the API
+export interface SocialMention {
+  id: string;
+  product_id: string;
+  source: string;
+  source_id: string | null;
+  content: string;
+  author: string | null;
+  author_followers: number | null;
+  engagement_count: number | null;
+  url: string | null;
+  published_at: string | null;
+  collected_at: string;
+  processed: boolean;
 }
 
-// Aggregated sentiment data for a product
+// Paginated mentions response
+export interface PaginatedMentions {
+  items: SocialMention[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+// Request to analyze sentiment
+export interface AnalyzeRequest {
+  product_id: string;
+  content: string;
+  source: SentimentSource;
+  author?: string;
+  url?: string;
+}
+
+// Response from sentiment analysis
+export interface AnalyzeResponse {
+  id: string;
+  product_id: string;
+  content: string;
+  source: string;
+  sentiment_score: number;
+  sentiment_label: SentimentLabel;
+  confidence: number;
+  created_at: string;
+}
+
+// Sentiment data point for charts
+export interface SentimentDataPoint {
+  timestamp: string;
+  score: number;
+  mention_count: number;
+}
+
+// Sentiment trend response
+export interface SentimentTrend {
+  product_id: string | null;
+  period_days: number;
+  current_score: number | null;
+  previous_score: number | null;
+  change: number | null;
+  trend: SentimentTrendDirection;
+  timeline: SentimentDataPoint[];
+}
+
+// Aggregated sentiment summary
 export interface SentimentSummary {
-  product_id: string;           // Which product
-  average_score: number;        // Average sentiment score
-  total_mentions: number;       // Total number of mentions analyzed
-  positive_count: number;       // How many positive mentions
-  negative_count: number;       // How many negative mentions
-  neutral_count: number;        // How many neutral mentions
-  trend: 'up' | 'down' | 'stable'; // Is sentiment improving or declining?
-}
-
-// What you send to analyze new content
-export interface SentimentAnalysisRequest {
-  product_id: string;           // Which product to associate with
-  content: string;              // The text to analyze
-  source: string;               // Where this text came from
+  product_id: string;
+  average_score: number;
+  total_mentions: number;
+  positive_count: number;
+  negative_count: number;
+  neutral_count: number;
+  trend: SentimentTrendDirection;
 }

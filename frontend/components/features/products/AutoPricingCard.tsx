@@ -113,7 +113,7 @@ export function AutoPricingCard({ product }: AutoPricingCardProps) {
         />
         <InfoRow
           label="Sentiment Multiplier"
-          value={`${((product.sentiment_multiplier || 0.2) * 100).toFixed(0)}%`}
+          value={`${((parseFloat(product.sentiment_multiplier) || 0.2) * 100).toFixed(0)}%`}
         />
         <InfoRow
           label="Last Updated"

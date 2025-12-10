@@ -15,7 +15,7 @@ import {
 
 interface PriceSuggestionCardProps {
   productId: string;
-  currentPrice: number;
+  currentPrice: string | number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +119,9 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
 
   const applyPrice = useApplyPriceSuggestion();
 
+  // Convert currentPrice to number
+  const currentPriceNum = typeof currentPrice === 'string' ? parseFloat(currentPrice) : currentPrice;
+
   // Loading state
   if (isLoading) {
     return <LoadingState />;
@@ -134,12 +137,12 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
     return <NoSuggestionState />;
   }
 
-  const change = calculateChange(suggestion.suggested_price, currentPrice);
+  const change = calculateChange(suggestion.suggested_price, currentPriceNum);
 
   const handleApply = () => {
     applyPrice.mutate({
       id: productId,
-      newPrice: suggestion.suggested_price,
+      price: suggestion.suggested_price,
     });
   };
 

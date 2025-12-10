@@ -25,10 +25,11 @@ import Link from 'next/link';
 import {
   useDashboardOverview,
   useProductSummaries,
-  useAlerts,
   useRefreshDashboard,
 } from '@/lib/hooks/use-analytics';
-import type { Alert, ProductSummary } from '@/lib/api/client';
+import { useAlerts } from '@/lib/hooks/use-alerts';
+import type { Alert } from '@/types/alert';
+import type { ProductSummary } from '@/types/product';
 
 // =============================================================================
 // COMPONENTS
@@ -279,7 +280,7 @@ export default function DashboardPage() {
   const isRefreshing = overviewFetching;
 
   const handleRefresh = () => {
-    refreshDashboard();
+    refreshDashboard.refresh();
   };
 
   // Extract alerts from paginated response

@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/Button';
 import {
   usePriceSuggestion,
   useApplyPriceSuggestion,
-  type Product,
 } from '@/lib/hooks/use-products';
+import type { Product } from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -145,7 +145,7 @@ function ConfidenceBar({ confidence }: ConfidenceBarProps) {
 }
 
 interface FactorsGridProps {
-  sentimentScore: number;
+  sentimentScore: number | null;
   mentionVolume: number;
 }
 
@@ -154,7 +154,9 @@ function FactorsGrid({ sentimentScore, mentionVolume }: FactorsGridProps) {
     <div className="grid grid-cols-2 gap-3">
       <div className="text-center p-3 bg-gray-50 rounded-lg">
         <p className="text-xs text-gray-500">Sentiment</p>
-        <p className="font-semibold">{(sentimentScore * 100).toFixed(0)}%</p>
+        <p className="font-semibold">
+          {sentimentScore !== null ? `${(sentimentScore * 100).toFixed(0)}%` : 'N/A'}
+        </p>
       </div>
       <div className="text-center p-3 bg-gray-50 rounded-lg">
         <p className="text-xs text-gray-500">Mentions</p>
@@ -175,7 +177,7 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
   const handleApply = () => {
     if (suggestion) {
       applyPrice.mutate(
-        { id: product.id, newPrice: suggestion.suggested_price },
+        { id: product.id, price: suggestion.suggested_price },
         { onSuccess: onClose }
       );
     }
@@ -235,7 +237,7 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
               )}
 
               <FactorsGrid
-                sentimentScore={Number(suggestion.sentiment_score)}
+                sentimentScore={suggestion.sentiment_score}
                 mentionVolume={suggestion.mention_volume}
               />
             </div>

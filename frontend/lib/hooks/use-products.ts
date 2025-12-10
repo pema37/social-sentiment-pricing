@@ -1,319 +1,146 @@
-// lib/hooks/use-products.ts
-
+// Product hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api/client';
+import { productsApi } from '@/lib/api';
+import type { 
+  Product,
+  CreateProductRequest, 
+  UpdateProductRequest,
+  PaginatedProducts,
+} from '@/types';
 
-// ─────────────────────────────── Types ─────────────────────────────── //
+// Re-export types for convenience
+export type { Product, CreateProductRequest, UpdateProductRequest, PaginatedProducts };
 
-export interface Product {
-  id: string;
-  user_id: string;
-  name: string;
-  sku: string | null;
-  description: string | null;
-  category: string | null;
-  image_url: string | null;
-  is_active: boolean;
-  base_price: number;
-  current_price: number;
-  cost: number | null;
-  min_price: number | null;
-  max_price: number | null;
-  sentiment_multiplier: number;
-  auto_pricing_enabled: boolean;
-  keywords: string[];
-  created_at: string;
-  updated_at: string;
-}
+// Legacy type aliases for backwards compatibility
+export type ProductCreate = CreateProductRequest;
+export type ProductUpdate = UpdateProductRequest;
 
-export interface ProductCreate {
-  name: string;
-  sku?: string | null;
-  description?: string | null;
-  category?: string | null;
-  image_url?: string | null;
-  is_active?: boolean;
-  base_price: number;
-  cost?: number | null;
-  min_price?: number | null;
-  max_price?: number | null;
-  sentiment_multiplier?: number;
-  auto_pricing_enabled?: boolean;
-  keywords?: string[];
-}
-
-export interface ProductUpdate {
-  name?: string;
-  sku?: string | null;
-  description?: string | null;
-  category?: string | null;
-  image_url?: string | null;
-  is_active?: boolean;
-  base_price?: number;
-  current_price?: number;
-  cost?: number | null;
-  min_price?: number | null;
-  max_price?: number | null;
-  sentiment_multiplier?: number;
-  auto_pricing_enabled?: boolean;
-  keywords?: string[];
-}
-
-export interface PriceSuggestion {
-  product_id: string;
-  current_price: number;
-  suggested_price: number;
-  price_change: number;
-  price_change_percent: number;
-  sentiment_score: number;
-  mention_volume: number;
-  confidence: number;
-  reasoning: string;
-  factors: {
-    sentiment_impact: number;
-    volume_impact: number;
-    competitor_impact: number;
-    trend_impact: number;
-  };
-}
-
-export interface PaginatedProducts {
-  items: Product[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
-
-export interface ProductsParams {
-  page?: number;
-  page_size?: number;
-}
-
-export interface PriceHistoryItem {
-  id: string;
-  product_id: string;
-  price: number;
-  previous_price: number | null;
-  change_percent: number | null;
-  change_reason: string | null;
-  created_at: string;
-}
-
-export interface PriceHistoryParams {
-  days?: number;
-  limit?: number;
-}
-
-// ─────────────────────────────── Query Keys ─────────────────────────────── //
-
+// Query keys
 export const productKeys = {
   all: ['products'] as const,
-  lists: () => [...productKeys.all, 'list'] as const,
-  list: (params: ProductsParams) => [...productKeys.lists(), params] as const,
-  details: () => [...productKeys.all, 'detail'] as const,
-  detail: (id: string) => [...productKeys.details(), id] as const,
-  priceSuggestion: (id: string) => [...productKeys.all, 'price-suggestion', id] as const,
-  priceHistory: (id: string, params?: PriceHistoryParams) => [...productKeys.all, 'price-history', id, params] as const,
+  list: (params?: { page?: number; page_size?: number }) =>
+    [...productKeys.all, 'list', params] as const,
+  detail: (id: string) => [...productKeys.all, 'detail', id] as const,
+  suggestion: (id: string) => [...productKeys.all, 'suggestion', id] as const,
+  priceHistory: (id: string, params?: { days?: number }) =>
+    [...productKeys.all, 'price-history', id, params] as const,
 };
 
-// ─────────────────────────────── Queries ─────────────────────────────── //
-
-/**
- * Fetch paginated list of products
- */
-export function useProducts(params: ProductsParams = {}) {
-  const { page = 1, page_size = 10 } = params;
-  
+// Get paginated products
+export function useProducts(params?: { page?: number; page_size?: number }) {
   return useQuery({
-    queryKey: productKeys.list({ page, page_size }),
-    queryFn: async () => {
-      const response = await apiClient<PaginatedProducts>(
-        `/api/v1/products?page=${page}&page_size=${page_size}`
-      );
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
+    queryKey: productKeys.list(params),
+    queryFn: () => productsApi.getAll(params),
+    staleTime: 30 * 1000,
   });
 }
 
-/**
- * Fetch a single product by ID
- */
-export function useProduct(productId: string | null) {
+// Get single product
+export function useProduct(id: string | null) {
   return useQuery({
-    queryKey: productKeys.detail(productId ?? ''),
-    queryFn: async () => {
-      if (!productId) throw new Error('Product ID required');
-      const response = await apiClient<Product>(`/api/v1/products/${productId}`);
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
-    enabled: !!productId,
+    queryKey: productKeys.detail(id || ''),
+    queryFn: () => productsApi.getById(id!),
+    enabled: !!id,
+    staleTime: 30 * 1000,
   });
 }
 
-/**
- * Fetch price suggestion for a product
- */
-export function usePriceSuggestion(productId: string | null) {
+// Get price suggestion for a product
+export function usePriceSuggestion(id: string | null) {
   return useQuery({
-    queryKey: productKeys.priceSuggestion(productId ?? ''),
-    queryFn: async () => {
-      if (!productId) throw new Error('Product ID required');
-      const response = await apiClient<PriceSuggestion>(
-        `/api/v1/products/${productId}/price-suggestion`
-      );
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
-    enabled: !!productId,
+    queryKey: productKeys.suggestion(id || ''),
+    queryFn: () => productsApi.getSuggestion(id!),
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
-/**
- * Fetch price history for a product
- */
-export function usePriceHistory(productId: string | null, params: PriceHistoryParams = {}) {
-  const { days = 30, limit = 100 } = params;
-  
+// Get price history for a product
+export function usePriceHistory(id: string | null, params?: { days?: number; limit?: number }) {
   return useQuery({
-    queryKey: productKeys.priceHistory(productId ?? '', { days, limit }),
-    queryFn: async () => {
-      if (!productId) throw new Error('Product ID required');
-      const response = await apiClient<PriceHistoryItem[]>(
-        `/api/v1/products/${productId}/price-history?days=${days}&limit=${limit}`
-      );
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
-    enabled: !!productId,
+    queryKey: productKeys.priceHistory(id || '', params),
+    queryFn: () => productsApi.getPriceHistory(id!, params),
+    enabled: !!id,
+    staleTime: 60 * 1000,
   });
 }
 
-// ─────────────────────────────── Mutations ─────────────────────────────── //
-
-/**
- * Create a new product
- */
+// Create product
 export function useCreateProduct() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async (data: ProductCreate) => {
-      const response = await apiClient<Product>('/api/v1/products', {
-        method: 'POST',
-        body: data,
-      });
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
+    mutationFn: (data: CreateProductRequest) => productsApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
     },
   });
 }
 
-/**
- * Update an existing product
- */
+// Update product
 export function useUpdateProduct() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: ProductUpdate }) => {
-      const response = await apiClient<Product>(`/api/v1/products/${id}`, {
-        method: 'PATCH',
-        body: data,
-      });
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
+    mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
+      productsApi.update(id, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.list() });
     },
   });
 }
 
-/**
- * Delete a product
- */
+// Delete product
 export function useDeleteProduct() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async (productId: string) => {
-      const response = await apiClient(`/api/v1/products/${productId}`, {
-        method: 'DELETE',
-      });
-      if (response.error) {
-        throw new Error(response.error);
-      }
-    },
+    mutationFn: (id: string) => productsApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
     },
   });
 }
 
-/**
- * Toggle auto-pricing for a product
- */
+// Toggle auto-pricing for a product
 export function useToggleAutoPricing() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      const response = await apiClient<Product>(`/api/v1/products/${id}`, {
-        method: 'PATCH',
-        body: { auto_pricing_enabled: enabled },
-      });
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      productsApi.update(id, { auto_pricing_enabled: enabled }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.list() });
     },
   });
 }
 
-/**
- * Apply a price suggestion to a product
- */
+// Apply price suggestion
 export function useApplyPriceSuggestion() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async ({ id, newPrice }: { id: string; newPrice: number }) => {
-      const response = await apiClient<Product>(`/api/v1/products/${id}`, {
-        method: 'PATCH',
-        body: { current_price: newPrice },
-      });
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      return response.data!;
-    },
+    mutationFn: ({ id, price }: { id: string; price: number }) =>
+      productsApi.update(id, { current_price: price }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.priceSuggestion(variables.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.suggestion(variables.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+    },
+  });
+}
+
+// Bulk update auto-pricing
+export function useBulkUpdatePricing() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ productIds, enabled }: { productIds: string[]; enabled: boolean }) =>
+      productsApi.bulkUpdatePricing(productIds, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
     },
   });
 }

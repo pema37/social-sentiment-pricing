@@ -3,7 +3,7 @@
 
 import { Package, Tag } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
-import type { Product } from '@/lib/hooks/use-products';
+import type { Product } from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -17,22 +17,26 @@ interface ProductInfoCardProps {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
+function toNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return isNaN(num) ? null : num;
+}
+
+function formatCurrency(value: string | number | null | undefined): string {
+  const num = toNumber(value);
+  if (num === null) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-  }).format(value);
+  }).format(num);
 }
 
-function calculatePriceChange(current: number, base: number): number | null {
-  if (!base || base === 0) return null;
-  return ((current - base) / base) * 100;
-}
-
-function calculateMargin(price: number | null, cost: number | null): number | null {
-  if (!price || !cost || cost === 0) return null;
-  return ((price - cost) / price) * 100;
+function calculatePriceChange(current: string | number, base: string | number): number | null {
+  const currentNum = toNumber(current);
+  const baseNum = toNumber(base);
+  if (currentNum === null || baseNum === null || baseNum === 0) return null;
+  return ((currentNum - baseNum) / baseNum) * 100;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,7 +101,6 @@ function KeywordBadge({ keyword }: KeywordBadgeProps) {
 
 export function ProductInfoCard({ product }: ProductInfoCardProps) {
   const priceChange = calculatePriceChange(product.current_price, product.base_price);
-  const margin = calculateMargin(product.current_price, product.cost);
 
   const priceChangeColor = priceChange
     ? priceChange > 0
@@ -115,7 +118,7 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
     <Card className="p-6">
       <div className="flex gap-6">
         {/* Product Image */}
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           {product.image_url ? (
             <img
               src={product.image_url}
@@ -157,7 +160,7 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
       </div>
 
       {/* Price Grid */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
         <PriceGridItem
           label="Current Price"
           value={formatCurrency(product.current_price)}
@@ -172,11 +175,6 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
         <PriceGridItem
           label="Price Range"
           value={`${formatCurrency(product.min_price)} - ${formatCurrency(product.max_price)}`}
-        />
-        <PriceGridItem
-          label="Cost"
-          value={formatCurrency(product.cost)}
-          subValue={margin !== null ? `${margin.toFixed(1)}% margin` : undefined}
         />
       </div>
 

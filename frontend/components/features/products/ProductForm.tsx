@@ -9,10 +9,8 @@ import { Card } from '@/components/ui/Card';
 import {
   useCreateProduct,
   useUpdateProduct,
-  type Product,
-  type ProductCreate,
-  type ProductUpdate,
 } from '@/lib/hooks/use-products';
+import type { Product, CreateProductRequest, UpdateProductRequest } from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -34,7 +32,6 @@ interface FormData {
   category: string;
   image_url: string;
   base_price: string;
-  cost: string;
   min_price: string;
   max_price: string;
   sentiment_multiplier: string;
@@ -55,7 +52,6 @@ function buildInitialFormData(product?: Product): FormData {
     category: product?.category || '',
     image_url: product?.image_url || '',
     base_price: product?.base_price?.toString() || '',
-    cost: product?.cost?.toString() || '',
     min_price: product?.min_price?.toString() || '',
     max_price: product?.max_price?.toString() || '',
     sentiment_multiplier: product?.sentiment_multiplier?.toString() || '0.2',
@@ -194,16 +190,15 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
     
     if (!validate()) return;
 
-    const data: ProductCreate | ProductUpdate = {
+    const data: CreateProductRequest | UpdateProductRequest = {
       name: formData.name.trim(),
-      sku: formData.sku.trim() || null,
-      description: formData.description.trim() || null,
-      category: formData.category.trim() || null,
-      image_url: formData.image_url.trim() || null,
+      sku: formData.sku.trim() || undefined,
+      description: formData.description.trim() || undefined,
+      category: formData.category.trim() || undefined,
+      image_url: formData.image_url.trim() || undefined,
       base_price: Number(formData.base_price),
-      cost: formData.cost ? Number(formData.cost) : null,
-      min_price: formData.min_price ? Number(formData.min_price) : null,
-      max_price: formData.max_price ? Number(formData.max_price) : null,
+      min_price: formData.min_price ? Number(formData.min_price) : undefined,
+      max_price: formData.max_price ? Number(formData.max_price) : undefined,
       sentiment_multiplier: Number(formData.sentiment_multiplier) || 0.2,
       auto_pricing_enabled: formData.auto_pricing_enabled,
       is_active: formData.is_active,
@@ -218,7 +213,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
         { onSuccess }
       );
     } else {
-      createProduct.mutate(data as ProductCreate, { onSuccess });
+      createProduct.mutate(data as CreateProductRequest, { onSuccess });
     }
   };
 
@@ -313,12 +308,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
             required
           />
           
-          <PriceInput
-            name="cost"
-            label="Cost"
-            value={formData.cost}
-            onChange={handleChange}
-          />
+          <div /> {/* Empty space for grid alignment */}
           
           <PriceInput
             name="min_price"

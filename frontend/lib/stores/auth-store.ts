@@ -3,8 +3,8 @@
 
 import { create } from 'zustand';
 import { getToken, setToken, removeToken } from '@/lib/auth/token';
-import { authApi } from '@/lib/api/client';
-import type { User } from '@/types';
+import { authApi, ApiError } from '@/lib/api';
+import type { User } from '@/lib/api/auth';
 
 // Define the shape of our auth state
 interface AuthState {
@@ -28,39 +28,38 @@ export const useAuthStore = create<AuthState>((set) => ({
   
   // Login action
   login: async (email, password) => {
-    // Call the login API
-    const response = await authApi.login(email, password);
-    
-    // Handle login failure
-    if (response.error || !response.data) {
-      return { success: false, error: response.error || 'Login failed' };
-    }
-    
-    // Save the token to localStorage
-    setToken(response.data.access_token);
-    
-    // Fetch the user's profile data
-    const userResponse = await authApi.me();
-    if (userResponse.data) {
+    try {
+      // Call the login API
+      const response = await authApi.login(email, password);
+      
+      // Save the token to localStorage
+      setToken(response.access_token);
+      
+      // Fetch the user's profile data
+      const user = await authApi.me();
+      
       // Update state with user data
-      set({ user: userResponse.data as User, isAuthenticated: true });
+      set({ user, isAuthenticated: true });
+      
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Login failed';
+      return { success: false, error: message };
     }
-    
-    return { success: true };
   },
   
   // Register action
   register: async (email, password, fullName) => {
-    // Call the register API
-    const response = await authApi.register(email, password, fullName);
-    
-    // Handle registration failure
-    if (response.error) {
-      return { success: false, error: response.error };
+    try {
+      // Call the register API
+      await authApi.register(email, password, fullName);
+      
+      // Registration successful (user still needs to login)
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Registration failed';
+      return { success: false, error: message };
     }
-    
-    // Registration successful (user still needs to login)
-    return { success: true };
   },
   
   // Logout action
@@ -82,13 +81,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       return;
     }
     
-    // We have a token - verify it's still valid by fetching user
-    const response = await authApi.me();
-    
-    if (response.data) {
+    try {
+      // We have a token - verify it's still valid by fetching user
+      const user = await authApi.me();
+      
       // Token is valid - user is logged in
-      set({ user: response.data as User, isAuthenticated: true, isLoading: false });
-    } else {
+      set({ user, isAuthenticated: true, isLoading: false });
+    } catch {
       // Token is invalid - clear it
       removeToken();
       set({ user: null, isAuthenticated: false, isLoading: false });

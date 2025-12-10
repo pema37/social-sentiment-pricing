@@ -1,41 +1,31 @@
-// types/analytics.ts
+// Analytics API
+import { api } from './client';
+import type {
+  DashboardOverview,
+  ProductSummary,
+  RecommendationStats,
+  AlertAnalytics,
+  SentimentTrend,
+} from '@/types';
 
-export interface DashboardStats {
-  products_tracked: number;
-  products_change: number;
-  avg_sentiment: number;
-  sentiment_change: number;
-  pending_suggestions: number;
-  urgent_suggestions: number;
-  competitors_count: number;
-  competitors_new: number;
-}
+export const analyticsApi = {
+  // Dashboard overview
+  getDashboard: () =>
+    api.get<DashboardOverview>('/api/v1/analytics/dashboard'),
 
-export interface SentimentTrendPoint {
-  date: string;
-  score: number;
-  mentions: number;
-}
+  // Product summaries for dashboard
+  getProductSummaries: (limit: number = 10) =>
+    api.get<ProductSummary[]>('/api/v1/analytics/products', { limit }),
 
-export interface RevenueTrendPoint {
-  month: string;
-  revenue: number;
-  baseline: number;
-}
+  // Recommendation stats
+  getRecommendationStats: (days: number = 30) =>
+    api.get<RecommendationStats>('/api/v1/analytics/recommendations/stats', { days }),
 
-export interface Alert {
-  id: string;
-  type: 'critical' | 'warning' | 'success' | 'info';
-  title: string;
-  description: string;
-  created_at: string;
-  is_read: boolean;
-}
+  // Alert analytics
+  getAlertAnalytics: (days: number = 30) =>
+    api.get<AlertAnalytics>('/api/v1/analytics/alerts/stats', { days }),
 
-export interface ActivityItem {
-  id: string;
-  action: string;
-  target: string;
-  created_at: string;
-  type: 'price' | 'sentiment' | 'competitor' | 'rule';
-}
+  // Sentiment trend over time
+  getSentimentTrend: (params?: { product_id?: string; days?: number; bucket?: string }) =>
+    api.get<SentimentTrend>('/api/v1/analytics/sentiment-trend', params),
+};
