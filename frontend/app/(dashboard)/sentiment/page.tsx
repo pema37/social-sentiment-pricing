@@ -1,227 +1,48 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { SectionHeader, Card, Button } from '@/components/ui';
-import { AnalyzeModal } from '@/components/sentiment';
+import {
+  KpiCard,
+  PeriodSelector,
+  ProductSelector,
+  PlatformSelector,
+  SentimentChart,
+  MentionVolumeChart,
+  MentionCard,
+  EmptyState,
+  AnalyzeModal,
+  SentimentBreakdown,
+  TopKeywords,
+  type Platform,
+} from '@/components/features/sentiment';
 import { useSentimentTrend, useDashboardOverview } from '@/lib/hooks';
 import { useProducts, useMentions } from '@/lib/hooks';
-import type { SocialMention } from '@/types';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-} from 'recharts';
 
-// Format date for chart labels
-function formatDate(timestamp: string): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatScore(score: number | null | undefined): string {
+  if (score === null || score === undefined) return '—';
+  return (score * 100).toFixed(0);
 }
 
-// Format relative time
-function formatRelativeTime(timestamp: string): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function getSentimentLabel(score: number | null | undefined): string {
+  if (score === null || score === undefined) return 'No data';
+  if (score >= 0.5) return 'Positive';
+  if (score >= 0) return 'Neutral';
+  return 'Negative';
 }
 
-// Source icon/badge
-function SourceBadge({ source }: { source: string }) {
-  const colors: Record<string, string> = {
-    twitter: 'bg-blue-100 text-blue-800',
-    reddit: 'bg-orange-100 text-orange-800',
-    manual: 'bg-gray-100 text-gray-800',
-    news: 'bg-purple-100 text-purple-800',
-    instagram: 'bg-pink-100 text-pink-800',
-    facebook: 'bg-indigo-100 text-indigo-800',
-    youtube: 'bg-red-100 text-red-800',
-  };
-
-  return (
-    <span
-      className={`px-2 py-0.5 rounded text-xs font-medium ${
-        colors[source.toLowerCase()] || 'bg-gray-100 text-gray-800'
-      }`}
-    >
-      {source}
-    </span>
-  );
-}
-
-// Trend indicator component
-function TrendBadge({ trend, change }: { trend: string; change: number | null }) {
-  const colors = {
-    up: 'bg-green-100 text-green-800',
-    down: 'bg-red-100 text-red-800',
-    stable: 'bg-gray-100 text-gray-800',
-  };
-
-  const icons = {
-    up: '↑',
-    down: '↓',
-    stable: '→',
-  };
-
-  const trendKey = trend as keyof typeof colors;
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium ${colors[trendKey]}`}
-    >
-      {icons[trendKey]}
-      {change !== null && ` ${Math.abs(change * 100).toFixed(1)}%`}
-    </span>
-  );
-}
-
-// KPI Card component
-function KpiCard({
-  title,
-  value,
-  subtitle,
-  trend,
-  change,
-}: {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  trend?: string;
-  change?: number | null;
-}) {
-  return (
-    <Card className="p-6">
-      <p className="text-sm text-gray-500 mb-1">{title}</p>
-      <div className="flex items-center gap-3">
-        <p className="text-3xl font-semibold">{value}</p>
-        {trend && <TrendBadge trend={trend} change={change ?? null} />}
-      </div>
-      {subtitle && <p className="text-sm text-gray-400 mt-1">{subtitle}</p>}
-    </Card>
-  );
-}
-
-// Period selector
-function PeriodSelector({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (days: number) => void;
-}) {
-  const periods = [
-    { label: '7 days', days: 7 },
-    { label: '30 days', days: 30 },
-    { label: '90 days', days: 90 },
-  ];
-
-  return (
-    <div className="flex gap-2">
-      {periods.map((period) => (
-        <button
-          key={period.days}
-          onClick={() => onChange(period.days)}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            value === period.days
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          {period.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// Product selector dropdown
-function ProductSelector({
-  value,
-  onChange,
-  products,
-  isLoading,
-}: {
-  value: string | null;
-  onChange: (productId: string | null) => void;
-  products: { id: string; name: string }[];
-  isLoading: boolean;
-}) {
-  return (
-    <select
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value || null)}
-      className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-      disabled={isLoading}
-    >
-      <option value="">All Products</option>
-      {products.map((product) => (
-        <option key={product.id} value={product.id}>
-          {product.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-// Mention card component
-function MentionCard({ mention }: { mention: SocialMention }) {
-  return (
-    <div className="p-4 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-2">
-          <SourceBadge source={mention.source} />
-          {mention.author && (
-            <span className="text-sm text-gray-600">@{mention.author}</span>
-          )}
-          {mention.author_followers && mention.author_followers > 1000 && (
-            <span className="text-xs text-gray-400">
-              {(mention.author_followers / 1000).toFixed(1)}K followers
-            </span>
-          )}
-        </div>
-        <span className="text-xs text-gray-400 whitespace-nowrap">
-          {formatRelativeTime(mention.collected_at)}
-        </span>
-      </div>
-      <p className="text-gray-700 text-sm leading-relaxed">{mention.content}</p>
-      <div className="flex items-center gap-4 mt-2">
-        {mention.engagement_count !== null && mention.engagement_count > 0 && (
-          <span className="text-xs text-gray-500">
-            {mention.engagement_count} engagements
-          </span>
-        )}
-        {mention.url && (
-          <a
-            href={mention.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:underline"
-          >
-            View source →
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Page
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function SentimentPage() {
   const [days, setDays] = useState(30);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform>('all');
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
 
   // Fetch products for dropdown
@@ -230,7 +51,7 @@ export default function SentimentPage() {
     page_size: 100,
   });
 
-  // Fetch sentiment trend data (filtered by product if selected)
+  // Fetch sentiment trend data
   const {
     data: trendData,
     isLoading: trendLoading,
@@ -244,39 +65,31 @@ export default function SentimentPage() {
   // Fetch mentions for selected product
   const { data: mentionsData, isLoading: mentionsLoading } = useMentions(
     selectedProductId,
-    { page: 1, page_size: 20 }
+    { page: 1, page_size: 100 }
   );
 
-  // Fetch dashboard overview for additional context
+  // Fetch dashboard overview
   const { data: dashboardData } = useDashboardOverview();
 
   // Get selected product name
   const selectedProduct = productsData?.items.find((p) => p.id === selectedProductId);
 
-  // Prepare chart data
-  const chartData =
-    trendData?.timeline.map((point) => ({
-      date: formatDate(point.timestamp),
-      score: point.score,
-      mentions: point.mention_count,
-    })) || [];
+  // Filter mentions by platform
+  const filteredMentions = useMemo(() => {
+    if (!mentionsData?.items) return [];
+    if (selectedPlatform === 'all') return mentionsData.items;
+    return mentionsData.items.filter(
+      (m) => m.source.toLowerCase() === selectedPlatform.toLowerCase()
+    );
+  }, [mentionsData, selectedPlatform]);
 
-  // Calculate sentiment label
-  const getSentimentLabel = (score: number | null | undefined): string => {
-    if (score === null || score === undefined) return 'No data';
-    if (score >= 0.5) return 'Positive';
-    if (score >= 0) return 'Neutral';
-    return 'Negative';
-  };
-
-  // Format score for display
-  const formatScore = (score: number | null | undefined): string => {
-    if (score === null || score === undefined) return '—';
-    return (score * 100).toFixed(0);
-  };
+  // Chart data - pass raw timeline to charts (they format internally)
+  const chartData = trendData?.timeline || [];
+  const totalMentions = chartData.reduce((sum, d) => sum + d.mention_count, 0);
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <SectionHeader
           title="Sentiment Analysis"
@@ -314,7 +127,7 @@ export default function SentimentPage() {
         />
         <KpiCard
           title="Total Mentions"
-          value={chartData.reduce((sum, d) => sum + d.mentions, 0)}
+          value={totalMentions}
           subtitle={`Last ${days} days`}
         />
         <KpiCard
@@ -328,7 +141,7 @@ export default function SentimentPage() {
       {trendLoading && (
         <Card className="p-8">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
           </div>
         </Card>
       )}
@@ -346,145 +159,100 @@ export default function SentimentPage() {
       {/* Charts */}
       {!trendLoading && !trendError && chartData.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Sentiment Score Chart */}
-          <Card className="p-6">
-            <h3 className="text-lg font-medium mb-4">Sentiment Score Over Time</h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <YAxis
-                    domain={[-1, 1]}
-                    tick={{ fontSize: 12 }}
-                    stroke="#9ca3af"
-                    tickFormatter={(value) => (value * 100).toFixed(0)}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [(value * 100).toFixed(1), 'Score']}
-                    labelStyle={{ color: '#374151' }}
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #e5e7eb',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Mention Volume Chart */}
-          <Card className="p-6">
-            <h3 className="text-lg font-medium mb-4">Mention Volume</h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" allowDecimals={false} />
-                  <Tooltip
-                    formatter={(value: number) => [value, 'Mentions']}
-                    labelStyle={{ color: '#374151' }}
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #e5e7eb',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <Bar dataKey="mentions" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
+          <SentimentChart data={chartData} />
+          <MentionVolumeChart data={chartData} />
         </div>
       )}
 
       {/* Empty chart state */}
       {!trendLoading && !trendError && chartData.length === 0 && (
-        <Card className="p-8">
-          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-            <svg
-              className="w-12 h-12 mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
-            <p className="text-lg font-medium">No sentiment data yet</p>
-            <p className="text-sm mt-1">
-              {selectedProductId
-                ? 'No sentiment data for this product yet'
-                : 'Sentiment data will appear here once you start analyzing content'}
-            </p>
-          </div>
-        </Card>
+        <EmptyState
+          title="No sentiment data yet"
+          description={
+            selectedProductId
+              ? 'No sentiment data for this product yet'
+              : 'Sentiment data will appear here once you start analyzing content'
+          }
+        />
       )}
 
-      {/* Mentions Feed - only shown when a product is selected */}
+      {/* Sentiment Breakdown & Keywords - shown when product selected */}
+      {selectedProductId && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="p-6">
+            <h3 className="text-lg font-medium mb-4">Sentiment Breakdown</h3>
+            {mentionsLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+              </div>
+            ) : (
+              <SentimentBreakdown mentions={mentionsData?.items || []} />
+            )}
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-medium mb-4">Top Keywords</h3>
+            {mentionsLoading ? (
+              <div className="flex items-center justify-center h-24">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+              </div>
+            ) : (
+              <TopKeywords mentions={mentionsData?.items || []} />
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Mentions Feed */}
       {selectedProductId && (
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium">Recent Mentions</h3>
-            {mentionsData && mentionsData.total > 0 && (
-              <span className="text-sm text-gray-500">
-                {mentionsData.total} total mention{mentionsData.total !== 1 ? 's' : ''}
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              <PlatformSelector value={selectedPlatform} onChange={setSelectedPlatform} />
+              {mentionsData && mentionsData.total > 0 && (
+                <span className="text-sm text-gray-500">
+                  {filteredMentions.length} of {mentionsData.total} mention
+                  {mentionsData.total !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Mentions loading */}
           {mentionsLoading && (
             <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
             </div>
           )}
 
-          {/* Mentions list */}
-          {!mentionsLoading && mentionsData && mentionsData.items.length > 0 && (
+          {!mentionsLoading && filteredMentions.length > 0 && (
             <div className="space-y-3">
-              {mentionsData.items.map((mention) => (
+              {filteredMentions.slice(0, 20).map((mention) => (
                 <MentionCard key={mention.id} mention={mention} />
               ))}
             </div>
           )}
 
-          {/* Empty mentions state */}
-          {!mentionsLoading && (!mentionsData || mentionsData.items.length === 0) && (
+          {!mentionsLoading && filteredMentions.length === 0 && (
             <div className="flex flex-col items-center justify-center h-32 text-gray-500">
-              <p className="text-sm">No mentions found for this product</p>
-              <p className="text-xs mt-1">
-                Mentions will appear here when social data is collected
+              <p className="text-sm">
+                {selectedPlatform === 'all'
+                  ? 'No mentions found for this product'
+                  : `No ${selectedPlatform} mentions found`}
               </p>
+              {selectedPlatform !== 'all' && (
+                <p className="text-xs mt-1">Try selecting &quot;All Platforms&quot;</p>
+              )}
             </div>
           )}
         </Card>
       )}
 
-      {/* Prompt to select product for mentions */}
+      {/* Prompt to select product */}
       {!selectedProductId && (
         <Card className="p-6">
           <div className="flex flex-col items-center justify-center h-32 text-gray-500">
-            <svg
-              className="w-8 h-8 mb-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -492,8 +260,8 @@ export default function SentimentPage() {
                 d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
               />
             </svg>
-            <p className="text-sm font-medium">Select a product to view mentions</p>
-            <p className="text-xs mt-1">Choose a product from the dropdown above</p>
+            <p className="text-sm font-medium">Select a product to view detailed analysis</p>
+            <p className="text-xs mt-1">Choose a product to see sentiment breakdown, keywords, and mentions</p>
           </div>
         </Card>
       )}

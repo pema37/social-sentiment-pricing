@@ -18,6 +18,9 @@ export interface SocialMention {
   published_at: string | null;
   collected_at: string;
   processed: boolean;
+  // Sentiment fields (populated after analysis)
+  sentiment_score: number | null;
+  sentiment_label: SentimentLabel | null;
 }
 
 // Paginated mentions response
