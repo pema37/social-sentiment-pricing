@@ -41,7 +41,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
 Card.displayName = 'Card';
 
 // Card Header - optional sub-component for card titles
-interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {}
+type CardHeaderProps = HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
   ({ className, children, ...props }, ref) => {
@@ -60,7 +60,7 @@ export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
 CardHeader.displayName = 'CardHeader';
 
 // Card Title - for the main heading inside a card
-interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {}
+type CardTitleProps = HTMLAttributes<HTMLHeadingElement>;
 
 export const CardTitle = forwardRef<HTMLHeadingElement, CardTitleProps>(
   ({ className, children, ...props }, ref) => {

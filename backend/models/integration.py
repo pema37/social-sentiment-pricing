@@ -81,6 +81,8 @@ class Integration(SQLModel, table=True):
         default=None,
         sa_column=SAColumn(LargeBinary, nullable=True)
     )
+    # Webhook IDs for cleanup on disconnect
+    webhook_ids: List[str] = Field(default=[], sa_column=Column(JSON))
     
     # ========== OAuth Flow (temporary fields) ==========
     oauth_state: Optional[str] = Field(default=None, max_length=64)

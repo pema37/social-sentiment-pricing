@@ -5,20 +5,30 @@ Integration API Routes
 
 Endpoints for connecting/disconnecting e-commerce platforms,
 syncing products, and pushing price updates.
+
+Production-ready with:
+- Full sync background task integration
+- OAuth callback with frontend redirect
+- WooCommerce API key connection endpoint
+- Configurable URLs from settings
+- Automatic webhook registration/unregistration
 """
 
+import logging
 import secrets
 from datetime import datetime
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
+from core.config import settings
 from core.deps import get_current_user
-from db.session import get_session
+from db.session import get_session, async_session
 from core.encryption import encrypt_token, decrypt_token
 from models.user import User
 from models.integration import (
@@ -49,12 +59,21 @@ from schemas.integration import (
     BulkPricePushRequest,
     BulkPricePushResponse,
     IntegrationHealthResponse,
+    WooCommerceConnectRequest,
 )
 from schemas.common import PaginatedResponse, PaginationParams
-from services.integration.base import PriceUpdateRequest, PriceUpdateResult, EcommerceService
-from services.integration.shopify_service import ShopifyService
-from services.integration.woocommerce_service import WooCommerceService
+from services.integration import (
+    EcommerceService,
+    PriceUpdateRequest,
+    PriceUpdateResult,
+    ShopifyService,
+    WooCommerceService,
+    SyncService,
+    WebhookRegistrationService,
+)
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
@@ -74,6 +93,37 @@ def get_ecommerce_service(platform: EcommercePlatform) -> EcommerceService:
         )
 
 
+# ==================== Background Task Wrapper ====================
+
+async def run_sync_background(
+    integration_id: UUID,
+    sync_type: str,
+    user_id: UUID,
+):
+    """
+    Background task wrapper for running product sync.
+    
+    Creates its own database session since background tasks
+    run outside the request lifecycle.
+    """
+    async with async_session() as db:
+        try:
+            sync_service = SyncService(db)
+            sync_log = await sync_service.run_sync(
+                integration_id=integration_id,
+                sync_type=sync_type,
+                user_id=user_id,
+            )
+            logger.info(
+                f"Sync completed for integration {integration_id}: "
+                f"created={sync_log.products_created}, "
+                f"updated={sync_log.products_updated}, "
+                f"deleted={sync_log.products_deleted}"
+            )
+        except Exception as e:
+            logger.exception(f"Background sync failed for integration {integration_id}: {e}")
+
+
 # ==================== OAuth Flow ====================
 
 @router.post("/oauth/init", response_model=OAuthInitResponse)
@@ -85,6 +135,9 @@ async def init_oauth(
     """
     Start OAuth flow for connecting a store.
     Returns authorization URL to redirect user to.
+    
+    For Shopify: Returns Shopify OAuth URL
+    For WooCommerce: Returns WooCommerce admin URL for API key generation
     """
     # Check if integration already exists
     stmt = select(Integration).where(
@@ -107,8 +160,8 @@ async def init_oauth(
     # Get service and generate OAuth URL
     service = get_ecommerce_service(request.platform)
     
-    # TODO: Get redirect_uri from config
-    redirect_uri = "http://localhost:8000/api/v1/integrations/oauth/callback"
+    # Use configured redirect URI
+    redirect_uri = f"{settings.BACKEND_URL}/api/v1/integrations/oauth/callback"
     
     auth_url = service.generate_oauth_url(
         store_url=request.store_url,
@@ -120,6 +173,7 @@ async def init_oauth(
     if existing:
         existing.oauth_state = state
         existing.status = IntegrationStatus.DISCONNECTED
+        existing.store_url = request.store_url  # Update in case URL changed
         db.add(existing)
     else:
         integration = Integration(
@@ -150,6 +204,7 @@ async def oauth_callback(
     """
     OAuth callback endpoint.
     Shopify redirects here after user approves.
+    Redirects to frontend with success/error status.
     """
     # Find integration by state
     stmt = select(Integration).where(Integration.oauth_state == state)
@@ -157,15 +212,14 @@ async def oauth_callback(
     integration = result.scalars().first()
     
     if not integration:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid state - OAuth session expired or invalid"
-        )
+        # Redirect to frontend with error
+        error_url = f"{settings.FRONTEND_URL}/integrations?error=invalid_state&message=OAuth+session+expired+or+invalid"
+        return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
     
     # Get service and exchange code
     service = get_ecommerce_service(integration.platform)
     
-    redirect_uri = "http://localhost:8000/api/v1/integrations/oauth/callback"
+    redirect_uri = f"{settings.BACKEND_URL}/api/v1/integrations/oauth/callback"
     
     oauth_result = await service.exchange_oauth_code(
         store_url=integration.store_url,
@@ -180,10 +234,14 @@ async def oauth_callback(
         db.add(integration)
         await db.commit()
         
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OAuth failed: {oauth_result.error}"
+        # Redirect to frontend with error
+        error_url = (
+            f"{settings.FRONTEND_URL}/integrations"
+            f"?error=oauth_failed"
+            f"&message={oauth_result.error}"
+            f"&platform={integration.platform.value}"
         )
+        return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
     
     # Store encrypted credentials
     integration.access_token_encrypted = encrypt_token(oauth_result.access_token)
@@ -200,8 +258,107 @@ async def oauth_callback(
     db.add(integration)
     await db.commit()
     
-    # TODO: Redirect to frontend success page
-    return {"message": "Successfully connected!", "integration_id": str(integration.id)}
+    logger.info(f"OAuth successful for integration {integration.id} ({integration.platform.value})")
+    
+    # Register webhooks automatically
+    try:
+        webhook_service = WebhookRegistrationService(db)
+        results = await webhook_service.register_webhooks(integration.id)
+        success_count = sum(1 for r in results if r.success)
+        logger.info(f"Registered {success_count} webhooks for integration {integration.id}")
+    except Exception as e:
+        logger.warning(f"Auto webhook registration failed: {e}")
+    
+    # Redirect to frontend with success
+    success_url = (
+        f"{settings.FRONTEND_URL}/integrations"
+        f"?connected=true"
+        f"&integration_id={integration.id}"
+        f"&platform={integration.platform.value}"
+    )
+    return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
+
+
+# ==================== WooCommerce API Key Connection ====================
+
+@router.post("/woocommerce/connect", response_model=IntegrationResponse)
+async def connect_woocommerce(
+    request: WooCommerceConnectRequest,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Connect a WooCommerce store using API keys.
+    
+    WooCommerce uses consumer key/secret instead of OAuth.
+    Users generate these in WooCommerce Admin > Settings > Advanced > REST API.
+    """
+    # Check if integration already exists
+    stmt = select(Integration).where(
+        Integration.user_id == current_user.id,
+        Integration.platform == EcommercePlatform.WOOCOMMERCE,
+        Integration.store_url == request.store_url,
+    )
+    result = await db.execute(stmt)
+    existing = result.scalars().first()
+    
+    if existing and existing.status == IntegrationStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This store is already connected"
+        )
+    
+    # Verify credentials work
+    service = WooCommerceService()
+    credentials = f"{request.consumer_key}:{request.consumer_secret}"
+    
+    is_valid = await service.verify_credentials(
+        store_url=request.store_url,
+        access_token=credentials,
+    )
+    
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid API credentials. Please verify your consumer key and secret."
+        )
+    
+    # Create or update integration
+    if existing:
+        existing.access_token_encrypted = encrypt_token(credentials)
+        existing.status = IntegrationStatus.ACTIVE
+        existing.error_message = None
+        existing.store_name = request.store_name
+        existing.updated_at = datetime.utcnow()
+        db.add(existing)
+        integration = existing
+    else:
+        integration = Integration(
+            user_id=current_user.id,
+            platform=EcommercePlatform.WOOCOMMERCE,
+            store_url=request.store_url,
+            store_name=request.store_name,
+            status=IntegrationStatus.ACTIVE,
+            access_token_encrypted=encrypt_token(credentials),
+            scopes=["read_products", "write_products"],  # WooCommerce default
+        )
+        db.add(integration)
+    
+    await db.commit()
+    await db.refresh(integration)
+    
+    logger.info(f"WooCommerce connected for user {current_user.id}: {request.store_url}")
+    
+    # Register webhooks automatically
+    try:
+        webhook_service = WebhookRegistrationService(db)
+        results = await webhook_service.register_webhooks(integration.id)
+        success_count = sum(1 for r in results if r.success)
+        logger.info(f"Registered {success_count} webhooks for integration {integration.id}")
+    except Exception as e:
+        logger.warning(f"Auto webhook registration failed: {e}")
+    
+    return IntegrationResponse.model_validate(integration)
 
 
 # ==================== Integration CRUD ====================
@@ -211,8 +368,11 @@ async def list_integrations(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """List all integrations for current user"""
-    stmt = select(Integration).where(Integration.user_id == current_user.id)
+    """List all integrations for current user."""
+    stmt = select(Integration).where(
+        Integration.user_id == current_user.id
+    ).order_by(Integration.created_at.desc())
+    
     result = await db.execute(stmt)
     integrations = list(result.scalars().all())
     
@@ -228,7 +388,7 @@ async def get_integration(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a specific integration"""
+    """Get a specific integration."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,
@@ -252,7 +412,7 @@ async def update_integration(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Update integration settings"""
+    """Update integration settings."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,
@@ -288,7 +448,7 @@ async def disconnect_integration(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Disconnect an integration"""
+    """Disconnect an integration (soft delete with webhook cleanup)."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,
@@ -302,11 +462,22 @@ async def disconnect_integration(
             detail="Integration not found"
         )
     
+    # Unregister webhooks first (best effort)
+    if integration.status == IntegrationStatus.ACTIVE:
+        try:
+            webhook_service = WebhookRegistrationService(db)
+            await webhook_service.unregister_webhooks(integration.id)
+            logger.info(f"Webhooks unregistered for integration {integration_id}")
+        except Exception as e:
+            logger.warning(f"Failed to unregister webhooks: {e}")
+    
     # Mark as disconnected (soft delete)
     integration.status = IntegrationStatus.DISCONNECTED
     integration.updated_at = datetime.utcnow()
     db.add(integration)
     await db.commit()
+    
+    logger.info(f"Integration {integration_id} disconnected by user {current_user.id}")
 
 
 # ==================== Sync Operations ====================
@@ -319,7 +490,11 @@ async def trigger_sync(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Trigger a product sync from the e-commerce platform"""
+    """
+    Trigger a product sync from the e-commerce platform.
+    
+    The sync runs as a background task. Use GET /sync/status to check progress.
+    """
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,
@@ -345,13 +520,20 @@ async def trigger_sync(
             detail="Sync already in progress"
         )
     
-    # Update sync status
+    # Update sync status immediately
     integration.sync_status = "syncing"
     db.add(integration)
     await db.commit()
     
-    # TODO: Add background task for actual sync
-    # background_tasks.add_task(run_product_sync, integration_id, request.sync_type)
+    # Add background task for actual sync
+    background_tasks.add_task(
+        run_sync_background,
+        integration_id=integration_id,
+        sync_type=request.sync_type,
+        user_id=current_user.id,
+    )
+    
+    logger.info(f"Sync triggered for integration {integration_id} by user {current_user.id}")
     
     return SyncStatusResponse(
         integration_id=integration.id,
@@ -367,7 +549,7 @@ async def get_sync_status(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Get current sync status"""
+    """Get current sync status."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,
@@ -396,7 +578,7 @@ async def get_sync_logs(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Get sync history for an integration"""
+    """Get sync history for an integration."""
     # First verify ownership
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -449,7 +631,7 @@ async def create_product_link(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Link an SSP product to an external platform product"""
+    """Link an SSP product to an external platform product."""
     # Verify integration ownership
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -512,7 +694,7 @@ async def list_product_links(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """List all product links for an integration"""
+    """List all product links for an integration."""
     # Verify integration ownership
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -546,7 +728,7 @@ async def delete_product_link(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove a product link"""
+    """Remove a product link."""
     # Verify integration ownership
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -587,7 +769,7 @@ async def push_price(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Push a price update to the e-commerce platform"""
+    """Push a price update to the e-commerce platform."""
     # Verify integration
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -642,7 +824,6 @@ async def push_price(
     # Check result with defensive coding
     is_success = False
     if price_response and price_response.result is not None:
-        # Compare using enum value
         is_success = price_response.result == PriceUpdateResult.SUCCESS
     
     # Update link with new price info on success
@@ -654,6 +835,16 @@ async def push_price(
         link.updated_at = datetime.utcnow()
         db.add(link)
         await db.commit()
+        
+        logger.info(
+            f"Price pushed for product link {link.id}: "
+            f"${price_response.old_price} -> ${request.new_price}"
+        )
+    else:
+        logger.warning(
+            f"Price push failed for product link {link.id}: "
+            f"{price_response.error if price_response else 'No response'}"
+        )
     
     return PricePushResponse(
         success=is_success,
@@ -672,7 +863,7 @@ async def check_integration_health(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Check if an integration connection is healthy"""
+    """Check if an integration connection is healthy."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,

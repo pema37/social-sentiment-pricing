@@ -9,31 +9,62 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Format number as currency (e.g., 1234.56 → "$1,234.56")
-export function formatCurrency(amount: number, currency = 'USD'): string {
+export function formatCurrency(amount: number | string, currency = 'USD'): string {
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  
+  if (isNaN(numAmount)) {
+    return '$0.00';
+  }
+  
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-  }).format(amount);
+  }).format(numAmount);
 }
 
 // Format percentage with sign (e.g., 3.5 → "+3.5%", -2.1 → "-2.1%")
-export function formatPercentage(value: number, decimals = 1): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+export function formatPercentage(value: number | string, decimals = 1): string {
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  if (isNaN(numValue)) {
+    return '0%';
+  }
+  
+  return `${numValue >= 0 ? '+' : ''}${numValue.toFixed(decimals)}%`;
 }
 
 // Format date (e.g., "2024-01-15" → "Jan 15, 2024")
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) {
+    return 'N/A';
+  }
+  
+  const dateObj = new Date(date);
+  
+  if (isNaN(dateObj.getTime())) {
+    return 'Invalid date';
+  }
+  
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(date));
+  }).format(dateObj);
 }
 
 // Format relative time (e.g., "5m ago", "2h ago", "3d ago")
-export function formatRelativeTime(date: string | Date): string {
-  const now = new Date();
+export function formatRelativeTime(date: string | Date | null | undefined): string {
+  if (!date) {
+    return 'N/A';
+  }
+  
   const then = new Date(date);
+  
+  if (isNaN(then.getTime())) {
+    return 'Invalid date';
+  }
+  
+  const now = new Date();
   const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
   
   if (seconds < 60) return 'just now';
@@ -43,4 +74,3 @@ export function formatRelativeTime(date: string | Date): string {
   
   return formatDate(date);
 }
-

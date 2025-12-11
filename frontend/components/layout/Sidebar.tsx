@@ -15,6 +15,9 @@ import {
   Settings,
   Key,
   Shield,
+  Plug,
+  Sliders,
+  ListChecks,
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
@@ -30,6 +33,11 @@ const navItems = [
     icon: Package 
   },
   { 
+    label: 'Integrations',  
+    href: '/integrations', 
+    icon: Plug 
+  },
+  { 
     label: 'Competitors', 
     href: '/competitors', 
     icon: Users 
@@ -39,11 +47,29 @@ const navItems = [
     href: '/sentiment', 
     icon: MessageSquare 
   },
+];
+
+// Pricing section items
+const pricingItems = [
   { 
-    label: 'Price Suggestions', 
-    href: '/suggestions', 
+    label: 'Recommendations', 
+    href: '/pricing', 
     icon: DollarSign 
   },
+  { 
+    label: 'Rules', 
+    href: '/pricing/rules', 
+    icon: Sliders 
+  },
+  { 
+    label: 'Pricing Settings', 
+    href: '/pricing/settings', 
+    icon: ListChecks 
+  },
+];
+
+// System items
+const systemItems = [
   { 
     label: 'Settings', 
     href: '/settings', 
@@ -65,6 +91,49 @@ export function Sidebar() {
   // Get current path to highlight active nav item
   const pathname = usePathname();
 
+  // Check if nav item is active
+  const isActive = (href: string) => {
+    if (href === '/pricing') {
+      // Exact match for /pricing recommendations, not rules or settings
+      return pathname === '/pricing' || pathname?.startsWith('/pricing/recommendations');
+    }
+    return pathname === href || pathname?.startsWith(`${href}/`);
+  };
+
+  // Render a nav item
+  const renderNavItem = (item: { label: string; href: string; icon: typeof LayoutDashboard }) => {
+    const active = isActive(item.href);
+    
+    return (
+      <li key={item.href}>
+        <Link
+          href={item.href}
+          className={cn(
+            // Base styles
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg',
+            'text-sm font-medium transition-colors duration-200',
+            // Active vs inactive styles
+            active
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+          )}
+        >
+          <item.icon className="w-5 h-5" />
+          {item.label}
+        </Link>
+      </li>
+    );
+  };
+
+  // Render a section header
+  const renderSectionHeader = (title: string) => (
+    <li className="pt-4 pb-2">
+      <span className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        {title}
+      </span>
+    </li>
+  );
+
   return (
     <aside className="fixed left-0 top-0 h-screen w-60 bg-gray-800 text-gray-50">
       {/* Logo / Brand */}
@@ -76,36 +145,20 @@ export function Sidebar() {
       </div>
 
       {/* Navigation Links */}
-      <nav className="mt-6 px-3">
+      <nav className="mt-6 px-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 100px)' }}>
         <ul className="space-y-1">
-          {navItems.map((item) => {
-            // Check if this nav item is active
-            const isActive = pathname === item.href || 
-                            pathname?.startsWith(`${item.href}/`);
-            
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={cn(
-                    // Base styles
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg',
-                    'text-sm font-medium transition-colors duration-200',
-                    // Active vs inactive styles
-                    isActive
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  )}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
+          {/* Main Navigation */}
+          {navItems.map(renderNavItem)}
+
+          {/* Pricing Section */}
+          {renderSectionHeader('Pricing')}
+          {pricingItems.map(renderNavItem)}
+
+          {/* System Section */}
+          {renderSectionHeader('System')}
+          {systemItems.map(renderNavItem)}
         </ul>
       </nav>
     </aside>
   );
 }
-

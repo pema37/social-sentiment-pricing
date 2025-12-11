@@ -59,7 +59,36 @@ class OAuthCallbackRequest(BaseModel):
     state: str
     shop: Optional[str] = None  # Shopify includes this
 
-
+class WooCommerceConnectRequest(BaseModel):
+    """Connect WooCommerce store with API keys"""
+    store_url: str = Field(..., min_length=3, max_length=255)
+    store_name: Optional[str] = Field(None, max_length=255)
+    consumer_key: str = Field(..., min_length=10)
+    consumer_secret: str = Field(..., min_length=10)
+    
+    @field_validator("store_url")
+    @classmethod
+    def validate_store_url(cls, v: str) -> str:
+        v = v.strip().lower()
+        for prefix in ["https://", "http://"]:
+            if v.startswith(prefix):
+                v = v[len(prefix):]
+        return v.rstrip("/")
+    
+    @field_validator("consumer_key")
+    @classmethod
+    def validate_consumer_key(cls, v: str) -> str:
+        if not v.startswith("ck_"):
+            raise ValueError("Consumer key must start with 'ck_'")
+        return v
+    
+    @field_validator("consumer_secret")
+    @classmethod
+    def validate_consumer_secret(cls, v: str) -> str:
+        if not v.startswith("cs_"):
+            raise ValueError("Consumer secret must start with 'cs_'")
+        return v
+    
 # ==================== Integration CRUD Schemas ====================
 
 class IntegrationCreate(BaseModel):

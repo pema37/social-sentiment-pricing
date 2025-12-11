@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     
     # ===================
+    # URLs
+    # ===================
+    BACKEND_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # ===================
     # Security / JWT
     # ===================
     JWT_SECRET_KEY: str

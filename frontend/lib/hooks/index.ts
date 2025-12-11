@@ -6,3 +6,5 @@ export * from './use-sentiment';
 export * from './use-analytics';
 export * from './use-alerts';
 export * from './use-competitors';
+export * from './use-pricing';
+export * from './use-integrations';
