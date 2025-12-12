@@ -311,6 +311,12 @@ async def connect_woocommerce(
     # Verify credentials work
     service = WooCommerceService()
     credentials = f"{request.consumer_key}:{request.consumer_secret}"
+
+    # DEBUG - remove after testing
+    logger.error(f"DEBUG: store_url={request.store_url}")
+    logger.error(f"DEBUG: normalized_url={service.normalize_store_url(request.store_url)}")
+    logger.error(f"DEBUG: full_url={service.normalize_store_url(request.store_url)}/wp-json/wc/v3/system_status")
+    logger.error(f"DEBUG: key_prefix={request.consumer_key[:20]}...")
     
     is_valid = await service.verify_credentials(
         store_url=request.store_url,

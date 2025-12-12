@@ -6,6 +6,7 @@
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { LogOut, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { NotificationBell } from '@/components/features/alerts';
 
 export function Topbar() {
   const router = useRouter();
@@ -26,6 +27,9 @@ export function Topbar() {
 
       {/* Right side - User info and logout */}
       <div className="flex items-center gap-4">
+        {/* Notifications */}
+        <NotificationBell />
+
         {/* User info */}
         <div className="flex items-center gap-3">
           {/* Avatar */}
@@ -56,4 +60,3 @@ export function Topbar() {
     </header>
   );
 }
-

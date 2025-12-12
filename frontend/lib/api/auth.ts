@@ -1,5 +1,6 @@
 // Auth API
 import { api } from './client';
+import type { User, UpdateProfileRequest, ChangePasswordRequest } from '@/types';
 
 export interface LoginResponse {
   access_token: string;
@@ -11,15 +12,8 @@ export interface RegisterResponse {
   email: string;
 }
 
-export interface User {
-  id: string;
-  email: string;
-  full_name: string | null;
-  is_active: boolean;
-  created_at: string;
-}
-
 export const authApi = {
+  // Authentication
   login: (email: string, password: string) =>
     api.post<LoginResponse>('/api/v1/auth/login', { email, password }),
 
@@ -31,4 +25,11 @@ export const authApi = {
     }),
 
   me: () => api.get<User>('/api/v1/auth/me'),
+
+  // Profile management
+  updateProfile: (data: UpdateProfileRequest) =>
+    api.put<User>('/api/v1/users/me', data),
+
+  changePassword: (data: ChangePasswordRequest) =>
+    api.post<{ message: string }>('/api/v1/auth/change-password', data),
 };

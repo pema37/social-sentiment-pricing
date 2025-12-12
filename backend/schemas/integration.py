@@ -39,12 +39,14 @@ class OAuthInitRequest(BaseModel):
     @field_validator("store_url")
     @classmethod
     def validate_store_url(cls, v: str) -> str:
-        v = v.strip().lower()
-        # Remove protocol if present
-        for prefix in ["https://", "http://"]:
-            if v.startswith(prefix):
-                v = v[len(prefix):]
-        return v.rstrip("/")
+        v = v.strip().rstrip("/")
+        # Preserve the protocol, just lowercase the domain
+        if v.startswith("http://"):
+            return "http://" + v[7:].lower()
+        elif v.startswith("https://"):
+            return "https://" + v[8:].lower()
+        # No protocol provided - just lowercase
+        return v.lower()
 
 
 class OAuthInitResponse(BaseModel):
@@ -59,6 +61,7 @@ class OAuthCallbackRequest(BaseModel):
     state: str
     shop: Optional[str] = None  # Shopify includes this
 
+
 class WooCommerceConnectRequest(BaseModel):
     """Connect WooCommerce store with API keys"""
     store_url: str = Field(..., min_length=3, max_length=255)
@@ -69,11 +72,14 @@ class WooCommerceConnectRequest(BaseModel):
     @field_validator("store_url")
     @classmethod
     def validate_store_url(cls, v: str) -> str:
-        v = v.strip().lower()
-        for prefix in ["https://", "http://"]:
-            if v.startswith(prefix):
-                v = v[len(prefix):]
-        return v.rstrip("/")
+        v = v.strip().rstrip("/")
+        # Preserve the protocol, just lowercase the domain
+        if v.startswith("http://"):
+            return "http://" + v[7:].lower()
+        elif v.startswith("https://"):
+            return "https://" + v[8:].lower()
+        # No protocol provided - just lowercase
+        return v.lower()
     
     @field_validator("consumer_key")
     @classmethod
@@ -89,6 +95,7 @@ class WooCommerceConnectRequest(BaseModel):
             raise ValueError("Consumer secret must start with 'cs_'")
         return v
     
+
 # ==================== Integration CRUD Schemas ====================
 
 class IntegrationCreate(BaseModel):

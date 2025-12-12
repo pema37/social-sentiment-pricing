@@ -185,8 +185,13 @@ class EcommerceService(ABC):
     
     def normalize_store_url(self, store_url: str) -> str:
         """Normalize store URL to consistent format."""
-        url = store_url.strip().lower().rstrip("/")
+        url = store_url.strip().rstrip("/")
+        # Check if URL has a port (like localhost:8888) - assume HTTP for local dev
         if not url.startswith(("http://", "https://")):
-            url = f"https://{url}"
+            if "localhost" in url or "127.0.0.1" in url:
+                url = f"http://{url}"  # Use HTTP for local development
+            else:
+                url = f"https://{url}"  # Use HTTPS for production
         return url
+    
     

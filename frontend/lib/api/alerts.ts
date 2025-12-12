@@ -5,6 +5,10 @@ import type {
   AlertStats,
   PaginatedAlerts,
   AlertFilterParams,
+  AlertConfiguration,
+  AlertConfigurationCreate,
+  AlertConfigurationUpdate,
+  AlertType,
 } from '@/types';
 
 export const alertsApi = {
@@ -35,4 +39,26 @@ export const alertsApi = {
   // Acknowledge all matching alerts
   acknowledgeAll: (params?: { severity?: string; alert_type?: string }) =>
     api.post<{ acknowledged_count: number }>('/api/v1/alerts/acknowledge-all', params),
+
+  // ============== Configuration Endpoints ==============
+
+  // List all configurations
+  getConfigurations: (params?: { alert_type?: AlertType; is_active?: boolean }) =>
+    api.get<AlertConfiguration[]>('/api/v1/alerts/configurations', params as Record<string, string | number | boolean | undefined>),
+
+  // Get single configuration
+  getConfiguration: (id: string) =>
+    api.get<AlertConfiguration>(`/api/v1/alerts/configurations/${id}`),
+
+  // Create configuration
+  createConfiguration: (data: AlertConfigurationCreate) =>
+    api.post<AlertConfiguration>('/api/v1/alerts/configurations', data),
+
+  // Update configuration
+  updateConfiguration: (id: string, data: AlertConfigurationUpdate) =>
+    api.patch<AlertConfiguration>(`/api/v1/alerts/configurations/${id}`, data),
+
+  // Delete configuration
+  deleteConfiguration: (id: string) =>
+    api.delete<void>(`/api/v1/alerts/configurations/${id}`),
 };

@@ -18,6 +18,8 @@ import {
   Plug,
   Sliders,
   ListChecks,
+  Bell,
+  BarChart3,
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
@@ -26,6 +28,11 @@ const navItems = [
     label: 'Dashboard', 
     href: '/dashboard', 
     icon: LayoutDashboard 
+  },
+  { 
+    label: 'Analytics', 
+    href: '/analytics', 
+    icon: BarChart3 
   },
   { 
     label: 'Products', 
@@ -46,6 +53,11 @@ const navItems = [
     label: 'Sentiment', 
     href: '/sentiment', 
     icon: MessageSquare 
+  },
+  { 
+    label: 'Alerts', 
+    href: '/alerts', 
+    icon: Bell 
   },
 ];
 

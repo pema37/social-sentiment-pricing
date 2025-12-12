@@ -14,6 +14,7 @@ export * from './alert';
 export * from './competitor';
 export * from './integration';
 export * from './pricing';
+export * from './user';
 
 // Legacy type for backwards compatibility
 export interface ApiResponse<T> {
@@ -21,6 +22,3 @@ export interface ApiResponse<T> {
   error: string | null;
   status: number;
 }
-
-// Re-export User from auth
-export type { User } from '@/lib/api/auth';

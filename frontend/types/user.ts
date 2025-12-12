@@ -27,3 +27,15 @@ export interface AuthTokens {
   access_token: string; // The JWT token from your backend
   token_type: string;   // Usually "bearer"
 }
+
+// Update profile request
+export interface UpdateProfileRequest {
+  full_name?: string;
+  email?: string;
+}
+
+// Change password request
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}

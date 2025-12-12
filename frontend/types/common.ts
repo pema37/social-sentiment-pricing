@@ -10,8 +10,8 @@ export interface PaginatedResponse<T> {
   total_pages: number;
 }
 
-/** Alert/notification channels */
-export type AlertChannel = 'email' | 'slack' | 'webhook' | 'in_app';
-
 /** Trend direction */
 export type TrendDirection = 'up' | 'down' | 'stable';
+
+/** Alert notification channels */
+export type AlertChannel = 'email' | 'slack' | 'in_app' | 'webhook';

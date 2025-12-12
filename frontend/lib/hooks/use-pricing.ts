@@ -1,6 +1,7 @@
 // Pricing hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pricingApi } from '@/lib/api';
+import { toast } from '@/lib/hooks/use-toast';
 import type {
   PricingRule,
   CreatePricingRuleRequest,
@@ -78,6 +79,10 @@ export function useCreatePricingRule() {
     mutationFn: (data: CreatePricingRuleRequest) => pricingApi.createRule(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.rules() });
+      toast.success({ title: 'Rule created', message: 'Pricing rule has been created successfully' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to create rule', message: error.message });
     },
   });
 }
@@ -92,6 +97,10 @@ export function useUpdatePricingRule() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.ruleDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.rulesList() });
+      toast.success({ title: 'Rule updated', message: 'Pricing rule has been updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to update rule', message: error.message });
     },
   });
 }
@@ -104,6 +113,10 @@ export function useDeletePricingRule() {
     mutationFn: (id: string) => pricingApi.deleteRule(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.rules() });
+      toast.success({ title: 'Rule deleted', message: 'Pricing rule has been deleted' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to delete rule', message: error.message });
     },
   });
 }
@@ -118,6 +131,13 @@ export function useTogglePricingRule() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.ruleDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.rulesList() });
+      toast.success({ 
+        title: variables.isActive ? 'Rule activated' : 'Rule deactivated',
+        message: `Pricing rule has been ${variables.isActive ? 'activated' : 'deactivated'}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to update rule', message: error.message });
     },
   });
 }
@@ -165,6 +185,10 @@ export function useApproveRecommendation() {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      toast.success({ title: 'Recommendation approved', message: 'You can now apply this price change' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to approve', message: error.message });
     },
   });
 }
@@ -180,6 +204,10 @@ export function useRejectRecommendation() {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      toast.success({ title: 'Recommendation rejected', message: 'The recommendation has been rejected' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to reject', message: error.message });
     },
   });
 }
@@ -196,6 +224,10 @@ export function useApplyRecommendation() {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
       // Also invalidate products since prices changed
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success({ title: 'Price updated!', message: 'The new price has been applied to your store' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to apply price', message: error.message });
     },
   });
 }
@@ -221,6 +253,10 @@ export function useUpdatePricingSettings() {
     mutationFn: (data: UpdatePricingSettingsRequest) => pricingApi.updateSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.settings() });
+      toast.success({ title: 'Settings saved', message: 'Your pricing settings have been updated' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to save settings', message: error.message });
     },
   });
 }

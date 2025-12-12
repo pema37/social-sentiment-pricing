@@ -44,6 +44,7 @@ export type OutcomeLabel = 'positive' | 'negative' | 'neutral' | 'inconclusive';
 export interface PricingRule {
   id: string;
   user_id: string;
+  product_id: string;
   name: string;
   description: string | null;
   rule_type: RuleType;
@@ -79,6 +80,7 @@ export interface PricingRule {
 
 /** Data required to create a new pricing rule */
 export interface CreatePricingRuleRequest {
+  product_id: string;
   name: string;
   description?: string;
   rule_type: RuleType;
@@ -173,6 +175,7 @@ export interface UpdatePricingSettingsRequest {
   default_cooldown_hours?: number;
   notification_channels?: AlertChannel[];
 }
+
 /** Statistics about pricing recommendations (from pricing API) */
 export interface PricingRecommendationStats {
   total_generated: number;

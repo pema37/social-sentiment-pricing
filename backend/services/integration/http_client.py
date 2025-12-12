@@ -114,4 +114,4 @@ class RetryableClient:
     
     async def delete(self, url: str, **kwargs) -> httpx.Response:
         return await self._request("DELETE", url, f"DELETE {url}", **kwargs)
-    
+

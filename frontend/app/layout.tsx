@@ -3,6 +3,7 @@
 
 import type { Metadata } from 'next';
 import { Providers } from './providers';
+import { Toaster } from '@/components/ui/Toaster';
 import './globals.css';
 
 // SEO metadata
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body>
         <Providers>
           {children}
+          <Toaster />
         </Providers>
       </body>
     </html>

@@ -1,6 +1,7 @@
 // Product hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '@/lib/api';
+import { toast } from '@/lib/hooks/use-toast';
 import type { 
   Product,
   CreateProductRequest, 
@@ -73,6 +74,10 @@ export function useCreateProduct() {
     mutationFn: (data: CreateProductRequest) => productsApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: productKeys.all });
+      toast.success({ title: 'Product created', message: 'Product has been created successfully' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to create product', message: error.message });
     },
   });
 }
@@ -87,6 +92,10 @@ export function useUpdateProduct() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      toast.success({ title: 'Product updated', message: 'Product details have been saved' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to update product', message: error.message });
     },
   });
 }
@@ -99,6 +108,10 @@ export function useDeleteProduct() {
     mutationFn: (id: string) => productsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: productKeys.all });
+      toast.success({ title: 'Product deleted', message: 'Product has been removed' });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to delete product', message: error.message });
     },
   });
 }
@@ -113,6 +126,13 @@ export function useToggleAutoPricing() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      toast.success({
+        title: variables.enabled ? 'Auto-pricing enabled' : 'Auto-pricing disabled',
+        message: `Auto-pricing has been ${variables.enabled ? 'enabled' : 'disabled'} for this product`,
+      });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to update auto-pricing', message: error.message });
     },
   });
 }
@@ -128,6 +148,13 @@ export function useApplyPriceSuggestion() {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: productKeys.suggestion(variables.id) });
       queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      toast.success({ 
+        title: 'Price updated', 
+        message: `Price has been updated to $${variables.price.toFixed(2)}` 
+      });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to apply price', message: error.message });
     },
   });
 }
@@ -139,8 +166,15 @@ export function useBulkUpdatePricing() {
   return useMutation({
     mutationFn: ({ productIds, enabled }: { productIds: string[]; enabled: boolean }) =>
       productsApi.bulkUpdatePricing(productIds, enabled),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.all });
+      toast.success({
+        title: 'Bulk update complete',
+        message: `Auto-pricing ${variables.enabled ? 'enabled' : 'disabled'} for ${variables.productIds.length} products`,
+      });
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Failed to update products', message: error.message });
     },
   });
 }

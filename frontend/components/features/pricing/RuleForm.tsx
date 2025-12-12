@@ -13,6 +13,7 @@ import {
   useCreatePricingRule,
   useUpdatePricingRule,
 } from '@/lib/hooks/use-pricing';
+import { useProducts } from '@/lib/hooks/use-products';
 import type {
   PricingRule,
   CreatePricingRuleRequest,
@@ -36,6 +37,7 @@ interface RuleFormProps {
 }
 
 interface FormData {
+  product_id: string;
   name: string;
   description: string;
   rule_type: RuleType;
@@ -115,6 +117,7 @@ const pricePositions = [
 // ============================================
 
 const getInitialFormData = (initialData?: Partial<PricingRule>): FormData => ({
+  product_id: initialData?.product_id ?? '',
   name: initialData?.name ?? '',
   description: initialData?.description ?? '',
   rule_type: initialData?.rule_type ?? 'sentiment_threshold',
@@ -153,6 +156,10 @@ export function RuleForm({
   const createMutation = useCreatePricingRule();
   const updateMutation = useUpdatePricingRule();
 
+  // Fetch products for the dropdown
+  const { data: productsData, isLoading: isLoadingProducts } = useProducts();
+  const products = productsData?.items ?? [];
+
   const isEditing = !!ruleId;
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
@@ -171,6 +178,10 @@ export function RuleForm({
   // Validate form
   const validate = useCallback((): boolean => {
     const newErrors: Partial<Record<keyof FormData, string>> = {};
+
+    if (!formData.product_id) {
+      newErrors.product_id = 'Product is required';
+    }
 
     if (!formData.name.trim()) {
       newErrors.name = 'Name is required';
@@ -212,6 +223,7 @@ export function RuleForm({
   // Build request payload
   const buildPayload = useCallback((): CreatePricingRuleRequest => {
     const payload: CreatePricingRuleRequest = {
+      product_id: formData.product_id,
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
       rule_type: formData.rule_type,
@@ -365,6 +377,37 @@ export function RuleForm({
       <Card padding="md">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
         <div className="space-y-4">
+          {/* Product Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product <span className="text-red-500 ml-1">*</span>
+            </label>
+            <select
+              value={formData.product_id}
+              onChange={(e) => handleChange('product_id', e.target.value)}
+              disabled={isEditing}
+              className={cn(
+                'w-full px-3 py-2 border rounded-lg text-sm',
+                'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                errors.product_id ? 'border-red-300' : 'border-gray-300',
+                isEditing && 'bg-gray-100 cursor-not-allowed'
+              )}
+            >
+              <option value="">Select a product...</option>
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+            {errors.product_id && (
+              <p className="mt-1 text-sm text-red-600">{errors.product_id}</p>
+            )}
+            {isLoadingProducts && (
+              <p className="mt-1 text-sm text-gray-500">Loading products...</p>
+            )}
+          </div>
+
           {renderInput('name', 'Rule Name', {
             required: true,
             placeholder: 'e.g., Increase price on positive sentiment',

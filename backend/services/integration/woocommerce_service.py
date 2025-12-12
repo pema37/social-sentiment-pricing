@@ -273,17 +273,26 @@ class WooCommerceService(EcommerceService):
         raise ValueError("Expected 'consumer_key:consumer_secret'")
     
     def _parse_product(self, data: dict) -> ExternalProduct:
-        variants = [
-            ExternalProductVariant(
-                id=str(v.get("id")),
-                title=v.get("attributes", [{}])[0].get("option", ""),
-                price=float(v.get("price", 0)) if v.get("price") else None,
-                sku=v.get("sku"),
-                inventory_quantity=v.get("stock_quantity"),
-                compare_at_price=float(v.get("regular_price", 0)) if v.get("regular_price") and v.get("sale_price") else None,
-            )
-            for v in data.get("variations", [])
-        ]
+        # WooCommerce returns variations as IDs (integers) in product list,
+        # not full objects. Full variation data requires separate API calls.
+        variations_data = data.get("variations", [])
+        variants = []
+        for v in variations_data:
+            if isinstance(v, dict):
+                # Full variation object (from single product or variation endpoint)
+                variants.append(ExternalProductVariant(
+                    id=str(v.get("id")),
+                    title=v.get("attributes", [{}])[0].get("option", "") if v.get("attributes") else "",
+                    price=float(v.get("price", 0)) if v.get("price") else None,
+                    sku=v.get("sku"),
+                    inventory_quantity=v.get("stock_quantity"),
+                    compare_at_price=float(v.get("regular_price", 0)) if v.get("regular_price") and v.get("sale_price") else None,
+                ))
+            elif isinstance(v, int):
+                # Just a variation ID - skip for now (no full data available)
+                # Variable products will need separate API calls to fetch variation details
+                pass
+        
         images = [img.get("src") for img in data.get("images", []) if img.get("src")]
         
         price, compare_at = None, None
@@ -317,4 +326,4 @@ class WooCommerceService(EcommerceService):
             return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             return None
-        
+
