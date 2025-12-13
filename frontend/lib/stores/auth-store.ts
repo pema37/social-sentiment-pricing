@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { getToken, setToken, removeToken } from '@/lib/auth/token';
 import { authApi, ApiError } from '@/lib/api';
-import type { User } from '@/lib/api/auth';
+import type { User } from '@/types';
 
 // Define the shape of our auth state
 interface AuthState {
