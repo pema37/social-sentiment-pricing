@@ -13,3 +13,4 @@ praw
 asyncpg
 email-validator
 python-multipart
+beautifulsoup4
