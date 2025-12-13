@@ -10,3 +10,4 @@ python-dotenv
 vaderSentiment==3.3.2
 pydantic-settings
 praw
+asyncpg
