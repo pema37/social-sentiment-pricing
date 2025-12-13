@@ -12,3 +12,4 @@ pydantic-settings
 praw
 asyncpg
 email-validator
+python-multipart
