@@ -1,4 +1,5 @@
 // Alert domain types
+import type { AlertChannel } from './common';
 
 export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type AlertStatus = 'pending' | 'acknowledged' | 'resolved';
@@ -11,7 +12,6 @@ export type AlertType =
   | 'volume_surge'
   | 'viral_mention';
 
-export type AlertChannel = 'email' | 'in_app' | 'slack' | 'webhook';
 
 // Alert from the API
 export interface Alert {
