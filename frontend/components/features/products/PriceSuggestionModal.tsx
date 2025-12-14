@@ -15,6 +15,7 @@ import {
   useApplyPriceSuggestion,
 } from '@/lib/hooks/use-products';
 import type { Product } from '@/types';
+import Image from 'next/image';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -63,9 +64,11 @@ function ProductInfo({ product }: ProductInfoProps) {
   return (
     <div className="flex items-center gap-4">
       {product.image_url ? (
-        <img
+        <Image
           src={product.image_url}
           alt={product.name}
+          width={64}
+          height={64}
           className="w-16 h-16 rounded-lg object-cover"
         />
       ) : (

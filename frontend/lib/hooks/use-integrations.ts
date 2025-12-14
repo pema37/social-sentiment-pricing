@@ -9,7 +9,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as integrationsApi from '@/lib/api/integrations';
 import type {
-  Integration,
   IntegrationUpdate,
   OAuthInitRequest,
   WooCommerceConnectRequest,

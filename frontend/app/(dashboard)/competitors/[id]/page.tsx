@@ -17,7 +17,7 @@ import {
   LinkProductForm,
   CompetitorProductCard,
 } from '@/components/features/competitors';
-import type { Competitor, CreateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
+import type { CreateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
 
 export default function CompetitorDetailPage() {
   const params = useParams();

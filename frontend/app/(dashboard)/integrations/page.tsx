@@ -7,7 +7,7 @@
  * Handles OAuth callback params and displays connection status.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useIntegrations } from '@/lib/hooks/use-integrations';
 import { SectionHeader } from '@/components/ui';
@@ -28,7 +28,13 @@ export default function IntegrationsPage() {
     platform?: string;
   } | null>(null);
 
+  // Track if we've processed the OAuth callback params
+  const hasProcessedCallback = useRef(false);
+
   useEffect(() => {
+    // Only process once
+    if (hasProcessedCallback.current) return;
+
     const connected = searchParams.get('connected');
     const errorParam = searchParams.get('error');
     const platform = searchParams.get('platform');
@@ -37,23 +43,29 @@ export default function IntegrationsPage() {
     // Early return if no params to process
     if (!connected && !errorParam) return;
 
+    // Mark as processed
+    hasProcessedCallback.current = true;
+
     // Clean URL first
     window.history.replaceState({}, '', '/integrations');
 
-    // Set toast after URL cleanup
-    if (connected === 'true' && platform) {
-      setToast({
-        type: 'success',
-        message: `Successfully connected ${platform}!`,
-        platform,
-      });
-    } else if (errorParam) {
-      setToast({
-        type: 'error',
-        message: message || `Connection failed: ${errorParam}`,
-        platform: platform || undefined,
-      });
-    }
+    // Defer state update to avoid cascading render warning
+    // This is the correct pattern for one-time OAuth callbacks
+    queueMicrotask(() => {
+      if (connected === 'true' && platform) {
+        setToast({
+          type: 'success',
+          message: `Successfully connected ${platform}!`,
+          platform,
+        });
+      } else if (errorParam) {
+        setToast({
+          type: 'error',
+          message: message || `Connection failed: ${errorParam}`,
+          platform: platform || undefined,
+        });
+      }
+    });
   }, [searchParams]);
 
   // Get platforms that aren't connected yet

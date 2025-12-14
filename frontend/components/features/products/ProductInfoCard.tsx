@@ -4,6 +4,7 @@
 import { Package, Tag } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import type { Product } from '@/types';
+import Image from 'next/image';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -120,9 +121,11 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
         {/* Product Image */}
         <div className="shrink-0">
           {product.image_url ? (
-            <img
+            <Image
               src={product.image_url}
               alt={product.name}
+              width={96}
+              height={96}
               className="w-24 h-24 object-cover rounded-lg"
             />
           ) : (

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { useToggleAutoPricing, type Product } from '@/lib/hooks/use-products';
+import Image from 'next/image';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -54,9 +55,11 @@ function ProductInfoCell({ product }: ProductInfoCellProps) {
   return (
     <div className="flex items-center gap-4">
       {product.image_url ? (
-        <img
+        <Image
           src={product.image_url}
           alt={product.name}
+          width={48}
+          height={48}
           className="w-12 h-12 rounded-lg object-cover"
         />
       ) : (
