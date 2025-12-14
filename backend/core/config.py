@@ -1,12 +1,11 @@
 # backend/core/config.py
-
 from pydantic_settings import BaseSettings
 from pathlib import Path
 from typing import Optional, List
 
-# Get absolute path to backend/.env
 BACKEND_DIR = Path(__file__).parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
+
 
 class Settings(BaseSettings):
     # ===================
@@ -15,6 +14,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Social Sentiment Pricing API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"  # development, staging, production
     
     # ===================
     # Database
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # ===================
     BACKEND_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"
-
+    
     # ===================
     # Security / JWT
     # ===================
@@ -53,9 +53,17 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     
     # ===================
+    # Monitoring & Observability
+    # ===================
+    SENTRY_DSN: Optional[str] = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"  # json or console
+    
+    # ===================
     # External APIs
     # ===================
-    # OpenAI
     OPENAI_API_KEY: Optional[str] = None
     
     # Reddit
@@ -69,26 +77,26 @@ class Settings(BaseSettings):
     # ===================
     # E-commerce Integrations
     # ===================
-    # Shopify
     SHOPIFY_CLIENT_ID: Optional[str] = None
     SHOPIFY_CLIENT_SECRET: Optional[str] = None
-    
-    # WooCommerce (future)
     WOOCOMMERCE_CONSUMER_KEY: Optional[str] = None
     WOOCOMMERCE_CONSUMER_SECRET: Optional[str] = None
     
     # ===================
     # Notifications
     # ===================
-    # SendGrid
     SENDGRID_API_KEY: Optional[str] = None
     SENDGRID_FROM_EMAIL: Optional[str] = None
-    
-    # Slack
     SLACK_WEBHOOK_URL: Optional[str] = None
-
+    
+    # ===================
+    # Alerting
+    # ===================
+    ALERT_EMAIL: Optional[str] = None  # Email for critical alerts
+    PAGERDUTY_KEY: Optional[str] = None  # PagerDuty integration key
+    
     class Config:
-        env_file = str(ENV_FILE)  # Absolute path to backend/.env
+        env_file = str(ENV_FILE)
         extra = "ignore"
 
 

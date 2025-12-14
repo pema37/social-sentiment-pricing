@@ -16,3 +16,7 @@ python-multipart
 beautifulsoup4
 celery
 bcrypt==4.0.1
+slowapi
+redis
+sentry-sdk[fastapi]
+structlog
