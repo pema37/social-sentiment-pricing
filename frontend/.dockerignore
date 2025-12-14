@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.gitignore
+*.log
+.env
+.env.local
+.env*.local
+npm-debug.log*
+.idea/
+.vscode/
+coverage/
+.nyc_output
+package-lock 2.json

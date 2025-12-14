@@ -4,6 +4,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  output: "standalone",
 };
 
 const sentryWebpackPluginOptions = {
