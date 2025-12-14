@@ -9,6 +9,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
+.pnpm-debug.log*
 
 # Diagnostic reports
 report.*.json
@@ -41,6 +42,7 @@ out/
 
 # TypeScript cache
 *.tsbuildinfo
+next-env.d.ts
 
 # Optional caches
 .npm/
@@ -52,7 +54,17 @@ out/
 
 # Yarn
 .yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 .pnp.*
+
+# Vercel
+.vercel
+
+# Build
+/build
 
 ##############################################
 # Python / FastAPI
@@ -82,16 +94,21 @@ dist/
 *.sqlite3
 
 ##############################################
-# Environment files (ALL projects)
+# Environment files
 ##############################################
 
+# Ignore all env files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 .env.*
+backend/.env
+backend/.env.*
+frontend/.env.local
+frontend/.env.*
+
+# Keep examples
 !.env.example
+!backend/.env.example
+!frontend/.env.example
 
 ##############################################
 # OS / Editor files
@@ -101,3 +118,4 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+*.pem
