@@ -1,0 +1,137 @@
+# backend/api/v1/routes/pricing/outcomes.py
+"""
+Recommendation outcome tracking endpoints.
+"""
+
+from datetime import datetime, timedelta
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
+from sqlmodel import select
+
+from db.session import get_session
+from core.deps import get_current_user
+from core.rate_limit import limiter, WRITE_RATE_LIMIT
+from models.user import User
+from models.price_recommendation import PriceRecommendation
+from models.pricing_rule import PricingRule
+from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
+from services.pricing.outcome_service import OutcomeService
+from schemas.common import PaginatedResponse, PaginationParams
+from schemas.pricing import (
+    OutcomeRecordRequest,
+    OutcomeResponse,
+    RulePerformanceResponse,
+    AccuracyStatsResponse,
+)
+
+router = APIRouter()
+
+
+@router.post("/outcomes/{recommendation_id}/record", response_model=OutcomeResponse)
+@limiter.limit(WRITE_RATE_LIMIT)
+async def record_outcome(
+    request: Request,
+    recommendation_id: UUID,
+    data: OutcomeRecordRequest,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Record the outcome/performance of an applied recommendation."""
+    service = OutcomeService(db)
+    
+    try:
+        return await service.record_outcome(
+            recommendation_id=recommendation_id,
+            user_id=current_user.id,
+            sales_count_before=data.sales_count_before,
+            units_sold_before=data.units_sold_before,
+            revenue_before=data.revenue_before,
+            sales_count_after=data.sales_count_after,
+            units_sold_after=data.units_sold_after,
+            revenue_after=data.revenue_after,
+            measurement_window_hours=data.measurement_window_hours,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/outcomes", response_model=PaginatedResponse[OutcomeResponse])
+async def list_outcomes(
+    request: Request,
+    product_id: Optional[UUID] = Query(default=None),
+    rule_id: Optional[UUID] = Query(default=None),
+    outcome_label: Optional[OutcomeLabel] = Query(default=None),
+    days: int = Query(default=30, le=365),
+    pagination: PaginationParams = Depends(),
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """List recommendation outcomes."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    query = (
+        select(RecommendationOutcome)
+        .join(PriceRecommendation)
+        .where(PriceRecommendation.user_id == current_user.id)
+        .where(RecommendationOutcome.measured_at >= cutoff)
+    )
+    
+    if product_id:
+        query = query.where(PriceRecommendation.product_id == product_id)
+    if rule_id:
+        query = query.where(PriceRecommendation.rule_id == rule_id)
+    if outcome_label:
+        query = query.where(RecommendationOutcome.outcome_label == outcome_label)
+    
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
+    
+    query = query.order_by(RecommendationOutcome.measured_at.desc())
+    query = query.offset(pagination.offset).limit(pagination.page_size)
+    
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.get("/outcomes/accuracy", response_model=AccuracyStatsResponse)
+async def get_accuracy_stats(
+    request: Request,
+    days: int = Query(default=30, le=365),
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get overall accuracy statistics for recommendations."""
+    service = OutcomeService(db)
+    return await service.get_accuracy_stats(current_user.id, days)
+
+
+@router.get("/rules/{rule_id}/performance", response_model=RulePerformanceResponse)
+async def get_rule_performance(
+    request: Request,
+    rule_id: UUID,
+    days: int = Query(default=90, le=365),
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get performance statistics for a specific pricing rule."""
+    service = OutcomeService(db)
+    
+    try:
+        return await service.get_rule_performance(rule_id, current_user.id, days)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    

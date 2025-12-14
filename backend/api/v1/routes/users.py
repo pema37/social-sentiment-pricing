@@ -3,13 +3,14 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
 
 from core.security import hash_password, verify_password
+from core.rate_limit import limiter, WRITE_RATE_LIMIT, AUTH_RATE_LIMIT
 from db.session import get_session
 from models import User
 from api.v1.routes.auth import get_current_user, require_role
@@ -44,13 +45,18 @@ class UserDetailResponse(BaseModel):
 # ───────────────────── User Self-Management ───────────────────── #
 
 @router.get("/me", response_model=UserDetailResponse)
-async def get_my_profile(current_user: User = Depends(get_current_user)):
+async def get_my_profile(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
     """Get current user's profile."""
     return current_user
 
 
 @router.patch("/me", response_model=UserDetailResponse)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def update_my_profile(
+    request: Request,
     payload: UserUpdateRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -59,7 +65,6 @@ async def update_my_profile(
     
     if payload.email is not None:
         email = payload.email.lower()
-        # Check if email is taken by another user
         stmt = select(User).where(User.email == email, User.id != current_user.id)
         result = await session.execute(stmt)
         existing = result.scalars().first()
@@ -71,7 +76,6 @@ async def update_my_profile(
         current_user.email = email
 
     if payload.username is not None:
-        # Check if username is taken by another user
         stmt = select(User).where(User.username == payload.username, User.id != current_user.id)
         result = await session.execute(stmt)
         existing = result.scalars().first()
@@ -90,35 +94,33 @@ async def update_my_profile(
 
 
 @router.post("/me/change-password", status_code=status.HTTP_200_OK)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def change_my_password(
+    request: Request,
     payload: PasswordChangeRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """Change current user's password."""
     
-    # Verify current password is correct
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
 
-    # Ensure new password is different from current
     if payload.current_password == payload.new_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from current password",
         )
 
-    # Validate minimum password length
     if len(payload.new_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be at least 8 characters",
         )
 
-    # Update password
     current_user.hashed_password = hash_password(payload.new_password)
     session.add(current_user)
     await session.commit()
@@ -127,7 +129,9 @@ async def change_my_password(
 
 
 @router.delete("/me", status_code=status.HTTP_200_OK)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def delete_my_account(
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -143,17 +147,16 @@ async def delete_my_account(
 
 @router.get("/", response_model=PaginatedResponse[UserDetailResponse])
 async def list_all_users(
+    request: Request,
     pagination: PaginationParams = Depends(),
     current_user: User = Depends(require_role("ADMIN")),
     session: AsyncSession = Depends(get_session),
 ):
     """List all users (Admin only)."""
-    # Count total
     count_query = select(func.count()).select_from(User)
     count_result = await session.execute(count_query)
     total = count_result.scalar_one()
     
-    # Paginate
     stmt = select(User).offset(pagination.offset).limit(pagination.page_size)
     result = await session.execute(stmt)
     users = list(result.scalars().all())
@@ -171,6 +174,7 @@ async def list_all_users(
 
 @router.get("/{user_id}", response_model=UserDetailResponse)
 async def get_user_by_id(
+    request: Request,
     user_id: UUID,
     current_user: User = Depends(require_role("ADMIN")),
     session: AsyncSession = Depends(get_session),
@@ -186,7 +190,9 @@ async def get_user_by_id(
 
 
 @router.patch("/{user_id}/deactivate", status_code=status.HTTP_200_OK)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def deactivate_user(
+    request: Request,
     user_id: UUID,
     current_user: User = Depends(require_role("ADMIN")),
     session: AsyncSession = Depends(get_session),
@@ -213,7 +219,9 @@ async def deactivate_user(
 
 
 @router.patch("/{user_id}/activate", status_code=status.HTTP_200_OK)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def activate_user(
+    request: Request,
     user_id: UUID,
     current_user: User = Depends(require_role("ADMIN")),
     session: AsyncSession = Depends(get_session),

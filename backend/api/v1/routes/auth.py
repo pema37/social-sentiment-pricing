@@ -3,7 +3,7 @@
 from typing import Callable
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -16,6 +16,7 @@ from core.security import (
     create_reset_token,
     decode_reset_token,
 )
+from core.rate_limit import limiter, AUTH_RATE_LIMIT, REGISTER_RATE_LIMIT, PASSWORD_RESET_RATE_LIMIT
 from db.session import get_session
 from models import User
 from schemas.auth import (
@@ -108,7 +109,9 @@ def require_role(min_role: str) -> Callable[[User], User]:
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit(REGISTER_RATE_LIMIT)
 async def register(
+    request: Request,
     payload: RegisterRequest,
     session: AsyncSession = Depends(get_session),
 ):
@@ -137,7 +140,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login(
+    request: Request,
     payload: LoginRequest,
     session: AsyncSession = Depends(get_session),
 ):
@@ -167,7 +172,9 @@ async def login(
 
 
 @router.post("/login/oauth", response_model=TokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login_oauth(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
 ):
@@ -217,7 +224,9 @@ async def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
 # ───────────────────────────── Password Reset ───────────────────────────── #
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
+@limiter.limit(PASSWORD_RESET_RATE_LIMIT)
 async def forgot_password(
+    request: Request,
     payload: ForgotPasswordRequest,
     session: AsyncSession = Depends(get_session),
 ):
@@ -247,7 +256,9 @@ async def forgot_password(
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def reset_password(
+    request: Request,
     payload: ResetPasswordRequest,
     session: AsyncSession = Depends(get_session),
 ):

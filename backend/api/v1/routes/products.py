@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -21,6 +21,7 @@ from schemas.common import PaginatedResponse, PaginationParams
 from api.v1.routes.auth import get_current_user
 from services.sentiment_analyzer import sentiment_analyzer
 from services.pricing_engine import pricing_engine
+from core.rate_limit import limiter, WRITE_RATE_LIMIT, ANALYSIS_RATE_LIMIT
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -32,7 +33,9 @@ router = APIRouter(prefix="/products", tags=["products"])
     response_model=ProductRead,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit(WRITE_RATE_LIMIT)
 async def create_product(
+    request: Request,
     payload: ProductCreate,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -65,6 +68,7 @@ async def create_product(
 
 @router.get("", response_model=PaginatedResponse[ProductRead])
 async def list_products(
+    request: Request,
     pagination: PaginationParams = Depends(),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -98,6 +102,7 @@ async def list_products(
 
 @router.get("/{product_id}", response_model=ProductRead)
 async def get_product(
+    request: Request,
     product_id: UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -121,7 +126,9 @@ async def get_product(
 
 
 @router.patch("/{product_id}", response_model=ProductRead)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def update_product(
+    request: Request,
     product_id: UUID,
     payload: ProductUpdate,
     session: AsyncSession = Depends(get_session),
@@ -156,7 +163,9 @@ async def update_product(
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def delete_product(
+    request: Request,
     product_id: UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -185,7 +194,9 @@ async def delete_product(
 # ───────────────────────────── Price Suggestion ───────────────────────────── #
 
 @router.get("/{product_id}/price-suggestion", response_model=PriceSuggestion)
+@limiter.limit(ANALYSIS_RATE_LIMIT)
 async def get_price_suggestion(
+    request: Request,
     product_id: UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),

@@ -17,6 +17,7 @@ from api.v1.routes.analytics import router as analytics_router
 from api.v1.routes.integrations import router as integrations_router
 from api.v1.routes.pricing import router as pricing_router
 from api.v1.routes.webhooks import router as webhooks_router
+from api.v1.routes.websockets import router as websocket_router
 
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "integrations_router",
     "pricing_router",
     "webhooks_router",
+    "websocket_router",
 ]

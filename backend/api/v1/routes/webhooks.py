@@ -19,9 +19,9 @@ from sqlmodel import select
 from db.session import get_session
 from core.config import settings
 from core.encryption import decrypt_token
+from core.rate_limit import limiter, WEBHOOK_RATE_LIMIT, WRITE_RATE_LIMIT
 from models.integration import Integration, EcommercePlatform, IntegrationStatus
 
-# Use modular imports
 from services.integration import (
     ShopifyService,
     WooCommerceService,
@@ -38,9 +38,10 @@ router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 # ==================== Shopify Webhooks ====================
 
 @router.post("/shopify/{integration_id}")
+@limiter.limit(WEBHOOK_RATE_LIMIT)
 async def shopify_webhook(
-    integration_id: str,
     request: Request,
+    integration_id: str,
     db: AsyncSession = Depends(get_session),
     x_shopify_topic: Optional[str] = Header(None),
     x_shopify_hmac_sha256: Optional[str] = Header(None),
@@ -56,7 +57,6 @@ async def shopify_webhook(
     """
     body = await request.body()
     
-    # Find integration
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.platform == EcommercePlatform.SHOPIFY,
@@ -72,7 +72,6 @@ async def shopify_webhook(
         logger.warning(f"Shopify webhook for inactive integration: {integration_id}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not active")
     
-    # Verify signature (skip if no secret configured)
     if x_shopify_hmac_sha256:
         webhook_secret = _get_shopify_webhook_secret(integration)
         if webhook_secret:
@@ -83,7 +82,6 @@ async def shopify_webhook(
         else:
             logger.warning(f"Skipping signature verification - no secret configured for {integration_id}")
     
-    # Parse payload
     try:
         payload = await request.json()
     except Exception as e:
@@ -94,7 +92,6 @@ async def shopify_webhook(
     if not product_id:
         return {"status": "ignored", "reason": "No product ID"}
     
-    # Determine action
     action = "update"
     if x_shopify_topic:
         if "create" in x_shopify_topic:
@@ -102,7 +99,6 @@ async def shopify_webhook(
         elif "delete" in x_shopify_topic:
             action = "delete"
     
-    # Process with circuit breaker awareness
     try:
         sync_service = SyncService(db)
         link = await sync_service.sync_single_product(
@@ -121,7 +117,6 @@ async def shopify_webhook(
         }
         
     except (CircuitOpenError, SyncTemporarilyUnavailable) as e:
-        # Service temporarily unavailable - tell Shopify to retry later
         logger.warning(f"Shopify webhook deferred (circuit open): {product_id}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -139,16 +134,16 @@ def _get_shopify_webhook_secret(integration: Integration) -> Optional[str]:
     """Get webhook secret for Shopify signature verification."""
     if integration.webhook_secret_encrypted:
         return decrypt_token(integration.webhook_secret_encrypted)
-    # Fallback to client secret (may not be configured)
     return getattr(settings, 'SHOPIFY_CLIENT_SECRET', None)
 
 
 # ==================== WooCommerce Webhooks ====================
 
 @router.post("/woocommerce/{integration_id}")
+@limiter.limit(WEBHOOK_RATE_LIMIT)
 async def woocommerce_webhook(
-    integration_id: str,
     request: Request,
+    integration_id: str,
     db: AsyncSession = Depends(get_session),
     x_wc_webhook_topic: Optional[str] = Header(None),
     x_wc_webhook_signature: Optional[str] = Header(None),
@@ -164,7 +159,6 @@ async def woocommerce_webhook(
     """
     body = await request.body()
     
-    # Find integration
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.platform == EcommercePlatform.WOOCOMMERCE,
@@ -180,7 +174,6 @@ async def woocommerce_webhook(
         logger.warning(f"WooCommerce webhook for inactive integration: {integration_id}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not active")
     
-    # Verify signature (skip if no secret available)
     if x_wc_webhook_signature:
         webhook_secret = _get_woocommerce_webhook_secret(integration)
         if webhook_secret:
@@ -191,7 +184,6 @@ async def woocommerce_webhook(
         else:
             logger.warning(f"Skipping signature verification - no secret available for {integration_id}")
     
-    # Parse payload
     try:
         payload = await request.json()
     except Exception as e:
@@ -202,7 +194,6 @@ async def woocommerce_webhook(
     if not product_id:
         return {"status": "ignored", "reason": "No product ID"}
     
-    # Determine action
     action = "update"
     if x_wc_webhook_topic:
         if "created" in x_wc_webhook_topic:
@@ -210,7 +201,6 @@ async def woocommerce_webhook(
         elif "deleted" in x_wc_webhook_topic:
             action = "delete"
     
-    # Process with circuit breaker awareness
     try:
         sync_service = SyncService(db)
         link = await sync_service.sync_single_product(
@@ -246,7 +236,6 @@ def _get_woocommerce_webhook_secret(integration: Integration) -> Optional[str]:
     """Get webhook secret for WooCommerce signature verification."""
     if integration.webhook_secret_encrypted:
         return decrypt_token(integration.webhook_secret_encrypted)
-    # Fallback: use consumer secret from stored credentials
     try:
         access_token = decrypt_token(integration.access_token_encrypted)
         if ":" in access_token:
@@ -259,7 +248,9 @@ def _get_woocommerce_webhook_secret(integration: Integration) -> Optional[str]:
 # ==================== Webhook Registration ====================
 
 @router.post("/{integration_id}/register")
+@limiter.limit(WRITE_RATE_LIMIT)
 async def register_webhooks(
+    request: Request,
     integration_id: str,
     db: AsyncSession = Depends(get_session),
 ):
@@ -277,7 +268,6 @@ async def register_webhooks(
     if integration.status != IntegrationStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not active")
     
-    # Get service and build callback URL
     if integration.platform == EcommercePlatform.SHOPIFY:
         service = ShopifyService()
         callback_url = f"{settings.BACKEND_URL}/api/v1/webhooks/shopify/{integration_id}"
@@ -289,7 +279,6 @@ async def register_webhooks(
     
     access_token = decrypt_token(integration.access_token_encrypted)
     
-    # Register webhooks
     try:
         results = await service.register_webhooks(
             store_url=integration.store_url,
@@ -302,7 +291,6 @@ async def register_webhooks(
             detail="Platform temporarily unavailable"
         )
     
-    # Store webhook IDs for later cleanup
     webhook_ids = [r.webhook_id for r in results if r.success and r.webhook_id]
     if webhook_ids and hasattr(integration, 'webhook_ids'):
         integration.webhook_ids = webhook_ids
@@ -327,7 +315,9 @@ async def register_webhooks(
 
 
 @router.delete("/{integration_id}/unregister")
+@limiter.limit(WRITE_RATE_LIMIT)
 async def unregister_webhooks(
+    request: Request,
     integration_id: str,
     db: AsyncSession = Depends(get_session),
 ):
@@ -342,12 +332,10 @@ async def unregister_webhooks(
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
     
-    # Get stored webhook IDs
     webhook_ids = getattr(integration, 'webhook_ids', None) or []
     if not webhook_ids:
         return {"status": "ok", "message": "No webhooks to unregister"}
     
-    # Get service
     if integration.platform == EcommercePlatform.SHOPIFY:
         service = ShopifyService()
     elif integration.platform == EcommercePlatform.WOOCOMMERCE:
@@ -366,7 +354,6 @@ async def unregister_webhooks(
         logger.warning(f"Failed to unregister webhooks: {e}")
         success = False
     
-    # Clear stored webhook IDs
     if hasattr(integration, 'webhook_ids'):
         integration.webhook_ids = []
         db.add(integration)
@@ -381,7 +368,7 @@ async def unregister_webhooks(
 # ==================== Health Check ====================
 
 @router.get("/status")
-async def webhook_status():
+async def webhook_status(request: Request):
     """Webhook endpoint health check."""
     return {
         "status": "active",
