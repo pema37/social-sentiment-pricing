@@ -24,23 +24,42 @@ def get_client_ip(request: Request) -> str:
     return get_remote_address(request)
 
 
-# Initialize limiter with Redis storage
-# Falls back to in-memory if Redis unavailable
-try:
-    limiter = Limiter(
+def _create_limiter() -> Limiter:
+    """
+    Create rate limiter with Redis if available, otherwise memory.
+    Actually tests Redis connection before using it.
+    """
+    redis_url = settings.REDIS_URL
+    
+    # Check if Redis URL is configured and not localhost (won't work in production)
+    if redis_url and "localhost" not in redis_url and "127.0.0.1" not in redis_url:
+        try:
+            # Test the connection before committing to Redis
+            import redis
+            r = redis.from_url(redis_url, socket_connect_timeout=2)
+            r.ping()
+            print("Rate limiter initialized with Redis backend")
+            return Limiter(
+                key_func=get_client_ip,
+                storage_uri=redis_url,
+                strategy="fixed-window",
+                default_limits=["100/minute"],
+            )
+        except Exception as e:
+            print(f"Redis connection failed, falling back to memory: {e}")
+    
+    # Fallback to in-memory storage
+    print("Rate limiter initialized with in-memory backend")
+    return Limiter(
         key_func=get_client_ip,
-        storage_uri=settings.REDIS_URL,
-        strategy="fixed-window",
-        default_limits=["100/minute"],  # Default for all endpoints
-    )
-    print("Rate limiter initialized with Redis backend")
-except Exception as e:
-    print(f"Redis unavailable for rate limiting, using in-memory: {e}")
-    limiter = Limiter(
-        key_func=get_client_ip,
+        storage_uri="memory://",
         strategy="fixed-window",
         default_limits=["100/minute"],
     )
+
+
+# Initialize the limiter
+limiter = _create_limiter()
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
