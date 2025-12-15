@@ -1,7 +1,15 @@
 // Base API client - handles fetch, auth, and errors
 import { getToken } from '@/lib/auth/token';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http://', 'https://') || 'http://localhost:8000';
+const RAW_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const API_BASE_URL =
+  RAW_BASE.includes('localhost') || RAW_BASE.includes('127.0.0.1')
+    ? RAW_BASE
+    : RAW_BASE.replace('http://', 'https://');
+
+// Debug - remove after fixing
+console.log('[API Client] RAW_BASE:', RAW_BASE);
+console.log('[API Client] API_BASE_URL:', API_BASE_URL);
 
 
 // Custom error class for API errors
