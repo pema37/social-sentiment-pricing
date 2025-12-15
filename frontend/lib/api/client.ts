@@ -1,7 +1,8 @@
 // Base API client - handles fetch, auth, and errors
 import { getToken } from '@/lib/auth/token';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http://', 'https://') || 'http://localhost:8000';
+
 
 // Custom error class for API errors
 export class ApiError extends Error {
