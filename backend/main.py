@@ -112,5 +112,5 @@ async def root():
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "status": "running",
-        "docs": "/docs" if settings.DEBUG else "disabled",
+        "docs": "/docs",
     }
