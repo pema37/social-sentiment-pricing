@@ -5,6 +5,15 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   devIndicators: false,
   output: "standalone",
+  async rewrites() {
+    const apiUrl = process.env.API_INTERNAL_URL || 'http://localhost:8000';
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${apiUrl}/api/v1/:path*`,
+      },
+    ];
+  },
 };
 
 const sentryWebpackPluginOptions = {
