@@ -1,3 +1,4 @@
+// API Client v2 - uses Next.js rewrites for production
 // Base API client - handles fetch, auth, and errors
 import { getToken } from '@/lib/auth/token';
 
