@@ -3,18 +3,24 @@
 import { getToken } from '@/lib/auth/token';
 
 const getApiBaseUrl = () => {
-  const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  // Client-side: detect production by hostname
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    
+    // Production (Vercel)
+    if (hostname.includes('vercel.app') || hostname.includes('social-sentiment-pricing')) {
+      return 'https://social-sentiment-pricing-production.up.railway.app';
+    }
+    
+    // Local development
+    return 'http://localhost:8000';
+  }
   
-  // Always force HTTPS for railway.app URLs (server or client)
+  // Server-side: use env var with HTTPS forcing
+  const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   if (url.includes('railway.app')) {
     return url.replace('http://', 'https://');
   }
-  
-  // Browser check for other production URLs
-  if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) {
-    return url.replace('http://', 'https://');
-  }
-  
   return url;
 };
 
