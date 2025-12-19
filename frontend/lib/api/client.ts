@@ -3,24 +3,36 @@
 import { getToken } from '@/lib/auth/token';
 
 const getApiBaseUrl = () => {
+  // Debug logging
+  const isClient = typeof window !== 'undefined';
+  console.log('[API] isClient:', isClient);
+  
   // Client-side: detect production by hostname
-  if (typeof window !== 'undefined') {
+  if (isClient) {
     const hostname = window.location.hostname;
+    console.log('[API] hostname:', hostname);
     
     // Production (Vercel)
     if (hostname.includes('vercel.app') || hostname.includes('social-sentiment-pricing')) {
-      return 'https://social-sentiment-pricing-production.up.railway.app';
+      const url = 'https://social-sentiment-pricing-production.up.railway.app';
+      console.log('[API] returning (production):', url);
+      return url;
     }
     
     // Local development
+    console.log('[API] returning (localhost):', 'http://localhost:8000');
     return 'http://localhost:8000';
   }
   
   // Server-side: use env var with HTTPS forcing
   const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  console.log('[API] server-side url:', url);
   if (url.includes('railway.app')) {
-    return url.replace('http://', 'https://');
+    const httpsUrl = url.replace('http://', 'https://');
+    console.log('[API] returning (server HTTPS):', httpsUrl);
+    return httpsUrl;
   }
+  console.log('[API] returning (server fallback):', url);
   return url;
 };
 
