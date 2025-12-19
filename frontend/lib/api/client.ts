@@ -2,13 +2,19 @@
 // Base API client - handles fetch, auth, and errors
 import { getToken } from '@/lib/auth/token';
 
-// Force HTTPS in production, use localhost for dev
 const getApiBaseUrl = () => {
   const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  // If in browser and not localhost, ensure HTTPS
+  
+  // Always force HTTPS for railway.app URLs (server or client)
+  if (url.includes('railway.app')) {
+    return url.replace('http://', 'https://');
+  }
+  
+  // Browser check for other production URLs
   if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) {
     return url.replace('http://', 'https://');
   }
+  
   return url;
 };
 
