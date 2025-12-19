@@ -12,8 +12,6 @@ const getApiBaseUrl = () => {
   return url;
 };
 
-const API_BASE_URL = getApiBaseUrl();
-
 // Custom error class for API errors
 export class ApiError extends Error {
   constructor(
@@ -84,7 +82,7 @@ export async function apiClient<T>(
   
   const token = getToken();
   const queryString = buildQueryString(params);
-  const url = `${API_BASE_URL}${endpoint}${queryString}`;
+  const url = `${getApiBaseUrl()}${endpoint}${queryString}`;
   
   const config: RequestInit = {
     method,
