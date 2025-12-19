@@ -4,8 +4,21 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   devIndicators: false,
   
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: 'upgrade-insecure-requests',
+          },
+        ],
+      },
+    ];
+  },
+  
   async rewrites() {
-    
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     return [
       {
