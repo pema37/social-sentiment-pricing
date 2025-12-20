@@ -53,7 +53,7 @@ export async function connectWooCommerce(data: WooCommerceConnectRequest): Promi
  * List all integrations for current user
  */
 export async function getIntegrations(): Promise<IntegrationListResponse> {
-  return api.get<IntegrationListResponse>(BASE);
+  return api.get<IntegrationListResponse>(`${BASE}/`);
 }
 
 /**

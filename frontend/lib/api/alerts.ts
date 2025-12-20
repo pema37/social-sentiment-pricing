@@ -14,7 +14,7 @@ import type {
 export const alertsApi = {
   // Get all alerts with filters
   getAll: (params?: AlertFilterParams) =>
-    api.get<PaginatedAlerts>('/api/v1/alerts', params as Record<string, string | number | boolean | undefined>),
+    api.get<PaginatedAlerts>('/api/v1/alerts/', params as Record<string, string | number | boolean | undefined>),
 
   // Get alert stats
   getStats: () =>
