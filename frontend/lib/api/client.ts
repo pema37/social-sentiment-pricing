@@ -1,38 +1,25 @@
-// API Client v2 - uses Next.js rewrites for production
-// Base API client - handles fetch, auth, and errors
+// API Client - handles fetch, auth, and errors
 import { getToken } from '@/lib/auth/token';
 
 const getApiBaseUrl = () => {
-  // Debug logging
-  const isClient = typeof window !== 'undefined';
-  console.log('[API] isClient:', isClient);
-  
   // Client-side: detect production by hostname
-  if (isClient) {
+  if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    console.log('[API] hostname:', hostname);
     
     // Production (Vercel)
     if (hostname.includes('vercel.app') || hostname.includes('social-sentiment-pricing')) {
-      const url = 'https://social-sentiment-pricing-production.up.railway.app';
-      console.log('[API] returning (production):', url);
-      return url;
+      return 'https://social-sentiment-pricing-production.up.railway.app';
     }
     
     // Local development
-    console.log('[API] returning (localhost):', 'http://localhost:8000');
     return 'http://localhost:8000';
   }
   
   // Server-side: use env var with HTTPS forcing
   const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  console.log('[API] server-side url:', url);
   if (url.includes('railway.app')) {
-    const httpsUrl = url.replace('http://', 'https://');
-    console.log('[API] returning (server HTTPS):', httpsUrl);
-    return httpsUrl;
+    return url.replace('http://', 'https://');
   }
-  console.log('[API] returning (server fallback):', url);
   return url;
 };
 
