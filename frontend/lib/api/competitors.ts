@@ -19,7 +19,7 @@ export const competitorsApi = {
 
   // Get all competitors
   getAll: (params?: { page?: number; page_size?: number; is_active?: boolean }) =>
-    api.get<PaginatedCompetitors>('/api/v1/competitors', params),
+    api.get<PaginatedCompetitors>('/api/v1/competitors/', params),
 
   // Get single competitor
   getById: (id: string) =>
@@ -27,7 +27,7 @@ export const competitorsApi = {
 
   // Create competitor
   create: (data: CreateCompetitorRequest) =>
-    api.post<Competitor>('/api/v1/competitors', data),
+    api.post<Competitor>('/api/v1/competitors/', data),
 
   // Update competitor
   update: (id: string, data: UpdateCompetitorRequest) =>
@@ -47,7 +47,7 @@ export const competitorsApi = {
     page?: number;
     page_size?: number;
   }) =>
-    api.get<PaginatedCompetitorProducts>('/api/v1/competitors/products', params),
+    api.get<PaginatedCompetitorProducts>('/api/v1/competitors/products/', params),
 
   // Get single competitor product with details
   getProduct: (competitorProductId: string) =>
@@ -55,7 +55,7 @@ export const competitorsApi = {
 
   // Create competitor product link
   createProduct: (data: CreateCompetitorProductRequest) =>
-    api.post<CompetitorProduct>('/api/v1/competitors/products', data),
+    api.post<CompetitorProduct>('/api/v1/competitors/products/', data),
 
   // Update competitor product
   updateProduct: (competitorProductId: string, data: UpdateCompetitorProductRequest) =>
