@@ -46,6 +46,15 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
   const currentTrend = data?.trend || 'stable';
   const TrendIcon = trendConfig[currentTrend]?.icon || Minus;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatTooltip = (value: any, name: string): [string | number, string] => {
+    const numValue = typeof value === 'number' ? value : 0;
+    return [
+      name === 'score' ? numValue.toFixed(3) : numValue,
+      name === 'score' ? 'Sentiment' : 'Mentions',
+    ];
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -98,10 +107,7 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
                   borderRadius: '8px',
                   fontSize: '12px',
                 }}
-                formatter={(value: number, name: string) => [
-                  name === 'score' ? value.toFixed(3) : value,
-                  name === 'score' ? 'Sentiment' : 'Mentions',
-                ]}
+                formatter={formatTooltip}
               />
               <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="3 3" />
               <Line
