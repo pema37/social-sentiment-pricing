@@ -89,6 +89,8 @@ jobs:
         run: |
           cd frontend
           npm ci
+          # Install Linux native binary for lightningcss (required by Turbopack)
+          npm install lightningcss-linux-x64-gnu
       
       - name: Run linting
         run: |
@@ -98,8 +100,7 @@ jobs:
       - name: Build
         run: |
           cd frontend
-          # Disable Turbopack to avoid native binary issues in CI
-          npx next build --no-turbopack
+          npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
@@ -119,3 +120,4 @@ jobs:
         run: |
           docker build -t ssp-frontend:test ./frontend \
             --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000
+
