@@ -28,7 +28,10 @@ export const SentimentChart = memo(function SentimentChart({ data, className }: 
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" tickLine={false} />
               <YAxis domain={[-1, 1]} tick={{ fontSize: 12 }} stroke="#9ca3af" tickFormatter={(v) => (v * 100).toFixed(0)} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => [(v * 100).toFixed(1), 'Score']} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+              <Tooltip 
+                formatter={((v: unknown) => [(typeof v === 'number' ? (v * 100).toFixed(1) : v), 'Score']) as never} 
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} 
+              />
               <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>

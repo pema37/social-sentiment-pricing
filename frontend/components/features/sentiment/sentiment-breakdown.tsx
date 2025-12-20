@@ -63,10 +63,13 @@ export function SentimentBreakdown({ mentions }: SentimentBreakdownProps) {
               ))}
             </Pie>
             <Tooltip
-              formatter={(value: number) => [
-                `${value} (${((value / total) * 100).toFixed(0)}%)`,
-                'Mentions',
-              ]}
+              formatter={((value: unknown) => {
+                const numValue = typeof value === 'number' ? value : 0;
+                return [
+                  `${numValue} (${((numValue / total) * 100).toFixed(0)}%)`,
+                  'Mentions',
+                ];
+              }) as never}
             />
           </PieChart>
         </ResponsiveContainer>
