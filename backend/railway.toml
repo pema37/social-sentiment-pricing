@@ -5,5 +5,4 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "sh -c 'uvicorn main:app --host 0.0.0.0 --port $PORT'"
 healthcheckPath = "/api/v1/health"
-healthcheckTimeout = 300git add backend/railway.toml
-
+healthcheckTimeout = 300
