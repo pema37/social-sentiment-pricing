@@ -25,6 +25,7 @@ from schemas.pricing import (
     RecommendationApprove,
     RecommendationReject,
 )
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -46,6 +47,71 @@ async def generate_recommendation(
     recommendation = await service.generate_recommendation(product, current_user.id)
     return recommendation
 
+@router.get("/recommendations/stats")
+async def get_recommendation_stats(
+    request: Request,
+    days: int = Query(default=30, le=365),
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get recommendation statistics."""
+    since = datetime.utcnow() - timedelta(days=days)
+    
+    # Count by status
+    stats = {}
+    for rec_status in RecommendationStatus:
+        stmt = (
+            select(func.count(PriceRecommendation.id))
+            .where(PriceRecommendation.user_id == current_user.id)
+            .where(PriceRecommendation.status == rec_status)
+            .where(PriceRecommendation.created_at >= since)
+        )
+        result = await db.execute(stmt)
+        stats[rec_status.value] = result.scalar() or 0
+    
+    # Calculate totals matching frontend interface
+    total_generated = sum(stats.values())
+    total_applied = stats.get("applied", 0)
+    total_rejected = stats.get("rejected", 0)
+    total_expired = stats.get("expired", 0)
+    total_pending = stats.get("pending", 0)
+    
+    # Approval rate
+    decided = total_applied + total_rejected
+    approval_rate = (total_applied / decided * 100) if decided > 0 else 0
+    
+    # Average confidence
+    stmt_conf = (
+        select(func.avg(PriceRecommendation.confidence_score))
+        .where(PriceRecommendation.user_id == current_user.id)
+        .where(PriceRecommendation.created_at >= since)
+    )
+    result = await db.execute(stmt_conf)
+    avg_confidence = result.scalar()
+    
+    # Average price change percent
+    stmt_change = (
+        select(func.avg(
+            (PriceRecommendation.recommended_price - PriceRecommendation.current_price) 
+            / PriceRecommendation.current_price * 100
+        ))
+        .where(PriceRecommendation.user_id == current_user.id)
+        .where(PriceRecommendation.current_price > 0)
+        .where(PriceRecommendation.created_at >= since)
+    )
+    result = await db.execute(stmt_change)
+    avg_price_change = result.scalar()
+    
+    return {
+        "total_generated": total_generated,
+        "total_applied": total_applied,
+        "total_rejected": total_rejected,
+        "total_expired": total_expired,
+        "total_pending": total_pending,
+        "approval_rate": round(approval_rate, 1),
+        "avg_confidence": round(float(avg_confidence), 2) if avg_confidence else None,
+        "avg_price_change_percent": round(float(avg_price_change), 2) if avg_price_change else None,
+    }
 
 @router.get("/recommendations", response_model=PaginatedResponse[PriceRecommendationResponse])
 async def list_recommendations(
