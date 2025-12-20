@@ -28,7 +28,11 @@ export const MentionVolumeChart = memo(function MentionVolumeChart({ data, class
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" tickLine={false} />
               <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" allowDecimals={false} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => [v, 'Mentions']} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
+              <Tooltip 
+                formatter={((v: unknown) => [v, 'Mentions']) as never} 
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} 
+                cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} 
+              />
               <Bar dataKey="mentions" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -37,3 +41,4 @@ export const MentionVolumeChart = memo(function MentionVolumeChart({ data, class
     </Card>
   );
 });
+
