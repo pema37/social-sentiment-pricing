@@ -30,7 +30,7 @@ from schemas.common import PaginatedResponse, PaginationParams
 router = APIRouter()
 
 
-@router.post("/products", response_model=CompetitorProductResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/products/", response_model=CompetitorProductResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(WRITE_RATE_LIMIT)
 async def create_competitor_product(
     request: Request,
@@ -79,7 +79,7 @@ async def create_competitor_product(
     return competitor_product
 
 
-@router.get("/products", response_model=PaginatedResponse[CompetitorProductResponse])
+@router.get("/products/", response_model=PaginatedResponse[CompetitorProductResponse])
 async def list_competitor_products(
     request: Request,
     product_id: Optional[uuid_lib.UUID] = None,
