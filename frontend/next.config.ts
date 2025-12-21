@@ -5,6 +5,19 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   devIndicators: false,
   
+  // Fix for external images (competitor logos, product images)
+  images: {
+    remotePatterns: [
+      // Allow images from any HTTPS source (for dynamic competitor sites)
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+    // Fallback for older Next.js versions or specific domains
+    // domains: ['bestbuy.com', 'amazon.com', 'walmart.com', 'target.com'],
+  },
+  
   async headers() {
     return [
       {

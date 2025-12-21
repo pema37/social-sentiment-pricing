@@ -2,11 +2,11 @@
 """Competitor Product CRUD endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import datetime, timedelta  # Added timedelta
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query  # Added Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select
@@ -226,3 +226,69 @@ async def delete_competitor_product(
     
     await db.delete(cp)
     await db.commit()
+
+
+# ============== NEW ENDPOINT: Price History ==============
+
+@router.get("/products/{competitor_product_id}/history")
+async def get_competitor_product_price_history(
+    request: Request,
+    competitor_product_id: uuid_lib.UUID,
+    days: int = Query(default=30, ge=1, le=365, description="Number of days of history"),
+    limit: int = Query(default=100, ge=1, le=500, description="Maximum records to return"),
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get price history for a competitor product.
+    
+    Returns historical price data points for charting and analysis.
+    """
+    # Verify competitor product exists and belongs to user
+    result = await db.execute(
+        select(CompetitorProduct)
+        .join(Product)
+        .where(CompetitorProduct.id == competitor_product_id)
+        .where(Product.user_id == current_user.id)
+    )
+    cp = result.scalars().first()
+    
+    if not cp:
+        raise HTTPException(status_code=404, detail="Competitor product not found")
+    
+    # Calculate date cutoff
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    
+    # Fetch price history
+    history_result = await db.execute(
+        select(CompetitorPriceHistory)
+        .where(CompetitorPriceHistory.competitor_product_id == competitor_product_id)
+        .where(CompetitorPriceHistory.observed_at >= cutoff_date)
+        .order_by(CompetitorPriceHistory.observed_at.desc())
+        .limit(limit)
+    )
+    history = history_result.scalars().all()
+    
+    return {
+        "items": [
+            {
+                "id": str(record.id),
+                "competitor_product_id": str(record.competitor_product_id),
+                "old_price": float(record.old_price) if record.old_price else None,
+                "new_price": float(record.new_price),
+                "currency": record.currency,
+                "change_amount": float(record.change_amount) if record.change_amount else None,
+                "change_percent": float(record.change_percent) if record.change_percent else None,
+                "change_type": record.change_type,
+                "detected_promotion": record.detected_promotion,
+                "promotion_name": record.promotion_name,
+                "was_available": record.was_available,
+                "is_available": record.is_available,
+                "observed_at": record.observed_at.isoformat() if record.observed_at else None,
+            }
+            for record in history
+        ],
+        "total": len(history),
+        "competitor_product_id": str(competitor_product_id),
+        "days": days,
+    }
