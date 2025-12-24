@@ -20,6 +20,7 @@ import {
   ListChecks,
   Bell,
   BarChart3,
+  Wallet, 
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
@@ -77,6 +78,11 @@ const pricingItems = [
     label: 'Pricing Settings', 
     href: '/pricing/settings', 
     icon: ListChecks 
+  },
+  { 
+    label: 'Payments (MNEE)', 
+    href: '/payments/demo', 
+    icon: Wallet 
   },
 ];
 

@@ -1,30 +1,35 @@
+/**
+ * Web3 Provider Component
+ * 
+ * Wraps the application with wagmi and RainbowKit providers
+ * to enable wallet connections and MNEE interactions.
+**/
+
 'use client'
 
-import { useState, ReactNode } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { ReactNode } from 'react'
 import { WagmiProvider } from 'wagmi'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
-import { wagmiConfig } from '@/lib/web3/config'
-import { Toaster } from '@/components/ui/Toaster'
+import { wagmiConfig } from './config'
 
 import '@rainbow-me/rainbowkit/styles.css'
 
-interface ProvidersProps {
+// Create a client for React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 2,
+    },
+  },
+})
+
+interface Web3ProviderProps {
   children: ReactNode
 }
 
-export function Providers({ children }: ProvidersProps) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 60 * 1000, // 1 minute
-        refetchOnWindowFocus: false,
-        retry: 1,
-      },
-    },
-  }))
-
+export function Web3Provider({ children }: Web3ProviderProps) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
@@ -38,15 +43,14 @@ export function Providers({ children }: ProvidersProps) {
           modalSize="compact"
           appInfo={{
             appName: 'ActualPrice',
+            learnMoreUrl: 'https://getactualprice.com/docs/payments',
           }}
         >
           {children}
-          <Toaster />
-          <ReactQueryDevtools initialIsOpen={false} />
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   )
 }
 
-export default Providers
+export default Web3Provider
