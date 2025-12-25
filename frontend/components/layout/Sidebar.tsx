@@ -81,7 +81,7 @@ const pricingItems = [
   },
   { 
     label: 'Payments (MNEE)', 
-    href: '/payments/demo', 
+    href: '/payments', 
     icon: Wallet 
   },
 ];
