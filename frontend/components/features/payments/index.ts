@@ -7,4 +7,4 @@
 export { ConnectWallet } from './ConnectWallet'
 export { MNEEBalance, MNEEBalanceCompact, MNEEBalanceCard } from './MNEEBalance'
 export { PayWithMNEE } from './PayWithMNEE'
-export { TransactionHistory, RecentTransactions } from './TransactionHistory'
+export { TransactionHistory } from './TransactionHistory'

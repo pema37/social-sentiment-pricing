@@ -4,10 +4,9 @@
  * Test page for wallet connection and MNEE payments.
  * Access at: /payments/demo
 **/
-
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'  
 import { useAccount } from 'wagmi'
 import { 
   ConnectWallet, 
@@ -19,6 +18,20 @@ import {
 export default function PaymentsDemoPage() {
   const { isConnected, address } = useAccount()
   const [testAmount, setTestAmount] = useState('10.00')
+  
+  // ADD: Manual wallet state for Safari users
+  const [manualAddress, setManualAddress] = useState<string | null>(null)
+  
+  // ADD: Load manual address from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('mnee_manual_wallet')
+    if (saved) setManualAddress(saved)
+  }, [])
+  
+  // ADD: Effective connection state (wagmi OR manual)
+  const effectiveAddress = isConnected ? address : manualAddress
+  const effectiveConnected = isConnected || !!manualAddress
+  const isManualOnly = !isConnected && !!manualAddress
   
   const splitRecipients = [
     { address: '0x1234567890123456789012345678901234567890', percentage: 80, label: 'Merchant' },
@@ -47,13 +60,18 @@ export default function PaymentsDemoPage() {
                 Wallet Connection
               </h2>
               <p className="text-gray-400 text-sm">
-                {isConnected 
-                  ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}` 
+                {/* CHANGED: Use effectiveConnected and effectiveAddress */}
+                {effectiveConnected 
+                  ? `Connected: ${effectiveAddress?.slice(0, 6)}...${effectiveAddress?.slice(-4)}${isManualOnly ? ' (view only)' : ''}` 
                   : 'Connect your wallet to get started'
                 }
               </p>
             </div>
-            <ConnectWallet />
+            {/* CHANGED: Add callbacks for manual connection */}
+            <ConnectWallet 
+              onManualConnect={(addr) => setManualAddress(addr)}
+              onManualDisconnect={() => setManualAddress(null)}
+            />
           </div>
         </div>
         

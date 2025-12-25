@@ -1,8 +1,6 @@
 /**
  * Web3 Module Exports
- * 
- * Central export point for all MNEE/Web3 functionality
-**/
+ */
 
 // Configuration
 export { 
@@ -18,3 +16,12 @@ export { Web3Provider } from './Web3Provider'
 // Hooks
 export { useMNEE } from './useMNEE'
 export type { UseMNEEReturn } from './useMNEE'
+
+// Etherscan
+export {
+  fetchMNEETransactions,
+  formatAddress,
+  formatTimestamp,
+  getEtherscanTxUrl
+} from './etherscan'
+export type { MNEETransaction } from './etherscan'
