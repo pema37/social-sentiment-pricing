@@ -15,6 +15,7 @@ export * from './competitor';
 export * from './integration';
 export * from './pricing';
 export * from './user';
+export * from './payment';  
 
 // Legacy type for backwards compatibility
 export interface ApiResponse<T> {

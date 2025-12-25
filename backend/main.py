@@ -43,6 +43,7 @@ from api.v1.routes import (
     webhooks_router,
     websocket_router,
     health_router,
+    payments_router,
 )
 
 
@@ -117,6 +118,7 @@ app.include_router(integrations_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(webhooks_router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/api/v1")
+app.include_router(payments_router, prefix="/api/v1")
 
 
 @app.get("/")

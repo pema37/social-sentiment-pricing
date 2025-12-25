@@ -29,6 +29,9 @@ class User(SQLModel, table=True):
     role: str = Field(default="USER")
     is_active: bool = Field(default=True)
 
+    # BSV wallet address for MNEE payments
+    bsv_wallet_address: Optional[str] = Field(default=None, max_length=50)
+
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),

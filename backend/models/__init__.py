@@ -14,6 +14,10 @@ from models.price_history import PriceHistory, ChangeReason
 from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
 from models.alert import Alert, AlertConfiguration, AlertType, AlertSeverity, AlertChannel, AlertStatus
 
+# Payment models
+from models.payment import Payment, PaymentStatus, PaymentType
+from models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
+
 
 __all__ = [
     "User",
@@ -40,4 +44,11 @@ __all__ = [
     "AlertSeverity",
     "AlertChannel",
     "AlertStatus",
+    # Payment models
+    "Payment",
+    "PaymentStatus",
+    "PaymentType",
+    "Subscription",
+    "SubscriptionTier",
+    "SubscriptionStatus",
 ]

@@ -18,3 +18,4 @@ export * from './alerts';
 export * from './competitors';
 export * from './pricing';
 export * from './integrations';
+export * from './payments';

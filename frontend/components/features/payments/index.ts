@@ -1,10 +1,12 @@
-/**
- * Payments Components Exports
- * 
- * MNEE stablecoin payment UI components for ActualPrice
-*/
+// frontend/components/features/payments/index.ts
 
-export { ConnectWallet } from './ConnectWallet'
-export { MNEEBalance, MNEEBalanceCompact, MNEEBalanceCard } from './MNEEBalance'
-export { PayWithMNEE } from './PayWithMNEE'
-export { TransactionHistory } from './TransactionHistory'
+/**
+ * Payment Components
+ * 
+ * BSV-compatible components for MNEE payment integration.
+ */
+
+export { BsvWalletCard } from './BsvWalletCard';
+export { SubscriptionPlans } from './SubscriptionPlans';
+export { CurrentPlan } from './CurrentPlan';
+export { PaymentHistory } from './PaymentHistory';
