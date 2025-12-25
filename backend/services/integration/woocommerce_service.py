@@ -70,8 +70,9 @@ class WooCommerceService(EcommerceService):
             key, secret = self._parse_credentials(access_token)
             async with RetryableClient(store_url, "woocommerce", self.retry_config, 15.0) as client:
                 await client.get(
-                    f"{base_url}/wp-json/{self.API_VERSION}/system_status",
+                    f"{base_url}/wp-json/{self.API_VERSION}/products",
                     auth=(key, secret),
+                    params={"per_page": 1},
                 )
                 return True
         except Exception:
@@ -256,7 +257,11 @@ class WooCommerceService(EcommerceService):
             base_url = self.normalize_store_url(store_url)
             key, secret = self._parse_credentials(access_token)
             async with RetryableClient(store_url, "woocommerce", RetryConfig(max_retries=1), 10.0) as client:
-                await client.get(f"{base_url}/wp-json/{self.API_VERSION}/system_status", auth=(key, secret))
+                await client.get(
+                    f"{base_url}/wp-json/{self.API_VERSION}/products",
+                    auth=(key, secret),
+                    params={"per_page": 1},
+                )
                 return ConnectionStatus.HEALTHY
         except httpx.HTTPStatusError as e:
             status_map = {401: ConnectionStatus.UNAUTHORIZED, 429: ConnectionStatus.RATE_LIMITED}
@@ -326,4 +331,4 @@ class WooCommerceService(EcommerceService):
             return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             return None
-
+        
