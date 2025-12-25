@@ -1,355 +1,333 @@
-"""
-Subscription Routes
+# backend/api/v1/routes/payments/subscription.py
 
-Handles subscription plans, billing, and payment history.
+"""
+Subscription Management Endpoints
+
+Handles subscription plans, upgrades, and payment processing.
 """
 
-import logging
 from datetime import datetime, timedelta
-from typing import Optional, List
-from uuid import UUID, uuid4
+from typing import List
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from pydantic import BaseModel
 
-from db.session import get_db
+from db.session import get_session
 from core.deps import get_current_user
 from core.config import settings
 from models.user import User
+from models.subscription import Subscription, SubscriptionTier, SubscriptionStatus, TIER_LIMITS
+from models.payment import Payment, PaymentStatus, PaymentType
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter()
-
-
-# =============================================================================
-# Pricing Configuration
-# =============================================================================
-
-SUBSCRIPTION_TIERS = {
-    "free": {
-        "name": "Free",
-        "monthly_price": "0.00",
-        "products_limit": 5,
-        "competitors_limit": 3,
-        "api_calls_limit": 100,
-        "features": [
-            "Basic sentiment analysis",
-            "Manual pricing",
-            "5 products",
-        ],
-    },
-    "starter": {
-        "name": "Starter",
-        "monthly_price": "29.00",
-        "products_limit": 50,
-        "competitors_limit": 20,
-        "api_calls_limit": 5000,
-        "features": [
-            "Everything in Free",
-            "Auto pricing suggestions",
-            "Competitor tracking",
-            "Email alerts",
-            "50 products",
-        ],
-    },
-    "professional": {
-        "name": "Professional",
-        "monthly_price": "99.00",
-        "products_limit": 500,
-        "competitors_limit": 100,
-        "api_calls_limit": 50000,
-        "popular": True,
-        "features": [
-            "Everything in Starter",
-            "Advanced sentiment analysis",
-            "All alert types",
-            "API access",
-            "Priority support",
-            "500 products",
-        ],
-    },
-    "enterprise": {
-        "name": "Enterprise",
-        "monthly_price": "299.00",
-        "products_limit": -1,  # Unlimited
-        "competitors_limit": -1,
-        "api_calls_limit": -1,
-        "features": [
-            "Everything in Professional",
-            "Unlimited products",
-            "Custom integrations",
-            "Dedicated support",
-            "SLA guarantee",
-        ],
-    },
-}
+router = APIRouter(tags=["subscriptions"])
 
 
 # =============================================================================
-# Schemas
+# SCHEMAS
 # =============================================================================
 
-class PlanResponse(BaseModel):
-    """Single plan details."""
-    id: str
-    name: str
-    monthly_price: str
-    products_limit: int
-    competitors_limit: int
-    api_calls_limit: int
-    features: List[str]
-    popular: bool = False
-
-
-class PlansResponse(BaseModel):
-    """All available plans."""
-    plans: List[PlanResponse]
-
-
-class SubscriptionResponse(BaseModel):
-    """Current subscription status."""
+class PlanInfo(BaseModel):
+    """Subscription plan information."""
     tier: str
     name: str
-    status: str
-    monthly_price: str
-    current_period_start: Optional[datetime] = None
-    current_period_end: Optional[datetime] = None
-    limits: dict
+    price_monthly: float
+    price_yearly: float
+    product_limit: int
     features: List[str]
+
+
+class SubscriptionInfo(BaseModel):
+    """Current subscription information."""
+    tier: str
+    status: str
+    current_period_start: datetime | None
+    current_period_end: datetime | None
+    product_limit: int
+    products_used: int
 
 
 class SubscribeRequest(BaseModel):
     """Request to subscribe to a plan."""
-    tier: str = Field(..., pattern="^(free|starter|professional|enterprise)$")
-
-
-class PaymentRequestResponse(BaseModel):
-    """Payment request for subscription."""
-    payment_id: str
-    status: str
     tier: str
+    billing_cycle: str = "monthly"  # monthly or yearly
+
+
+class PaymentRequest(BaseModel):
+    """Payment request details."""
+    payment_id: str
     amount: str
-    currency: str = "MNEE"
-    payment_address: str
+    amount_raw: int
+    recipient_address: str
     memo: str
     expires_at: datetime
-    instructions: dict
 
 
-class PaymentStatusResponse(BaseModel):
-    """Payment status check."""
-    payment_id: str
-    status: str
-    amount: str
-    currency: str
-    created_at: datetime
-    confirmed_at: Optional[datetime] = None
-    txid: Optional[str] = None
-
-
-class PaymentHistoryItem(BaseModel):
-    """Single payment in history."""
+class PaymentInfo(BaseModel):
+    """Payment information."""
     id: str
     amount: str
-    currency: str
     status: str
-    description: Optional[str] = None
+    payment_type: str
     created_at: datetime
-    txid: Optional[str] = None
-
-
-class PaymentHistoryResponse(BaseModel):
-    """Payment history list."""
-    payments: List[PaymentHistoryItem]
-    total: int
-    limit: int
-    offset: int
+    transaction_hash: str | None
 
 
 # =============================================================================
-# Routes
+# PLAN DEFINITIONS
 # =============================================================================
 
-@router.get(
-    "/plans",
-    response_model=PlansResponse,
-    summary="Get available plans",
-    description="List all subscription plans with pricing and features"
-)
+PLANS: List[PlanInfo] = [
+    PlanInfo(
+        tier="free",
+        name="Free",
+        price_monthly=0,
+        price_yearly=0,
+        product_limit=5,
+        features=[
+            "Up to 5 products",
+            "Basic sentiment analysis",
+            "Daily price updates",
+            "Email support",
+        ],
+    ),
+    PlanInfo(
+        tier="starter",
+        name="Starter",
+        price_monthly=29,
+        price_yearly=290,
+        product_limit=50,
+        features=[
+            "Up to 50 products",
+            "Advanced sentiment analysis",
+            "Hourly price updates",
+            "Competitor tracking (3 competitors)",
+            "Priority email support",
+        ],
+    ),
+    PlanInfo(
+        tier="professional",
+        name="Professional",
+        price_monthly=99,
+        price_yearly=990,
+        product_limit=500,
+        features=[
+            "Up to 500 products",
+            "Real-time sentiment analysis",
+            "Real-time price updates",
+            "Competitor tracking (10 competitors)",
+            "API access",
+            "Dedicated support",
+        ],
+    ),
+    PlanInfo(
+        tier="enterprise",
+        name="Enterprise",
+        price_monthly=299,
+        price_yearly=2990,
+        product_limit=-1,  # Unlimited
+        features=[
+            "Unlimited products",
+            "Real-time sentiment analysis",
+            "Real-time price updates",
+            "Unlimited competitor tracking",
+            "Full API access",
+            "Custom integrations",
+            "24/7 dedicated support",
+            "SLA guarantee",
+        ],
+    ),
+]
+
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+
+@router.get("/plans", response_model=List[PlanInfo])
 async def get_plans():
-    """Get all available subscription plans."""
-    plans = [
-        PlanResponse(
-            id=tier_id,
-            name=tier["name"],
-            monthly_price=tier["monthly_price"],
-            products_limit=tier["products_limit"],
-            competitors_limit=tier["competitors_limit"],
-            api_calls_limit=tier["api_calls_limit"],
-            features=tier["features"],
-            popular=tier.get("popular", False),
-        )
-        for tier_id, tier in SUBSCRIPTION_TIERS.items()
-    ]
-    
-    return PlansResponse(plans=plans)
+    """
+    Get all available subscription plans.
+    """
+    return PLANS
 
 
-@router.get(
-    "/subscription",
-    response_model=SubscriptionResponse,
-    summary="Get current subscription",
-    description="Get user's current subscription status and limits"
-)
+@router.get("/subscription", response_model=SubscriptionInfo)
 async def get_subscription(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
 ):
-    """Get current user's subscription."""
-    # For now, return free tier
-    # TODO: Query subscription from database when models are ready
+    """
+    Get current user's subscription.
+    """
+    # Find active subscription
+    result = await session.execute(
+        select(Subscription)
+        .where(Subscription.user_id == current_user.id)
+        .where(Subscription.status == SubscriptionStatus.ACTIVE)
+    )
+    subscription = result.scalar_one_or_none()
     
-    tier_id = "free"  # Default to free
-    tier = SUBSCRIPTION_TIERS[tier_id]
+    if not subscription:
+        # Return free tier info
+        return SubscriptionInfo(
+            tier="free",
+            status="active",
+            current_period_start=None,
+            current_period_end=None,
+            product_limit=TIER_LIMITS[SubscriptionTier.FREE],
+            products_used=0,  # TODO: Get actual count
+        )
     
-    return SubscriptionResponse(
-        tier=tier_id,
-        name=tier["name"],
-        status="active",
-        monthly_price=tier["monthly_price"],
-        current_period_start=None,
-        current_period_end=None,
-        limits={
-            "products": tier["products_limit"],
-            "competitors": tier["competitors_limit"],
-            "api_calls": tier["api_calls_limit"],
-        },
-        features=tier["features"],
+    return SubscriptionInfo(
+        tier=subscription.tier.value,
+        status=subscription.status.value,
+        current_period_start=subscription.current_period_start,
+        current_period_end=subscription.current_period_end,
+        product_limit=TIER_LIMITS.get(subscription.tier, 5),
+        products_used=0,  # TODO: Get actual count
     )
 
 
-@router.post(
-    "/subscribe",
-    response_model=PaymentRequestResponse,
-    summary="Subscribe to a plan",
-    description="Create a payment request for a subscription"
-)
+@router.post("/subscribe", response_model=PaymentRequest)
 async def subscribe(
-    request: SubscribeRequest,
+    data: SubscribeRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Create a subscription payment request.
-    
-    Returns payment details including MNEE address to send payment.
+    Returns payment details for the user to complete via MNEE.
     """
-    tier = request.tier.lower()
-    
-    if tier not in SUBSCRIPTION_TIERS:
+    # Validate tier
+    try:
+        tier = SubscriptionTier(data.tier)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid tier. Choose from: {list(SUBSCRIPTION_TIERS.keys())}",
+            detail=f"Invalid tier: {data.tier}",
         )
     
-    tier_config = SUBSCRIPTION_TIERS[tier]
-    amount = tier_config["monthly_price"]
-    
-    # Free tier - just activate
-    if tier == "free":
-        return PaymentRequestResponse(
-            payment_id=str(uuid4()),
-            status="active",
-            tier=tier,
-            amount="0.00",
-            payment_address="",
-            memo="",
-            expires_at=datetime.utcnow(),
-            instructions={
-                "message": "Free tier activated. No payment required.",
-            },
-        )
-    
-    # Get SSP's receiving wallet
-    ssp_wallet = settings.SSP_MNEE_WALLET_ADDRESS
-    
-    if not ssp_wallet:
+    # Free tier doesn't need payment
+    if tier == SubscriptionTier.FREE:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment system not configured. Please contact support.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Free tier doesn't require payment",
         )
     
-    # Create payment request
-    payment_id = str(uuid4())
-    expires_at = datetime.utcnow() + timedelta(hours=24)
-    memo = f"SSP-{current_user.id}-{tier}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    # Get plan pricing
+    plan = next((p for p in PLANS if p.tier == data.tier), None)
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plan not found",
+        )
     
-    # TODO: Save payment to database when models are ready
+    # Calculate amount
+    if data.billing_cycle == "yearly":
+        amount = plan.price_yearly
+    else:
+        amount = plan.price_monthly
     
-    logger.info(f"Payment request created: {payment_id} for user {current_user.id}")
+    # MNEE uses 5 decimal places (1 MNEE = $1)
+    amount_raw = int(amount * 100000)
     
-    return PaymentRequestResponse(
-        payment_id=payment_id,
-        status="pending",
-        tier=tier,
-        amount=amount,
-        payment_address=ssp_wallet,
-        memo=memo,
-        expires_at=expires_at,
-        instructions={
-            "step1": f"Send exactly {amount} MNEE to the payment address",
-            "step2": f"Include memo: {memo}",
-            "step3": "Payment confirms within minutes",
-            "step4": "Subscription activates automatically",
+    # Create pending payment record
+    payment = Payment(
+        id=str(uuid4()),
+        user_id=current_user.id,
+        amount=str(amount),
+        amount_raw=amount_raw,
+        payment_type=PaymentType.SUBSCRIPTION,
+        status=PaymentStatus.PENDING,
+        metadata={
+            "tier": data.tier,
+            "billing_cycle": data.billing_cycle,
         },
     )
+    session.add(payment)
+    await session.commit()
+    await session.refresh(payment)
+    
+    # Get SSP wallet address from settings
+    recipient_address = settings.SSP_MNEE_WALLET_ADDRESS
+    if not recipient_address:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Payment system not configured",
+        )
+    
+    return PaymentRequest(
+        payment_id=payment.id,
+        amount=f"{amount:.2f}",
+        amount_raw=amount_raw,
+        recipient_address=recipient_address,
+        memo=f"SSP-{payment.id[:8]}",
+        expires_at=datetime.utcnow() + timedelta(hours=1),
+    )
 
 
-@router.get(
-    "/payments/{payment_id}",
-    response_model=PaymentStatusResponse,
-    summary="Check payment status",
-    description="Check status of a pending payment"
-)
-async def get_payment_status(
+@router.get("/payments/{payment_id}", response_model=PaymentInfo)
+async def get_payment(
     payment_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
 ):
-    """Get status of a payment."""
-    # TODO: Query from database when models are ready
+    """
+    Get payment status.
+    """
+    result = await session.execute(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .where(Payment.user_id == current_user.id)
+    )
+    payment = result.scalar_one_or_none()
     
-    # For now, return mock pending status
-    return PaymentStatusResponse(
-        payment_id=payment_id,
-        status="pending",
-        amount="0.00",
-        currency="MNEE",
-        created_at=datetime.utcnow(),
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+    
+    return PaymentInfo(
+        id=payment.id,
+        amount=payment.amount,
+        status=payment.status.value,
+        payment_type=payment.payment_type.value,
+        created_at=payment.created_at,
+        transaction_hash=payment.transaction_hash,
     )
 
 
-@router.get(
-    "/history",
-    response_model=PaymentHistoryResponse,
-    summary="Get payment history",
-    description="List user's payment history"
-)
+@router.get("/history", response_model=List[PaymentInfo])
 async def get_payment_history(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
     limit: int = 20,
     offset: int = 0,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    """Get user's payment history."""
-    # TODO: Query from database when models are ready
-    
-    return PaymentHistoryResponse(
-        payments=[],
-        total=0,
-        limit=limit,
-        offset=offset,
+    """
+    Get user's payment history.
+    """
+    result = await session.execute(
+        select(Payment)
+        .where(Payment.user_id == current_user.id)
+        .order_by(Payment.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
+    payments = result.scalars().all()
+    
+    return [
+        PaymentInfo(
+            id=p.id,
+            amount=p.amount,
+            status=p.status.value,
+            payment_type=p.payment_type.value,
+            created_at=p.created_at,
+            transaction_hash=p.transaction_hash,
+        )
+        for p in payments
+    ]

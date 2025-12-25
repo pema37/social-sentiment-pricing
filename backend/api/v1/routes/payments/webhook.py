@@ -1,59 +1,65 @@
-"""
-Payment Webhook Routes
+# backend/api/v1/routes/payments/webhook.py
 
-Handles MNEE payment webhook notifications.
+"""
+MNEE Webhook Endpoints
+
+Handles payment confirmations from MNEE.
 """
 
 import hmac
 import hashlib
-import json
-import logging
-from typing import Optional
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Request, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 from pydantic import BaseModel
 
+from db.session import get_session
 from core.config import settings
+from models.payment import Payment, PaymentStatus
+from models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter()
+router = APIRouter(tags=["webhooks"])
 
 
 # =============================================================================
-# Schemas
+# SCHEMAS
 # =============================================================================
+
+class MneeWebhookPayload(BaseModel):
+    """MNEE webhook payload."""
+    transaction_id: str
+    from_address: str
+    to_address: str
+    amount: str
+    amount_raw: int
+    memo: str | None = None
+    block_height: int | None = None
+    confirmations: int = 0
+
 
 class WebhookResponse(BaseModel):
-    """Webhook acknowledgment response."""
-    status: str = "ok"
-    message: Optional[str] = None
+    """Webhook response."""
+    success: bool
+    message: str
 
 
 # =============================================================================
-# Webhook Verification
+# HELPERS
 # =============================================================================
 
-def verify_mnee_signature(payload: bytes, signature: str) -> bool:
+def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     """
     Verify MNEE webhook signature.
-    
-    Args:
-        payload: Raw request body
-        signature: X-Mnee-Signature header value
-        
-    Returns:
-        True if signature is valid
     """
-    webhook_secret = settings.MNEE_WEBHOOK_SECRET
-    
-    if not webhook_secret:
-        logger.warning("MNEE_WEBHOOK_SECRET not configured - skipping verification")
-        # In development, allow unverified webhooks
-        return settings.ENVIRONMENT == "development"
+    secret = settings.MNEE_WEBHOOK_SECRET
+    if not secret:
+        # No secret configured, skip verification in development
+        return True
     
     expected = hmac.new(
-        webhook_secret.encode(),
+        secret.encode(),
         payload,
         hashlib.sha256,
     ).hexdigest()
@@ -61,173 +67,137 @@ def verify_mnee_signature(payload: bytes, signature: str) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
-# =============================================================================
-# Background Tasks
-# =============================================================================
-
-async def process_payment_received(data: dict):
+async def process_payment_confirmation(
+    payment: Payment,
+    payload: MneeWebhookPayload,
+    session: AsyncSession,
+):
     """
-    Process payment.received webhook event.
-    
-    Called when MNEE detects incoming payment.
+    Process a confirmed payment and activate subscription.
     """
-    txid = data.get("txid")
-    memo = data.get("memo", "")
-    amount = data.get("amount")
+    # Update payment status
+    payment.status = PaymentStatus.CONFIRMED
+    payment.transaction_hash = payload.transaction_id
+    payment.confirmed_at = datetime.utcnow()
+    session.add(payment)
     
-    logger.info(f"Payment received: txid={txid}, memo={memo}, amount={amount}")
+    # If this is a subscription payment, create/update subscription
+    if payment.metadata and payment.metadata.get("tier"):
+        tier = SubscriptionTier(payment.metadata["tier"])
+        billing_cycle = payment.metadata.get("billing_cycle", "monthly")
+        
+        # Calculate period
+        now = datetime.utcnow()
+        if billing_cycle == "yearly":
+            period_end = now + timedelta(days=365)
+        else:
+            period_end = now + timedelta(days=30)
+        
+        # Check for existing subscription
+        result = await session.execute(
+            select(Subscription)
+            .where(Subscription.user_id == payment.user_id)
+            .where(Subscription.status == SubscriptionStatus.ACTIVE)
+        )
+        existing = result.scalar_one_or_none()
+        
+        if existing:
+            # Update existing subscription
+            existing.tier = tier
+            existing.current_period_start = now
+            existing.current_period_end = period_end
+            session.add(existing)
+        else:
+            # Create new subscription
+            subscription = Subscription(
+                user_id=payment.user_id,
+                tier=tier,
+                status=SubscriptionStatus.ACTIVE,
+                current_period_start=now,
+                current_period_end=period_end,
+            )
+            session.add(subscription)
     
-    # Parse memo to find payment
-    # Memo format: SSP-{user_id}-{tier}-{timestamp}
-    if not memo.startswith("SSP-"):
-        logger.warning(f"Unknown memo format: {memo}")
-        return
-    
-    parts = memo.split("-")
-    if len(parts) < 3:
-        logger.warning(f"Invalid memo format: {memo}")
-        return
-    
-    user_id = parts[1]
-    tier = parts[2]
-    
-    logger.info(f"Payment matched: user={user_id}, tier={tier}")
-    
-    # TODO: Update payment record in database
-    # payment.status = "processing"
-    # payment.txid = txid
-    # await db.commit()
-
-
-async def process_payment_confirmed(data: dict):
-    """
-    Process payment.confirmed webhook event.
-    
-    Called when payment is confirmed on blockchain.
-    Activates user subscription.
-    """
-    txid = data.get("txid")
-    memo = data.get("memo", "")
-    
-    logger.info(f"Payment confirmed: txid={txid}")
-    
-    if not memo.startswith("SSP-"):
-        logger.warning(f"Unknown memo format: {memo}")
-        return
-    
-    parts = memo.split("-")
-    if len(parts) < 3:
-        return
-    
-    user_id = parts[1]
-    tier = parts[2]
-    
-    logger.info(f"Activating subscription: user={user_id}, tier={tier}")
-    
-    # TODO: Activate subscription in database
-    # subscription.tier = tier
-    # subscription.status = "active"
-    # subscription.current_period_start = datetime.utcnow()
-    # subscription.current_period_end = datetime.utcnow() + timedelta(days=30)
-    # await db.commit()
-
-
-async def process_payment_failed(data: dict):
-    """
-    Process payment.failed webhook event.
-    
-    Called when payment fails.
-    """
-    txid = data.get("txid")
-    reason = data.get("reason", "Unknown")
-    
-    logger.warning(f"Payment failed: txid={txid}, reason={reason}")
-    
-    # TODO: Update payment record
-    # payment.status = "failed"
-    # payment.error_message = reason
-    # await db.commit()
-    
-    # TODO: Notify user of failed payment
+    await session.commit()
 
 
 # =============================================================================
-# Routes
+# ENDPOINTS
 # =============================================================================
 
-@router.post(
-    "/webhook/mnee",
-    response_model=WebhookResponse,
-    summary="MNEE payment webhook",
-    description="Receives payment notifications from MNEE"
-)
+@router.post("/webhook/mnee", response_model=WebhookResponse)
 async def mnee_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Handle MNEE payment webhooks.
-    
-    Events:
-    - payment.received: Payment detected
-    - payment.confirmed: Payment confirmed on blockchain
-    - payment.failed: Payment failed
     """
     # Get raw body for signature verification
     body = await request.body()
-    signature = request.headers.get("X-Mnee-Signature", "")
     
-    # Verify signature
-    if not verify_mnee_signature(body, signature):
-        logger.warning("Invalid MNEE webhook signature")
+    # Verify signature if configured
+    signature = request.headers.get("X-MNEE-Signature", "")
+    if settings.MNEE_WEBHOOK_SECRET and not verify_webhook_signature(body, signature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid signature",
+            detail="Invalid webhook signature",
         )
     
     # Parse payload
     try:
-        payload = json.loads(body)
-    except json.JSONDecodeError:
+        payload = MneeWebhookPayload.model_validate_json(body)
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON payload",
+            detail=f"Invalid payload: {str(e)}",
         )
     
-    event_type = payload.get("type")
-    data = payload.get("data", {})
+    # Extract payment ID from memo (format: SSP-{payment_id_prefix})
+    if not payload.memo or not payload.memo.startswith("SSP-"):
+        # Not our payment, ignore
+        return WebhookResponse(success=True, message="Ignored: not SSP payment")
     
-    logger.info(f"MNEE webhook received: {event_type}")
+    payment_id_prefix = payload.memo[4:]  # Remove "SSP-" prefix
     
-    # Route to appropriate handler
-    if event_type == "payment.received":
-        background_tasks.add_task(process_payment_received, data)
+    # Find matching payment
+    result = await session.execute(
+        select(Payment)
+        .where(Payment.id.startswith(payment_id_prefix))
+        .where(Payment.status == PaymentStatus.PENDING)
+    )
+    payment = result.scalar_one_or_none()
     
-    elif event_type == "payment.confirmed":
-        background_tasks.add_task(process_payment_confirmed, data)
+    if not payment:
+        return WebhookResponse(success=True, message="Payment not found or already processed")
     
-    elif event_type == "payment.failed":
-        background_tasks.add_task(process_payment_failed, data)
+    # Verify amount matches
+    if payload.amount_raw < payment.amount_raw:
+        payment.status = PaymentStatus.FAILED
+        payment.metadata = {**payment.metadata, "error": "Insufficient amount"}
+        session.add(payment)
+        await session.commit()
+        return WebhookResponse(success=False, message="Insufficient payment amount")
     
-    else:
-        logger.warning(f"Unknown webhook event type: {event_type}")
+    # Process payment in background
+    background_tasks.add_task(
+        process_payment_confirmation,
+        payment,
+        payload,
+        session,
+    )
     
-    return WebhookResponse(status="ok")
+    return WebhookResponse(success=True, message="Payment processing")
 
 
-@router.get(
-    "/webhook/mnee/test",
-    response_model=WebhookResponse,
-    summary="Test webhook endpoint",
-    description="Verify webhook endpoint is reachable (for MNEE setup)"
-)
+@router.get("/webhook/mnee/test")
 async def test_webhook():
     """
-    Test endpoint for MNEE webhook verification.
-    
-    MNEE may ping this to verify the webhook URL is valid.
+    Test endpoint to verify webhook is reachable.
     """
-    return WebhookResponse(
-        status="ok",
-        message="MNEE webhook endpoint is active",
-    )
+    return {
+        "status": "ok",
+        "message": "MNEE webhook endpoint is active",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
