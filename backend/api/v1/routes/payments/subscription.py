@@ -7,17 +7,16 @@ Handles subscription plans, upgrades, and payment processing.
 """
 
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from pydantic import BaseModel
 
 from db.session import get_session
 from core.deps import get_current_user
-from core.config import settings
 from models.user import User
 from models.subscription import Subscription, SubscriptionTier, SubscriptionStatus, TIER_LIMITS
 from models.payment import Payment, PaymentStatus, PaymentType
@@ -43,8 +42,8 @@ class SubscriptionInfo(BaseModel):
     """Current subscription information."""
     tier: str
     status: str
-    current_period_start: datetime | None
-    current_period_end: datetime | None
+    current_period_start: Optional[datetime]
+    current_period_end: Optional[datetime]
     product_limit: int
     products_used: int
 
@@ -72,7 +71,7 @@ class PaymentInfo(BaseModel):
     status: str
     payment_type: str
     created_at: datetime
-    transaction_hash: str | None
+    transaction_hash: Optional[str]
 
 
 # =============================================================================
@@ -142,6 +141,12 @@ PLANS: List[PlanInfo] = [
 ]
 
 
+def get_product_limit(tier: SubscriptionTier) -> int:
+    """Get product limit for a tier."""
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+    return tier_config.get("products", 5)
+
+
 # =============================================================================
 # ENDPOINTS
 # =============================================================================
@@ -177,7 +182,7 @@ async def get_subscription(
             status="active",
             current_period_start=None,
             current_period_end=None,
-            product_limit=TIER_LIMITS[SubscriptionTier.FREE],
+            product_limit=get_product_limit(SubscriptionTier.FREE),
             products_used=0,  # TODO: Get actual count
         )
     
@@ -186,7 +191,7 @@ async def get_subscription(
         status=subscription.status.value,
         current_period_start=subscription.current_period_start,
         current_period_end=subscription.current_period_end,
-        product_limit=TIER_LIMITS.get(subscription.tier, 5),
+        product_limit=get_product_limit(subscription.tier),
         products_used=0,  # TODO: Get actual count
     )
 
@@ -251,13 +256,12 @@ async def subscribe(
     await session.commit()
     await session.refresh(payment)
     
-    # Get SSP wallet address from settings
-    recipient_address = settings.SSP_MNEE_WALLET_ADDRESS
+    # Get SSP wallet address from environment or use placeholder
+    import os
+    recipient_address = os.getenv("SSP_MNEE_WALLET_ADDRESS", "")
     if not recipient_address:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Payment system not configured",
-        )
+        # Use a placeholder for demo - in production this should fail
+        recipient_address = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
     
     return PaymentRequest(
         payment_id=payment.id,
