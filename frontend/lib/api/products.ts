@@ -1,4 +1,5 @@
-// Products API
+// lib/api/products.ts
+
 import { api } from './client';
 import type {
   Product,
@@ -8,6 +9,34 @@ import type {
   PriceSuggestion,
   PriceHistoryEntry,
 } from '@/types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types for Import
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ImportProductRow {
+  name: string;
+  sku?: string;
+  base_price: number;
+  description?: string;
+  category?: string;
+  image_url?: string;
+  stock_quantity?: number;
+}
+
+export interface ImportProductsRequest {
+  products: ImportProductRow[];
+}
+
+export interface ImportProductsResponse {
+  created: number;
+  failed: number;
+  errors: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API Functions
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const productsApi = {
   getAll: (params?: { page?: number; page_size?: number }) =>
@@ -39,4 +68,8 @@ export const productsApi = {
       product_ids: productIds,
       enabled,
     }),
+
+  // CSV Import
+  import: (data: ImportProductsRequest) =>
+    api.post<ImportProductsResponse>('/api/v1/products/import', data),
 };

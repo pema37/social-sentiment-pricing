@@ -1,4 +1,5 @@
-// Product hooks
+// lib/hooks/use-products.ts
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
@@ -8,6 +9,7 @@ import type {
   UpdateProductRequest,
   PaginatedProducts,
 } from '@/types';
+import type { ImportProductRow, ImportProductsResponse } from '@/lib/api/products';
 
 // Re-export types for convenience
 export type { Product, CreateProductRequest, UpdateProductRequest, PaginatedProducts };
@@ -26,6 +28,10 @@ export const productKeys = {
   priceHistory: (id: string, params?: { days?: number }) =>
     [...productKeys.all, 'price-history', id, params] as const,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Queries
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Get paginated products
 export function useProducts(params?: { page?: number; page_size?: number }) {
@@ -65,6 +71,10 @@ export function usePriceHistory(id: string | null, params?: { days?: number; lim
     staleTime: 60 * 1000,
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mutations
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Create product
 export function useCreateProduct() {
@@ -175,6 +185,33 @@ export function useBulkUpdatePricing() {
     },
     onError: (error: Error) => {
       toast.error({ title: 'Failed to update products', message: error.message });
+    },
+  });
+}
+
+// Import products from CSV
+export function useImportProducts() {
+  const queryClient = useQueryClient();
+
+  return useMutation<ImportProductsResponse, Error, { products: ImportProductRow[] }>({
+    mutationFn: (data) => productsApi.import(data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+      
+      if (result.failed > 0) {
+        toast.warning({
+          title: 'Import completed with errors',
+          message: `${result.created} products imported, ${result.failed} failed`,
+        });
+      } else {
+        toast.success({
+          title: 'Import successful',
+          message: `${result.created} products have been imported`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Import failed', message: error.message });
     },
   });
 }

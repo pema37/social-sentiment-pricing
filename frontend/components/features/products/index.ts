@@ -12,3 +12,6 @@ export { ProductRow } from './ProductRow';
 export { ProductsTable } from './ProductsTable';
 export { PriceSuggestionModal } from './PriceSuggestionModal';
 export { DeleteProductModal } from './DeleteProductModal';
+
+// Import
+export { ImportCSVModal } from './ImportCSVModal';

@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -12,6 +12,7 @@ import {
   ProductsTable,
   PriceSuggestionModal,
   DeleteProductModal,
+  ImportCSVModal,
 } from '@/components/features/products';
 import { useProducts, useDeleteProduct, type Product } from '@/lib/hooks/use-products';
 
@@ -28,9 +29,10 @@ export default function ProductsPage() {
   // Modal states
   const [suggestionProduct, setSuggestionProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Data fetching
-  const { data, isLoading, error } = useProducts({ page, page_size: pageSize });
+  const { data, isLoading, error, refetch } = useProducts({ page, page_size: pageSize });
   const deleteProductMutation = useDeleteProduct();
 
   // Filter products by search (client-side)
@@ -50,6 +52,11 @@ export default function ProductsPage() {
     }
   };
 
+  const handleImportSuccess = () => {
+    setShowImportModal(false);
+    refetch();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -58,12 +65,18 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Products</h1>
           <p className="text-gray-500 mt-1">Manage your products and pricing</p>
         </div>
-        <Link href="/products/new">
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowImportModal(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import CSV
           </Button>
-        </Link>
+          <Link href="/products/new">
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search */}
@@ -115,6 +128,14 @@ export default function ProductsPage() {
           isOpen={true}
           onClose={() => setDeleteProduct(null)}
           onSuccess={handleDelete}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportCSVModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={handleImportSuccess}
         />
       )}
     </div>
