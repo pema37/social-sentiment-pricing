@@ -1,16 +1,22 @@
 // frontend/components/features/payments/EthWalletCard.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { Wallet, ExternalLink, Copy, Check, LogOut } from 'lucide-react';
+import { Wallet, ExternalLink, Copy, Check, LogOut, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useMNEE } from '@/lib/web3/useMNEE';
+import { api } from '@/lib/api/client';
 
 // MNEE ERC-20 Contract on Ethereum
 const MNEE_CONTRACT = '0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF';
+
+interface WalletResponse {
+  eth_wallet_address: string | null;
+  bsv_wallet_address: string | null;
+}
 
 export function EthWalletCard() {
   const { address, isConnected } = useAccount();
@@ -19,6 +25,41 @@ export function EthWalletCard() {
   const { balance, isLoadingBalance } = useMNEE();
   
   const [copied, setCopied] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedAddress, setSavedAddress] = useState<string | null>(null);
+
+  // Load saved wallet on mount
+  useEffect(() => {
+    const loadSavedWallet = async () => {
+      try {
+        const response = await api.get<WalletResponse>('/api/v1/users/me/wallet');
+        setSavedAddress(response.eth_wallet_address);
+      } catch (error) {
+        console.error('Failed to load wallet:', error);
+      }
+    };
+    loadSavedWallet();
+  }, []);
+
+  // Save wallet when connected
+  useEffect(() => {
+    const saveWallet = async () => {
+      if (isConnected && address && address !== savedAddress) {
+        setIsSaving(true);
+        try {
+          await api.put<WalletResponse>('/api/v1/users/me/wallet', {
+            eth_wallet_address: address,
+          });
+          setSavedAddress(address);
+        } catch (error) {
+          console.error('Failed to save wallet:', error);
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    };
+    saveWallet();
+  }, [isConnected, address, savedAddress]);
 
   const handleCopyAddress = () => {
     if (address) {
@@ -32,6 +73,10 @@ export function EthWalletCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
+  const handleDisconnect = () => {
+    disconnect();
+  };
+
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -41,8 +86,17 @@ export function EthWalletCard() {
         </h2>
         {isConnected && (
           <span className="flex items-center gap-1.5 text-sm text-green-600">
-            <span className="w-2 h-2 bg-green-500 rounded-full" />
-            Connected
+            {isSaving ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 bg-green-500 rounded-full" />
+                Connected
+              </>
+            )}
           </span>
         )}
       </div>
@@ -61,6 +115,11 @@ export function EthWalletCard() {
           <p className="text-xs text-gray-500 mt-3">
             Supports MetaMask, Rainbow, Coinbase Wallet, and more
           </p>
+          {savedAddress && (
+            <p className="text-xs text-gray-400 mt-2">
+              Previously connected: {truncateAddress(savedAddress)}
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -124,7 +183,7 @@ export function EthWalletCard() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => disconnect()}
+            onClick={handleDisconnect}
             className="w-full text-gray-500 hover:text-red-600"
           >
             <LogOut className="w-4 h-4 mr-2" />
