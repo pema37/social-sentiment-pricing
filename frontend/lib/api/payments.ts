@@ -12,12 +12,45 @@ import type {
   WalletUpdateRequest,
   BalanceInfo,
   PlansResponse,
+  SubscriptionPlan,
   Subscription,
   SubscribeRequest,
   PaymentRequest,
   Payment,
   PaymentHistoryResponse,
+  SubscriptionTier,
 } from '@/types/payment';
+
+// =============================================================================
+// API Response Types (what the backend actually returns)
+// =============================================================================
+
+interface ApiPlan {
+  tier: string;
+  name: string;
+  price_monthly: number;
+  price_yearly: number;
+  product_limit: number;
+  features: string[];
+}
+
+interface ApiSubscription {
+  tier: string;
+  status: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  product_limit: number;
+  products_used: number;
+}
+
+interface ApiPayment {
+  id: string;
+  amount: string;
+  status: string;
+  payment_type: string;
+  created_at: string;
+  transaction_hash: string | null;
+}
 
 // =============================================================================
 // Wallet Endpoints
@@ -57,23 +90,95 @@ export async function checkBalance(address: string): Promise<BalanceInfo> {
 
 /**
  * Get all available subscription plans
+ * Transforms API response to match frontend types
  */
 export async function getPlans(): Promise<PlansResponse> {
-  return api.get<PlansResponse>('/api/v1/payments/plans');
+  // API returns array directly, we need to transform it
+  const apiPlans = await api.get<ApiPlan[]>('/api/v1/payments/plans');
+  
+  // Transform to frontend format
+  const plans: SubscriptionPlan[] = apiPlans.map((plan) => ({
+    id: plan.tier as SubscriptionTier,
+    name: plan.name,
+    monthly_price: plan.price_monthly.toFixed(2),
+    products_limit: plan.product_limit,
+    competitors_limit: plan.tier === 'enterprise' ? -1 : plan.tier === 'professional' ? 10 : plan.tier === 'starter' ? 3 : 0,
+    api_calls_limit: plan.tier === 'enterprise' ? -1 : plan.tier === 'professional' ? 100000 : plan.tier === 'starter' ? 10000 : 1000,
+    features: plan.features,
+    popular: plan.tier === 'professional',
+  }));
+
+  return { plans };
 }
 
 /**
  * Get current user's subscription
+ * Transforms API response to match frontend types
  */
 export async function getSubscription(): Promise<Subscription> {
-  return api.get<Subscription>('/api/v1/payments/subscription');
+  const apiSub = await api.get<ApiSubscription>('/api/v1/payments/subscription');
+  
+  // Get the plan details for this tier
+  const tierPrices: Record<string, string> = {
+    free: '0.00',
+    starter: '29.00',
+    professional: '99.00',
+    enterprise: '299.00',
+  };
+
+  const tierNames: Record<string, string> = {
+    free: 'Free',
+    starter: 'Starter',
+    professional: 'Professional',
+    enterprise: 'Enterprise',
+  };
+
+  const tierFeatures: Record<string, string[]> = {
+    free: ['Up to 5 products', 'Basic sentiment analysis', 'Daily price updates', 'Email support'],
+    starter: ['Up to 50 products', 'Advanced sentiment analysis', 'Hourly price updates', 'Competitor tracking (3)', 'Priority email support'],
+    professional: ['Up to 500 products', 'Real-time sentiment', 'Real-time price updates', 'Competitor tracking (10)', 'API access', 'Dedicated support'],
+    enterprise: ['Unlimited products', 'Real-time sentiment', 'Real-time price updates', 'Unlimited competitors', 'Full API access', 'Custom integrations', '24/7 support', 'SLA guarantee'],
+  };
+
+  return {
+    tier: apiSub.tier as SubscriptionTier,
+    name: tierNames[apiSub.tier] || apiSub.tier,
+    status: apiSub.status as any,
+    monthly_price: tierPrices[apiSub.tier] || '0.00',
+    current_period_start: apiSub.current_period_start,
+    current_period_end: apiSub.current_period_end,
+    limits: {
+      products: apiSub.product_limit,
+      competitors: apiSub.tier === 'enterprise' ? -1 : apiSub.tier === 'professional' ? 10 : apiSub.tier === 'starter' ? 3 : 0,
+      api_calls: apiSub.tier === 'enterprise' ? -1 : apiSub.tier === 'professional' ? 100000 : apiSub.tier === 'starter' ? 10000 : 1000,
+    },
+    features: tierFeatures[apiSub.tier] || [],
+  };
 }
 
 /**
  * Subscribe to a plan (creates payment request)
  */
 export async function subscribe(data: SubscribeRequest): Promise<PaymentRequest> {
-  return api.post<PaymentRequest>('/api/v1/payments/subscribe', data);
+  const response = await api.post<any>('/api/v1/payments/subscribe', data);
+  
+  // Transform response to match frontend type
+  return {
+    payment_id: response.payment_id,
+    status: 'pending',
+    tier: data.tier,
+    amount: response.amount,
+    currency: 'MNEE',
+    payment_address: response.recipient_address,
+    memo: response.memo,
+    expires_at: response.expires_at,
+    instructions: {
+      step1: 'Open your BSV wallet (HandCash or RelayX)',
+      step2: `Send exactly ${response.amount} MNEE to the address above`,
+      step3: `Include memo: ${response.memo}`,
+      step4: 'Wait for confirmation (usually < 1 minute)',
+    },
+  };
 }
 
 // =============================================================================
@@ -84,7 +189,27 @@ export async function subscribe(data: SubscribeRequest): Promise<PaymentRequest>
  * Get payment status by ID
  */
 export async function getPayment(paymentId: string): Promise<Payment> {
-  return api.get<Payment>(`/api/v1/payments/payments/${paymentId}`);
+  const apiPayment = await api.get<ApiPayment>(`/api/v1/payments/payments/${paymentId}`);
+  
+  return {
+    id: apiPayment.id,
+    user_id: '',
+    subscription_id: null,
+    amount: apiPayment.amount,
+    amount_raw: parseFloat(apiPayment.amount) * 100000,
+    currency: 'MNEE',
+    status: apiPayment.status as any,
+    payment_type: apiPayment.payment_type as any,
+    txid: apiPayment.transaction_hash,
+    from_address: null,
+    to_address: null,
+    memo: null,
+    description: null,
+    created_at: apiPayment.created_at,
+    updated_at: apiPayment.created_at,
+    expires_at: null,
+    confirmed_at: null,
+  };
 }
 
 /**
@@ -94,7 +219,34 @@ export async function getPaymentHistory(
   limit: number = 20,
   offset: number = 0
 ): Promise<PaymentHistoryResponse> {
-  return api.get<PaymentHistoryResponse>('/api/v1/payments/history', { limit, offset });
+  const apiPayments = await api.get<ApiPayment[]>('/api/v1/payments/history', { limit, offset });
+  
+  const payments: Payment[] = apiPayments.map((p) => ({
+    id: p.id,
+    user_id: '',
+    subscription_id: null,
+    amount: p.amount,
+    amount_raw: parseFloat(p.amount) * 100000,
+    currency: 'MNEE',
+    status: p.status as any,
+    payment_type: p.payment_type as any,
+    txid: p.transaction_hash,
+    from_address: null,
+    to_address: null,
+    memo: null,
+    description: null,
+    created_at: p.created_at,
+    updated_at: p.created_at,
+    expires_at: null,
+    confirmed_at: null,
+  }));
+
+  return {
+    payments,
+    total: payments.length,
+    limit,
+    offset,
+  };
 }
 
 // =============================================================================
