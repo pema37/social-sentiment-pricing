@@ -6,12 +6,11 @@ Tracks MNEE payment transactions for subscriptions and other purchases.
 
 from datetime import datetime
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from enum import Enum
 
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text, text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Column, Text
 
 
 class PaymentStatus(str, Enum):
@@ -65,14 +64,8 @@ class Payment(PaymentBase, table=True):
     
     __tablename__ = "payments"
     
-    # Primary key - let PostgreSQL generate UUID
-    id: UUID = Field(
-        sa_column=Column(
-            PG_UUID(as_uuid=True),
-            primary_key=True,
-            server_default=text("gen_random_uuid()")
-        )
-    )
+    # Primary key - UUID type to match database column
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     
     # Foreign keys
     user_id: UUID = Field(foreign_key="users.id", index=True)
