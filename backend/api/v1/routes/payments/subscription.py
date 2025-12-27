@@ -171,7 +171,7 @@ async def get_subscription(
     result = await session.execute(
         select(Subscription)
         .where(Subscription.user_id == current_user.id)
-        .where(Subscription.status == SubscriptionStatus.ACTIVE)
+        .where(Subscription.status == "active")
     )
     subscription = result.scalar_one_or_none()
     
