@@ -6,6 +6,7 @@ Subscription Management Endpoints
 Handles subscription plans, upgrades, and payment processing.
 """
 
+import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import uuid4
@@ -18,7 +19,7 @@ from pydantic import BaseModel
 from db.session import get_session
 from core.deps import get_current_user
 from models.user import User
-from models.subscription import Subscription, SubscriptionTier, SubscriptionStatus, TIER_LIMITS
+from models.subscription import Subscription, SubscriptionTier, TIER_LIMITS_STR
 from models.payment import Payment, PaymentStatus, PaymentType
 
 router = APIRouter(tags=["subscriptions"])
@@ -141,9 +142,9 @@ PLANS: List[PlanInfo] = [
 ]
 
 
-def get_product_limit(tier: SubscriptionTier) -> int:
+def get_product_limit(tier: str) -> int:
     """Get product limit for a tier."""
-    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+    tier_config = TIER_LIMITS_STR.get(tier, TIER_LIMITS_STR["free"])
     return tier_config.get("products", 5)
 
 
@@ -167,7 +168,7 @@ async def get_subscription(
     """
     Get current user's subscription.
     """
-    # Find active subscription
+    # Find active subscription - using string comparison
     result = await session.execute(
         select(Subscription)
         .where(Subscription.user_id == current_user.id)
@@ -182,13 +183,14 @@ async def get_subscription(
             status="active",
             current_period_start=None,
             current_period_end=None,
-            product_limit=get_product_limit(SubscriptionTier.FREE),
+            product_limit=get_product_limit("free"),
             products_used=0,  # TODO: Get actual count
         )
     
+    # subscription.tier and subscription.status are now strings, not Enums
     return SubscriptionInfo(
-        tier=subscription.tier.value,
-        status=subscription.status.value,
+        tier=subscription.tier,
+        status=subscription.status,
         current_period_start=subscription.current_period_start,
         current_period_end=subscription.current_period_end,
         product_limit=get_product_limit(subscription.tier),
@@ -207,16 +209,15 @@ async def subscribe(
     Returns payment details for the user to complete via MNEE.
     """
     # Validate tier
-    try:
-        tier = SubscriptionTier(data.tier)
-    except ValueError:
+    valid_tiers = ["free", "starter", "professional", "enterprise"]
+    if data.tier not in valid_tiers:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid tier: {data.tier}",
+            detail=f"Invalid tier: {data.tier}. Must be one of: {valid_tiers}",
         )
     
     # Free tier doesn't need payment
-    if tier == SubscriptionTier.FREE:
+    if data.tier == "free":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Free tier doesn't require payment",
@@ -257,7 +258,6 @@ async def subscribe(
     await session.refresh(payment)
     
     # Get SSP wallet address from environment or use placeholder
-    import os
     recipient_address = os.getenv("SSP_MNEE_WALLET_ADDRESS", "")
     if not recipient_address:
         # Use a placeholder for demo - in production this should fail
@@ -298,8 +298,8 @@ async def get_payment(
     return PaymentInfo(
         id=payment.id,
         amount=payment.amount,
-        status=payment.status.value,
-        payment_type=payment.payment_type.value,
+        status=payment.status.value if hasattr(payment.status, 'value') else payment.status,
+        payment_type=payment.payment_type.value if hasattr(payment.payment_type, 'value') else payment.payment_type,
         created_at=payment.created_at,
         transaction_hash=payment.transaction_hash,
     )
@@ -328,8 +328,8 @@ async def get_payment_history(
         PaymentInfo(
             id=p.id,
             amount=p.amount,
-            status=p.status.value,
-            payment_type=p.payment_type.value,
+            status=p.status.value if hasattr(p.status, 'value') else p.status,
+            payment_type=p.payment_type.value if hasattr(p.payment_type, 'value') else p.payment_type,
             created_at=p.created_at,
             transaction_hash=p.transaction_hash,
         )

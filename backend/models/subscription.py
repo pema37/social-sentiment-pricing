@@ -1,14 +1,11 @@
 """
 Subscription Model
-
 Tracks user subscription tiers, billing periods, and limits.
 """
-
 from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 from enum import Enum
-
 from sqlmodel import SQLModel, Field
 
 
@@ -36,9 +33,9 @@ class SubscriptionStatus(str, Enum):
 class SubscriptionBase(SQLModel):
     """Base subscription fields."""
     
-    # Plan info
-    tier: SubscriptionTier = Field(default=SubscriptionTier.FREE)
-    status: SubscriptionStatus = Field(default=SubscriptionStatus.ACTIVE)
+    # Plan info - use str instead of Enum to avoid PostgreSQL enum issues
+    tier: str = Field(default="free", max_length=20)
+    status: str = Field(default="active", max_length=20)
     
     # Pricing
     monthly_price: str = Field(default="0.00", max_length=20)
@@ -74,13 +71,13 @@ class Subscription(SubscriptionBase, table=True):
 
 class SubscriptionCreate(SQLModel):
     """Schema for creating a subscription."""
-    tier: SubscriptionTier = SubscriptionTier.FREE
+    tier: str = "free"
 
 
 class SubscriptionUpdate(SQLModel):
     """Schema for updating a subscription."""
-    tier: Optional[SubscriptionTier] = None
-    status: Optional[SubscriptionStatus] = None
+    tier: Optional[str] = None
+    status: Optional[str] = None
     cancel_at_period_end: Optional[bool] = None
 
 
@@ -127,12 +124,23 @@ TIER_LIMITS = {
 }
 
 
-def get_tier_limits(tier: SubscriptionTier) -> dict:
+# String-based tier limits for when we use str instead of Enum
+TIER_LIMITS_STR = {
+    "free": TIER_LIMITS[SubscriptionTier.FREE],
+    "starter": TIER_LIMITS[SubscriptionTier.STARTER],
+    "professional": TIER_LIMITS[SubscriptionTier.PROFESSIONAL],
+    "enterprise": TIER_LIMITS[SubscriptionTier.ENTERPRISE],
+}
+
+
+def get_tier_limits(tier) -> dict:
     """Get limits for a subscription tier."""
-    return TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+    if isinstance(tier, SubscriptionTier):
+        return TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+    return TIER_LIMITS_STR.get(tier, TIER_LIMITS_STR["free"])
 
 
-def get_tier_price(tier: SubscriptionTier) -> str:
+def get_tier_price(tier) -> str:
     """Get monthly price for a tier."""
     limits = get_tier_limits(tier)
     return limits["price"]
