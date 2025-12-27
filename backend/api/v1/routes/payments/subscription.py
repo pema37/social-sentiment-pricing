@@ -289,9 +289,19 @@ async def get_payment(
     """
     Get payment status.
     """
+    from uuid import UUID as PyUUID
+    
+    try:
+        payment_uuid = PyUUID(payment_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid payment ID format",
+        )
+    
     result = await session.execute(
         select(Payment)
-        .where(Payment.id == payment_id)
+        .where(Payment.id == payment_uuid)
         .where(Payment.user_id == current_user.id)
     )
     payment = result.scalar_one_or_none()
@@ -303,7 +313,7 @@ async def get_payment(
         )
     
     return PaymentInfo(
-        id=payment.id,
+        id=str(payment.id),
         amount=payment.amount,
         status=payment.status,
         payment_type=payment.payment_type,
@@ -333,7 +343,7 @@ async def get_payment_history(
     
     return [
         PaymentInfo(
-            id=p.id,
+            id=str(p.id),
             amount=p.amount,
             status=p.status,
             payment_type=p.payment_type,
@@ -342,3 +352,131 @@ async def get_payment_history(
         )
         for p in payments
     ]
+
+
+# =============================================================================
+# PAYMENT CONFIRMATION
+# =============================================================================
+
+class ConfirmPaymentRequest(BaseModel):
+    """Request to confirm a payment."""
+    transaction_hash: str
+    network: str = "bsv"  # "bsv" or "ethereum"
+
+
+class ConfirmPaymentResponse(BaseModel):
+    """Response after confirming payment."""
+    success: bool
+    message: str
+    subscription_tier: Optional[str] = None
+    subscription_status: Optional[str] = None
+
+
+@router.post("/payments/{payment_id}/confirm", response_model=ConfirmPaymentResponse)
+async def confirm_payment(
+    payment_id: str,
+    data: ConfirmPaymentRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Confirm a payment with transaction hash.
+    This activates the subscription after payment is verified.
+    """
+    from uuid import UUID as PyUUID
+    
+    # Find the payment
+    try:
+        payment_uuid = PyUUID(payment_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid payment ID format",
+        )
+    
+    result = await session.execute(
+        select(Payment)
+        .where(Payment.id == payment_uuid)
+        .where(Payment.user_id == current_user.id)
+    )
+    payment = result.scalar_one_or_none()
+    
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+    
+    if payment.status == "confirmed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment already confirmed",
+        )
+    
+    if payment.status not in ["pending", "processing"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot confirm payment with status: {payment.status}",
+        )
+    
+    # Get metadata to find the tier
+    metadata = payment.get_metadata() if hasattr(payment, 'get_metadata') else None
+    if not metadata and payment.metadata_json:
+        import json as json_lib
+        try:
+            metadata = json_lib.loads(payment.metadata_json)
+        except:
+            metadata = {}
+    
+    tier = metadata.get("tier", "starter") if metadata else "starter"
+    billing_cycle = metadata.get("billing_cycle", "monthly") if metadata else "monthly"
+    
+    # Update payment status
+    payment.status = "confirmed"
+    payment.txid = data.transaction_hash
+    payment.confirmed_at = datetime.utcnow()
+    payment.updated_at = datetime.utcnow()
+    
+    # Calculate subscription period
+    if billing_cycle == "yearly":
+        period_end = datetime.utcnow() + timedelta(days=365)
+    else:
+        period_end = datetime.utcnow() + timedelta(days=30)
+    
+    # Find or create subscription
+    sub_result = await session.execute(
+        select(Subscription)
+        .where(Subscription.user_id == current_user.id)
+    )
+    subscription = sub_result.scalar_one_or_none()
+    
+    if subscription:
+        # Update existing subscription
+        subscription.tier = tier
+        subscription.status = "active"
+        subscription.current_period_start = datetime.utcnow()
+        subscription.current_period_end = period_end
+        subscription.updated_at = datetime.utcnow()
+    else:
+        # Create new subscription
+        subscription = Subscription(
+            user_id=current_user.id,
+            tier=tier,
+            status="active",
+            current_period_start=datetime.utcnow(),
+            current_period_end=period_end,
+        )
+        session.add(subscription)
+    
+    # Link payment to subscription
+    payment.subscription_id = subscription.id
+    
+    await session.commit()
+    await session.refresh(subscription)
+    
+    return ConfirmPaymentResponse(
+        success=True,
+        message=f"Payment confirmed! Your {tier.title()} subscription is now active.",
+        subscription_tier=subscription.tier,
+        subscription_status=subscription.status,
+    )
