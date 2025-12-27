@@ -241,9 +241,8 @@ async def subscribe(
     # MNEE uses 5 decimal places (1 MNEE = $1)
     amount_raw = int(amount * 100000)
     
-    # Create pending payment record
+    # Create pending payment record (id auto-generated as UUID)
     payment = Payment(
-        id=str(uuid4()),
         user_id=current_user.id,
         amount=str(amount),
         amount_raw=amount_raw,
@@ -264,12 +263,15 @@ async def subscribe(
         # Use a placeholder for demo - in production this should fail
         recipient_address = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
     
+    # Convert UUID to string for response
+    payment_id_str = str(payment.id)
+    
     return PaymentRequest(
-        payment_id=payment.id,
+        payment_id=payment_id_str,
         amount=f"{amount:.2f}",
         amount_raw=amount_raw,
         recipient_address=recipient_address,
-        memo=f"SSP-{payment.id[:8]}",
+        memo=f"SSP-{payment_id_str[:8]}",
         expires_at=datetime.utcnow() + timedelta(hours=1),
     )
 

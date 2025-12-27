@@ -6,11 +6,12 @@ Tracks MNEE payment transactions for subscriptions and other purchases.
 
 from datetime import datetime
 from typing import Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 from enum import Enum
 
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 
 class PaymentStatus(str, Enum):
@@ -64,8 +65,14 @@ class Payment(PaymentBase, table=True):
     
     __tablename__ = "payments"
     
-    # Primary key - use str for id to match how it's used in routes
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
+    # Primary key - let PostgreSQL generate UUID
+    id: UUID = Field(
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            primary_key=True,
+            server_default=text("gen_random_uuid()")
+        )
+    )
     
     # Foreign keys
     user_id: UUID = Field(foreign_key="users.id", index=True)
@@ -82,6 +89,7 @@ class Payment(PaymentBase, table=True):
     confirmed_at: Optional[datetime] = Field(default=None)
     
     # Metadata (JSON string for flexibility)
+    # NOTE: Cannot use 'metadata' as property name - conflicts with SQLAlchemy
     metadata_json: Optional[str] = Field(default=None, sa_column=Column(Text))
     
     # Alias for backward compatibility
@@ -130,7 +138,7 @@ class PaymentUpdate(SQLModel):
 
 class PaymentResponse(PaymentBase):
     """Schema for payment API response."""
-    id: str
+    id: UUID
     user_id: UUID
     subscription_id: Optional[UUID] = None
     created_at: datetime
@@ -140,4 +148,4 @@ class PaymentResponse(PaymentBase):
     
     class Config:
         from_attributes = True
-        
+
