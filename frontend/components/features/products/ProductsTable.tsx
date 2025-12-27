@@ -1,8 +1,9 @@
 // components/features/products/ProductsTable.tsx
 'use client';
 
-import { Package, AlertTriangle } from 'lucide-react';
+import { Package, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { ProductRow } from './ProductRow';
 import type { Product } from '@/lib/hooks/use-products';
 
@@ -17,6 +18,7 @@ interface ProductsTableProps {
   emptyMessage?: string;
   onPriceSuggestion: (product: Product) => void;
   onDelete: (product: Product) => void;
+  onRetry?: () => void;  // ADDED: Optional retry callback
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,12 +33,30 @@ function LoadingState() {
   );
 }
 
-function ErrorState() {
+// FIXED: Error state now accepts onRetry callback
+interface ErrorStateProps {
+  onRetry?: () => void;
+  errorMessage?: string;
+}
+
+function ErrorState({ onRetry, errorMessage }: ErrorStateProps) {
   return (
     <div className="text-center py-20">
       <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-      <p className="text-gray-600">Failed to load products</p>
-      <p className="text-sm text-gray-500 mt-1">Please try again later</p>
+      <p className="text-gray-600 font-medium">Failed to load products</p>
+      <p className="text-sm text-gray-500 mt-1">
+        {errorMessage || 'Something went wrong. Please try again.'}
+      </p>
+      {onRetry && (
+        <Button
+          variant="secondary"
+          onClick={onRetry}
+          className="mt-4"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Try Again
+        </Button>
+      )}
     </div>
   );
 }
@@ -93,6 +113,7 @@ export function ProductsTable({
   emptyMessage = 'Add your first product to get started',
   onPriceSuggestion,
   onDelete,
+  onRetry,  // ADDED
 }: ProductsTableProps) {
   // Loading state
   if (isLoading) {
@@ -103,11 +124,14 @@ export function ProductsTable({
     );
   }
 
-  // Error state
+  // Error state - FIXED: Now shows retry button
   if (error) {
     return (
       <Card className="overflow-visible">
-        <ErrorState />
+        <ErrorState 
+          onRetry={onRetry} 
+          errorMessage={error.message}
+        />
       </Card>
     );
   }

@@ -51,17 +51,46 @@ interface ProductInfoCellProps {
   product: Product;
 }
 
+// FIXED: ProductImage component with error handling
+function ProductImage({ src, alt }: { src: string; alt: string }) {
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  if (hasError) {
+    return (
+      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+        <Package className="w-6 h-6 text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-12 h-12">
+      {isLoading && (
+        <div className="absolute inset-0 bg-gray-100 rounded-lg animate-pulse" />
+      )}
+      <Image
+        src={src}
+        alt={alt}
+        width={48}
+        height={48}
+        className={`w-12 h-12 rounded-lg object-cover transition-opacity ${
+          isLoading ? 'opacity-0' : 'opacity-100'
+        }`}
+        onError={() => setHasError(true)}
+        onLoad={() => setIsLoading(false)}
+        // ADDED: unoptimized for external images that might have CORS issues
+        unoptimized
+      />
+    </div>
+  );
+}
+
 function ProductInfoCell({ product }: ProductInfoCellProps) {
   return (
     <div className="flex items-center gap-4">
       {product.image_url ? (
-        <Image
-          src={product.image_url}
-          alt={product.name}
-          width={48}
-          height={48}
-          className="w-12 h-12 rounded-lg object-cover"
-        />
+        <ProductImage src={product.image_url} alt={product.name} />
       ) : (
         <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
           <Package className="w-6 h-6 text-gray-400" />

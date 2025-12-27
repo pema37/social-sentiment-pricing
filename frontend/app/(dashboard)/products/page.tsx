@@ -43,17 +43,20 @@ export default function ProductsPage() {
         product.sku?.toLowerCase().includes(search.toLowerCase())
     ) ?? [];
 
-  // Handlers
-  const handleDelete = () => {
+  // FIXED: Proper delete handler that doesn't cause double-toast
+  const handleDeleteConfirm = () => {
     if (deleteProduct) {
-      deleteProductMutation.mutate(deleteProduct.id, {
-        onSuccess: () => setDeleteProduct(null),
-      });
+      setDeleteProduct(null); // Close modal immediately
     }
   };
 
   const handleImportSuccess = () => {
     setShowImportModal(false);
+    refetch();
+  };
+
+  // ADDED: Retry handler for error state
+  const handleRetry = () => {
     refetch();
   };
 
@@ -92,7 +95,7 @@ export default function ProductsPage() {
         </div>
       </Card>
 
-      {/* Table */}
+      {/* Table - FIXED: Added onRetry prop */}
       <ProductsTable
         products={filteredProducts}
         isLoading={isLoading}
@@ -100,6 +103,7 @@ export default function ProductsPage() {
         emptyMessage={search ? 'Try a different search term' : 'Add your first product to get started'}
         onPriceSuggestion={setSuggestionProduct}
         onDelete={setDeleteProduct}
+        onRetry={handleRetry}
       />
 
       {/* Pagination */}
@@ -127,7 +131,7 @@ export default function ProductsPage() {
           productName={deleteProduct.name}
           isOpen={true}
           onClose={() => setDeleteProduct(null)}
-          onSuccess={handleDelete}
+          onSuccess={handleDeleteConfirm}
         />
       )}
 

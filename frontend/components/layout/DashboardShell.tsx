@@ -3,7 +3,8 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { Menu, X } from 'lucide-react';
@@ -14,6 +15,26 @@ interface DashboardShellProps {
 
 export function DashboardShell({ children }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+
+  // FIXED: Close sidebar when route changes (user clicked a nav link)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  // FIXED: Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -22,6 +43,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <div 
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
 
@@ -39,6 +61,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <button
           onClick={() => setSidebarOpen(false)}
           className="fixed top-4 right-4 z-50 p-2 bg-white rounded-lg shadow-lg lg:hidden"
+          aria-label="Close menu"
         >
           <X className="w-6 h-6" />
         </button>
@@ -51,6 +74,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-lg hover:bg-gray-100"
+            aria-label="Open menu"
+            aria-expanded={sidebarOpen}
           >
             <Menu className="w-6 h-6" />
           </button>

@@ -1,6 +1,5 @@
 # backend/workers/celery_app.py
 
-
 from celery import Celery
 from celery.schedules import crontab
 
@@ -11,7 +10,10 @@ celery_app = Celery(
     "ssp_workers",
     broker="redis://localhost:6379/0",
     backend="redis://localhost:6379/0",
-    include=["backend.workers.tasks.ingestion_tasks"]
+    include=[
+        "backend.workers.tasks.ingestion_tasks",
+        "backend.workers.tasks.pricing_tasks",  # NEW: Include pricing tasks
+    ]
 )
 
 # Celery configuration
@@ -37,5 +39,22 @@ celery_app.conf.beat_schedule = {
         "task": "backend.workers.tasks.ingestion_tasks.process_pending_mentions",
         "schedule": crontab(minute="*/5"),  # Every 5 minutes
     },
+    
+    # === NEW: Pricing tasks ===
+    
+    # Generate recommendations every hour
+    "generate-recommendations": {
+        "task": "backend.workers.tasks.pricing_tasks.generate_all_recommendations",
+        "schedule": crontab(minute=0),  # Every hour at :00
+    },
+    # Check competitor prices every 15 minutes
+    "check-competitor-prices": {
+        "task": "backend.workers.tasks.pricing_tasks.check_competitor_prices",
+        "schedule": crontab(minute="*/15"),  # Every 15 minutes
+    },
+    # Expire old recommendations every 6 hours
+    "expire-recommendations": {
+        "task": "backend.workers.tasks.pricing_tasks.expire_recommendations",
+        "schedule": crontab(minute=0, hour="*/6"),  # Every 6 hours
+    },
 }
-

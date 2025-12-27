@@ -4,16 +4,20 @@
  * IntegrationCard
  * 
  * Displays a single integration with status, sync info, and actions.
+ * 
+ * FIXED: Now properly polls for sync status and displays updated values
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Integration, PLATFORM_CONFIGS } from '@/types/integration';
 import { 
   useDisconnectIntegration, 
   useTriggerSync, 
-  useSyncStatus 
+  useSyncStatus,
+  integrationKeys,
 } from '@/lib/hooks/use-integrations';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -23,21 +27,42 @@ interface IntegrationCardProps {
 
 export function IntegrationCard({ integration }: IntegrationCardProps) {
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  // FIXED: Track if we just triggered a sync to enable polling
+  const [justTriggeredSync, setJustTriggeredSync] = useState(false);
   
+  const queryClient = useQueryClient();
   const config = PLATFORM_CONFIGS[integration.platform];
   const disconnect = useDisconnectIntegration();
   const triggerSync = useTriggerSync();
   
-  // Poll sync status when syncing
+  // FIXED: Poll sync status when syncing OR when we just triggered a sync
+  const shouldPoll = integration.sync_status === 'syncing' || justTriggeredSync;
+  
   const { data: syncStatus } = useSyncStatus(
     integration.id,
-    { polling: integration.sync_status === 'syncing' }
+    { polling: shouldPoll }
   );
 
+  // FIXED: Use polled status if available, otherwise fall back to prop
   const currentSyncStatus = syncStatus?.sync_status || integration.sync_status;
   const isSyncing = currentSyncStatus === 'syncing';
+  
+  // FIXED: Use polled values for display, with fallback to integration prop
+  const displayProductsSynced = syncStatus?.products_synced ?? integration.products_synced;
+  const displayLastSyncAt = syncStatus?.last_sync_at ?? integration.last_sync_at;
+
+  // FIXED: Stop polling when sync completes and refresh the integration data
+  useEffect(() => {
+    if (justTriggeredSync && syncStatus?.sync_status === 'idle') {
+      setJustTriggeredSync(false);
+      // Refresh the parent integration list to get updated data
+      queryClient.invalidateQueries({ queryKey: integrationKeys.list() });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integration.id) });
+    }
+  }, [syncStatus?.sync_status, justTriggeredSync, queryClient, integration.id]);
 
   const handleSync = () => {
+    setJustTriggeredSync(true);
     triggerSync.mutate({ integrationId: integration.id, syncType: 'full' });
   };
 
@@ -80,20 +105,31 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
         </span>
       </div>
 
-      {/* Stats */}
+      {/* Stats - FIXED: Now uses polled syncStatus values */}
       <div className="mt-4 grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
         <div>
           <p className="text-sm text-gray-500">Products Synced</p>
           <p className="text-lg font-semibold text-gray-900">
-            {integration.products_synced}
+            {isSyncing ? (
+              <span className="flex items-center gap-2">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+                <span className="text-sm text-gray-500">Syncing...</span>
+              </span>
+            ) : (
+              displayProductsSynced
+            )}
           </p>
         </div>
         <div>
           <p className="text-sm text-gray-500">Last Sync</p>
           <p className="text-sm font-medium text-gray-900">
-            {integration.last_sync_at
-              ? formatRelativeTime(integration.last_sync_at)
-              : 'Never'}
+            {isSyncing ? (
+              <span className="text-blue-600">In progress...</span>
+            ) : displayLastSyncAt ? (
+              formatRelativeTime(displayLastSyncAt)
+            ) : (
+              'Never'
+            )}
           </p>
         </div>
       </div>

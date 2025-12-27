@@ -39,6 +39,9 @@ export function useProducts(params?: { page?: number; page_size?: number }) {
     queryKey: productKeys.list(params),
     queryFn: () => productsApi.getAll(params),
     staleTime: 30 * 1000,
+    // ADDED: Retry configuration to handle transient failures
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
 }
 
@@ -110,17 +113,73 @@ export function useUpdateProduct() {
   });
 }
 
-// Delete product
+// Delete product - FIXED: Using optimistic update to prevent race condition
 export function useDeleteProduct() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: string) => productsApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productKeys.all });
-      toast.success({ title: 'Product deleted', message: 'Product has been removed' });
+    
+    // FIXED: Optimistically remove from cache BEFORE the API call completes
+    onMutate: async (deletedId: string) => {
+      // Cancel any outgoing refetches to prevent race conditions
+      await queryClient.cancelQueries({ queryKey: productKeys.all });
+      
+      // Snapshot current data for rollback
+      const previousData = queryClient.getQueriesData({ queryKey: productKeys.all });
+      
+      // Optimistically remove from all product list caches
+      queryClient.setQueriesData(
+        { queryKey: productKeys.all },
+        (old: PaginatedProducts | Product[] | undefined) => {
+          if (!old) return old;
+          
+          // Handle paginated response
+          if ('items' in old && Array.isArray(old.items)) {
+            return {
+              ...old,
+              items: old.items.filter((p: Product) => p.id !== deletedId),
+              total: Math.max(0, old.total - 1),
+            };
+          }
+          
+          // Handle array response
+          if (Array.isArray(old)) {
+            return old.filter((p: Product) => p.id !== deletedId);
+          }
+          
+          return old;
+        }
+      );
+      
+      // Also remove the detail query
+      queryClient.removeQueries({ queryKey: productKeys.detail(deletedId) });
+      
+      return { previousData };
     },
-    onError: (error: Error) => {
+    
+    onSuccess: () => {
+      // Show success toast - delete completed
+      toast.success({ title: 'Product deleted', message: 'Product has been removed' });
+      
+      // FIXED: Delay the background refetch to avoid immediate re-fetch issues
+      // This gives the backend time to fully process the deletion
+      setTimeout(() => {
+        queryClient.invalidateQueries({ 
+          queryKey: productKeys.all,
+          // Don't refetch if the query is not currently being used
+          refetchType: 'active',
+        });
+      }, 500);
+    },
+    
+    onError: (error: Error, deletedId: string, context) => {
+      // Rollback on error
+      if (context?.previousData) {
+        context.previousData.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
       toast.error({ title: 'Failed to delete product', message: error.message });
     },
   });

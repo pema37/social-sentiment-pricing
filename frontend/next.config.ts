@@ -5,17 +5,27 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   devIndicators: false,
   
-  // Fix for external images (competitor logos, product images)
+  // FIXED: Allow images from both HTTP and HTTPS sources
   images: {
     remotePatterns: [
-      // Allow images from any HTTPS source (for dynamic competitor sites)
+      // Allow HTTPS images from any source
       {
         protocol: 'https',
+        hostname: '**',
+      },
+      // ADDED: Allow HTTP images (for local WooCommerce stores without SSL)
+      {
+        protocol: 'http',
         hostname: '**',
       },
     ],
     // Fallback for older Next.js versions or specific domains
     // domains: ['bestbuy.com', 'amazon.com', 'walmart.com', 'target.com'],
+    
+    // ADDED: Disable strict domain checking for external images
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
   async headers() {
@@ -25,7 +35,8 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org; frame-ancestors 'none';",
+            // FIXED: Added http: to img-src for WooCommerce compatibility
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org; frame-ancestors 'none';",
           },
           {
             key: 'X-Frame-Options',
