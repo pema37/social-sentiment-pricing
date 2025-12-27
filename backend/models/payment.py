@@ -90,8 +90,7 @@ class Payment(PaymentBase, table=True):
         """Alias for txid for backward compatibility."""
         return self.txid
     
-    @property
-    def metadata(self) -> Optional[dict]:
+    def get_metadata(self) -> Optional[dict]:
         """Parse metadata JSON."""
         if self.metadata_json:
             import json
@@ -101,8 +100,7 @@ class Payment(PaymentBase, table=True):
                 return None
         return None
     
-    @metadata.setter
-    def metadata(self, value: Optional[dict]):
+    def set_metadata(self, value: Optional[dict]):
         """Set metadata as JSON string."""
         if value:
             import json
@@ -142,5 +140,4 @@ class PaymentResponse(PaymentBase):
     
     class Config:
         from_attributes = True
-
         
