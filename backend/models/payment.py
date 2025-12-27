@@ -9,7 +9,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 from enum import Enum
 
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, Text
 
 
@@ -42,9 +42,9 @@ class PaymentBase(SQLModel):
     amount_raw: int = Field(default=0)  # Raw amount (5 decimals)
     currency: str = Field(default="MNEE", max_length=10)
     
-    # Status
-    status: PaymentStatus = Field(default=PaymentStatus.PENDING)
-    payment_type: PaymentType = Field(default=PaymentType.SUBSCRIPTION)
+    # Status - use str instead of Enum to avoid PostgreSQL enum issues
+    status: str = Field(default="pending", max_length=20)
+    payment_type: str = Field(default="subscription", max_length=20)
     
     # Transaction details
     txid: Optional[str] = Field(default=None, max_length=100, index=True)
@@ -64,8 +64,8 @@ class Payment(PaymentBase, table=True):
     
     __tablename__ = "payments"
     
-    # Primary key
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    # Primary key - use str for id to match how it's used in routes
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
     
     # Foreign keys
     user_id: UUID = Field(foreign_key="users.id", index=True)
@@ -83,6 +83,32 @@ class Payment(PaymentBase, table=True):
     
     # Metadata (JSON string for flexibility)
     metadata_json: Optional[str] = Field(default=None, sa_column=Column(Text))
+    
+    # Alias for backward compatibility
+    @property
+    def transaction_hash(self) -> Optional[str]:
+        """Alias for txid for backward compatibility."""
+        return self.txid
+    
+    @property
+    def metadata(self) -> Optional[dict]:
+        """Parse metadata JSON."""
+        if self.metadata_json:
+            import json
+            try:
+                return json.loads(self.metadata_json)
+            except:
+                return None
+        return None
+    
+    @metadata.setter
+    def metadata(self, value: Optional[dict]):
+        """Set metadata as JSON string."""
+        if value:
+            import json
+            self.metadata_json = json.dumps(value)
+        else:
+            self.metadata_json = None
 
 
 # =============================================================================
@@ -92,21 +118,21 @@ class Payment(PaymentBase, table=True):
 class PaymentCreate(SQLModel):
     """Schema for creating a payment."""
     amount: str
-    payment_type: PaymentType = PaymentType.SUBSCRIPTION
+    payment_type: str = "subscription"
     description: Optional[str] = None
     memo: Optional[str] = None
 
 
 class PaymentUpdate(SQLModel):
     """Schema for updating a payment."""
-    status: Optional[PaymentStatus] = None
+    status: Optional[str] = None
     txid: Optional[str] = None
     error_message: Optional[str] = None
 
 
 class PaymentResponse(PaymentBase):
     """Schema for payment API response."""
-    id: UUID
+    id: str
     user_id: UUID
     subscription_id: Optional[UUID] = None
     created_at: datetime
@@ -117,3 +143,4 @@ class PaymentResponse(PaymentBase):
     class Config:
         from_attributes = True
 
+        

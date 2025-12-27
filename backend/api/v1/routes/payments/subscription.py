@@ -6,6 +6,7 @@ Subscription Management Endpoints
 Handles subscription plans, upgrades, and payment processing.
 """
 
+import json
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -20,7 +21,7 @@ from db.session import get_session
 from core.deps import get_current_user
 from models.user import User
 from models.subscription import Subscription, SubscriptionTier, TIER_LIMITS_STR
-from models.payment import Payment, PaymentStatus, PaymentType
+from models.payment import Payment
 
 router = APIRouter(tags=["subscriptions"])
 
@@ -246,12 +247,12 @@ async def subscribe(
         user_id=current_user.id,
         amount=str(amount),
         amount_raw=amount_raw,
-        payment_type=PaymentType.SUBSCRIPTION,
-        status=PaymentStatus.PENDING,
-        metadata={
+        payment_type="subscription",
+        status="pending",
+        metadata_json=json.dumps({
             "tier": data.tier,
             "billing_cycle": data.billing_cycle,
-        },
+        }),
     )
     session.add(payment)
     await session.commit()
@@ -298,8 +299,8 @@ async def get_payment(
     return PaymentInfo(
         id=payment.id,
         amount=payment.amount,
-        status=payment.status.value if hasattr(payment.status, 'value') else payment.status,
-        payment_type=payment.payment_type.value if hasattr(payment.payment_type, 'value') else payment.payment_type,
+        status=payment.status,
+        payment_type=payment.payment_type,
         created_at=payment.created_at,
         transaction_hash=payment.transaction_hash,
     )
@@ -328,8 +329,8 @@ async def get_payment_history(
         PaymentInfo(
             id=p.id,
             amount=p.amount,
-            status=p.status.value if hasattr(p.status, 'value') else p.status,
-            payment_type=p.payment_type.value if hasattr(p.payment_type, 'value') else p.payment_type,
+            status=p.status,
+            payment_type=p.payment_type,
             created_at=p.created_at,
             transaction_hash=p.transaction_hash,
         )
