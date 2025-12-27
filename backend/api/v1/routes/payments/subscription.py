@@ -95,7 +95,7 @@ async def subscribe(
 # PAYMENT ENDPOINTS
 # =============================================================================
 
-@router.get("/payments/{payment_id}", response_model=PaymentInfo)
+@router.get("/{payment_id}", response_model=PaymentInfo)
 async def get_payment(
     payment_id: str,
     current_user: User = Depends(get_current_user),
@@ -121,7 +121,7 @@ async def get_payment(
     return payment
 
 
-@router.post("/payments/{payment_id}/confirm", response_model=ConfirmPaymentResponse)
+@router.post("/{payment_id}/confirm", response_model=ConfirmPaymentResponse)
 async def confirm_payment(
     payment_id: str,
     data: ConfirmPaymentRequest,
