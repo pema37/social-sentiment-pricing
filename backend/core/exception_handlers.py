@@ -104,7 +104,7 @@ async def database_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=503,
         content={
-            "error": "Database temporarily unavailable",
+            "error": str(exc),
             "correlation_id": correlation_id,
         },
     )
