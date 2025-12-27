@@ -4,7 +4,10 @@ Payment Services Package
 # Existing exports
 from services.payment.mnee_service import MneeService, get_mnee_service, close_mnee_service
 from services.payment.mnee_client import MneeClient
-from services.payment.exceptions import PaymentError, MneeValidationError, MneeApiError, MneeConfigError
+from services.payment.exceptions import MneeBaseError, MneeValidationError, MneeApiError, MneeConfigError, MneeNetworkError
+
+# Alias for compatibility
+PaymentError = MneeBaseError
 
 # New exports
 from services.payment.base import PaymentVerificationService, PaymentServiceFactory
@@ -20,10 +23,12 @@ __all__ = [
     # Existing
     "MneeService",
     "MneeClient",
-    "PaymentError",
+    "MneeBaseError",
     "MneeValidationError",
     "MneeApiError",
     "MneeConfigError",
+    "MneeNetworkError",
+    "PaymentError",
     "get_mnee_service",
     "close_mnee_service",
     # New
