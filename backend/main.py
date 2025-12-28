@@ -45,6 +45,8 @@ from api.v1.routes import (
     health_router,
     payments_router,
 )
+from api.v1.routes.support import router as support_router 
+
 
 
 @asynccontextmanager
@@ -119,6 +121,7 @@ app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(webhooks_router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
+app.include_router(support_router, prefix="/api/v1")  
 
 
 @app.get("/")
