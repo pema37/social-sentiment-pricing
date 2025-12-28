@@ -22,6 +22,7 @@ import {
   BarChart3,
   Wallet, 
   Sparkles, 
+  TrendingUp,
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
@@ -65,6 +66,11 @@ const navItems = [
     label: 'AI Support',
     href: '/support',
     icon: Sparkles
+  },
+  {                          
+    label: 'Market Trends',
+    href: '/trends',
+    icon: TrendingUp
   },
 ];
 
@@ -163,9 +169,9 @@ export function Sidebar() {
       {/* Logo / Brand */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-700">
         <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">SSP</span>
+          <span className="text-white font-bold text-sm">AP</span>
         </div>
-        <span className="font-semibold text-lg">Social Sentiment</span>
+        <span className="font-semibold text-lg">Actual Price</span>
       </div>
 
       {/* Navigation Links */}
@@ -186,3 +192,4 @@ export function Sidebar() {
     </aside>
   );
 }
+

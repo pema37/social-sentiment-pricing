@@ -8,8 +8,8 @@ import './globals.css';
 
 // SEO metadata
 export const metadata: Metadata = {
-  title: 'Social Sentiment Pricing',
-  description: 'AI-powered pricing based on social sentiment analysis',
+  title: 'ActualPrice',
+  description: 'AI-powered pricing optimization for e-commerce',
 };
 
 export default function RootLayout({
