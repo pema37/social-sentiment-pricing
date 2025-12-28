@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { SectionHeader, Card, Button } from '@/components/ui';
+import { AIBadge } from '@/components/ui/ai-badge';
 import {
   KpiCard,
   PeriodSelector,
@@ -92,7 +93,7 @@ export default function SentimentPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <SectionHeader
-          title="Sentiment Analysis"
+          title={<span className="flex items-center gap-2">Sentiment Analysis <AIBadge /></span>}
           description={
             selectedProduct
               ? `Showing data for ${selectedProduct.name}`

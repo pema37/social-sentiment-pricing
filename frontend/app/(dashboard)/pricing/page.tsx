@@ -9,6 +9,7 @@ import { DollarSign, Settings, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { AIBadge } from '@/components/ui/ai-badge';
 import {
   RecommendationsList,
   RecommendationsListSkeleton,
@@ -169,6 +170,7 @@ export default function PricingPage() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <DollarSign className="h-6 w-6 text-green-600" />
             Price Recommendations
+            <AIBadge />
           </h1>
           <p className="text-gray-600 mt-1">
             Review and approve AI-generated pricing suggestions
