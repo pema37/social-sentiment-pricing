@@ -21,6 +21,7 @@ import {
   Bell,
   BarChart3,
   Wallet, 
+  Sparkles, 
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
@@ -59,6 +60,11 @@ const navItems = [
     label: 'Alerts', 
     href: '/alerts', 
     icon: Bell 
+  },
+  {                          
+    label: 'AI Support',
+    href: '/support',
+    icon: Sparkles
   },
 ];
 
