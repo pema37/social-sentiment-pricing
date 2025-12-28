@@ -65,7 +65,7 @@ export function CompetitorCard({ competitor, onEdit }: CompetitorCardProps) {
               className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
             >
               <Globe className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[200px]">{competitor.website}</span>
+              <span className="truncate max-w-50">{competitor.website}</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
