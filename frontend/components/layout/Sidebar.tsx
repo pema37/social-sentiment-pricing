@@ -1,4 +1,4 @@
-// Sidebar Component
+// frontend/components/layout/Sidebar.tsx
 // Main navigation for the dashboard - always visible on the left
 
 'use client';
@@ -23,108 +23,48 @@ import {
   Wallet, 
   Sparkles, 
   TrendingUp,
+  LogOut,
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
 const navItems = [
-  { 
-    label: 'Dashboard', 
-    href: '/dashboard', 
-    icon: LayoutDashboard 
-  },
-  { 
-    label: 'Analytics', 
-    href: '/analytics', 
-    icon: BarChart3 
-  },
-  { 
-    label: 'Products', 
-    href: '/products', 
-    icon: Package 
-  },
-  { 
-    label: 'Integrations',  
-    href: '/integrations', 
-    icon: Plug 
-  },
-  { 
-    label: 'Competitors', 
-    href: '/competitors', 
-    icon: Users 
-  },
-  { 
-    label: 'Sentiment', 
-    href: '/sentiment', 
-    icon: MessageSquare 
-  },
-  { 
-    label: 'Alerts', 
-    href: '/alerts', 
-    icon: Bell 
-  },
-  {                          
-    label: 'AI Support',
-    href: '/support',
-    icon: Sparkles
-  },
-  {                          
-    label: 'Market Trends',
-    href: '/trends',
-    icon: TrendingUp
-  },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { label: 'Products', href: '/products', icon: Package },
+  { label: 'Integrations', href: '/integrations', icon: Plug },
+  { label: 'Competitors', href: '/competitors', icon: Users },
+  { label: 'Sentiment', href: '/sentiment', icon: MessageSquare },
+  { label: 'Alerts', href: '/alerts', icon: Bell },
+  { label: 'AI Support', href: '/support', icon: Sparkles },
+  { label: 'Market Trends', href: '/trends', icon: TrendingUp },
 ];
 
 // Pricing section items
 const pricingItems = [
-  { 
-    label: 'Recommendations', 
-    href: '/pricing', 
-    icon: DollarSign 
-  },
-  { 
-    label: 'Rules', 
-    href: '/pricing/rules', 
-    icon: Sliders 
-  },
-  { 
-    label: 'Pricing Settings', 
-    href: '/pricing/settings', 
-    icon: ListChecks 
-  },
-  { 
-    label: 'Payments (MNEE)', 
-    href: '/payments', 
-    icon: Wallet 
-  },
+  { label: 'Recommendations', href: '/pricing', icon: DollarSign },
+  { label: 'Rules', href: '/pricing/rules', icon: Sliders },
+  { label: 'Pricing Settings', href: '/pricing/settings', icon: ListChecks },
+  { label: 'Payments (MNEE)', href: '/payments', icon: Wallet },
 ];
 
 // System items
 const systemItems = [
-  { 
-    label: 'Settings', 
-    href: '/settings', 
-    icon: Settings 
-  },
-  { 
-    label: 'API Keys', 
-    href: '/api-keys', 
-    icon: Key 
-  },
-  { 
-    label: 'Admin', 
-    href: '/admin', 
-    icon: Shield 
-  },
+  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'API Keys', href: '/api-keys', icon: Key },
+  { label: 'Admin', href: '/admin', icon: Shield },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  onLogout?: () => void;
+}
+
+export function Sidebar({ onLogout }: SidebarProps) {
   // Get current path to highlight active nav item
   const pathname = usePathname();
 
   // Check if nav item is active
   const isActive = (href: string) => {
     if (href === '/pricing') {
-      // Exact match for /pricing recommendations, not rules or settings
       return pathname === '/pricing' || pathname?.startsWith('/pricing/recommendations');
     }
     return pathname === href || pathname?.startsWith(`${href}/`);
@@ -139,10 +79,8 @@ export function Sidebar() {
         <Link
           href={item.href}
           className={cn(
-            // Base styles
             'flex items-center gap-3 px-3 py-2.5 rounded-lg',
             'text-sm font-medium transition-colors duration-200',
-            // Active vs inactive styles
             active
               ? 'bg-gray-700 text-white'
               : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -165,17 +103,17 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-60 bg-gray-800 text-gray-50">
+    <aside className="fixed left-0 top-0 h-screen w-60 bg-gray-800 text-gray-50 flex flex-col">
       {/* Logo / Brand */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-700">
         <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
           <span className="text-white font-bold text-sm">AP</span>
         </div>
-        <span className="font-semibold text-lg">Actual Price</span>
+        <span className="font-semibold text-lg">ActualPrice</span>
       </div>
 
-      {/* Navigation Links */}
-      <nav className="mt-6 px-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 100px)' }}>
+      {/* Navigation Links - scrollable */}
+      <nav className="flex-1 mt-6 px-3 overflow-y-auto">
         <ul className="space-y-1">
           {/* Main Navigation */}
           {navItems.map(renderNavItem)}
@@ -189,7 +127,26 @@ export function Sidebar() {
           {systemItems.map(renderNavItem)}
         </ul>
       </nav>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          LOGOUT BUTTON - At bottom of sidebar
+          Important for mobile/iPad users (David's feedback)
+      ═══════════════════════════════════════════════════════════════════ */}
+      {onLogout && (
+        <div className="p-4 border-t border-gray-700">
+          <button
+            onClick={onLogout}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg w-full',
+              'text-sm font-medium transition-colors duration-200',
+              'text-gray-300 hover:bg-red-600 hover:text-white'
+            )}
+          >
+            <LogOut className="w-5 h-5" />
+            Sign Out
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
-
