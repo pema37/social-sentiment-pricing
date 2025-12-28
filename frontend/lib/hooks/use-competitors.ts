@@ -129,8 +129,15 @@ export function useCreateCompetitorProduct() {
   return useMutation({
     mutationFn: (data: CreateCompetitorProductRequest) => competitorsApi.createProduct(data),
     onSuccess: (_, variables) => {
+      // ═══════════════════════════════════════════════════════════════════
+      // INVALIDATE ALL RELEVANT QUERIES (David's bug fix)
+      // Must invalidate competitors list too, not just products
+      // ═══════════════════════════════════════════════════════════════════
+      queryClient.invalidateQueries({ queryKey: competitorKeys.all });
       queryClient.invalidateQueries({ queryKey: competitorKeys.products() });
       queryClient.invalidateQueries({ queryKey: competitorKeys.comparison(variables.product_id) });
+      // Also invalidate the products list (competitor count may have changed)
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       toast.success({ title: 'Product linked', message: 'Competitor product has been linked' });
     },
     onError: (error: Error) => {
@@ -138,6 +145,7 @@ export function useCreateCompetitorProduct() {
     },
   });
 }
+
 
 // Update competitor product
 export function useUpdateCompetitorProduct() {
