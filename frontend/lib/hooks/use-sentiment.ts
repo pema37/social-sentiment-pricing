@@ -34,23 +34,29 @@ export function useMentions(
   });
 }
 
-// Analyze text sentiment
+// Analyze text sentiment and save to database
 export function useAnalyzeSentiment() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: AnalyzeRequest) => sentimentApi.analyze(data),
-    onSuccess: (data) => {
+    onSuccess: (_data, variables) => {
+      // Use variables.product_id since response may not include it
+      const productId = variables.product_id;
+      
       // Invalidate mentions for this product
       queryClient.invalidateQueries({
-        queryKey: sentimentKeys.mentions(data.product_id),
+        queryKey: sentimentKeys.mentions(productId),
       });
+      
       // Invalidate sentiment by product
       queryClient.invalidateQueries({
-        queryKey: sentimentKeys.byProduct(data.product_id),
+        queryKey: sentimentKeys.byProduct(productId),
       });
+      
       // Invalidate analytics to update charts
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
   });
 }
+

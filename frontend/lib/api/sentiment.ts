@@ -8,9 +8,20 @@ import type {
 } from '@/types';
 
 export const sentimentApi = {
-  // Analyze text for sentiment
-  analyze: (data: AnalyzeRequest) =>
+  // Analyze text for sentiment (without saving)
+  analyzeOnly: (data: { text: string; source?: string }) =>
     api.post<AnalyzeResponse>('/api/v1/sentiment/analyze', data),
+
+  // Analyze text AND save to database for a product
+  analyze: (data: AnalyzeRequest) => {
+    const { product_id, content, source, author, url } = data;
+    return api.post<AnalyzeResponse>(`/api/v1/sentiment/analyze/${product_id}`, {
+      text: content,  // Backend expects 'text', frontend sends 'content'
+      source: source || 'manual',
+      author,
+      url,
+    });
+  },
 
   // Get sentiment results for a product
   getByProduct: (productId: string) =>
@@ -34,3 +45,4 @@ export const sentimentApi = {
   }) =>
     api.post<SocialMention>('/api/v1/sentiment/mentions', data),
 };
+
