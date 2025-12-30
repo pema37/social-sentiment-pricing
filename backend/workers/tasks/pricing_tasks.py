@@ -15,14 +15,14 @@ from uuid import UUID
 
 from sqlmodel import select
 
-from backend.workers.celery_app import celery_app
-from backend.db.session import async_session_maker
-from backend.models.product import Product
-from backend.models.pricing_rule import PricingRule
-from backend.models.price_recommendation import PriceRecommendation, RecommendationStatus
-from backend.models.competitor_product import CompetitorProduct
-from backend.services.pricing.recommendation_service import RecommendationService
-from backend.core.logging import get_logger
+from workers.celery_app import celery_app
+from db.session import get_session_context
+from models.product import Product
+from models.pricing_rule import PricingRule
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.competitor_product import CompetitorProduct
+from services.pricing.recommendation_service import RecommendationService
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,7 @@ def run_async(coro):
         loop.close()
 
 
-@celery_app.task(name="backend.workers.tasks.pricing_tasks.generate_all_recommendations")
+@celery_app.task(name="workers.tasks.pricing_tasks.generate_all_recommendations")
 def generate_all_recommendations():
     """
     Generate pricing recommendations for all products with active rules.
@@ -51,7 +51,7 @@ def generate_all_recommendations():
 async def _generate_all_recommendations():
     """Async implementation of recommendation generation."""
     
-    async with async_session_maker() as db:
+    async with get_session_context() as db:
         # Get all products that have active pricing rules
         stmt = (
             select(Product)
@@ -103,7 +103,7 @@ async def _generate_all_recommendations():
         }
 
 
-@celery_app.task(name="backend.workers.tasks.pricing_tasks.generate_recommendation_for_product")
+@celery_app.task(name="workers.tasks.pricing_tasks.generate_recommendation_for_product")
 def generate_recommendation_for_product(product_id: str, user_id: str):
     """
     Generate recommendation for a specific product.
@@ -119,7 +119,7 @@ def generate_recommendation_for_product(product_id: str, user_id: str):
 async def _generate_recommendation_for_product(product_id: str, user_id: str):
     """Async implementation for single product recommendation."""
     
-    async with async_session_maker() as db:
+    async with get_session_context() as db:
         # Get the product
         stmt = select(Product).where(Product.id == UUID(product_id))
         result = await db.execute(stmt)
@@ -160,7 +160,7 @@ async def _generate_recommendation_for_product(product_id: str, user_id: str):
             return {"error": str(e)}
 
 
-@celery_app.task(name="backend.workers.tasks.pricing_tasks.check_competitor_prices")
+@celery_app.task(name="workers.tasks.pricing_tasks.check_competitor_prices")
 def check_competitor_prices():
     """
     Check for competitor price changes and trigger recommendations.
@@ -176,7 +176,7 @@ def check_competitor_prices():
 async def _check_competitor_prices():
     """Async implementation of competitor price checking."""
     
-    async with async_session_maker() as db:
+    async with get_session_context() as db:
         # Get all active competitor products
         stmt = select(CompetitorProduct).where(CompetitorProduct.is_active == True)
         result = await db.execute(stmt)
@@ -221,7 +221,7 @@ async def _check_competitor_prices():
         }
 
 
-@celery_app.task(name="backend.workers.tasks.pricing_tasks.expire_recommendations")
+@celery_app.task(name="workers.tasks.pricing_tasks.expire_recommendations")
 def expire_recommendations():
     """Expire old pending recommendations."""
     return run_async(_expire_recommendations())
@@ -230,7 +230,7 @@ def expire_recommendations():
 async def _expire_recommendations():
     """Async implementation of recommendation expiration."""
     
-    async with async_session_maker() as db:
+    async with get_session_context() as db:
         service = RecommendationService(db)
         expired_count = await service.expire_old_recommendations()
         
@@ -238,3 +238,4 @@ async def _expire_recommendations():
         
         return {"expired_count": expired_count}
     
+

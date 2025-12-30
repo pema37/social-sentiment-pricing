@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Settings, RefreshCw } from 'lucide-react';
+import { DollarSign, Settings, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -21,6 +21,7 @@ import {
   usePricingRecommendationStats,
 } from '@/lib/hooks/use-pricing';
 import { useProducts } from '@/lib/hooks/use-products';
+import { api } from '@/lib/api/client';
 import type { RecommendationStatus } from '@/types';
 
 // ============================================
@@ -53,6 +54,7 @@ export default function PricingPage() {
   const router = useRouter();
   const [filterStatus, setFilterStatus] = useState<RecommendationStatus | 'all'>('pending');
   const [actionLoadingId, setActionLoadingId] = useState<string | undefined>();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Fetch recommendations
   const {
@@ -65,7 +67,7 @@ export default function PricingPage() {
   });
 
   // Fetch stats
-  const { data: stats } = usePricingRecommendationStats();
+  const { data: stats, refetch: refetchStats } = usePricingRecommendationStats();
 
   // Fetch products for names
   const { data: productsData, isLoading: isLoadingProducts } = useProducts({
@@ -86,6 +88,50 @@ export default function PricingPage() {
       productSkus[product.id] = product.sku;
     });
   }
+
+  // Handle generate recommendations
+  const handleGenerateRecommendations = useCallback(async () => {
+    setIsGenerating(true);
+    try {
+      const result = await api.post<{
+        message: string;
+        products_checked: number;
+        recommendations_created: number;
+        results: Array<{
+          product_id: string;
+          product_name: string;
+          success: boolean;
+          recommendation_id?: string;
+          message?: string;
+          error?: string;
+        }>;
+      }>('/api/v1/pricing/recommendations/generate-all', {});
+
+      if (result.recommendations_created > 0) {
+        toast.success(
+          `Generated ${result.recommendations_created} recommendation${result.recommendations_created > 1 ? 's' : ''} from ${result.products_checked} products`
+        );
+      } else {
+        toast.info(
+          `Checked ${result.products_checked} products. No new recommendations needed.`,
+          {
+            description: 'Products may already be optimally priced or no rules matched.',
+          }
+        );
+      }
+
+      // Refresh data
+      refetchRecommendations();
+      refetchStats();
+    } catch (error) {
+      console.error('Generate error:', error);
+      toast.error('Failed to generate recommendations', {
+        description: error instanceof Error ? error.message : 'Please try again',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [refetchRecommendations, refetchStats]);
 
   // Handle approve
   const handleApprove = useCallback(
@@ -189,6 +235,16 @@ export default function PricingPage() {
           </Button>
 
           <Button
+            variant="primary"
+            size="sm"
+            onClick={handleGenerateRecommendations}
+            disabled={isGenerating}
+          >
+            <Sparkles className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-pulse' : ''}`} />
+            {isGenerating ? 'Generating...' : 'Generate Recommendations'}
+          </Button>
+
+          <Button
             variant="secondary"
             size="sm"
             onClick={() => router.push('/pricing/rules')}
@@ -220,6 +276,30 @@ export default function PricingPage() {
         />
       </div>
 
+      {/* Info banner when no recommendations */}
+      {!isLoading && (!recommendationsData?.items || recommendationsData.items.length === 0) && (
+        <Card padding="md" className="mb-6 bg-blue-50 border-blue-200">
+          <h3 className="text-blue-800 font-medium mb-2">No Recommendations Yet</h3>
+          <p className="text-blue-700 text-sm mb-3">
+            To generate recommendations, make sure you have:
+          </p>
+          <ul className="text-blue-700 text-sm list-disc list-inside mb-4 space-y-1">
+            <li>At least one <strong>active pricing rule</strong> configured</li>
+            <li>Competitor products linked with current prices</li>
+            <li>Price differences that match your rule conditions</li>
+          </ul>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleGenerateRecommendations}
+            disabled={isGenerating}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {isGenerating ? 'Generating...' : 'Generate Recommendations Now'}
+          </Button>
+        </Card>
+      )}
+
       {/* Recommendations List */}
       {isLoading ? (
         <RecommendationsListSkeleton count={3} />
@@ -240,3 +320,4 @@ export default function PricingPage() {
     </div>
   );
 }
+
