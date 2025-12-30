@@ -31,5 +31,5 @@ export const authApi = {
     api.put<User>('/api/v1/users/me', data),
 
   changePassword: (data: ChangePasswordRequest) =>
-    api.post<{ message: string }>('/api/v1/auth/change-password', data),
+    api.post<{ message: string }>('/api/v1/users/me/change-password', data),
 };
