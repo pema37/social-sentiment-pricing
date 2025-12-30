@@ -52,12 +52,17 @@ async def _generate_all_recommendations():
     """Async implementation of recommendation generation."""
     
     async with get_session_context() as db:
-        # Get all products that have active pricing rules
-        stmt = (
-            select(Product)
-            .join(PricingRule, PricingRule.product_id == Product.id)
+        # Get product IDs that have active pricing rules (avoid DISTINCT on JSON columns)
+        subquery = (
+            select(PricingRule.product_id)
             .where(PricingRule.is_active == True)
             .distinct()
+            .subquery()
+        )
+        
+        stmt = (
+            select(Product)
+            .where(Product.id.in_(select(subquery.c.product_id)))
         )
         
         result = await db.execute(stmt)
@@ -101,7 +106,7 @@ async def _generate_all_recommendations():
             "recommendations_expired": expired_count,
             "errors": errors
         }
-
+    
 
 @celery_app.task(name="workers.tasks.pricing_tasks.generate_recommendation_for_product")
 def generate_recommendation_for_product(product_id: str, user_id: str):
