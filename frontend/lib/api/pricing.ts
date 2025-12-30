@@ -38,7 +38,7 @@ async function createRule(data: CreatePricingRuleRequest): Promise<PricingRule> 
 }
 
 async function updateRule(id: string, data: UpdatePricingRuleRequest): Promise<PricingRule> {
-  return api.put<PricingRule>(`/api/v1/pricing/rules/${id}`, data);
+  return api.patch<PricingRule>(`/api/v1/pricing/rules/${id}`, data);  // Changed from put to patch
 }
 
 async function deleteRule(id: string): Promise<void> {
@@ -135,3 +135,4 @@ export const pricingApi = {
   getSettings,
   updateSettings,
 };
+
