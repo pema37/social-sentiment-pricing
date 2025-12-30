@@ -222,3 +222,4 @@ async def delete_rule(
     await db.delete(rule)
     await db.commit()
     return None
+
