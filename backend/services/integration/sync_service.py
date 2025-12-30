@@ -329,9 +329,40 @@ class SyncService:
         integration: Integration,
         external_product: ExternalProduct,
     ) -> Tuple[int, int]:
-        """Create new product and link."""
+        """Create new product and link, or link to existing product with same SKU."""
         sku = external_product.sku or f"{integration.platform.value.upper()}-{external_product.id}"
         
+        # Check if product with this SKU already exists for this user
+        existing_stmt = select(Product).where(
+            Product.user_id == integration.user_id,
+            Product.sku == sku,
+        )
+        result = await self.db.execute(existing_stmt)
+        existing_product = result.scalars().first()
+        
+        if existing_product:
+            # Product exists - just create the link
+            logger.info(f"Product with SKU {sku} already exists, creating link only")
+            
+            variant_id = None
+            if external_product.variants:
+                variant_id = external_product.variants[0].id
+            
+            link = ProductIntegrationLink(
+                product_id=existing_product.id,
+                integration_id=integration.id,
+                external_product_id=external_product.id,
+                external_variant_id=variant_id,
+                external_price=external_product.price,
+                external_compare_at_price=external_product.compare_at_price,
+                last_price_pull_at=utc_now(),
+            )
+            self.db.add(link)
+            await self.db.commit()
+            
+            return 0, 1  # Count as update since product existed
+        
+        # Create new product
         product = Product(
             user_id=integration.user_id,
             name=external_product.title,
@@ -545,3 +576,4 @@ async def run_product_sync(
         integration_id=integration_id,
         sync_type=sync_type,
     )
+
