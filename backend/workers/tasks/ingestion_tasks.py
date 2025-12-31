@@ -32,8 +32,13 @@ def get_task_session_maker():
     Uses NullPool to prevent connection reuse across forked processes,
     which would cause "Future attached to a different loop" errors.
     """
+    # Convert postgresql:// to postgresql+asyncpg:// for async support
+    db_url = settings.DATABASE_URL
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
     engine = create_async_engine(
-        settings.DATABASE_URL,  # ✅ Uppercase to match Settings class
+        db_url,
         echo=False,
         poolclass=NullPool,  # Critical: No pooling in workers
     )
