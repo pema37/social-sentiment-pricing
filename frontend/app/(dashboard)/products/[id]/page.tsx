@@ -13,6 +13,7 @@ import {
   PriceSuggestionCard,
   PriceHistoryCard,
   DeleteProductModal,
+  KeywordsManager,
 } from '@/components/features/products';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,6 +31,9 @@ function PageSkeleton() {
       
       {/* Info card skeleton */}
       <div className="bg-white rounded-lg border p-6 h-48" />
+      
+      {/* Keywords skeleton */}
+      <div className="bg-white rounded-lg border p-6 h-32" />
       
       {/* Grid skeleton */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -171,6 +175,12 @@ export default function ProductDetailPage() {
       />
 
       <ProductInfoCard product={product} />
+
+      {/* Keywords Manager - for sentiment tracking */}
+      <KeywordsManager
+        productId={productId}
+        keywords={product.keywords || []}
+      />
 
       <div className="grid md:grid-cols-2 gap-6">
         <AutoPricingCard product={product} />
