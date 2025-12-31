@@ -3,6 +3,7 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import { CompetitorSelect } from '@/components/ui/CompetitorSelect';
 import { cn } from '@/lib/utils';
 import type { RuleType } from '@/types';
 import type { RuleFormSectionProps } from './types';
@@ -97,14 +98,15 @@ export function RuleFormConditions({ data, errors, onChange }: RuleFormSectionPr
           {data.rule_type === 'competitor_relative' && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Competitor ID</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Competitor</label>
+                <CompetitorSelect
                   value={data.competitor_id}
-                  onChange={(e) => onChange('competitor_id', e.target.value)}
-                  placeholder="Leave blank for any competitor"
-                  className={inputClass('competitor_id')}
+                  onChange={(value) => onChange('competitor_id', value)}
+                  allowAny={true}
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Select a specific competitor or leave as &quot;Any&quot; to react to all competitors
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Price Position</label>
