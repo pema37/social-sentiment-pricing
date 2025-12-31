@@ -2,7 +2,7 @@
 """
 AI Content Generation Service
 =============================
-Uses OpenAI GPT-4o-mini with Gemini fallback.
+Uses OpenAI GPT-4o-mini with Google Gemini fallback.
 """
 
 import json
@@ -14,13 +14,21 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Try to import Gemini
+# Try to import new Google GenAI
+GEMINI_AVAILABLE = False
+
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_AVAILABLE = True
+    GEMINI_NEW_API = True
 except ImportError:
-    GEMINI_AVAILABLE = False
-    logger.warning("google-generativeai not installed. Gemini fallback unavailable.")
+    GEMINI_NEW_API = False
+    try:
+        import google.generativeai as genai_legacy
+        GEMINI_AVAILABLE = True
+        logger.info("Using legacy google.generativeai package")
+    except ImportError:
+        logger.warning("Google GenAI not installed. Gemini fallback unavailable.")
 
 
 class AIGeneratorService:
@@ -29,26 +37,36 @@ class AIGeneratorService:
     def __init__(self):
         # OpenAI (primary)
         self.openai_client = None
-        if settings.OPENAI_API_KEY:
+        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
             self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         
         # Gemini (fallback)
-        self.gemini_model = None
+        self.gemini_client = None
+        self.gemini_model_name = "gemini-2.0-flash-exp"
+        self._using_new_api = False
+        
         if GEMINI_AVAILABLE and getattr(settings, 'GEMINI_API_KEY', None):
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.gemini_model = genai.GenerativeModel('gemini-pro')
+            if GEMINI_NEW_API:
+                from google import genai
+                self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                self._using_new_api = True
+            else:
+                import google.generativeai as genai_legacy
+                genai_legacy.configure(api_key=settings.GEMINI_API_KEY)
+                self.gemini_client = genai_legacy.GenerativeModel('gemini-pro')
+                self.gemini_model_name = "gemini-pro"
         
         self.model = "gpt-4o-mini"
     
     def is_available(self) -> bool:
         """Check if any AI service is configured."""
-        return self.openai_client is not None or self.gemini_model is not None
+        return self.openai_client is not None or self.gemini_client is not None
     
     def _get_provider(self) -> str:
         """Return which provider is being used."""
         if self.openai_client:
             return "openai"
-        elif self.gemini_model:
+        elif self.gemini_client:
             return "gemini"
         return "none"
     
@@ -68,8 +86,16 @@ class AIGeneratorService:
     def _call_gemini_sync(self, system_prompt: str, user_message: str) -> str:
         """Call Gemini API (sync)."""
         full_prompt = f"{system_prompt}\n\n---\n\n{user_message}"
-        response = self.gemini_model.generate_content(full_prompt)
-        return response.text.strip()
+        
+        if self._using_new_api:
+            response = self.gemini_client.models.generate_content(
+                model=self.gemini_model_name,
+                contents=full_prompt
+            )
+            return response.text.strip()
+        else:
+            response = self.gemini_client.generate_content(full_prompt)
+            return response.text.strip()
     
     async def _call_gemini(self, system_prompt: str, user_message: str) -> str:
         """Call Gemini API with async wrapper."""
@@ -91,7 +117,7 @@ class AIGeneratorService:
                 logger.warning(f"OpenAI failed, trying Gemini: {e}")
         
         # Fallback to Gemini
-        if self.gemini_model:
+        if self.gemini_client:
             try:
                 result = await self._call_gemini(system_prompt, user_message)
                 return result, "gemini"
