@@ -89,6 +89,7 @@ export async function apiClient<T>(
   
   const config: RequestInit = {
     method,
+    cache: 'no-store',  // FIXED: Prevent browser caching - ensures fresh data on every request
     headers: {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -143,3 +144,4 @@ export const api = {
   delete: <T>(endpoint: string) =>
     apiClient<T>(endpoint, { method: 'DELETE' }),
 };
+
