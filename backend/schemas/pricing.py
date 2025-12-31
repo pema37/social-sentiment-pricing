@@ -5,7 +5,7 @@ Pricing Schemas - DTOs for rules, recommendations, and settings.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -20,7 +20,14 @@ from models.recommendation_outcome import OutcomeLabel
 # ═══════════════════════════════════════════════════════════════
 
 class PricingRuleCreate(BaseModel):
-    product_id: UUID
+    # Legacy single product (now optional)
+    product_id: Optional[UUID] = None
+    
+    # NEW: Scoping options
+    applies_to_all_products: bool = False
+    applies_to_products: Optional[List[str]] = None  # List of UUID strings
+    applies_to_categories: Optional[List[str]] = None
+    
     name: str = Field(max_length=100)
     description: Optional[str] = Field(default=None, max_length=500)
     rule_type: RuleType
@@ -31,6 +38,7 @@ class PricingRuleCreate(BaseModel):
     
     competitor_id: Optional[UUID] = None
     competitor_margin_percent: Optional[Decimal] = None
+    price_position: Optional[str] = None
     
     time_days: Optional[str] = None
     time_start: Optional[str] = None
@@ -53,6 +61,11 @@ class PricingRuleCreate(BaseModel):
 
 
 class PricingRuleUpdate(BaseModel):
+    # NEW: Scoping options
+    applies_to_all_products: Optional[bool] = None
+    applies_to_products: Optional[List[str]] = None
+    applies_to_categories: Optional[List[str]] = None
+    
     name: Optional[str] = Field(default=None, max_length=100)
     description: Optional[str] = None
     is_active: Optional[bool] = None
@@ -63,6 +76,7 @@ class PricingRuleUpdate(BaseModel):
     
     competitor_id: Optional[UUID] = None
     competitor_margin_percent: Optional[Decimal] = None
+    price_position: Optional[str] = None
     
     time_days: Optional[str] = None
     time_start: Optional[str] = None
@@ -87,7 +101,13 @@ class PricingRuleUpdate(BaseModel):
 class PricingRuleResponse(BaseModel):
     id: UUID
     user_id: UUID
-    product_id: UUID
+    product_id: Optional[UUID]  # Now optional
+    
+    # NEW: Scoping fields
+    applies_to_all_products: bool = False
+    applies_to_products: Optional[List[str]] = None
+    applies_to_categories: Optional[List[str]] = None
+    
     name: str
     description: Optional[str]
     rule_type: RuleType
@@ -99,6 +119,7 @@ class PricingRuleResponse(BaseModel):
     
     competitor_id: Optional[UUID]
     competitor_margin_percent: Optional[Decimal]
+    price_position: Optional[str]
     
     time_days: Optional[str]
     time_start: Optional[str]
@@ -385,4 +406,5 @@ class AccuracyStatsResponse(BaseModel):
     by_rule_type: dict
     top_performing_rules: list[dict]
     worst_performing_rules: list[dict]
+
     

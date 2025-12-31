@@ -4,17 +4,23 @@ Pricing Rule Model - Configurable rules that trigger price recommendations.
 
 Rule Types: sentiment_threshold, competitor_relative, time_based, volume_surge, viral_detection
 Actions: increase_percent, decrease_percent, set_absolute, match_competitor, undercut_competitor
+
+Scoping: Rules can apply to:
+- A single product (product_id)
+- All products (applies_to_all_products = True)
+- Specific products (applies_to_products = [uuid1, uuid2, ...])
+- Products by category (applies_to_categories = ["Electronics", ...])
 """
 
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
 from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
 
 class RuleType(str, Enum):
@@ -45,8 +51,22 @@ class PricingRule(SQLModel, table=True):
     user_id: UUID = Field(
         sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True)
     )
-    product_id: UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True)
+    
+    # Legacy single product targeting (nullable for backward compatibility)
+    product_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(PG_UUID(as_uuid=True), nullable=True, index=True)
+    )
+    
+    # NEW: Scoping - which products this rule applies to
+    applies_to_all_products: bool = Field(default=False)
+    applies_to_products: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True)
+    )
+    applies_to_categories: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True)
     )
     
     # Rule definition
@@ -66,6 +86,7 @@ class PricingRule(SQLModel, table=True):
         sa_column=Column(PG_UUID(as_uuid=True), nullable=True)
     )
     competitor_margin_percent: Optional[Decimal] = Field(default=None, decimal_places=2)
+    price_position: Optional[str] = Field(default=None, max_length=20)
     
     # Time-based conditions
     time_days: Optional[str] = Field(default=None, max_length=50)
@@ -103,3 +124,35 @@ class PricingRule(SQLModel, table=True):
 
     class Config:
         use_enum_values = True
+    
+    def applies_to_product(self, product_id: UUID, product_category: Optional[str] = None) -> bool:
+        """
+        Check if this rule applies to a given product.
+        
+        A rule applies if ANY of these conditions are true:
+        1. applies_to_all_products is True
+        2. product_id matches the rule's product_id (legacy)
+        3. product_id is in applies_to_products list
+        4. product_category is in applies_to_categories list
+        """
+        # Check all products flag
+        if self.applies_to_all_products:
+            return True
+        
+        # Check legacy single product
+        if self.product_id and self.product_id == product_id:
+            return True
+        
+        # Check products list
+        if self.applies_to_products:
+            if str(product_id) in self.applies_to_products:
+                return True
+        
+        # Check categories list
+        if self.applies_to_categories and product_category:
+            if product_category in self.applies_to_categories:
+                return True
+        
+        return False
+    
+    

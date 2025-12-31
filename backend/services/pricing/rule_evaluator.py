@@ -1,6 +1,12 @@
 # backend/services/pricing/rule_evaluator.py
 """
 Rule Evaluator - Evaluates pricing rules against market signals.
+
+Updated to support rule scoping:
+- applies_to_all_products: Rule applies to all user's products
+- applies_to_products: Rule applies to specific product IDs
+- applies_to_categories: Rule applies to products in specific categories
+- product_id: Legacy single-product targeting (still supported)
 """
 
 from dataclasses import dataclass, field
@@ -9,6 +15,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -52,17 +59,65 @@ class RuleEvaluator:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def get_active_rules(self, product_id: UUID, user_id: UUID) -> list[PricingRule]:
-        """Get all active rules for a product, ordered by priority."""
+    async def get_active_rules(self, product_id: UUID, user_id: UUID, product_category: Optional[str] = None) -> list[PricingRule]:
+        """
+        Get all active rules that apply to a product, ordered by priority.
         
+        A rule applies to a product if ANY of these conditions are true:
+        1. applies_to_all_products is True
+        2. product_id matches the rule's product_id (legacy)
+        3. product_id is in applies_to_products list
+        4. product_category is in applies_to_categories list
+        """
+        
+        # Build query for rules that could apply to this product
         stmt = select(PricingRule).where(
-            PricingRule.product_id == product_id,
             PricingRule.user_id == user_id,
             PricingRule.is_active == True
         ).order_by(PricingRule.priority.desc())
         
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        all_rules = list(result.scalars().all())
+        
+        # Filter rules that apply to this product
+        applicable_rules = []
+        product_id_str = str(product_id)
+        
+        for rule in all_rules:
+            # Check if rule applies to this product
+            if self._rule_applies_to_product(rule, product_id, product_id_str, product_category):
+                applicable_rules.append(rule)
+        
+        return applicable_rules
+    
+    def _rule_applies_to_product(
+        self, 
+        rule: PricingRule, 
+        product_id: UUID, 
+        product_id_str: str,
+        product_category: Optional[str]
+    ) -> bool:
+        """Check if a rule applies to a specific product."""
+        
+        # 1. Check applies_to_all_products flag
+        if rule.applies_to_all_products:
+            return True
+        
+        # 2. Check legacy single product_id
+        if rule.product_id and rule.product_id == product_id:
+            return True
+        
+        # 3. Check applies_to_products list
+        if rule.applies_to_products:
+            if product_id_str in rule.applies_to_products:
+                return True
+        
+        # 4. Check applies_to_categories list
+        if rule.applies_to_categories and product_category:
+            if product_category in rule.applies_to_categories:
+                return True
+        
+        return False
     
     async def find_matching_rule(
         self,
@@ -72,7 +127,8 @@ class RuleEvaluator:
     ) -> tuple[Optional[PricingRule], Optional[dict]]:
         """Find the highest priority rule that matches current signals."""
         
-        rules = await self.get_active_rules(product.id, user_id)
+        # Get rules with category context
+        rules = await self.get_active_rules(product.id, user_id, product.category)
         
         for rule in rules:
             # Check cooldown
@@ -152,17 +208,31 @@ class RuleEvaluator:
     ) -> Optional[dict]:
         """Evaluate competitor-relative pricing rule."""
         
-        if not rule.competitor_id or rule.competitor_id not in signals.competitor_prices:
-            return None
+        # If a specific competitor is set, use that
+        if rule.competitor_id and rule.competitor_id in signals.competitor_prices:
+            competitor_price = signals.competitor_prices[rule.competitor_id]
+            return {
+                "rule_type": "competitor_relative",
+                "competitor_id": str(rule.competitor_id),
+                "competitor_price": float(competitor_price),
+                "margin_percent": float(rule.competitor_margin_percent or 0),
+                "price_position": rule.price_position,
+            }
         
-        competitor_price = signals.competitor_prices[rule.competitor_id]
+        # If no specific competitor, check if ANY competitor price is available
+        if not rule.competitor_id and signals.competitor_prices:
+            # Use the first/lowest competitor price
+            min_price = min(signals.competitor_prices.values())
+            min_competitor_id = [k for k, v in signals.competitor_prices.items() if v == min_price][0]
+            return {
+                "rule_type": "competitor_relative",
+                "competitor_id": str(min_competitor_id),
+                "competitor_price": float(min_price),
+                "margin_percent": float(rule.competitor_margin_percent or 0),
+                "price_position": rule.price_position,
+            }
         
-        return {
-            "rule_type": "competitor_relative",
-            "competitor_id": str(rule.competitor_id),
-            "competitor_price": float(competitor_price),
-            "margin_percent": float(rule.competitor_margin_percent or 0),
-        }
+        return None
     
     def _eval_time_based(self, rule: PricingRule) -> Optional[dict]:
         """Evaluate time-based rule."""
@@ -240,4 +310,5 @@ class RuleEvaluator:
             }
         
         return None
+    
     

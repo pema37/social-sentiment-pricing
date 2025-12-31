@@ -44,7 +44,7 @@ export type OutcomeLabel = 'positive' | 'negative' | 'neutral' | 'inconclusive';
 export interface PricingRule {
   id: string;
   user_id: string;
-  product_id: string;
+  product_id: string | null;  // CHANGED: now nullable
   name: string;
   description: string | null;
   rule_type: RuleType;
@@ -56,7 +56,7 @@ export interface PricingRule {
   sentiment_direction: string | null;
   competitor_id: string | null;
   price_position: string | null;
-  time_days: number | null;
+  time_days: string | null;  // CHANGED: string not number
   volume_threshold: number | null;
   viral_threshold_reach: number | null;
 
@@ -70,7 +70,8 @@ export interface PricingRule {
   max_price: string | null;
   cooldown_hours: number;
 
-  // Scope
+  // Scope - NEW
+  applies_to_all_products: boolean;  // NEW
   applies_to_products: string[] | null;
   applies_to_categories: string[] | null;
 
@@ -80,28 +81,38 @@ export interface PricingRule {
 
 /** Data required to create a new pricing rule */
 export interface CreatePricingRuleRequest {
-  product_id: string;
+  product_id?: string;  // CHANGED: now optional
   name: string;
   description?: string;
   rule_type: RuleType;
   is_active?: boolean;
   priority?: number;
+  
+  // Scope - NEW
+  applies_to_all_products?: boolean;  // NEW
+  applies_to_products?: string[];
+  applies_to_categories?: string[];
+  
+  // Conditions
   sentiment_threshold?: number;
   sentiment_direction?: string;
   competitor_id?: string;
   price_position?: string;
-  time_days?: number;
+  time_days?: string;  // CHANGED: string not number
   volume_threshold?: number;
   viral_threshold_reach?: number;
+  
+  // Action
   action: RuleAction;
   action_value: string;
+  
+  // Constraints
   max_change_percent?: string;
   min_price?: string;
   max_price?: string;
   cooldown_hours?: number;
-  applies_to_products?: string[];
-  applies_to_categories?: string[];
 }
+
 
 /** Data for updating an existing pricing rule */
 export type UpdatePricingRuleRequest = Partial<CreatePricingRuleRequest>;
