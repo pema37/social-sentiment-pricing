@@ -13,4 +13,5 @@ export { PriceSuggestionModal } from './PriceSuggestionModal';
 export { DeleteProductModal } from './DeleteProductModal';
 // Import
 export { ImportCSVModal } from './ImportCSVModal';
+export { GenerateDescriptionModal } from './GenerateDescriptionModal';
 

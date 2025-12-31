@@ -265,3 +265,74 @@ async def get_price_suggestion(
     
     return suggestion
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI DESCRIPTION GENERATOR 
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class GenerateDescriptionRequest(BaseModel):
+    """Request for AI description generation."""
+    tone: str = Field(default="professional", description="Tone: professional, casual, luxury, technical")
+    length: str = Field(default="medium", description="Length: short, medium, long")
+
+
+class GenerateDescriptionResponse(BaseModel):
+    """Response from AI description generation."""
+    description: str
+    seo_title: str
+    meta_description: str
+    suggested_keywords: List[str]
+    ai_generated: bool = True
+
+
+@router.post("/{product_id}/generate-description", response_model=GenerateDescriptionResponse)
+@limiter.limit(ANALYSIS_RATE_LIMIT)
+async def generate_description(
+    request: Request,
+    product_id: UUID,
+    payload: GenerateDescriptionRequest,
+    current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
+):
+    """
+    Generate AI-powered SEO-optimized product description.
+    
+    Uses GPT-4o-mini to create compelling product copy based on:
+    - Product name and category
+    - Keywords configured for sentiment tracking
+    - Existing description (if any) for improvement
+    """
+    from services.ai_generator import ai_generator
+    
+    if not ai_generator.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service not available. Please configure OPENAI_API_KEY.",
+        )
+    
+    # Get product
+    product = await service.get_by_id(product_id, current_user.id)
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    
+    try:
+        result = await ai_generator.generate_product_description(
+            name=product.name,
+            category=product.category,
+            keywords=product.keywords,
+            current_description=product.description,
+            tone=payload.tone,
+            length=payload.length,
+        )
+        
+        return GenerateDescriptionResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+    

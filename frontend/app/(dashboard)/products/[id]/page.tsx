@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useProduct } from '@/lib/hooks/use-products';
 import {
@@ -14,6 +14,7 @@ import {
   PriceHistoryCard,
   DeleteProductModal,
   KeywordsManager,
+  GenerateDescriptionModal,
 } from '@/components/features/products';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,9 +84,10 @@ interface PageHeaderProps {
   productId: string;
   productName: string;
   onDelete: () => void;
+  onGenerateDescription: () => void;
 }
 
-function PageHeader({ productId, productName, onDelete }: PageHeaderProps) {
+function PageHeader({ productId, productName, onDelete, onGenerateDescription }: PageHeaderProps) {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -99,6 +101,10 @@ function PageHeader({ productId, productName, onDelete }: PageHeaderProps) {
       </div>
       
       <div className="flex gap-2">
+        <Button variant="secondary" onClick={onGenerateDescription}>
+          <Sparkles className="h-4 w-4 mr-2" />
+          AI Description
+        </Button>
         <Link href={`/products/${productId}/edit`}>
           <Button variant="secondary">
             <Edit className="h-4 w-4 mr-2" />
@@ -124,6 +130,7 @@ export default function ProductDetailPage() {
   const productId = params.id as string;
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   const {
     data: product,
@@ -143,6 +150,12 @@ export default function ProductDetailPage() {
 
   const handleDeleteSuccess = () => {
     router.push('/products');
+  };
+
+  const handleApplyDescription = (description: string) => {
+    // Could auto-update the product here via API
+    // For now, user can copy the generated content
+    console.log('Generated description:', description);
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -172,6 +185,7 @@ export default function ProductDetailPage() {
         productId={productId}
         productName={product.name}
         onDelete={() => setShowDeleteModal(true)}
+        onGenerateDescription={() => setShowGenerateModal(true)}
       />
 
       <ProductInfoCard product={product} />
@@ -199,6 +213,15 @@ export default function ProductDetailPage() {
         onClose={() => setShowDeleteModal(false)}
         onSuccess={handleDeleteSuccess}
       />
+
+      <GenerateDescriptionModal
+        isOpen={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+        productId={productId}
+        productName={product.name}
+        onApply={handleApplyDescription}
+      />
     </div>
   );
 }
+
