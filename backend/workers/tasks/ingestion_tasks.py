@@ -11,6 +11,7 @@ conflicts when running in Celery's forked worker processes.
 """
 
 import asyncio
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -37,10 +38,21 @@ def get_task_session_maker():
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     
+    # Remove sslmode parameter - asyncpg doesn't support it as a query param
+    # It needs to be passed via connect_args instead
+    if "sslmode=" in db_url:
+        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
+        # Clean up any trailing ? or &&
+        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
+    
+    # Determine if SSL should be enabled based on host
+    use_ssl = "neon.tech" in db_url or "railway" in db_url
+    
     engine = create_async_engine(
         db_url,
         echo=False,
         poolclass=NullPool,  # Critical: No pooling in workers
+        connect_args={"ssl": True} if use_ssl else {},
     )
     return sessionmaker(
         engine,
@@ -233,11 +245,11 @@ async def _process_pending_mentions(task_self, batch_size: int):
     async with session_maker() as session:
         task_self.update_state(state="LOADING", meta={"batch_size": batch_size})
         
-        # Get unprocessed mentions
+        # Get unprocessed mentions - use collected_at (not created_at)
         stmt = (
             select(SocialMention)
             .where(SocialMention.processed == False)
-            .order_by(SocialMention.created_at.asc())
+            .order_by(SocialMention.collected_at.asc())
             .limit(batch_size)
         )
         result = await session.execute(stmt)
@@ -306,6 +318,4 @@ async def _process_pending_mentions(task_self, batch_size: int):
             "errors": errors[:10],  # Only return first 10 errors
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
-    
-
     

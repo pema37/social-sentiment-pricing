@@ -12,6 +12,7 @@ conflicts when running in Celery's forked worker processes.
 """
 
 import asyncio
+import re
 from typing import Optional
 from uuid import UUID
 
@@ -44,10 +45,21 @@ def get_task_session_maker():
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     
+    # Remove sslmode parameter - asyncpg doesn't support it as a query param
+    # It needs to be passed via connect_args instead
+    if "sslmode=" in db_url:
+        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
+        # Clean up any trailing ? or &&
+        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
+    
+    # Determine if SSL should be enabled based on host
+    use_ssl = "neon.tech" in db_url or "railway" in db_url
+    
     engine = create_async_engine(
         db_url,
         echo=False,
         poolclass=NullPool,  # Critical: No pooling in workers
+        connect_args={"ssl": True} if use_ssl else {},
     )
     return sessionmaker(
         engine,
@@ -293,5 +305,4 @@ async def _expire_recommendations():
         logger.info(f"Expired {expired_count} old recommendations")
         
         return {"expired_count": expired_count}
-    
     
