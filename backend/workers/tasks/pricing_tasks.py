@@ -40,7 +40,7 @@ def get_task_session_maker():
     which would cause "Future attached to a different loop" errors.
     """
     engine = create_async_engine(
-        settings.database_url,
+        settings.DATABASE_URL,  # ✅ FIXED: uppercase to match Settings class
         echo=False,
         poolclass=NullPool,  # Critical: No pooling in workers
     )
@@ -285,3 +285,4 @@ async def _expire_recommendations():
         return {"expired_count": expired_count}
     
 
+    

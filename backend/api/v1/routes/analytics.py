@@ -69,7 +69,7 @@ async def get_alert_analytics(
 async def get_sentiment_trend(
     product_id: Optional[str] = Query(None, description="Filter by product ID"),
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
-    bucket: str = Query("day", regex="^(hour|day|week)$", description="Time bucket size"),
+    bucket: str = Query("day", pattern="^(hour|day|week)$", description="Time bucket size"),  # ✅ Only one line, with comma
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -80,3 +80,4 @@ async def get_sentiment_trend(
         days=days,
         bucket=bucket
     )
+
