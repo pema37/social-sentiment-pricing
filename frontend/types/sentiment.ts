@@ -1,5 +1,4 @@
 // Sentiment domain types
-
 export type SentimentLabel = 'very_negative' | 'negative' | 'neutral' | 'positive' | 'very_positive';
 export type SentimentTrendDirection = 'up' | 'down' | 'stable';
 export type SentimentSource = 'twitter' | 'reddit' | 'manual' | 'news' | 'instagram' | 'facebook' | 'youtube';
@@ -39,18 +38,30 @@ export interface AnalyzeRequest {
   source: SentimentSource;
   author?: string;
   url?: string;
+  use_ai?: boolean;  // Use GPT-4o-mini for analysis
 }
 
 // Response from sentiment analysis
 export interface AnalyzeResponse {
-  id: string;
-  product_id: string;
-  content: string;
-  source: string;
+  id?: string;
+  sentiment_id?: string;
+  product_id?: string;
+  content?: string;
+  text?: string;
+  source?: string;
   sentiment_score: number;
   sentiment_label: SentimentLabel;
   confidence: number;
-  created_at: string;
+  emotions?: {
+    positive: number;
+    negative: number;
+    neutral: number;
+  };
+  topics?: string[];
+  is_sarcastic?: boolean;
+  ai_powered?: boolean;
+  analyzed_by?: 'vader' | 'openai';
+  created_at?: string;
 }
 
 // Sentiment data point for charts
@@ -81,3 +92,11 @@ export interface SentimentSummary {
   neutral_count: number;
   trend: SentimentTrendDirection;
 }
+
+// AI status response
+export interface AIStatusResponse {
+  openai_available: boolean;
+  model: string | null;
+  features: string[];
+}
+

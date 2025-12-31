@@ -5,17 +5,24 @@ import type {
   AnalyzeResponse,
   PaginatedMentions,
   SocialMention,
+  AIStatusResponse,
 } from '@/types';
 
 export const sentimentApi = {
   // Analyze text for sentiment (without saving)
-  analyzeOnly: (data: { text: string; source?: string }) =>
-    api.post<AnalyzeResponse>('/api/v1/sentiment/analyze', data),
+  analyzeOnly: (data: { text: string; source?: string; use_ai?: boolean }) => {
+    const params = data.use_ai ? '?use_ai=true' : '';
+    return api.post<AnalyzeResponse>(`/api/v1/sentiment/analyze${params}`, {
+      text: data.text,
+      source: data.source,
+    });
+  },
 
   // Analyze text AND save to database for a product
   analyze: (data: AnalyzeRequest) => {
-    const { product_id, content, source, author, url } = data;
-    return api.post<AnalyzeResponse>(`/api/v1/sentiment/analyze/${product_id}`, {
+    const { product_id, content, source, author, url, use_ai } = data;
+    const params = use_ai ? '?use_ai=true' : '';
+    return api.post<AnalyzeResponse>(`/api/v1/sentiment/analyze/${product_id}${params}`, {
       text: content,  // Backend expects 'text', frontend sends 'content'
       source: source || 'manual',
       author,
@@ -44,5 +51,9 @@ export const sentimentApi = {
     url?: string;
   }) =>
     api.post<SocialMention>('/api/v1/sentiment/mentions', data),
+
+  // Check AI status
+  getAIStatus: () =>
+    api.get<AIStatusResponse>('/api/v1/sentiment/ai-status'),
 };
 
