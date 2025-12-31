@@ -6,8 +6,8 @@ from decimal import Decimal
 from typing import Optional, List, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, DateTime, JSON, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
 if TYPE_CHECKING:
     from models.integration import ProductIntegrationLink
@@ -46,7 +46,9 @@ class Product(SQLModel, table=True):
     # Users should explicitly opt-in to automatic price changes
     auto_pricing_enabled: bool = Field(default=False)
 
-    keywords: List[str] = Field(default=[], sa_column=Column(JSON))
+    keywords: List[str] = Field(default=[], sa_column=Column(JSONB))
+
+
 
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
