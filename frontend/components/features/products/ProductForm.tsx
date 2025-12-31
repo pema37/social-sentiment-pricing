@@ -1,14 +1,16 @@
 // components/products/ProductForm.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Package, DollarSign, Zap, Tag } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { CategorySelect } from '@/components/ui/CategorySelect';
 import {
   useCreateProduct,
   useUpdateProduct,
+  useProducts,
 } from '@/lib/hooks/use-products';
 import type { Product, CreateProductRequest, UpdateProductRequest } from '@/types';
 
@@ -17,11 +19,8 @@ import type { Product, CreateProductRequest, UpdateProductRequest } from '@/type
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ProductFormProps {
-  /** Product to edit. If undefined, form is in "create" mode */
   product?: Product;
-  /** Called after successful submit */
   onSuccess?: () => void;
-  /** Called when cancel is clicked */
   onCancel?: () => void;
 }
 
@@ -41,7 +40,7 @@ interface FormData {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper: Build initial form data
+// Helper
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildInitialFormData(product?: Product): FormData {
@@ -138,24 +137,27 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
   
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
+  const { data: productsData, isLoading: isLoadingProducts } = useProducts({ page_size: 100 });
   
   const [formData, setFormData] = useState<FormData>(() => buildInitialFormData(product));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Handlers
-  // ─────────────────────────────────────────────────────────────────────────
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    productsData?.items?.forEach(p => {
+      if (p.category) cats.add(p.category);
+    });
+    return Array.from(cats).sort();
+  }, [productsData?.items]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear error when field is edited
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setFormData(prev => ({ ...prev, category: value }));
   };
 
   const handleToggle = (field: 'auto_pricing_enabled' | 'is_active') => {
@@ -164,30 +166,19 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Product name is required';
-    }
-    
+    if (!formData.name.trim()) newErrors.name = 'Product name is required';
     if (!formData.base_price || Number(formData.base_price) <= 0) {
       newErrors.base_price = 'Base price must be greater than 0';
     }
-    
-    if (
-      formData.min_price &&
-      formData.max_price &&
-      Number(formData.min_price) > Number(formData.max_price)
-    ) {
+    if (formData.min_price && formData.max_price && Number(formData.min_price) > Number(formData.max_price)) {
       newErrors.min_price = 'Min price cannot be greater than max price';
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!validate()) return;
 
     const data: CreateProductRequest | UpdateProductRequest = {
@@ -202,26 +193,17 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
       sentiment_multiplier: Number(formData.sentiment_multiplier) || 0.2,
       auto_pricing_enabled: formData.auto_pricing_enabled,
       is_active: formData.is_active,
-      keywords: formData.keywords
-        ? formData.keywords.split(',').map(k => k.trim()).filter(Boolean)
-        : [],
+      keywords: formData.keywords ? formData.keywords.split(',').map(k => k.trim()).filter(Boolean) : [],
     };
 
     if (isEdit && product) {
-      updateProduct.mutate(
-        { id: product.id, data },
-        { onSuccess }
-      );
+      updateProduct.mutate({ id: product.id, data }, { onSuccess });
     } else {
       createProduct.mutate(data as CreateProductRequest, { onSuccess });
     }
   };
 
   const isPending = createProduct.isPending || updateProduct.isPending;
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -249,21 +231,16 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-            <Input
-              name="sku"
-              value={formData.sku}
-              onChange={handleChange}
-              placeholder="e.g., WBH-001"
-            />
+            <Input name="sku" value={formData.sku} onChange={handleChange} placeholder="e.g., WBH-001" />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <Input
-              name="category"
+            <CategorySelect
               value={formData.category}
-              onChange={handleChange}
-              placeholder="e.g., Electronics"
+              onChange={handleCategoryChange}
+              categories={categories}
+              isLoading={isLoadingProducts}
             />
           </div>
 
@@ -281,12 +258,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-            <Input
-              name="image_url"
-              value={formData.image_url}
-              onChange={handleChange}
-              placeholder="https://example.com/image.jpg"
-            />
+            <Input name="image_url" value={formData.image_url} onChange={handleChange} placeholder="https://example.com/image.jpg" />
           </div>
         </div>
       </Card>
@@ -299,31 +271,10 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
         </h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PriceInput
-            name="base_price"
-            label="Base Price"
-            value={formData.base_price}
-            onChange={handleChange}
-            error={errors.base_price}
-            required
-          />
-          
-          <div /> {/* Empty space for grid alignment */}
-          
-          <PriceInput
-            name="min_price"
-            label="Min Price"
-            value={formData.min_price}
-            onChange={handleChange}
-            error={errors.min_price}
-          />
-          
-          <PriceInput
-            name="max_price"
-            label="Max Price"
-            value={formData.max_price}
-            onChange={handleChange}
-          />
+          <PriceInput name="base_price" label="Base Price" value={formData.base_price} onChange={handleChange} error={errors.base_price} required />
+          <div />
+          <PriceInput name="min_price" label="Min Price" value={formData.min_price} onChange={handleChange} error={errors.min_price} />
+          <PriceInput name="max_price" label="Max Price" value={formData.max_price} onChange={handleChange} />
         </div>
       </Card>
 
@@ -336,37 +287,12 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sentiment Multiplier
-            </label>
-            <Input
-              name="sentiment_multiplier"
-              type="number"
-              step="0.01"
-              min="0"
-              max="1"
-              value={formData.sentiment_multiplier}
-              onChange={handleChange}
-              placeholder="0.2"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              How much sentiment affects pricing (0.0 - 1.0). Default: 0.2 = 20% max impact
-            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sentiment Multiplier</label>
+            <Input name="sentiment_multiplier" type="number" step="0.01" min="0" max="1" value={formData.sentiment_multiplier} onChange={handleChange} placeholder="0.2" />
+            <p className="text-xs text-gray-500 mt-1">How much sentiment affects pricing (0.0 - 1.0). Default: 0.2 = 20% max impact</p>
           </div>
-
-          <ToggleSwitch
-            enabled={formData.auto_pricing_enabled}
-            onToggle={() => handleToggle('auto_pricing_enabled')}
-            label="Auto-Pricing"
-            description="Automatically adjust prices based on sentiment"
-          />
-
-          <ToggleSwitch
-            enabled={formData.is_active}
-            onToggle={() => handleToggle('is_active')}
-            label="Active"
-            description="Product is visible and available"
-          />
+          <ToggleSwitch enabled={formData.auto_pricing_enabled} onToggle={() => handleToggle('auto_pricing_enabled')} label="Auto-Pricing" description="Automatically adjust prices based on sentiment" />
+          <ToggleSwitch enabled={formData.is_active} onToggle={() => handleToggle('is_active')} label="Active" description="Product is visible and available" />
         </div>
       </Card>
 
@@ -376,25 +302,13 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
           <Tag className="w-4 h-4" />
           Social Monitoring Keywords
         </h3>
-        
-        <Input
-          name="keywords"
-          value={formData.keywords}
-          onChange={handleChange}
-          placeholder="keyword1, keyword2, keyword3"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Comma-separated keywords to track on social media for this product
-        </p>
+        <Input name="keywords" value={formData.keywords} onChange={handleChange} placeholder="keyword1, keyword2, keyword3" />
+        <p className="text-xs text-gray-500 mt-1">Comma-separated keywords to track on social media for this product</p>
       </Card>
 
       {/* Actions */}
       <div className="flex gap-3">
-        {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">
-            Cancel
-          </Button>
-        )}
+        {onCancel && <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">Cancel</Button>}
         <Button type="submit" isLoading={isPending} className={onCancel ? 'flex-1' : 'w-full'}>
           {isEdit ? 'Save Changes' : 'Create Product'}
         </Button>
