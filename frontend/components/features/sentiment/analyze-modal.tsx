@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { Button, Input, Card } from '@/components/ui';
+import { AIBadge } from '@/components/ui/ai-badge';
 import { useAnalyzeSentiment } from '@/lib/hooks';
 import { useProducts } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
   const [source, setSource] = useState<SentimentSource>('manual');
   const [author, setAuthor] = useState('');
   const [url, setUrl] = useState('');
+  const [useAI, setUseAI] = useState(true); // NEW: AI enabled by default
 
   const { data: productsData, isLoading: productsLoading } = useProducts({ page: 1, page_size: 100 });
   const analyzeMutation = useAnalyzeSentiment();
@@ -57,12 +59,12 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
         source,
         author: author.trim() || undefined,
         url: url.trim() || undefined,
+        use_ai: useAI, // NEW: Pass AI flag
       });
 
       resetForm();
       onClose();
     } catch (error) {
-      // Error is handled by mutation state
       console.error('Analysis failed:', error);
     }
   };
@@ -93,8 +95,9 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
         <form onSubmit={handleSubmit}>
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 id="analyze-modal-title" className="text-lg font-semibold">
+              <h2 id="analyze-modal-title" className="text-lg font-semibold flex items-center gap-2">
                 Analyze Sentiment
+                {useAI && <AIBadge />}
               </h2>
               <button
                 type="button"
@@ -109,6 +112,34 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
             </div>
 
             <div className="space-y-4">
+              {/* NEW: AI Toggle */}
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Use AI Analysis</p>
+                    <p className="text-xs text-gray-500">GPT-4o-mini for more accurate results</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUseAI(!useAI)}
+                  className={cn(
+                    'relative w-11 h-6 rounded-full transition-colors',
+                    useAI ? 'bg-purple-600' : 'bg-gray-300'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm',
+                      useAI ? 'translate-x-6' : 'translate-x-1'
+                    )}
+                  />
+                </button>
+              </div>
+
               {/* Product selector */}
               <div>
                 <label htmlFor="analyze-product" className="block text-sm font-medium text-gray-700 mb-1">
@@ -211,7 +242,14 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
               {/* Success result preview */}
               {analyzeMutation.isSuccess && analyzeMutation.data && (
                 <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-                  <p className="text-sm font-medium text-green-800 mb-2">Analysis Complete!</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-sm font-medium text-green-800">Analysis Complete!</p>
+                    {analyzeMutation.data.ai_powered && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                        AI Powered
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <div>
                       <span className="text-gray-600">Score:</span>
@@ -255,7 +293,7 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
               type="submit"
               disabled={!productId || !content.trim() || analyzeMutation.isPending}
             >
-              {analyzeMutation.isPending ? 'Analyzing...' : 'Analyze'}
+              {analyzeMutation.isPending ? 'Analyzing...' : useAI ? 'Analyze with AI' : 'Analyze'}
             </Button>
           </div>
         </form>
@@ -263,3 +301,4 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
     </div>
   );
 }
+
