@@ -48,16 +48,16 @@ celery_app.conf.beat_schedule = {
     
     # Fetch social mentions for all products every 30 minutes
     "fetch-social-mentions": {
-        "task": "ingestion.fetch_all_mentions",  # ✅ Matches registered task name
+        "task": "ingestion.fetch_all_mentions",  # ✅ NEW: iterates all products
         "schedule": crontab(minute="*/30"),
-        "options": {"queue": "default"},
+        "options": {"queue": "celery"},
     },
     
     # Process unprocessed mentions every 5 minutes
     "process-mentions": {
         "task": "ingestion.process_pending_mentions",  # ✅ Matches registered task name
         "schedule": crontab(minute="*/5"),
-        "options": {"queue": "default"},
+        "options": {"queue": "celery"},
     },
 
     # === Pricing tasks ===
@@ -66,27 +66,21 @@ celery_app.conf.beat_schedule = {
     "generate-recommendations": {
         "task": "workers.tasks.pricing_tasks.generate_all_recommendations",
         "schedule": crontab(minute=0),
-        "options": {"queue": "default"},
+        "options": {"queue": "celery"},
     },
     
     # Check competitor prices every 30 minutes (at minute 15 and 45)
     "check-competitor-prices": {
         "task": "workers.tasks.pricing_tasks.check_competitor_prices",
         "schedule": crontab(minute="15,45"),
-        "options": {"queue": "default"},
+        "options": {"queue": "celery"},
     },
     
     # Expire old recommendations every 6 hours (at minute 0)
     "expire-recommendations": {
         "task": "workers.tasks.pricing_tasks.expire_recommendations",
         "schedule": crontab(minute=0, hour="*/6"),
-        "options": {"queue": "default"},
+        "options": {"queue": "celery"},
     },
 }
-
-# Optional: Configure task routes for different queues (future scaling)
-# celery_app.conf.task_routes = {
-#     "ingestion.*": {"queue": "ingestion"},
-#     "workers.tasks.pricing_tasks.*": {"queue": "pricing"},
-# }
 

@@ -1,4 +1,4 @@
-# api/v1/routes/analytics.py
+# backend/api/v1/routes/analytics.py
 """
 Analytics API routes for dashboard metrics.
 """
@@ -65,11 +65,12 @@ async def get_alert_analytics(
     service = AnalyticsService(session, str(current_user.id))
     return await service.get_alert_analytics(days=days)
 
+
 @router.get("/sentiment-trend", response_model=SentimentAnalytics)
 async def get_sentiment_trend(
     product_id: Optional[str] = Query(None, description="Filter by product ID"),
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
-    bucket: str = Query("day", pattern="^(hour|day|week)$", description="Time bucket size"),  # ✅ Only one line, with comma
+    bucket: str = Query("day", pattern="^(hour|day|week)$", description="Time bucket size"),  # ✅ FIXED: pattern instead of regex
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):

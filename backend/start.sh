@@ -8,15 +8,10 @@ echo "Starting SSP Backend Services..."
 
 # Clear stale Celery beat schedule to ensure fresh schedule is loaded
 # This prevents issues where old task names persist after code updates
-if [ -f "celerybeat-schedule" ]; then
-    echo "Removing stale celerybeat-schedule file..."
-    rm -f celerybeat-schedule
-fi
-
-if [ -f "/app/celerybeat-schedule" ]; then
-    echo "Removing stale celerybeat-schedule file from /app..."
-    rm -f /app/celerybeat-schedule
-fi
+echo "Clearing stale celerybeat-schedule files..."
+rm -f celerybeat-schedule
+rm -f /app/celerybeat-schedule
+rm -f /home/claude/celerybeat-schedule
 
 # Start Celery worker in the background
 echo "Starting Celery worker..."
@@ -44,3 +39,4 @@ exec uvicorn main:app \
     --workers 1 \
     --log-level info
 
+    

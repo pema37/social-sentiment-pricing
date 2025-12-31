@@ -64,11 +64,16 @@ def run_async(coro):
         return loop.run_until_complete(coro)
     finally:
         # Properly clean up pending tasks before closing
-        pending = asyncio.all_tasks(loop)
-        for task in pending:
-            task.cancel()
-        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        loop.close()
+        try:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        except Exception:
+            pass
+        finally:
+            loop.close()
 
 
 @celery_app.task(name="workers.tasks.pricing_tasks.generate_all_recommendations")
