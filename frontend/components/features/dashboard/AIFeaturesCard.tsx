@@ -78,7 +78,7 @@ export function AIFeaturesCard() {
     <Card>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
+          <div className="p-1.5 bg-linear-to-br from-purple-500 to-blue-500 rounded-lg">
             <Brain className="h-4 w-4 text-white" />
           </div>
           <CardTitle>AI Features</CardTitle>
