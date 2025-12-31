@@ -9,7 +9,7 @@ from sqlmodel import select
 from celery.result import AsyncResult
 
 from db.session import get_session
-from core.security import get_current_user
+from core.deps import get_current_user
 from core.rate_limit import limiter, BULK_RATE_LIMIT
 from models import Product, User
 from workers.tasks.ingestion_tasks import fetch_for_product, process_pending_mentions

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from db.session import get_session
-from core.security import get_current_user
+from core.deps import get_current_user
 from core.rate_limit import limiter, ANALYSIS_RATE_LIMIT, BULK_RATE_LIMIT
 from models import Sentiment, Product, User
 from schemas.sentiment import (

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_session
-from core.security import get_current_user
+from core.deps import get_current_user
 from models.user import User
 from services.analytics.analytics_service import AnalyticsService
 from typing import Optional
@@ -70,7 +70,7 @@ async def get_alert_analytics(
 async def get_sentiment_trend(
     product_id: Optional[str] = Query(None, description="Filter by product ID"),
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
-    bucket: str = Query("day", pattern="^(hour|day|week)$", description="Time bucket size"),  # ✅ FIXED: pattern instead of regex
+    bucket: str = Query("day", pattern="^(hour|day|week)$", description="Time bucket size"),  
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):

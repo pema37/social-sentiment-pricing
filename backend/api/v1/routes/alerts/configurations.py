@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from db.session import get_session
-from core.security import get_current_user
+from core.deps import get_current_user
 from core.rate_limit import limiter, WRITE_RATE_LIMIT
 from models.user import User
 from models.alert import AlertConfiguration, AlertType
