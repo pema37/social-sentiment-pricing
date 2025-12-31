@@ -54,9 +54,9 @@ export const productsApi = {
   delete: (id: string) =>
     api.delete<void>(`/api/v1/products/${id}`),
 
-  // Price suggestion
-  getSuggestion: (id: string) =>
-    api.get<PriceSuggestion>(`/api/v1/products/${id}/price-suggestion`),
+  // Price suggestion (with AI explanation by default)
+  getSuggestion: (id: string, useAi: boolean = true) =>
+    api.get<PriceSuggestion>(`/api/v1/products/${id}/price-suggestion?use_ai=${useAi}`),
 
   // Price history
   getPriceHistory: (id: string, params?: { days?: number; limit?: number }) =>
@@ -73,3 +73,4 @@ export const productsApi = {
   import: (data: ImportProductsRequest) =>
     api.post<ImportProductsResponse>('/api/v1/products/import', data),
 };
+

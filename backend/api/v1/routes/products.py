@@ -251,6 +251,7 @@ async def import_products(
 async def get_price_suggestion(
     request: Request,
     product_id: UUID,
+    use_ai: bool = Query(False, description="Use AI for enhanced explanation"),
     current_user: User = Depends(get_current_user),
     service: ProductService = Depends(get_product_service),
 ):
@@ -262,6 +263,30 @@ async def get_price_suggestion(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
+    
+    # Enhance with AI explanation if requested
+    if use_ai:
+        from services.ai_generator import ai_generator
+        
+        if ai_generator.is_available():
+            try:
+                product = await service.get_by_id(product_id, current_user.id)
+                ai_explanation = await ai_generator.generate_pricing_explanation(
+                    product_name=product.name,
+                    current_price=float(suggestion["current_price"]),
+                    suggested_price=float(suggestion["suggested_price"]),
+                    sentiment_score=float(suggestion["factors"].get("sentiment_score", 0)),
+                    factors=[
+                        f"Sentiment: {suggestion['factors'].get('trend', 'stable')}",
+                        f"Mentions: {suggestion['factors'].get('mention_volume', 0)}",
+                    ],
+                )
+                suggestion["reasoning"] = ai_explanation["explanation"]
+                suggestion["factors"]["ai_key_factors"] = ai_explanation["key_factors"]
+                suggestion["factors"]["ai_powered"] = True
+            except Exception as e:
+                # Fall back to basic reasoning if AI fails
+                suggestion["factors"]["ai_powered"] = False
     
     return suggestion
 

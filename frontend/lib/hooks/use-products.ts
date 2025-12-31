@@ -55,11 +55,11 @@ export function useProduct(id: string | null) {
   });
 }
 
-// Get price suggestion for a product
-export function usePriceSuggestion(id: string | null) {
+// Get price suggestion for a product (with AI explanation)
+export function usePriceSuggestion(id: string | null, useAi: boolean = true) {
   return useQuery({
-    queryKey: productKeys.suggestion(id || ''),
-    queryFn: () => productsApi.getSuggestion(id!),
+    queryKey: [...productKeys.suggestion(id || ''), useAi],
+    queryFn: () => productsApi.getSuggestion(id!, useAi),
     enabled: !!id,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -274,3 +274,4 @@ export function useImportProducts() {
     },
   });
 }
+
