@@ -16,6 +16,7 @@ import {
   CompetitorForm, 
   LinkProductForm,
   CompetitorProductCard,
+  AIAnalysisCard,
 } from '@/components/features/competitors';
 import type { CreateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
 
@@ -135,6 +136,14 @@ export default function CompetitorDetailPage() {
         <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-sm text-gray-500">
           Added {formatDistanceToNow(new Date(competitor.created_at), { addSuffix: true })}
         </div>
+      </div>
+
+      {/* AI Strategy Analysis Card */}
+      <div className="mb-6">
+        <AIAnalysisCard 
+          competitorId={competitorId} 
+          competitorName={competitor.name} 
+        />
       </div>
 
       {/* Linked Products */}
