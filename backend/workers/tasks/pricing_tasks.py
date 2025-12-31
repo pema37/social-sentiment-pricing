@@ -111,23 +111,49 @@ async def _generate_all_recommendations():
     session_maker = get_task_session_maker()
     
     async with session_maker() as db:
-        # Get all products that have active pricing rules
-        stmt = (
+        # Step 1: Get all active pricing rules
+        rules_stmt = select(PricingRule).where(PricingRule.is_active == True)
+        rules_result = await db.execute(rules_stmt)
+        active_rules = list(rules_result.scalars().all())
+        
+        if not active_rules:
+            logger.info("No active pricing rules found")
+            return {
+                "products_checked": 0,
+                "recommendations_created": 0,
+                "recommendations_expired": 0,
+                "errors": 0
+            }
+        
+        # Step 2: Get all active products for users who have rules
+        user_ids = list(set(rule.user_id for rule in active_rules))
+        products_stmt = (
             select(Product)
-            .join(PricingRule, PricingRule.product_id == Product.id)
-            .where(PricingRule.is_active == True)
-            .distinct()
+            .where(Product.user_id.in_(user_ids))
+            .where(Product.is_active == True)
         )
+        products_result = await db.execute(products_stmt)
+        all_products = list(products_result.scalars().all())
         
-        result = await db.execute(stmt)
-        products = list(result.scalars().all())
+        logger.info(f"Found {len(active_rules)} active rules, {len(all_products)} products")
         
-        logger.info(f"Checking {len(products)} products for recommendations")
+        # Step 3: For each product, check if any rule applies
+        products_to_check = []
+        for product in all_products:
+            # Check if any rule applies to this product
+            for rule in active_rules:
+                if rule.user_id != product.user_id:
+                    continue
+                if rule.applies_to_product(product.id, product.category):
+                    products_to_check.append(product)
+                    break  # Found a matching rule, move to next product
+        
+        logger.info(f"Checking {len(products_to_check)} products with matching rules")
         
         recommendations_created = 0
         errors = 0
         
-        for product in products:
+        for product in products_to_check:
             try:
                 service = RecommendationService(db)
                 recommendation = await service.generate_recommendation(
@@ -155,12 +181,12 @@ async def _generate_all_recommendations():
         )
         
         return {
-            "products_checked": len(products),
+            "products_checked": len(products_to_check),
             "recommendations_created": recommendations_created,
             "recommendations_expired": expired_count,
             "errors": errors
         }
-
+    
 
 @celery_app.task(name="workers.tasks.pricing_tasks.generate_recommendation_for_product")
 def generate_recommendation_for_product(product_id: str, user_id: str):
@@ -305,4 +331,5 @@ async def _expire_recommendations():
         logger.info(f"Expired {expired_count} old recommendations")
         
         return {"expired_count": expired_count}
+    
     
