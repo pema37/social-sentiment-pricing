@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     # External APIs
     # ===================
     OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     
     # Reddit
     REDDIT_CLIENT_ID: Optional[str] = None

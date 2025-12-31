@@ -20,3 +20,4 @@ slowapi
 redis
 sentry-sdk[fastapi]
 structlog
+google-generativeai>=0.8.0

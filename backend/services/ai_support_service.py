@@ -1,11 +1,23 @@
 # backend/services/ai_support_service.py
 """
-AI Support Chat service using OpenAI GPT-4o-mini.
+AI Support Chat service with OpenAI + Gemini fallback.
 """
 
+import logging
 from typing import Dict, List, Optional
+
 from openai import AsyncOpenAI
 from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Try to import Gemini
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    logger.warning("google-generativeai not installed. Gemini fallback unavailable.")
 
 
 SYSTEM_PROMPT = """You are the AI Support Assistant for ActualPrice, an AI-powered pricing optimization platform for e-commerce merchants.
@@ -73,14 +85,66 @@ SUGGESTED_QUESTIONS = [
 
 
 class AISupportService:
-    """AI-powered support chat service."""
+    """AI-powered support chat service with OpenAI + Gemini fallback."""
     
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
+        # OpenAI (primary)
+        self.openai_client = None
+        if settings.OPENAI_API_KEY:
+            self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        # Gemini (fallback)
+        self.gemini_model = None
+        if GEMINI_AVAILABLE and getattr(settings, 'GEMINI_API_KEY', None):
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            self.gemini_model = genai.GenerativeModel('gemini-pro')
+        
         self.model = "gpt-4o-mini"
     
     def is_available(self) -> bool:
-        return self.client is not None
+        """Check if any AI service is configured."""
+        return self.openai_client is not None or self.gemini_model is not None
+    
+    def _get_provider(self) -> str:
+        """Return which provider is active."""
+        if self.openai_client:
+            return "openai"
+        elif self.gemini_model:
+            return "gemini"
+        return "none"
+    
+    async def _call_openai(self, messages: List[Dict]) -> str:
+        """Call OpenAI API."""
+        response = await self.openai_client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+    
+    def _call_gemini_sync(self, messages: List[Dict]) -> str:
+        """Call Gemini API (sync) - convert chat format to single prompt."""
+        prompt_parts = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                prompt_parts.append(f"Instructions: {content}")
+            elif role == "assistant":
+                prompt_parts.append(f"Assistant: {content}")
+            else:
+                prompt_parts.append(f"User: {content}")
+        
+        full_prompt = "\n\n".join(prompt_parts) + "\n\nAssistant:"
+        response = self.gemini_model.generate_content(full_prompt)
+        return response.text
+    
+    async def _call_gemini(self, messages: List[Dict]) -> str:
+        """Call Gemini API with async wrapper."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._call_gemini_sync, messages)
     
     async def chat(
         self,
@@ -88,9 +152,14 @@ class AISupportService:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         topic: Optional[str] = None
     ) -> Dict:
-        if not self.client:
+        """
+        Send a message and get AI response.
+        Tries OpenAI first, falls back to Gemini if needed.
+        """
+        if not self.is_available():
             return self._fallback_response("I'm having trouble connecting. Please try again or contact support@getactualprice.com")
         
+        # Build messages
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         
         if conversation_history:
@@ -102,28 +171,41 @@ class AISupportService:
         if topic and topic in TOPIC_CONTEXT:
             messages.append({"role": "system", "content": f"Context: User selected '{topic}' topic. {TOPIC_CONTEXT[topic]}"})
         
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=500,
-                temperature=0.7
-            )
-            
-            assistant_message = response.choices[0].message.content
-            topic_detected = self._detect_topic(message + " " + (assistant_message or ""))
-            suggested_actions = TOPIC_ACTIONS.get(topic_detected, TOPIC_ACTIONS["general"])
-            
-            return {
-                "message": assistant_message,
-                "topic_detected": topic_detected,
-                "suggested_actions": suggested_actions
-            }
-        except Exception as e:
-            print(f"AI Support error: {e}")
+        # Try OpenAI first, then Gemini
+        provider = "none"
+        assistant_message = None
+        
+        if self.openai_client:
+            try:
+                assistant_message = await self._call_openai(messages)
+                provider = "openai"
+            except Exception as e:
+                logger.warning(f"OpenAI failed, trying Gemini: {e}")
+        
+        if assistant_message is None and self.gemini_model:
+            try:
+                assistant_message = await self._call_gemini(messages)
+                provider = "gemini"
+            except Exception as e:
+                logger.error(f"Gemini also failed: {e}")
+                return self._fallback_response("I apologize, but I'm having trouble right now. Please try again.")
+        
+        if assistant_message is None:
             return self._fallback_response("I apologize, but I'm having trouble right now. Please try again.")
+        
+        # Detect topic and get suggested actions
+        topic_detected = self._detect_topic(message + " " + (assistant_message or ""))
+        suggested_actions = TOPIC_ACTIONS.get(topic_detected, TOPIC_ACTIONS["general"])
+        
+        return {
+            "message": assistant_message,
+            "topic_detected": topic_detected,
+            "suggested_actions": suggested_actions,
+            "ai_provider": provider
+        }
     
     def _detect_topic(self, text: str) -> str:
+        """Detect topic from message content."""
         text_lower = text.lower()
         if any(w in text_lower for w in ["sentiment", "social", "twitter", "reddit", "trending"]):
             return "market_insights"
@@ -136,18 +218,38 @@ class AISupportService:
         return "general"
     
     def _fallback_response(self, message: str) -> Dict:
-        return {"message": message, "topic_detected": "general", "suggested_actions": ["Try again", "Contact support"]}
+        """Return fallback response when AI is unavailable."""
+        return {
+            "message": message,
+            "topic_detected": "general",
+            "suggested_actions": ["Try again", "Contact support"],
+            "ai_provider": "none"
+        }
     
     def get_topics(self) -> Dict:
-        return {"topics": TOPIC_SUGGESTIONS, "default_greeting": DEFAULT_GREETING, "suggested_questions": SUGGESTED_QUESTIONS}
+        """Get available support topics."""
+        return {
+            "topics": TOPIC_SUGGESTIONS,
+            "default_greeting": DEFAULT_GREETING,
+            "suggested_questions": SUGGESTED_QUESTIONS
+        }
     
     def get_health(self) -> Dict:
+        """Check service health status."""
         return {
             "status": "healthy" if self.is_available() else "degraded",
             "service": "ai_support",
-            "openai_configured": self.is_available(),
+            "openai_configured": self.openai_client is not None,
+            "gemini_configured": self.gemini_model is not None,
+            "active_provider": self._get_provider(),
             "model": self.model,
-            "features": ["contextual_responses", "conversation_history", "topic_detection", "suggested_actions"]
+            "features": [
+                "contextual_responses",
+                "conversation_history",
+                "topic_detection",
+                "suggested_actions",
+                "gemini_fallback"
+            ]
         }
 
 
