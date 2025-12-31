@@ -6,17 +6,22 @@ These tasks run on a schedule to:
 1. Generate recommendations for all products with active rules
 2. Expire old recommendations
 3. Check competitor prices and trigger alerts
+
+IMPORTANT: Each task creates its own database session to avoid event loop
+conflicts when running in Celery's forked worker processes.
 """
 
 import asyncio
-from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import select
 
 from workers.celery_app import celery_app
-from db.session import get_session_context
+from core.config import settings
 from models.product import Product
 from models.pricing_rule import PricingRule
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
@@ -27,13 +32,42 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def get_task_session_maker():
+    """
+    Create a fresh async session maker for Celery tasks.
+    
+    Uses NullPool to prevent connection reuse across forked processes,
+    which would cause "Future attached to a different loop" errors.
+    """
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        poolclass=NullPool,  # Critical: No pooling in workers
+    )
+    return sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+
 def run_async(coro):
-    """Helper to run async code in sync Celery task."""
+    """
+    Helper to run async code in sync Celery task.
+    
+    Creates a fresh event loop for each task execution to avoid
+    conflicts with asyncpg connections from other workers.
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(coro)
     finally:
+        # Properly clean up pending tasks before closing
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
         loop.close()
 
 
@@ -51,18 +85,16 @@ def generate_all_recommendations():
 async def _generate_all_recommendations():
     """Async implementation of recommendation generation."""
     
-    async with get_session_context() as db:
-        # Get product IDs that have active pricing rules (avoid DISTINCT on JSON columns)
-        subquery = (
-            select(PricingRule.product_id)
-            .where(PricingRule.is_active == True)
-            .distinct()
-            .subquery()
-        )
-        
+    # Create fresh session maker for this task
+    session_maker = get_task_session_maker()
+    
+    async with session_maker() as db:
+        # Get all products that have active pricing rules
         stmt = (
             select(Product)
-            .where(Product.id.in_(select(subquery.c.product_id)))
+            .join(PricingRule, PricingRule.product_id == Product.id)
+            .where(PricingRule.is_active == True)
+            .distinct()
         )
         
         result = await db.execute(stmt)
@@ -106,7 +138,7 @@ async def _generate_all_recommendations():
             "recommendations_expired": expired_count,
             "errors": errors
         }
-    
+
 
 @celery_app.task(name="workers.tasks.pricing_tasks.generate_recommendation_for_product")
 def generate_recommendation_for_product(product_id: str, user_id: str):
@@ -124,7 +156,10 @@ def generate_recommendation_for_product(product_id: str, user_id: str):
 async def _generate_recommendation_for_product(product_id: str, user_id: str):
     """Async implementation for single product recommendation."""
     
-    async with get_session_context() as db:
+    # Create fresh session maker for this task
+    session_maker = get_task_session_maker()
+    
+    async with session_maker() as db:
         # Get the product
         stmt = select(Product).where(Product.id == UUID(product_id))
         result = await db.execute(stmt)
@@ -181,7 +216,10 @@ def check_competitor_prices():
 async def _check_competitor_prices():
     """Async implementation of competitor price checking."""
     
-    async with get_session_context() as db:
+    # Create fresh session maker for this task
+    session_maker = get_task_session_maker()
+    
+    async with session_maker() as db:
         # Get all active competitor products
         stmt = select(CompetitorProduct).where(CompetitorProduct.is_active == True)
         result = await db.execute(stmt)
@@ -235,7 +273,10 @@ def expire_recommendations():
 async def _expire_recommendations():
     """Async implementation of recommendation expiration."""
     
-    async with get_session_context() as db:
+    # Create fresh session maker for this task
+    session_maker = get_task_session_maker()
+    
+    async with session_maker() as db:
         service = RecommendationService(db)
         expired_count = await service.expire_old_recommendations()
         
