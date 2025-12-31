@@ -178,3 +178,198 @@ async def get_competitor_alerts(
         ))
     
     return alerts
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI COMPETITOR ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel
+from typing import Optional
+
+
+class AICompetitorAnalysisResponse(BaseModel):
+    """AI-generated competitor analysis."""
+    competitor_id: uuid_lib.UUID
+    competitor_name: str
+    strategy_detected: str  # "aggressive", "premium", "discount", "stable"
+    analysis: str
+    recommended_response: str
+    confidence: float
+    ai_powered: bool = True
+
+
+@router.get("/{competitor_id}/ai-analysis", response_model=AICompetitorAnalysisResponse)
+async def get_ai_competitor_analysis(
+    request: Request,
+    competitor_id: uuid_lib.UUID,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get AI-powered analysis of a competitor's pricing strategy.
+    
+    Analyzes price history patterns to detect:
+    - Pricing strategy (aggressive, premium, discount, stable)
+    - Seasonal patterns
+    - Response recommendations
+    """
+    from services.ai_generator import ai_generator
+    
+    # Get competitor
+    result = await db.execute(
+        select(Competitor)
+        .where(Competitor.id == competitor_id)
+        .where(Competitor.user_id == current_user.id)
+    )
+    competitor = result.scalars().first()
+    
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+    
+    # Get competitor products with price history
+    cp_result = await db.execute(
+        select(CompetitorProduct)
+        .where(CompetitorProduct.competitor_id == competitor_id)
+        .where(CompetitorProduct.is_active == True)
+    )
+    competitor_products = cp_result.scalars().all()
+    
+    # Get price history for analysis
+    price_changes = []
+    for cp in competitor_products:
+        history_result = await db.execute(
+            select(CompetitorPriceHistory)
+            .where(CompetitorPriceHistory.competitor_product_id == cp.id)
+            .order_by(CompetitorPriceHistory.observed_at.desc())
+            .limit(20)
+        )
+        histories = history_result.scalars().all()
+        
+        for h in histories:
+            if h.change_percent:
+                price_changes.append({
+                    "product": cp.competitor_product_name,
+                    "change_percent": float(h.change_percent),
+                    "change_type": h.change_type,
+                    "date": h.observed_at.isoformat() if h.observed_at else None,
+                })
+    
+    # Detect strategy based on patterns
+    if not price_changes:
+        strategy = "unknown"
+        analysis = f"No price history available for {competitor.name}. Add competitor products to track their pricing patterns."
+        recommendation = "Start tracking competitor products to enable AI analysis."
+        confidence = 0.1
+    else:
+        # Calculate metrics
+        avg_change = sum(p["change_percent"] for p in price_changes) / len(price_changes)
+        drops = sum(1 for p in price_changes if p["change_percent"] < -2)
+        increases = sum(1 for p in price_changes if p["change_percent"] > 2)
+        promotions = sum(1 for p in price_changes if p.get("change_type") == "promotion")
+        
+        # Determine strategy
+        if promotions > len(price_changes) * 0.3 or drops > increases * 2:
+            strategy = "aggressive"
+        elif increases > drops * 2 and avg_change > 3:
+            strategy = "premium"
+        elif avg_change < -2:
+            strategy = "discount"
+        else:
+            strategy = "stable"
+        
+        confidence = min(0.9, 0.3 + len(price_changes) * 0.03)
+        
+        # Use AI for deeper analysis if available
+        if ai_generator.is_available():
+            try:
+                ai_result = await _generate_ai_analysis(
+                    ai_generator,
+                    competitor.name,
+                    strategy,
+                    price_changes,
+                    avg_change,
+                )
+                analysis = ai_result["analysis"]
+                recommendation = ai_result["recommendation"]
+                confidence = min(0.95, confidence + 0.1)
+            except Exception:
+                analysis, recommendation = _generate_basic_analysis(
+                    competitor.name, strategy, avg_change, len(price_changes)
+                )
+        else:
+            analysis, recommendation = _generate_basic_analysis(
+                competitor.name, strategy, avg_change, len(price_changes)
+            )
+    
+    return AICompetitorAnalysisResponse(
+        competitor_id=competitor_id,
+        competitor_name=competitor.name,
+        strategy_detected=strategy,
+        analysis=analysis,
+        recommended_response=recommendation,
+        confidence=confidence,
+        ai_powered=ai_generator.is_available() if price_changes else False,
+    )
+
+
+def _generate_basic_analysis(name: str, strategy: str, avg_change: float, data_points: int) -> tuple:
+    """Generate basic analysis without AI."""
+    strategies = {
+        "aggressive": (
+            f"{name} shows aggressive pricing with frequent discounts and promotions.",
+            "Monitor closely. Match critical promotions but avoid a price war."
+        ),
+        "premium": (
+            f"{name} is positioning as premium with consistent price increases.",
+            "Opportunity to capture price-sensitive customers. Emphasize value."
+        ),
+        "discount": (
+            f"{name} appears to be in discount mode with declining prices.",
+            "Focus on value differentiation rather than price matching."
+        ),
+        "stable": (
+            f"{name} maintains stable pricing with minimal changes.",
+            "Safe to maintain current pricing strategy. Focus on other differentiators."
+        ),
+        "unknown": (
+            f"Insufficient data to analyze {name}'s pricing strategy.",
+            "Continue monitoring to gather more pricing data."
+        ),
+    }
+    return strategies.get(strategy, strategies["unknown"])
+
+
+async def _generate_ai_analysis(ai_generator, name: str, strategy: str, changes: list, avg_change: float) -> dict:
+    """Generate AI-powered analysis."""
+    import json
+    
+    prompt = f"""Analyze this competitor's pricing behavior:
+
+Competitor: {name}
+Detected Strategy: {strategy}
+Average Price Change: {avg_change:.1f}%
+Recent Changes: {json.dumps(changes[:10])}
+
+Provide:
+1. A 2-3 sentence analysis of their pricing strategy
+2. A specific recommendation for how to respond
+
+Return JSON: {{"analysis": "...", "recommendation": "..."}}"""
+
+    response = await ai_generator.client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a competitive pricing analyst. Be specific and actionable."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.5,
+        max_tokens=300
+    )
+    
+    result_text = response.choices[0].message.content.strip()
+    if result_text.startswith("```"):
+        result_text = result_text.split("```")[1]
+        if result_text.startswith("json"):
+            result_text = result_text[4:]
+    
+    return json.loads(result_text)
+
