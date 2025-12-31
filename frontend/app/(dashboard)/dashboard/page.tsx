@@ -14,6 +14,7 @@ import {
   SentimentOverview,
   QuickActions,
   PendingRecommendations,
+  AIFeaturesCard,
 } from '@/components/features/dashboard';
 import {
   useDashboardOverview,
@@ -128,6 +129,9 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* AI Features Showcase */}
+      <AIFeaturesCard />
+
       {/* Sentiment Overview */}
       <SentimentOverview
         trend={overview?.sentiment_trend || 'stable'}
@@ -214,3 +218,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

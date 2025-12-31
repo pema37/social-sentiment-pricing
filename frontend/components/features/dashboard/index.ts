@@ -5,3 +5,5 @@ export { ProductSummaryCard } from './ProductSummaryCard';
 export { SentimentOverview } from './SentimentOverview';
 export { QuickActions } from './QuickActions';
 export { PendingRecommendations } from './PendingRecommendations';
+export { AIFeaturesCard } from './AIFeaturesCard';
+
