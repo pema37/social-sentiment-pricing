@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useProduct } from '@/lib/hooks/use-products';
+import { productsApi } from '@/lib/api';
 import {
   ProductInfoCard,
   AutoPricingCard,
@@ -152,10 +153,13 @@ export default function ProductDetailPage() {
     router.push('/products');
   };
 
-  const handleApplyDescription = (description: string) => {
-    // Could auto-update the product here via API
-    // For now, user can copy the generated content
-    console.log('Generated description:', description);
+  const handleApplyDescription = async (description: string) => {
+    try {
+      await productsApi.update(productId, { description });
+      refetch(); // Refresh the product data
+    } catch (err) {
+      console.error('Failed to update description:', err);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────
