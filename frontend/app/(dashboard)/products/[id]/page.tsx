@@ -156,7 +156,8 @@ export default function ProductDetailPage() {
   const handleApplyDescription = async (description: string) => {
     try {
       await productsApi.update(productId, { description });
-      refetch(); // Refresh the product data
+      setShowGenerateModal(false);  // ADD THIS LINE
+      refetch();
     } catch (err) {
       console.error('Failed to update description:', err);
     }

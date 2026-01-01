@@ -155,9 +155,10 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
           </div>
 
           {product.description && (
-            <p className="mt-3 text-gray-600 text-sm line-clamp-2">
-              {product.description}
-            </p>
+            <div 
+              className="mt-3 text-gray-600 text-sm line-clamp-2 prose prose-sm"
+              dangerouslySetInnerHTML={{ __html: product.description }}
+            />
           )}
         </div>
       </div>
