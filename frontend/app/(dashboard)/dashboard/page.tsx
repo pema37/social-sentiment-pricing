@@ -11,7 +11,7 @@ import {
   StatCard,
   RecentAlerts,
   ProductSummaryCard,
-  SentimentOverview,
+  SentimentTrendChart, 
   QuickActions,
   PendingRecommendations,
   AIFeaturesCard,
@@ -133,12 +133,7 @@ export default function DashboardPage() {
       <AIFeaturesCard />
 
       {/* Sentiment Overview */}
-      <SentimentOverview
-        trend={overview?.sentiment_trend || 'stable'}
-        score={overview?.average_sentiment ?? null}
-        mentions24h={overview?.total_mentions_24h || 0}
-        isLoading={overviewLoading}
-      />
+      <SentimentTrendChart />
 
       {/* Quick Actions */}
       <Card>
