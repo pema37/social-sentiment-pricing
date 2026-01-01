@@ -10,10 +10,13 @@ interface ProductSummaryCardProps {
 }
 
 export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
+  // Safe fallback for price_change_percent
+  const priceChangePercent = product.price_change_percent ?? 0;
+  
   const priceChangeColor =
-    product.price_change_percent > 0
+    priceChangePercent > 0
       ? 'text-green-600'
-      : product.price_change_percent < 0
+      : priceChangePercent < 0
       ? 'text-red-600'
       : 'text-gray-500';
 
@@ -39,15 +42,15 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
       <div className="mt-3 flex items-end justify-between">
         <div>
           <p className="text-lg font-semibold text-gray-900">
-            ${parseFloat(product.current_price).toFixed(2)}
+            ${parseFloat(product.current_price || '0').toFixed(2)}
           </p>
           <p className={`text-sm ${priceChangeColor}`}>
-            {product.price_change_percent > 0 ? '+' : ''}
-            {product.price_change_percent.toFixed(1)}% from base
+            {priceChangePercent > 0 ? '+' : ''}
+            {priceChangePercent.toFixed(1)}% from base
           </p>
         </div>
         <div className="text-right">
-          {product.sentiment_score !== null && (
+          {product.sentiment_score != null && (
             <p
               className={`text-sm font-medium ${
                 product.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
