@@ -77,16 +77,20 @@ export interface UpdateProductRequest {
 
 // Price suggestion from AI
 export interface PriceSuggestion {
+  product_id: string;
+  current_price: number;
   suggested_price: number;
-  confidence: number;
+  change_percent: number;          
   reasoning: string;
-  price_change_percent: number;
-  sentiment_score: number | null;
-  mention_volume: number;
+  confidence: number;
   factors: {
     sentiment_score: number | null;
-    competitor_avg_price: number | null;
-    mention_count: number;
+    competitor_avg_price?: number | null;
+    mention_count?: number;
+    mention_volume?: number;
+    trend?: string;
+    ai_key_factors?: string[];
+    ai_powered?: boolean;
   };
 }
 

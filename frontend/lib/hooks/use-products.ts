@@ -207,19 +207,25 @@ export function useToggleAutoPricing() {
 }
 
 // Apply price suggestion
+// Apply price suggestion
 export function useApplyPriceSuggestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, price }: { id: string; price: number }) =>
-      productsApi.update(id, { current_price: price }),
+    mutationFn: ({ id, price }: { id: string; price: number }) => {
+      // Validate price before sending
+      if (price == null || isNaN(price)) {
+        return Promise.reject(new Error('Invalid price value'));
+      }
+      return productsApi.update(id, { current_price: price });
+    },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: productKeys.suggestion(variables.id) });
       queryClient.invalidateQueries({ queryKey: productKeys.list() });
       toast.success({ 
         title: 'Price updated', 
-        message: `Price has been updated to $${variables.price.toFixed(2)}` 
+        message: `Price has been updated to $${(variables.price ?? 0).toFixed(2)}` 
       });
     },
     onError: (error: Error) => {
