@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button, Card } from '@/components/ui';
 import { AIBadge } from '@/components/ui/ai-badge';
 import { cn } from '@/lib/utils';
+import { productsApi } from '@/lib/api';
 import { Sparkles, Copy, Check } from 'lucide-react';
 
 interface GenerateDescriptionModalProps {
@@ -54,24 +55,13 @@ export function GenerateDescriptionModal({
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/products/${productId}/generate-description`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        body: JSON.stringify({ tone, length }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to generate description');
-      }
-
-      const data = await response.json();
+      const data = await productsApi.generateDescription(productId, { tone, length });
       setResult(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed');
+    } catch (err: unknown) {
+      const message = err instanceof Error 
+                ? err.message 
+                : 'Failed to generate description';
+      setError(message);
     } finally {
       setIsLoading(false);
     }

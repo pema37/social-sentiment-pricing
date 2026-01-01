@@ -39,6 +39,8 @@ class AIGeneratorService:
         self.openai_client = None
         if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
             self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        logger.info(f"OpenAI client initialized: {self.openai_client is not None}")
+        logger.info(f"API key starts with: {settings.OPENAI_API_KEY[:10] if settings.OPENAI_API_KEY else 'None'}...")
         
         # Gemini (fallback)
         self.gemini_client = None

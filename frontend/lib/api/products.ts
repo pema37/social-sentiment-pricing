@@ -72,5 +72,16 @@ export const productsApi = {
   // CSV Import
   import: (data: ImportProductsRequest) =>
     api.post<ImportProductsResponse>('/api/v1/products/import', data),
+
+  // Add to productsApi object
+  generateDescription: (id: string, options: { tone: string; length: string }) =>
+    api.post<{
+      description: string;
+      seo_title: string;
+      meta_description: string;
+      suggested_keywords: string[];
+    }>(`/api/v1/products/${id}/generate-description`, options),
+
 };
+
 
