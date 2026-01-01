@@ -54,34 +54,37 @@ export const productsApi = {
   delete: (id: string) =>
     api.delete<void>(`/api/v1/products/${id}`),
 
-  // Price suggestion (with AI explanation by default)
   getSuggestion: (id: string, useAi: boolean = true) =>
     api.get<PriceSuggestion>(`/api/v1/products/${id}/price-suggestion?use_ai=${useAi}`),
 
-  // Price history
   getPriceHistory: (id: string, params?: { days?: number; limit?: number }) =>
     api.get<PriceHistoryEntry[]>(`/api/v1/products/${id}/price-history`, params),
 
-  // Bulk operations
   bulkUpdatePricing: (productIds: string[], enabled: boolean) =>
     api.post<{ updated_count: number }>('/api/v1/products/bulk/auto-pricing', {
       product_ids: productIds,
       enabled,
     }),
 
-  // CSV Import
   import: (data: ImportProductsRequest) =>
     api.post<ImportProductsResponse>('/api/v1/products/import', data),
 
-  // Add to productsApi object
-  generateDescription: (id: string, options: { tone: string; length: string }) =>
-    api.post<{
-      description: string;
-      seo_title: string;
-      meta_description: string;
-      suggested_keywords: string[];
-    }>(`/api/v1/products/${id}/generate-description`, options),
-
+  // TEMPORARY: hardcoded URL to test backend
+  generateDescription: async (id: string, options: { tone: string; length: string }) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const res = await fetch(
+      `https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/products/${id}/generate-description`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify(options),
+      }
+    );
+    if (!res.ok) throw new Error('Failed to generate');
+    return res.json();
+  },
 };
-
 
