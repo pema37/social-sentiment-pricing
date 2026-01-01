@@ -227,7 +227,7 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
               <PriceComparison
                 currentPrice={Number(product.current_price)}
                 suggestedPrice={Number(suggestion.suggested_price)}
-                changePercent={Number(suggestion.price_change_percent)}
+                changePercent={Number(suggestion.change_percent)}
               />
 
               <ConfidenceBar confidence={Number(suggestion.confidence)} />
@@ -240,8 +240,8 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
               )}
 
               <FactorsGrid
-                sentimentScore={suggestion.sentiment_score}
-                mentionVolume={suggestion.mention_volume}
+                sentimentScore={suggestion.factors.sentiment_score}
+                mentionVolume={suggestion.factors.mention_volume ?? 0}
               />
             </div>
           ) : null}
