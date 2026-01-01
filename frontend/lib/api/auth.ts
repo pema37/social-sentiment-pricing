@@ -33,3 +33,4 @@ export const authApi = {
   changePassword: (data: ChangePasswordRequest) =>
     api.post<{ message: string }>('/api/v1/users/me/change-password', data),
 };
+
