@@ -158,13 +158,14 @@ class PriceRecommendationResponse(BaseModel):
     product_id: UUID
     triggered_rule_id: Optional[UUID]
     
-    current_price: Decimal
-    recommended_price: Decimal
-    change_percent: Decimal
+    # Add defaults for safety
+    current_price: Decimal = Decimal("0")
+    recommended_price: Decimal = Decimal("0")
+    change_percent: Decimal = Decimal("0")
+    confidence_score: Decimal = Decimal("0")
     
-    confidence_score: Decimal
-    reasoning: str
-    factors: dict
+    reasoning: str = ""
+    factors: dict = Field(default_factory=dict)
     
     status: RecommendationStatus
     requires_approval: bool

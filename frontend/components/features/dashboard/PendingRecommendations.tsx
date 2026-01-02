@@ -13,7 +13,7 @@ interface PendingRecommendationsProps {
 }
 
 function RecommendationRow({ recommendation }: { recommendation: PriceRecommendation }) {
-  const changePercent = recommendation.change_percent;
+  const changePercent = recommendation.change_percent ?? 0;  
   const isIncrease = changePercent > 0;
 
   return (
@@ -37,7 +37,7 @@ function RecommendationRow({ recommendation }: { recommendation: PriceRecommenda
         </p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-gray-500">
-            ${parseFloat(recommendation.current_price).toFixed(2)}
+            ${parseFloat(recommendation.current_price || '0').toFixed(2)}
           </span>
           <ArrowRight className="w-3 h-3 text-gray-400" />
           <span
@@ -45,7 +45,7 @@ function RecommendationRow({ recommendation }: { recommendation: PriceRecommenda
               isIncrease ? 'text-green-600' : 'text-red-600'
             }`}
           >
-            ${parseFloat(recommendation.recommended_price).toFixed(2)}
+            ${parseFloat(recommendation.recommended_price || '0').toFixed(2)}
           </span>
         </div>
       </div>
