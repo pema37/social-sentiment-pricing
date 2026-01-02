@@ -75,10 +75,24 @@ async def get_sentiment_trend(
     current_user: User = Depends(get_current_user),
 ):
     """Get sentiment trend data for charts."""
-    service = AnalyticsService(session, str(current_user.id))
-    return await service.get_sentiment_trend(
-        product_id=product_id,
-        days=days,
-        bucket=bucket
-    )
-
+    try:
+        service = AnalyticsService(session, str(current_user.id))
+        return await service.get_sentiment_trend(
+            product_id=product_id,
+            days=days,
+            bucket=bucket
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Sentiment trend error for user {current_user.id}: {e}", exc_info=True)
+        # Return empty response instead of crashing
+        return SentimentAnalytics(
+            product_id=product_id,
+            period_days=days,
+            current_score=None,
+            previous_score=None,
+            change=None,
+            trend="stable",
+            timeline=[]
+        )
+    
