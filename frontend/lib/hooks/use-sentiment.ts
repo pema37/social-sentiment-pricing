@@ -18,6 +18,7 @@ export function useSentimentByProduct(productId: string | null) {
     queryFn: () => sentimentApi.getByProduct(productId!),
     enabled: !!productId,
     staleTime: 60 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -31,6 +32,7 @@ export function useMentions(
     queryFn: () => sentimentApi.getMentions(productId!, params),
     enabled: !!productId,
     staleTime: 60 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -41,22 +43,19 @@ export function useAnalyzeSentiment() {
   return useMutation({
     mutationFn: (data: AnalyzeRequest) => sentimentApi.analyze(data),
     onSuccess: (_data, variables) => {
-      // Use variables.product_id since response may not include it
       const productId = variables.product_id;
       
-      // Invalidate mentions for this product
       queryClient.invalidateQueries({
         queryKey: sentimentKeys.mentions(productId),
       });
       
-      // Invalidate sentiment by product
       queryClient.invalidateQueries({
         queryKey: sentimentKeys.byProduct(productId),
       });
       
-      // Invalidate analytics to update charts
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
   });
 }
+
 

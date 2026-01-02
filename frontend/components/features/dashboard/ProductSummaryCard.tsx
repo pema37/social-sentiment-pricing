@@ -12,7 +12,9 @@ interface ProductSummaryCardProps {
 export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
   // Safe fallback for price_change_percent
   const priceChangePercent = product.price_change_percent ?? 0;
-  
+  // Safe fallback for sentiment_score
+  const sentimentScore = product.sentiment_score ?? null;
+
   const priceChangeColor =
     priceChangePercent > 0
       ? 'text-green-600'
@@ -50,17 +52,17 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
           </p>
         </div>
         <div className="text-right">
-          {product.sentiment_score != null && (
+          {sentimentScore !== null && typeof sentimentScore === 'number' && (
             <p
               className={`text-sm font-medium ${
-                product.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
+                sentimentScore >= 0 ? 'text-green-600' : 'text-red-600'
               }`}
             >
-              {product.sentiment_score >= 0 ? '+' : ''}
-              {product.sentiment_score.toFixed(2)}
+              {sentimentScore >= 0 ? '+' : ''}
+              {sentimentScore.toFixed(2)}
             </p>
           )}
-          <p className="text-xs text-gray-500">{product.mention_count_24h} mentions</p>
+          <p className="text-xs text-gray-500">{product.mention_count_24h ?? 0} mentions</p>
         </div>
       </div>
 
@@ -75,3 +77,4 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
     </Link>
   );
 }
+

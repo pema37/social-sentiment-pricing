@@ -32,8 +32,8 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
         month: 'short', 
         day: 'numeric' 
       }),
-      score: point.score,
-      mentions: point.mention_count,
+      score: point.score ?? 0,
+      mentions: point.mention_count ?? 0,
     }));
   }, [data]);
 
@@ -45,6 +45,9 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
 
   const currentTrend = data?.trend || 'stable';
   const TrendIcon = trendConfig[currentTrend]?.icon || Minus;
+  
+  // Safe change value
+  const changeValue = typeof data?.change === 'number' ? data.change : null;
 
   if (isLoading) {
     return (
@@ -63,13 +66,13 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
           <p className="text-sm text-gray-500 mt-1">Last {days} days</p>
         </div>
         <div className="flex items-center gap-2">
-          <TrendIcon className={`w-5 h-5 ${trendConfig[currentTrend].color}`} />
-          <span className={`text-sm font-medium ${trendConfig[currentTrend].color}`}>
-            {trendConfig[currentTrend].label}
+          <TrendIcon className={`w-5 h-5 ${trendConfig[currentTrend]?.color || 'text-gray-500'}`} />
+          <span className={`text-sm font-medium ${trendConfig[currentTrend]?.color || 'text-gray-500'}`}>
+            {trendConfig[currentTrend]?.label || 'Stable'}
           </span>
-          {data?.change != null && (
-            <span className={`text-sm ${data.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              ({data.change >= 0 ? '+' : ''}{data.change.toFixed(2)})
+          {changeValue !== null && (
+            <span className={`text-sm ${changeValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              ({changeValue >= 0 ? '+' : ''}{changeValue.toFixed(2)})
             </span>
           )}
         </div>
@@ -89,7 +92,7 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
                 domain={[-1, 1]} 
                 tick={{ fontSize: 12 }} 
                 stroke="#9ca3af"
-                tickFormatter={(value) => (value ?? 0).toFixed(1)}
+                tickFormatter={(value) => (typeof value === 'number' ? value : 0).toFixed(1)}
               />
               <Tooltip
                 contentStyle={{
