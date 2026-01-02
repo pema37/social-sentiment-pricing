@@ -15,11 +15,16 @@ const ruleActions: { value: RuleAction; label: string }[] = [
   { value: 'undercut_competitor', label: 'Undercut competitor' },
 ];
 
+// Actions that don't require a value input
+const ACTIONS_WITHOUT_VALUE = ['match_competitor'];
+
 export function RuleFormActions({ data, errors, onChange }: RuleFormSectionProps) {
   const inputClass = (field: keyof typeof errors) => cn(
     'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
     errors[field] ? 'border-red-300' : 'border-gray-300'
   );
+
+  const requiresValue = !ACTIONS_WITHOUT_VALUE.includes(data.action);
 
   return (
     <>
@@ -40,19 +45,31 @@ export function RuleFormActions({ data, errors, onChange }: RuleFormSectionProps
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Action Value <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={data.action_value}
-              onChange={(e) => onChange('action_value', e.target.value)}
-              placeholder={data.action.includes('percent') ? 'e.g., 10 (for 10%)' : 'e.g., 29.99'}
-              className={inputClass('action_value')}
-            />
-            {errors.action_value && <p className="mt-1 text-sm text-red-600">{errors.action_value}</p>}
-          </div>
+          {/* Only show Action Value for actions that need it */}
+          {requiresValue && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Action Value <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={data.action_value}
+                onChange={(e) => onChange('action_value', e.target.value)}
+                placeholder={data.action.includes('percent') ? 'e.g., 10 (for 10%)' : 'e.g., 29.99'}
+                className={inputClass('action_value')}
+              />
+              {errors.action_value && <p className="mt-1 text-sm text-red-600">{errors.action_value}</p>}
+            </div>
+          )}
+
+          {/* Show info message when action doesn't need value */}
+          {!requiresValue && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                This action will automatically match the competitor&apos;s price. No value needed.
+              </p>
+            </div>
+          )}
         </div>
       </Card>
 

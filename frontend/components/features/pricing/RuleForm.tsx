@@ -66,6 +66,9 @@ const getInitialData = (data?: Partial<PricingRule>): RuleFormData => {
   };
 };
 
+// Actions that don't require a value input
+const ACTIONS_WITHOUT_VALUE = ['match_competitor'];
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -78,7 +81,7 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
   const updateMutation = useUpdatePricingRule();
   const { data: productsData, isLoading: isLoadingProducts } = useProducts();
 
-const products = useMemo(() => productsData?.items ?? [], [productsData?.items]);
+  const products = useMemo(() => productsData?.items ?? [], [productsData?.items]);
   const categories = useMemo(() => {
     const cats = new Set<string>();
     products.forEach(p => { if (p.category) cats.add(p.category); });
@@ -97,7 +100,11 @@ const products = useMemo(() => productsData?.items ?? [], [productsData?.items])
     const errs: RuleFormErrors = {};
 
     if (!formData.name.trim()) errs.name = 'Name is required';
-    if (!formData.action_value.trim()) errs.action_value = 'Action value is required';
+    
+    // Only require action_value for actions that need it
+    if (!ACTIONS_WITHOUT_VALUE.includes(formData.action) && !formData.action_value.trim()) {
+      errs.action_value = 'Action value is required';
+    }
 
     // Scope validation
     if (formData.scope_type === 'single' && !formData.product_id) errs.product_id = 'Select a product';
@@ -122,7 +129,7 @@ const products = useMemo(() => productsData?.items ?? [], [productsData?.items])
       is_active: formData.is_active,
       priority: formData.priority,
       action: formData.action,
-      action_value: formData.action_value.trim(),
+      action_value: ACTIONS_WITHOUT_VALUE.includes(formData.action) ? '0' : formData.action_value.trim(),
       cooldown_hours: parseInt(formData.cooldown_hours) || 24,
     };
 
