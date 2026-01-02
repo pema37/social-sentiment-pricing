@@ -227,10 +227,19 @@ export function GenerateDescriptionModal({
               {/* Keywords */}
               {result.suggested_keywords.length > 0 && (
                 <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">
-                    Suggested Keywords
-                  </label>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sm font-medium text-gray-700">
+                      Suggested Keywords
+                    </label>
+                    <button
+                      onClick={() => handleCopy(result.suggested_keywords.join(', '), 'keywords')}
+                      className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                    >
+                      {copied === 'keywords' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {copied === 'keywords' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {result.suggested_keywords.map((kw, i) => (
                       <span
                         key={i}
@@ -240,6 +249,9 @@ export function GenerateDescriptionModal({
                       </span>
                     ))}
                   </div>
+                  <p className="text-xs text-gray-400">
+                    Click Copy to get comma-separated keywords for pasting
+                  </p>
                 </div>
               )}
             </div>
@@ -280,4 +292,5 @@ export function GenerateDescriptionModal({
     </div>
   );
 }
+
 
