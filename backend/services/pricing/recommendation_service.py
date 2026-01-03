@@ -3,6 +3,7 @@
 Recommendation Service - Generates price recommendations based on rules and signals.
 """
 
+import logging
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
@@ -18,6 +19,8 @@ from models.pricing_settings import PricingSettings
 from .rule_evaluator import RuleEvaluator, MarketSignals
 from .signal_processor import SignalProcessor
 from .confidence_calculator import ConfidenceCalculator
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationService:
@@ -130,6 +133,17 @@ class RecommendationService:
         self.db.add(recommendation)
         await self.db.commit()
         await self.db.refresh(recommendation)
+        
+        # AUTO-APPLY: If recommendation doesn't require approval, auto-approve and push to e-commerce
+        if not requires_approval and settings and settings.auto_approve_enabled:
+            try:
+                from services.pricing.approval_service import ApprovalService
+                approval_service = ApprovalService(self.db)
+                recommendation = await approval_service.auto_approve_and_apply(recommendation, user_id)
+                logger.info(f"Auto-applied recommendation {recommendation.id} for product {product.id}")
+            except Exception as e:
+                # Log error but don't fail - recommendation stays as pending
+                logger.warning(f"Auto-apply failed for recommendation {recommendation.id}: {str(e)}")
         
         return recommendation
     
@@ -331,4 +345,5 @@ class RecommendationService:
         await self.db.commit()
         
         return len(expired)
-    
+
+
