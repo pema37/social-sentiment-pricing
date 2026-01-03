@@ -48,25 +48,36 @@ async def create_rule(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Create a new pricing rule.
+    """Create a new pricing rule."""
     
-    - Validates that the product exists and belongs to the user
-    - Associates rule with the authenticated user
-    - Returns 201 Created with the new rule
-    """
-    # Verify product ownership
-    product = await db.get(Product, data.product_id)
-    if not product or product.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Product not found")
+    # Validate product ownership based on scope
+    if data.product_id:
+        # Single product rule
+        product = await db.get(Product, data.product_id)
+        if not product or product.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Product not found")
     
-    # Create rule with user_id set from auth
+    elif data.applies_to_products:
+        # Multiple specific products
+        for pid in data.applies_to_products:
+            product = await db.get(Product, pid)
+            if not product or product.user_id != current_user.id:
+                raise HTTPException(status_code=404, detail=f"Product {pid} not found")
+    
+    elif data.applies_to_categories:
+        # Category-based - validate categories exist for user's products
+        pass  # Categories are strings, no DB validation needed
+    
+    elif not data.applies_to_all_products:
+        # No scope specified and not "all products"
+        raise HTTPException(status_code=400, detail="Must specify product scope")
+    
+    # Create rule
     rule = PricingRule(user_id=current_user.id, **data.model_dump())
     db.add(rule)
     await db.commit()
     await db.refresh(rule)
     return rule
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # READ (LIST) - PAGINATED

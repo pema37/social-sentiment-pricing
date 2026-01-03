@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from core.deps import get_current_user
-from core.rate_limit import limiter, BULK_RATE_LIMIT
+from core.rate_limit import limiter, BULK_RATE_LIMIT, WRITE_RATE_LIMIT
 from db.session import get_session, async_session
 from models.user import User
 from models.integration import Integration, IntegrationSyncLog, IntegrationStatus
@@ -20,7 +20,7 @@ from schemas.integration import (
     SyncLogResponse,
 )
 from schemas.common import PaginatedResponse, PaginationParams
-from services.integration import SyncService
+from services.integration import SyncService, PricePushService  # Updated import
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,49 @@ async def trigger_sync(
     )
 
 
+@router.post("/{integration_id}/push-prices")
+@limiter.limit(WRITE_RATE_LIMIT)
+async def push_prices_to_platform(
+    request: Request,
+    integration_id: UUID,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Push all pending price changes to the e-commerce platform.
+    
+    Compares local prices with external prices and pushes any differences.
+    Skips products where prices match (within $0.01 tolerance).
+    
+    Returns:
+        - total: Total linked products
+        - pushed: Successfully pushed
+        - failed: Failed to push
+        - skipped: Prices already match
+        - errors: Details of first 10 failures
+    """
+    price_push_service = PricePushService(db)  # Changed from SyncService
+    
+    try:
+        result = await price_push_service.push_all_pending_prices(  # Changed
+            integration_id=integration_id,
+            user_id=current_user.id,
+        )
+        
+        logger.info(
+            f"Price push for integration {integration_id}: "
+            f"pushed={result['pushed']}, failed={result['failed']}, skipped={result['skipped']}"
+        )
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+
 @router.get("/{integration_id}/sync/status", response_model=SyncStatusResponse)
 async def get_sync_status(
     request: Request,
@@ -183,3 +226,4 @@ async def get_sync_logs(
         page_size=pagination.page_size,
         total_pages=total_pages,
     )
+

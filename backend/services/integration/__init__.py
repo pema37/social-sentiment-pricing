@@ -58,13 +58,17 @@ from .base import EcommerceService
 from .shopify_service import ShopifyService
 from .woocommerce_service import WooCommerceService
 
-# Sync orchestration
+# Sync orchestration (PULL)
 from .sync_service import (
     SyncService,
     SyncError,
     SyncTemporarilyUnavailable,
+    SyncTimeoutError,  # Added
     run_product_sync,
 )
+
+# Price push (PUSH)
+from .price_push_service import PricePushService  # Added
 
 # Webhook registration
 from .webhook_registration import (
@@ -108,13 +112,17 @@ __all__ = [
     # Services
     "ShopifyService",
     "WooCommerceService",
-    # Sync
+    # Sync (PULL)
     "SyncService",
     "SyncError",
     "SyncTemporarilyUnavailable",
+    "SyncTimeoutError",  # Added
     "run_product_sync",
+    # Price Push (PUSH)
+    "PricePushService",  # Added
     # Webhook registration
     "WebhookRegistrationService",
     "register_webhooks_for_integration",
     "unregister_webhooks_for_integration",
 ]
+
