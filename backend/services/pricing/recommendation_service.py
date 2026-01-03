@@ -36,6 +36,18 @@ class RecommendationService:
     ) -> Optional[PriceRecommendation]:
         """Generate a price recommendation for a product."""
         
+        # Check if pending recommendation already exists for this product
+        existing_stmt = (
+            select(PriceRecommendation)
+            .where(PriceRecommendation.product_id == product.id)
+            .where(PriceRecommendation.user_id == user_id)
+            .where(PriceRecommendation.status == RecommendationStatus.PENDING)
+            .where(PriceRecommendation.valid_until > datetime.utcnow())
+        )
+        existing_result = await self.db.execute(existing_stmt)
+        if existing_result.scalars().first():
+            return None  # Don't create duplicate pending recommendation
+        
         # Gather market signals
         signals = await self.signal_processor.gather_signals(product)
         
