@@ -162,29 +162,46 @@ export interface RejectRecommendationRequest {
 // ============================================
 // PRICING SETTINGS TYPES
 // ============================================
-
-/** User's pricing settings/preferences */
+/** User's pricing settings/preferences - matches backend PricingSettingsResponse */
 export interface PricingSettings {
   id: string;
   user_id: string;
-  auto_apply_enabled: boolean;
-  auto_apply_max_percent: string;
-  require_approval_above: string;
-  min_confidence_threshold: number;
-  default_cooldown_hours: number;
-  notification_channels: AlertChannel[];
+  auto_approve_enabled: boolean;
+  auto_approve_max_increase: number;
+  auto_approve_max_decrease: number;
+  auto_approve_min_confidence: number;
+  min_margin_percent: number;
+  max_auto_changes_per_day: number;
+  global_cooldown_hours: number;
+  blackout_hours_start: number | null;
+  blackout_hours_end: number | null;
+  require_approval_above_price: number | null;
+  recommendation_valid_hours: number;
+  notify_on_auto_apply: boolean;
+  notify_on_pending: boolean;
+  notification_email: string | null;
+  notification_slack_webhook: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at: string | null;
 }
 
-/** Data for updating pricing settings */
+/** Data for updating pricing settings - matches backend PricingSettingsUpdate */
 export interface UpdatePricingSettingsRequest {
-  auto_apply_enabled?: boolean;
-  auto_apply_max_percent?: string;
-  require_approval_above?: string;
-  min_confidence_threshold?: number;
-  default_cooldown_hours?: number;
-  notification_channels?: AlertChannel[];
+  auto_approve_enabled?: boolean;
+  auto_approve_max_increase?: number;
+  auto_approve_max_decrease?: number;
+  auto_approve_min_confidence?: number;
+  min_margin_percent?: number;
+  max_auto_changes_per_day?: number;
+  global_cooldown_hours?: number;
+  blackout_hours_start?: number | null;
+  blackout_hours_end?: number | null;
+  require_approval_above_price?: number | null;
+  recommendation_valid_hours?: number;
+  notify_on_auto_apply?: boolean;
+  notify_on_pending?: boolean;
+  notification_email?: string | null;
+  notification_slack_webhook?: string | null;
 }
 
 /** Statistics about pricing recommendations (from pricing API) */
