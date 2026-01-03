@@ -1,12 +1,13 @@
 // components/products/ProductForm.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Package, DollarSign, Zap, Tag } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Package, DollarSign, Zap, Tag, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { CategorySelect } from '@/components/ui/CategorySelect';
+import { GenerateDescriptionModal } from './GenerateDescriptionModal';
 import {
   useCreateProduct,
   useUpdateProduct,
@@ -141,6 +142,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
   
   const [formData, setFormData] = useState<FormData>(() => buildInitialFormData(product));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -163,6 +165,23 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
   const handleToggle = (field: 'auto_pricing_enabled' | 'is_active') => {
     setFormData(prev => ({ ...prev, [field]: !prev[field] }));
   };
+
+  // Handle AI-generated content - now receives an object with individual fields
+  const handleApplyGenerated = useCallback((fields: {
+    description?: string;
+    seo_title?: string;
+    meta_description?: string;
+    keywords?: string[];
+  }) => {
+    if (fields.description) {
+      setFormData(prev => ({ ...prev, description: fields.description! }));
+    }
+    if (fields.keywords) {
+      setFormData(prev => ({ ...prev, keywords: fields.keywords!.join(', ') }));
+    }
+    // Note: seo_title and meta_description aren't in this form yet
+    // but the modal will still show them for copy/paste
+  }, []);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -205,116 +224,150 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 
   const isPending = createProduct.isPending || updateProduct.isPending;
 
+  // For new products, we need a product ID for the API call
+  // The modal requires productId, so we only show the button for existing products
+  // OR we need to handle the "new product" case differently
+  const canShowGenerator = isEdit && product?.id;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic Information */}
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
-          <Package className="w-4 h-4" />
-          Basic Information
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Product Name <span className="text-red-500">*</span>
-            </label>
-            <Input
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="e.g., Wireless Bluetooth Headphones"
-              className={errors.name ? 'border-red-500' : ''}
-            />
-            {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+    <>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic Information */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              Basic Information
+            </h3>
+            {/* AI Generate Button - only show for existing products */}
+            {canShowGenerator && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowGenerateModal(true)}
+                className="flex items-center gap-2 bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200"
+              >
+                <Sparkles className="w-4 h-4" />
+                AI Generate
+              </Button>
+            )}
           </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Product Name <span className="text-red-500">*</span>
+              </label>
+              <Input
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="e.g., Wireless Bluetooth Headphones"
+                className={errors.name ? 'border-red-500' : ''}
+              />
+              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-            <Input name="sku" value={formData.sku} onChange={handleChange} placeholder="e.g., WBH-001" />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+              <Input name="sku" value={formData.sku} onChange={handleChange} placeholder="e.g., WBH-001" />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <CategorySelect
-              value={formData.category}
-              onChange={handleCategoryChange}
-              categories={categories}
-              isLoading={isLoadingProducts}
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <CategorySelect
+                value={formData.category}
+                onChange={handleCategoryChange}
+                categories={categories}
+                isLoading={isLoadingProducts}
+              />
+            </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              placeholder="Product description..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                placeholder="Product description..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-            <Input name="image_url" value={formData.image_url} onChange={handleChange} placeholder="https://example.com/image.jpg" />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+              <Input name="image_url" value={formData.image_url} onChange={handleChange} placeholder="https://example.com/image.jpg" />
+            </div>
           </div>
+        </Card>
+
+        {/* Pricing */}
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Pricing
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PriceInput name="base_price" label="Base Price" value={formData.base_price} onChange={handleChange} error={errors.base_price} required />
+            <div />
+            <PriceInput name="min_price" label="Min Price" value={formData.min_price} onChange={handleChange} error={errors.min_price} />
+            <PriceInput name="max_price" label="Max Price" value={formData.max_price} onChange={handleChange} />
+          </div>
+        </Card>
+
+        {/* Auto-Pricing Settings */}
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+            <Zap className="w-4 h-4" />
+            Auto-Pricing Settings
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sentiment Multiplier</label>
+              <Input name="sentiment_multiplier" type="number" step="0.01" min="0" max="1" value={formData.sentiment_multiplier} onChange={handleChange} placeholder="0.2" />
+              <p className="text-xs text-gray-500 mt-1">How much sentiment affects pricing (0.0 - 1.0). Default: 0.2 = 20% max impact</p>
+            </div>
+            <ToggleSwitch enabled={formData.auto_pricing_enabled} onToggle={() => handleToggle('auto_pricing_enabled')} label="Auto-Pricing" description="Automatically adjust prices based on sentiment" />
+            <ToggleSwitch enabled={formData.is_active} onToggle={() => handleToggle('is_active')} label="Active" description="Product is visible and available" />
+          </div>
+        </Card>
+
+        {/* Keywords */}
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+            <Tag className="w-4 h-4" />
+            Social Monitoring Keywords
+          </h3>
+          <Input name="keywords" value={formData.keywords} onChange={handleChange} placeholder="keyword1, keyword2, keyword3" />
+          <p className="text-xs text-gray-500 mt-1">Comma-separated keywords to track on social media for this product</p>
+        </Card>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          {onCancel && <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">Cancel</Button>}
+          <Button type="submit" isLoading={isPending} className={onCancel ? 'flex-1' : 'w-full'}>
+            {isEdit ? 'Save Changes' : 'Create Product'}
+          </Button>
         </div>
-      </Card>
+      </form>
 
-      {/* Pricing */}
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
-          <DollarSign className="w-4 h-4" />
-          Pricing
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PriceInput name="base_price" label="Base Price" value={formData.base_price} onChange={handleChange} error={errors.base_price} required />
-          <div />
-          <PriceInput name="min_price" label="Min Price" value={formData.min_price} onChange={handleChange} error={errors.min_price} />
-          <PriceInput name="max_price" label="Max Price" value={formData.max_price} onChange={handleChange} />
-        </div>
-      </Card>
-
-      {/* Auto-Pricing Settings */}
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
-          <Zap className="w-4 h-4" />
-          Auto-Pricing Settings
-        </h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sentiment Multiplier</label>
-            <Input name="sentiment_multiplier" type="number" step="0.01" min="0" max="1" value={formData.sentiment_multiplier} onChange={handleChange} placeholder="0.2" />
-            <p className="text-xs text-gray-500 mt-1">How much sentiment affects pricing (0.0 - 1.0). Default: 0.2 = 20% max impact</p>
-          </div>
-          <ToggleSwitch enabled={formData.auto_pricing_enabled} onToggle={() => handleToggle('auto_pricing_enabled')} label="Auto-Pricing" description="Automatically adjust prices based on sentiment" />
-          <ToggleSwitch enabled={formData.is_active} onToggle={() => handleToggle('is_active')} label="Active" description="Product is visible and available" />
-        </div>
-      </Card>
-
-      {/* Keywords */}
-      <Card className="p-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
-          <Tag className="w-4 h-4" />
-          Social Monitoring Keywords
-        </h3>
-        <Input name="keywords" value={formData.keywords} onChange={handleChange} placeholder="keyword1, keyword2, keyword3" />
-        <p className="text-xs text-gray-500 mt-1">Comma-separated keywords to track on social media for this product</p>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        {onCancel && <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">Cancel</Button>}
-        <Button type="submit" isLoading={isPending} className={onCancel ? 'flex-1' : 'w-full'}>
-          {isEdit ? 'Save Changes' : 'Create Product'}
-        </Button>
-      </div>
-    </form>
+      {/* AI Generate Modal - only rendered for existing products */}
+      {canShowGenerator && product && (
+        <GenerateDescriptionModal
+          isOpen={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
+          productId={product.id}
+          productName={product.name}
+          onApply={handleApplyGenerated}
+        />
+      )}
+    </>
   );
 }
 
 export default ProductForm;
+

@@ -6,14 +6,19 @@ import { Button, Card } from '@/components/ui';
 import { AIBadge } from '@/components/ui/ai-badge';
 import { cn } from '@/lib/utils';
 import { productsApi } from '@/lib/api';
-import { Sparkles, Copy, Check } from 'lucide-react';
+import { Sparkles, Copy, Check, CheckCircle } from 'lucide-react';
 
 interface GenerateDescriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   productId: string;
   productName: string;
-  onApply: (description: string) => void;
+  onApply: (fields: {
+    description?: string;
+    seo_title?: string;
+    meta_description?: string;
+    keywords?: string[];
+  }) => void;
 }
 
 interface GeneratedContent {
@@ -49,10 +54,12 @@ export function GenerateDescriptionModal({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratedContent | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
 
   const handleGenerate = async () => {
     setIsLoading(true);
     setError(null);
+    setAppliedFields(new Set());
 
     try {
       const data = await productsApi.generateDescription(productId, { tone, length });
@@ -73,16 +80,35 @@ export function GenerateDescriptionModal({
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleApply = () => {
-    if (result) {
-      onApply(result.description);
-      onClose();
+  // Apply individual field
+  const handleApplyField = (field: 'description' | 'seo_title' | 'meta_description' | 'keywords') => {
+    if (!result) return;
+    
+    if (field === 'keywords') {
+      onApply({ keywords: result.suggested_keywords });
+    } else {
+      onApply({ [field]: result[field] });
     }
+    
+    setAppliedFields(prev => new Set([...prev, field]));
+  };
+
+  // Apply all fields
+  const handleApplyAll = () => {
+    if (!result) return;
+    onApply({
+      description: result.description,
+      seo_title: result.seo_title,
+      meta_description: result.meta_description,
+      keywords: result.suggested_keywords,
+    });
+    setAppliedFields(new Set(['description', 'seo_title', 'meta_description', 'keywords']));
   };
 
   const handleClose = () => {
     setResult(null);
     setError(null);
+    setAppliedFields(new Set());
     onClose();
   };
 
@@ -173,73 +199,55 @@ export function GenerateDescriptionModal({
           {result && (
             <div className="space-y-4 mb-6">
               {/* Description */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">Description</label>
-                  <button
-                    onClick={() => handleCopy(result.description, 'description')}
-                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                  >
-                    {copied === 'description' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    {copied === 'description' ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
+              <FieldResult
+                label="Description"
+                isApplied={appliedFields.has('description')}
+                isCopied={copied === 'description'}
+                onApply={() => handleApplyField('description')}
+                onCopy={() => handleCopy(result.description, 'description')}
+              >
                 <div
-                  className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm prose prose-sm max-w-none"
+                  className="p-3 bg-white border border-gray-200 rounded-lg text-sm prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: result.description }}
                 />
-              </div>
+              </FieldResult>
 
               {/* SEO Title */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">SEO Title</label>
-                  <button
-                    onClick={() => handleCopy(result.seo_title, 'seo_title')}
-                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                  >
-                    {copied === 'seo_title' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    {copied === 'seo_title' ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-                <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+              <FieldResult
+                label="SEO Title"
+                isApplied={appliedFields.has('seo_title')}
+                isCopied={copied === 'seo_title'}
+                onApply={() => handleApplyField('seo_title')}
+                onCopy={() => handleCopy(result.seo_title, 'seo_title')}
+              >
+                <div className="p-2 bg-white border border-gray-200 rounded-lg text-sm">
                   {result.seo_title}
                 </div>
-              </div>
+              </FieldResult>
 
               {/* Meta Description */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">Meta Description</label>
-                  <button
-                    onClick={() => handleCopy(result.meta_description, 'meta')}
-                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                  >
-                    {copied === 'meta' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    {copied === 'meta' ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-                <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+              <FieldResult
+                label="Meta Description"
+                isApplied={appliedFields.has('meta_description')}
+                isCopied={copied === 'meta_description'}
+                onApply={() => handleApplyField('meta_description')}
+                onCopy={() => handleCopy(result.meta_description, 'meta_description')}
+              >
+                <div className="p-2 bg-white border border-gray-200 rounded-lg text-sm">
                   {result.meta_description}
                 </div>
-              </div>
+              </FieldResult>
 
               {/* Keywords */}
               {result.suggested_keywords.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-sm font-medium text-gray-700">
-                      Suggested Keywords
-                    </label>
-                    <button
-                      onClick={() => handleCopy(result.suggested_keywords.join(', '), 'keywords')}
-                      className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                    >
-                      {copied === 'keywords' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copied === 'keywords' ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-1 mb-2">
+                <FieldResult
+                  label="Suggested Keywords"
+                  isApplied={appliedFields.has('keywords')}
+                  isCopied={copied === 'keywords'}
+                  onApply={() => handleApplyField('keywords')}
+                  onCopy={() => handleCopy(result.suggested_keywords.join(', '), 'keywords')}
+                >
+                  <div className="flex flex-wrap gap-1">
                     {result.suggested_keywords.map((kw, i) => (
                       <span
                         key={i}
@@ -249,10 +257,10 @@ export function GenerateDescriptionModal({
                       </span>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400">
-                    Click Copy to get comma-separated keywords for pasting
+                  <p className="text-xs text-gray-400 mt-1">
+                    Click Copy for comma-separated format
                   </p>
-                </div>
+                </FieldResult>
               )}
             </div>
           )}
@@ -265,15 +273,19 @@ export function GenerateDescriptionModal({
           </Button>
           {result ? (
             <>
-              <Button variant="secondary" onClick={() => setResult(null)}>
+              <Button variant="secondary" onClick={() => { setResult(null); setAppliedFields(new Set()); }}>
                 Regenerate
               </Button>
-              <Button onClick={handleApply}>
-                Apply Description
+              <Button 
+                onClick={handleApplyAll}
+                disabled={appliedFields.size === 4}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {appliedFields.size === 4 ? 'All Applied' : 'Apply All'}
               </Button>
             </>
           ) : (
-            <Button onClick={handleGenerate} disabled={isLoading}>
+            <Button onClick={handleGenerate} disabled={isLoading} className="bg-purple-600 hover:bg-purple-700">
               {isLoading ? (
                 <>
                   <span className="animate-spin mr-2">⚡</span>
@@ -293,4 +305,56 @@ export function GenerateDescriptionModal({
   );
 }
 
+// Sub-component for each field result with individual Apply button
+interface FieldResultProps {
+  label: string;
+  isApplied: boolean;
+  isCopied: boolean;
+  onApply: () => void;
+  onCopy: () => void;
+  children: React.ReactNode;
+}
+
+function FieldResult({ label, isApplied, isCopied, onApply, onCopy, children }: FieldResultProps) {
+  return (
+    <div className={cn(
+      "border rounded-lg p-3 transition-colors",
+      isApplied ? "border-green-300 bg-green-50" : "border-gray-200 bg-gray-50"
+    )}>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          {label}
+          {isApplied && (
+            <span className="text-xs text-green-600 flex items-center gap-1">
+              <CheckCircle className="w-3 h-3" />
+              Applied
+            </span>
+          )}
+        </label>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCopy}
+            className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-white"
+          >
+            {isCopied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+            {isCopied ? 'Copied!' : 'Copy'}
+          </button>
+          <Button
+            variant={isApplied ? "secondary" : "primary"}
+            size="sm"
+            onClick={onApply}
+            disabled={isApplied}
+            className={cn(
+              "text-xs h-7",
+              !isApplied && "bg-purple-600 hover:bg-purple-700"
+            )}
+          >
+            {isApplied ? 'Applied' : 'Apply'}
+          </Button>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
 

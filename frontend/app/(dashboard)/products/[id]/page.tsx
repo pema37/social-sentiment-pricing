@@ -153,13 +153,27 @@ export default function ProductDetailPage() {
     router.push('/products');
   };
 
-  const handleApplyDescription = async (description: string) => {
+  // NEW: Updated handler to accept individual fields object
+  const handleApplyGenerated = async (fields: {
+    description?: string;
+    seo_title?: string;
+    meta_description?: string;
+    keywords?: string[];
+  }) => {
     try {
-      await productsApi.update(productId, { description });
-      setShowGenerateModal(false);  // ADD THIS LINE
-      refetch();
+      // Build update payload with only the fields that were applied
+      const updateData: Record<string, unknown> = {};
+      if (fields.description) updateData.description = fields.description;
+      if (fields.keywords) updateData.keywords = fields.keywords;
+      // Note: seo_title and meta_description would need backend fields
+      // For now, they're available in the modal for copy/paste
+      
+      if (Object.keys(updateData).length > 0) {
+        await productsApi.update(productId, updateData);
+        refetch();
+      }
     } catch (err) {
-      console.error('Failed to update description:', err);
+      console.error('Failed to update product:', err);
     }
   };
 
@@ -219,12 +233,13 @@ export default function ProductDetailPage() {
         onSuccess={handleDeleteSuccess}
       />
 
+      {/* UPDATED: Now uses handleApplyGenerated instead of handleApplyDescription */}
       <GenerateDescriptionModal
         isOpen={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
         productId={productId}
         productName={product.name}
-        onApply={handleApplyDescription}
+        onApply={handleApplyGenerated}
       />
     </div>
   );
