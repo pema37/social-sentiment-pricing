@@ -181,20 +181,33 @@ async def _fetch_for_product(task_self, product_id: str):
         
         logger.info(f"Fetching mentions for product '{product.name}' with keywords: {keywords}")
         
-        mentions = []
+        # Fetch from Reddit
+        from services.ingestion.reddit_service import get_reddit_collector
         
-        # TODO: Import and use actual services when implemented
-        # from services.ingestion.twitter_service import TwitterService
-        # from services.ingestion.reddit_service import RedditService
-        # 
-        # twitter = TwitterService()
-        # reddit = RedditService()
-        # 
-        # for keyword in keywords:
-        #     twitter_mentions = await twitter.search(keyword, product_id=product.id)
-        #     reddit_mentions = await reddit.search(keyword, product_id=product.id)
-        #     mentions.extend(twitter_mentions)
-        #     mentions.extend(reddit_mentions)
+        collector = get_reddit_collector(mock_mode=True)
+        collected = await collector.collect(keywords, limit=20)
+        
+        # Convert to SocialMention models
+        from models.social_mention import SocialMention
+        
+        mentions = []
+        for item in collected:
+            mention = SocialMention(
+                product_id=product.id,
+                source=item.source.value,
+                source_id=item.source_id,
+                content=item.content[:2000],  # Truncate if needed
+                author=item.author,
+                author_followers=item.author_followers,
+                engagement_count=item.engagement_count,
+                url=item.url,
+                collected_at=datetime.now(timezone.utc),
+                published_at=item.published_at,
+                language=item.language,
+                raw_data=item.raw_data,
+                processed=False,
+            )
+            mentions.append(mention)
         
         task_self.update_state(state="SAVING", meta={"count": len(mentions)})
         
