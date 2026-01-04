@@ -215,3 +215,5 @@ export interface PricingRecommendationStats {
   avg_confidence: number | null;
   avg_price_change_percent: number | null;
 }
+
+

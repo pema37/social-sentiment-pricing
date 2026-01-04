@@ -161,6 +161,8 @@ def fetch_for_product(self, product_id: str):
 async def _fetch_for_product(task_self, product_id: str):
     """Async implementation for single product fetch."""
     from models.product import Product
+    from models.social_mention import SocialMention
+    from services.ingestion.reddit_service import get_reddit_collector
     
     session_maker = get_task_session_maker()
     
@@ -182,9 +184,6 @@ async def _fetch_for_product(task_self, product_id: str):
         logger.info(f"Fetching mentions for product '{product.name}' with keywords: {keywords}")
         
         # Fetch from Reddit (mock mode for demo)
-        from services.ingestion.reddit_service import get_reddit_collector
-        from models.social_mention import SocialMention
-        
         collector = get_reddit_collector(mock_mode=True)
         collected = await collector.collect(keywords, limit=10)
         
@@ -242,7 +241,7 @@ def process_pending_mentions(self, batch_size: int = 100):
     
     This task runs every 5 minutes to:
     1. Fetch unprocessed mentions from the database
-    2. Run sentiment analysis on each mention
+    2. Run sentiment analysis using VADER + OpenAI + Gemini (hybrid)
     3. Store the sentiment results
     """
     return run_async(_process_pending_mentions(self, batch_size))
@@ -250,8 +249,10 @@ def process_pending_mentions(self, batch_size: int = 100):
 
 async def _process_pending_mentions(task_self, batch_size: int):
     """Async implementation of processing pending mentions."""
+    from decimal import Decimal
     from models.social_mention import SocialMention
-    from services.sentiment_analyzer import SentimentAnalyzer
+    from models.sentiment import Sentiment
+    from services.hybrid_sentiment_analyzer import HybridSentimentAnalyzer
     
     session_maker = get_task_session_maker()
     
@@ -280,8 +281,10 @@ async def _process_pending_mentions(task_self, batch_size: int):
         logger.info(f"Processing {len(mentions)} pending mentions")
         task_self.update_state(state="PROCESSING", meta={"total": len(mentions)})
         
-        # Initialize VADER analyzer (fast, no API calls needed)
-        analyzer = SentimentAnalyzer()
+        # Initialize hybrid analyzer (VADER + OpenAI + Gemini)
+        analyzer = HybridSentimentAnalyzer()
+        available_sources = analyzer.get_available_sources()
+        logger.info(f"Sentiment analyzers available: {available_sources}")
         
         processed_count = 0
         errors = []
@@ -293,25 +296,52 @@ async def _process_pending_mentions(task_self, batch_size: int):
                     meta={"current": i + 1, "total": len(mentions)}
                 )
                 
-                # Analyze sentiment
-                sentiment_result = await analyzer.analyze(mention.content)
+                # Analyze sentiment using all available analyzers
+                sentiment_result = await analyzer.analyze(mention.content, use_ai=True)
                 
                 # Store sentiment in raw_data for aggregator to read
                 raw_data = mention.raw_data or {}
                 raw_data["sentiment"] = {
-                    "compound": sentiment_result.score,
+                    "compound": sentiment_result.compound,
                     "label": sentiment_result.label,
                     "confidence": sentiment_result.confidence,
-                    "positive": sentiment_result.emotions.get("positive", 0),
-                    "negative": sentiment_result.emotions.get("negative", 0),
-                    "neutral": sentiment_result.emotions.get("neutral", 0),
+                    "positive": sentiment_result.positive,
+                    "negative": sentiment_result.negative,
+                    "neutral": sentiment_result.neutral,
+                    "sources_used": sentiment_result.sources_used,
+                    "individual_scores": sentiment_result.individual_scores,
+                    "emotions": sentiment_result.emotions,
+                    "topics": sentiment_result.topics,
+                    "is_sarcastic": sentiment_result.is_sarcastic,
                 }
                 mention.raw_data = raw_data
+                
+                # Create Sentiment record for pricing rules to query
+                sentiment_record = Sentiment(
+                    product_id=mention.product_id,
+                    source=mention.source,
+                    raw_text=mention.content[:1000],  # Truncate for storage
+                    compound_score=Decimal(str(round(sentiment_result.compound, 3))),
+                    positive_score=Decimal(str(round(sentiment_result.positive, 3))),
+                    negative_score=Decimal(str(round(sentiment_result.negative, 3))),
+                    neutral_score=Decimal(str(round(sentiment_result.neutral, 3))),
+                    author=mention.author,
+                    url=mention.url,
+                    analyzed_at=datetime.now(timezone.utc),
+                )
+                session.add(sentiment_record)
                 
                 # Mark mention as processed
                 mention.processed = True
                 mention.processed_at = datetime.now(timezone.utc)
                 processed_count += 1
+                
+                logger.debug(
+                    f"Analyzed mention {mention.id}: "
+                    f"score={sentiment_result.compound:.3f}, "
+                    f"label={sentiment_result.label}, "
+                    f"sources={sentiment_result.sources_used}"
+                )
                 
             except Exception as e:
                 logger.error(f"Error processing mention {mention.id}: {e}")
@@ -329,8 +359,9 @@ async def _process_pending_mentions(task_self, batch_size: int):
             "status": "success",
             "processed_count": processed_count,
             "error_count": len(errors),
+            "analyzers_used": available_sources,
             "errors": errors[:10],
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     
-    
+
