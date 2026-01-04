@@ -14,6 +14,7 @@ from .models import (
     ProductSyncResult,
     PriceUpdateRequest,
     PriceUpdateResponse,
+    PriceUpdateResult,  
     WebhookRegistration,
     ConnectionStatus,
 )
