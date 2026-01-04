@@ -73,12 +73,12 @@ export default function SupportPage() {
     <div className="flex flex-col h-[calc(100vh-100px)] max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-[#E5E7EB]">
-        <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
+        <div className="p-2 bg-linear-to-br from-purple-500 to-blue-500 rounded-lg">
           <Sparkles className="w-6 h-6 text-white" />
         </div>
         <div>
           <h1 className="text-xl font-semibold text-[#111827]">AI Support Assistant</h1>
-          <p className="text-sm text-[#6B7280]">Powered by GPT-4o-mini</p>
+          <p className="text-sm text-[#6B7280]">Get instant help with ActualPrice</p>
         </div>
         <span className="ml-auto px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
           AI Powered
@@ -186,3 +186,4 @@ export default function SupportPage() {
     </div>
   );
 }
+

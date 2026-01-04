@@ -49,31 +49,64 @@ function buildQueryString(params?: Record<string, string | number | boolean | un
 }
 
 // Extract error message from API response
-function parseErrorMessage(errorData: unknown): string {
-  if (!errorData || typeof errorData !== 'object') {
-    return 'An error occurred';
+function parseErrorMessage(status: number, errorData: unknown): string {
+  // Try to extract message from response body first
+  if (errorData && typeof errorData === 'object') {
+    const err = errorData as Record<string, unknown>;
+    
+    // FastAPI validation errors: { detail: [{ msg: "...", loc: [...] }] }
+    if (Array.isArray(err.detail)) {
+      const messages = err.detail
+        .map((item: { msg?: string }) => item.msg || 'Validation error')
+        .join(', ');
+      return messages || 'Please check your input';
+    }
+    
+    // Simple string error: { detail: "User already exists" }
+    if (typeof err.detail === 'string') {
+      const detail = err.detail;
+      
+      // Make certain backend messages more user-friendly
+      if (detail.toLowerCase().includes('already exists')) {
+        return 'This email is already registered. Please sign in instead.';
+      }
+      if (detail.toLowerCase().includes('incorrect email or password')) {
+        return 'Incorrect email or password. Please try again.';
+      }
+      if (detail.toLowerCase().includes('deactivated')) {
+        return 'This account has been deactivated. Please contact support.';
+      }
+      
+      return detail;
+    }
+    
+    // Generic message field
+    if (typeof err.message === 'string') {
+      return err.message;
+    }
   }
   
-  const err = errorData as Record<string, unknown>;
-  
-  // FastAPI validation errors: { detail: [{ msg: "...", loc: [...] }] }
-  if (Array.isArray(err.detail)) {
-    return err.detail
-      .map((item: { msg?: string }) => item.msg || 'Validation error')
-      .join(', ');
+  // Fallback based on status code
+  switch (status) {
+    case 400:
+      return 'Invalid request. Please check your input.';
+    case 401:
+      return 'Invalid credentials. Please try again.';
+    case 403:
+      return 'Access denied.';
+    case 404:
+      return 'Resource not found.';
+    case 409:
+      return 'This email is already registered.';
+    case 422:
+      return 'Please check your input and try again.';
+    case 429:
+      return 'Too many attempts. Please wait a moment and try again.';
+    case 500:
+      return 'Server error. Please try again later.';
+    default:
+      return 'An error occurred. Please try again.';
   }
-  
-  // Simple string error: { detail: "Incorrect email or password" }
-  if (typeof err.detail === 'string') {
-    return err.detail;
-  }
-  
-  // Generic message field
-  if (typeof err.message === 'string') {
-    return err.message;
-  }
-  
-  return 'An error occurred';
 }
 
 // Main API client - throws on error, returns data on success
@@ -89,7 +122,7 @@ export async function apiClient<T>(
   
   const config: RequestInit = {
     method,
-    cache: 'no-store',  // FIXED: Prevent browser caching - ensures fresh data on every request
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -108,7 +141,7 @@ export async function apiClient<T>(
       const errorData = await response.json().catch(() => ({}));
       throw new ApiError(
         response.status,
-        parseErrorMessage(errorData),
+        parseErrorMessage(response.status, errorData),
         errorData
       );
     }
@@ -123,7 +156,13 @@ export async function apiClient<T>(
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError(0, error instanceof Error ? error.message : 'Network error');
+    // Network errors (no response from server)
+    throw new ApiError(
+      0,
+      error instanceof Error && error.message.includes('fetch')
+        ? 'Unable to connect to server. Please check your internet connection.'
+        : 'Network error. Please try again.'
+    );
   }
 }
 
