@@ -181,22 +181,21 @@ async def _fetch_for_product(task_self, product_id: str):
         
         logger.info(f"Fetching mentions for product '{product.name}' with keywords: {keywords}")
         
-        # Fetch from Reddit
+        # Fetch from Reddit (mock mode for demo)
         from services.ingestion.reddit_service import get_reddit_collector
-        
-        collector = get_reddit_collector(mock_mode=True)
-        collected = await collector.collect(keywords, limit=20)
-        
-        # Convert to SocialMention models
         from models.social_mention import SocialMention
         
+        collector = get_reddit_collector(mock_mode=True)
+        collected = await collector.collect(keywords, limit=10)
+        
+        # Convert to SocialMention models
         mentions = []
         for item in collected:
             mention = SocialMention(
                 product_id=product.id,
                 source=item.source.value,
                 source_id=item.source_id,
-                content=item.content[:2000],  # Truncate if needed
+                content=item.content[:2000],
                 author=item.author,
                 author_followers=item.author_followers,
                 engagement_count=item.engagement_count,
@@ -252,13 +251,14 @@ def process_pending_mentions(self, batch_size: int = 100):
 async def _process_pending_mentions(task_self, batch_size: int):
     """Async implementation of processing pending mentions."""
     from models.social_mention import SocialMention
+    from services.sentiment_analyzer import SentimentAnalyzer
     
     session_maker = get_task_session_maker()
     
     async with session_maker() as session:
         task_self.update_state(state="LOADING", meta={"batch_size": batch_size})
         
-        # Get unprocessed mentions - use collected_at (not created_at)
+        # Get unprocessed mentions
         stmt = (
             select(SocialMention)
             .where(SocialMention.processed == False)
@@ -280,9 +280,8 @@ async def _process_pending_mentions(task_self, batch_size: int):
         logger.info(f"Processing {len(mentions)} pending mentions")
         task_self.update_state(state="PROCESSING", meta={"total": len(mentions)})
         
-        # TODO: Import actual analyzer when implemented
-        # from services.analysis.sentiment_analyzer import SentimentAnalyzer
-        # analyzer = SentimentAnalyzer()
+        # Initialize VADER analyzer (fast, no API calls needed)
+        analyzer = SentimentAnalyzer()
         
         processed_count = 0
         errors = []
@@ -294,18 +293,20 @@ async def _process_pending_mentions(task_self, batch_size: int):
                     meta={"current": i + 1, "total": len(mentions)}
                 )
                 
-                # TODO: Actual sentiment analysis
-                # sentiment_result = await analyzer.analyze(mention.content)
-                # 
-                # Create sentiment record
-                # sentiment = Sentiment(
-                #     mention_id=mention.id,
-                #     product_id=mention.product_id,
-                #     score=sentiment_result.score,
-                #     label=sentiment_result.label,
-                #     confidence=sentiment_result.confidence,
-                # )
-                # session.add(sentiment)
+                # Analyze sentiment
+                sentiment_result = await analyzer.analyze(mention.content)
+                
+                # Store sentiment in raw_data for aggregator to read
+                raw_data = mention.raw_data or {}
+                raw_data["sentiment"] = {
+                    "compound": sentiment_result.score,
+                    "label": sentiment_result.label,
+                    "confidence": sentiment_result.confidence,
+                    "positive": sentiment_result.emotions.get("positive", 0),
+                    "negative": sentiment_result.emotions.get("negative", 0),
+                    "neutral": sentiment_result.emotions.get("neutral", 0),
+                }
+                mention.raw_data = raw_data
                 
                 # Mark mention as processed
                 mention.processed = True
@@ -328,7 +329,8 @@ async def _process_pending_mentions(task_self, batch_size: int):
             "status": "success",
             "processed_count": processed_count,
             "error_count": len(errors),
-            "errors": errors[:10],  # Only return first 10 errors
+            "errors": errors[:10],
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+    
     
