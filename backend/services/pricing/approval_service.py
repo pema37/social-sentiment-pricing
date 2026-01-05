@@ -128,7 +128,19 @@ class ApprovalService:
         # Push to e-commerce platform
         platform_result = await self._push_to_ecommerce(product, user_id)
         
-        # Update recommendation status
+        # Check if push succeeded
+        if not platform_result.get("success"):
+            # Revert product price since push failed
+            product.current_price = old_price
+            self.db.add(product)
+            
+            # Don't save the price history record - remove it
+            await self.db.rollback()
+            
+            error_msg = platform_result.get("error", "Unknown error pushing to platform")
+            raise ValueError(f"Failed to push price to platform: {error_msg}")
+        
+        # Update recommendation status only on success
         recommendation.status = RecommendationStatus.APPLIED
         recommendation.applied_at = datetime.utcnow()
         recommendation.applied_to_platform = platform_result.get("platform")
@@ -138,7 +150,7 @@ class ApprovalService:
         await self.db.refresh(recommendation)
         
         return recommendation
-    
+        
     async def auto_approve_and_apply(
         self,
         recommendation: PriceRecommendation,

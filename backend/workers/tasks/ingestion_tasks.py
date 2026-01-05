@@ -191,6 +191,7 @@ async def _fetch_for_product(task_self, product_id: str):
         mentions = []
         for item in collected:
             mention = SocialMention(
+                user_id=product.user_id,  # <-- ADD THIS LINE
                 product_id=product.id,
                 source=item.source.value,
                 source_id=item.source_id,

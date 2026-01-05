@@ -109,13 +109,13 @@ function CrisisAlertItem({ alert }: { alert: CrisisAlert }) {
             <div>
               <span className="text-gray-500">Current Sentiment:</span>
               <span className={`ml-2 font-medium ${alert.current_sentiment < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {alert.current_sentiment.toFixed(3)}
+                {(alert.current_sentiment ?? 0).toFixed(3)}
               </span>
             </div>
             <div>
               <span className="text-gray-500">Previous:</span>
               <span className="ml-2 font-medium text-gray-700">
-                {alert.previous_sentiment.toFixed(3)}
+                {(alert.previous_sentiment ?? 0).toFixed(3)}
               </span>
             </div>
           </div>

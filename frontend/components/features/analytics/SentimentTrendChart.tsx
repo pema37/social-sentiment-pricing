@@ -67,7 +67,7 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
           <span className={`text-sm font-medium ${trendConfig[currentTrend].color}`}>
             {trendConfig[currentTrend].label}
           </span>
-          {data?.change !== null && data?.change !== undefined && (
+          {typeof data?.change === 'number' && (
             <span className={`text-sm ${data.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               ({data.change >= 0 ? '+' : ''}{data.change.toFixed(2)})
             </span>
@@ -89,7 +89,7 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
                 domain={[-1, 1]} 
                 tick={{ fontSize: 12 }} 
                 stroke="#9ca3af"
-                tickFormatter={(value) => value.toFixed(1)}
+                tickFormatter={(value) => (typeof value === 'number' ? value : 0).toFixed(1)}
               />
               <Tooltip
                 contentStyle={{
