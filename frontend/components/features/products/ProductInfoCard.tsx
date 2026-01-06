@@ -48,6 +48,11 @@ function formatPriceChange(priceChange: number | null): string | undefined {
   return `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(1)}% from base`;
 }
 
+// Fix mixed content: ensure HTTPS for external images
+function ensureHttps(url: string): string {
+  return url.replace(/^http:\/\//i, 'https://');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,7 +133,7 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
         <div className="shrink-0">
           {product.image_url ? (
             <Image
-              src={product.image_url}
+              src={ensureHttps(product.image_url)}
               alt={product.name}
               width={96}
               height={96}
@@ -207,5 +212,3 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
 }
 
 export default ProductInfoCard;
-
-

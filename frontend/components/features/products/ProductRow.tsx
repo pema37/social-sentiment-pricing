@@ -62,10 +62,13 @@ interface ProductInfoCellProps {
   product: Product;
 }
 
-// FIXED: ProductImage component with error handling
+// FIXED: ProductImage component with error handling and HTTPS enforcement
 function ProductImage({ src, alt }: { src: string; alt: string }) {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Fix mixed content: ensure HTTPS
+  const safeSrc = src.replace(/^http:\/\//i, 'https://');
 
   if (hasError) {
     return (
@@ -81,7 +84,7 @@ function ProductImage({ src, alt }: { src: string; alt: string }) {
         <div className="absolute inset-0 bg-gray-100 rounded-lg animate-pulse" />
       )}
       <Image
-        src={src}
+        src={safeSrc}
         alt={alt}
         width={48}
         height={48}

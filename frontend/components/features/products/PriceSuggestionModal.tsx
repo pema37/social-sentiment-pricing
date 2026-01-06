@@ -42,6 +42,11 @@ function safeNumber(value: unknown, defaultValue = 0): number {
   return isNaN(num) ? defaultValue : num;
 }
 
+// Fix mixed content: ensure HTTPS for external images
+function ensureHttps(url: string): string {
+  return url.replace(/^http:\/\//i, 'https://');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +78,7 @@ function ProductInfo({ product }: ProductInfoProps) {
     <div className="flex items-center gap-4">
       {product.image_url ? (
         <Image
-          src={product.image_url}
+          src={ensureHttps(product.image_url)}
           alt={product.name}
           width={64}
           height={64}
@@ -279,5 +284,4 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
 }
 
 export default PriceSuggestionModal;
-
 

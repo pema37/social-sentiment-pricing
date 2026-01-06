@@ -126,7 +126,7 @@ export default function TrendsPage() {
 
       {/* AI Summary */}
       {trendsData?.ai_summary && (
-        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100 rounded-lg">
+        <div className="mb-6 p-4 bg-linear-to-r from-purple-50 to-blue-50 border border-purple-100 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-4 w-4 text-purple-600" />
             <span className="text-sm font-medium text-purple-700">AI Market Summary</span>
@@ -221,3 +221,5 @@ export default function TrendsPage() {
     </div>
   );
 }
+
+
