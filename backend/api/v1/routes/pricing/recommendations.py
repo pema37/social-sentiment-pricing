@@ -304,6 +304,38 @@ async def generate_all_recommendations(
         "results": results
     }
 
+@router.post("/recommendations/process-auto-approvals")
+@limiter.limit(ANALYSIS_RATE_LIMIT)
+async def process_auto_approvals(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Process all existing PENDING recommendations for auto-approval.
+    """
+    service = ApprovalService(db)
+    
+    try:
+        applied = await service.process_auto_approvals(current_user.id)
+        
+        results = []
+        for rec in applied:
+            results.append({
+                "recommendation_id": str(rec.id),
+                "product_id": str(rec.product_id),
+                "status": rec.status.value if hasattr(rec.status, 'value') else rec.status,
+                "recommended_price": str(rec.recommended_price),
+                "change_percent": str(rec.change_percent),
+            })
+        
+        return {
+            "message": f"Applied {len(applied)} recommendations",
+            "applied_count": len(applied),
+            "results": results,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================
 # Existing endpoints below
@@ -532,4 +564,4 @@ async def apply_recommendation(
         return await service.apply_price(recommendation_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
