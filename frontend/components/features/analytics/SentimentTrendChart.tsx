@@ -21,6 +21,13 @@ interface SentimentTrendChartProps {
   days?: number;
 }
 
+// Helper to safely convert any value to a number (handles strings!)
+function toSafeNumber(value: unknown, fallback = 0): number {
+  if (value == null) return fallback;
+  const num = Number(value);
+  return isNaN(num) ? fallback : num;
+}
+
 export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChartProps) {
   const { data, isLoading } = useSentimentTrend({ product_id: productId, days });
 
@@ -32,8 +39,9 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
         month: 'short', 
         day: 'numeric' 
       }),
-      score: point.score ?? 0,           // ✅ Added null safety
-      mentions: point.mention_count ?? 0, // ✅ Added null safety
+      // CRITICAL FIX: Number() converts strings to numbers, ?? does NOT
+      score: toSafeNumber(point.score),
+      mentions: toSafeNumber(point.mention_count),
     }));
   }, [data]);
 
@@ -45,6 +53,10 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
 
   const currentTrend = data?.trend || 'stable';
   const TrendIcon = trendConfig[currentTrend]?.icon || Minus;
+
+  // Safe change value - must be a real number
+  const changeValue = toSafeNumber(data?.change, NaN);
+  const hasValidChange = !isNaN(changeValue);
 
   if (isLoading) {
     return (
@@ -67,9 +79,9 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
           <span className={`text-sm font-medium ${trendConfig[currentTrend]?.color || 'text-gray-500'}`}>
             {trendConfig[currentTrend]?.label || 'Stable'}
           </span>
-          {typeof data?.change === 'number' && (
-            <span className={`text-sm ${data.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              ({data.change >= 0 ? '+' : ''}{data.change.toFixed(2)})
+          {hasValidChange && (
+            <span className={`text-sm ${changeValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              ({changeValue >= 0 ? '+' : ''}{changeValue.toFixed(2)})
             </span>
           )}
         </div>
@@ -89,7 +101,7 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
                 domain={[-1, 1]} 
                 tick={{ fontSize: 12 }} 
                 stroke="#9ca3af"
-                tickFormatter={(value) => (typeof value === 'number' ? value : 0).toFixed(1)}
+                tickFormatter={(value) => toSafeNumber(value).toFixed(1)}
               />
               <Tooltip
                 contentStyle={{
@@ -99,7 +111,7 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
                   fontSize: '12px',
                 }}
                 formatter={((value: unknown, name: unknown) => {
-                  const numValue = typeof value === 'number' ? value : 0;
+                  const numValue = toSafeNumber(value);
                   const strName = String(name || '');
                   return [
                     strName === 'score' ? numValue.toFixed(3) : numValue,
