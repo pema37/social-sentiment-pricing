@@ -119,9 +119,20 @@ class PricePushService:
             }
         
         if response.result == PriceUpdateResult.SUCCESS:
+            # Update the link
             link.last_price_push_at = utc_now()
             link.external_price = new_price
             self.db.add(link)
+            
+            # ✅ FIX: Also update the product's current_price
+            stmt = select(Product).where(Product.id == product_id)
+            result = await self.db.execute(stmt)
+            product = result.scalars().first()
+            if product:
+                product.current_price = new_price
+                product.updated_at = utc_now()
+                self.db.add(product)
+            
             await self.db.commit()
             
             logger.info(f"Price pushed to {integration.platform.value}: product={product_id}, price={new_price}")
