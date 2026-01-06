@@ -209,28 +209,30 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Page Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      {/* Page Header - Responsive */}
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Title Row */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <DollarSign className="h-6 w-6 text-green-600" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
             Price Recommendations
             <AIBadge />
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-sm sm:text-base text-gray-600 mt-1">
             Review and approve AI-generated pricing suggestions
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Actions Row - Wraps on mobile */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="secondary"
             size="sm"
             onClick={() => refetchRecommendations()}
             disabled={isLoading}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
 
@@ -240,7 +242,7 @@ export default function PricingPage() {
             onClick={handleGenerateRecommendations}
             disabled={isGenerating}
           >
-            <Sparkles className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-pulse' : ''}`} />
+            <Sparkles className={`h-4 w-4 mr-1.5 ${isGenerating ? 'animate-pulse' : ''}`} />
             {isGenerating ? 'Generating...' : 'Generate Recommendations'}
           </Button>
 
@@ -249,14 +251,14 @@ export default function PricingPage() {
             size="sm"
             onClick={() => router.push('/pricing/rules')}
           >
-            <Settings className="h-4 w-4 mr-2" />
+            <Settings className="h-4 w-4 mr-1.5" />
             Pricing Rules
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Stats - Responsive grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatCard
           label="Pending Review"
           value={stats?.total_pending ?? 0}

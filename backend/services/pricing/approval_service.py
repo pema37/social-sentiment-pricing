@@ -4,6 +4,9 @@ Approval Service - Handles approval workflow and price application.
 
 FIX APPLIED: Replaced all datetime.now(timezone.utc) with datetime.utcnow()
 to fix PostgreSQL TIMESTAMP WITHOUT TIME ZONE compatibility issues.
+
+FIX APPLIED: process_auto_approvals now re-evaluates eligibility based on
+current settings instead of relying on the stored requires_approval flag.
 """
 
 from datetime import datetime, timedelta
@@ -171,7 +174,13 @@ class ApprovalService:
         return recommendation
     
     async def process_auto_approvals(self, user_id: UUID) -> list[PriceRecommendation]:
-        """Process all pending recommendations eligible for auto-approval."""
+        """
+        Process all pending recommendations eligible for auto-approval.
+        
+        FIXED: Now re-evaluates eligibility based on current settings instead of
+        relying on the stored requires_approval flag. This ensures recommendations
+        that were reset to PENDING are properly processed.
+        """
         
         settings = await self._get_user_settings(user_id)
         if not settings or not settings.auto_approve_enabled:
@@ -181,12 +190,11 @@ class ApprovalService:
         if self._in_blackout_period(settings):
             return []
         
-        # Get pending recommendations that don't require approval
+        # Get ALL pending recommendations (not just requires_approval=False)
         stmt = (
             select(PriceRecommendation)
             .where(PriceRecommendation.user_id == user_id)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.requires_approval == False)
             .where(PriceRecommendation.valid_until > datetime.utcnow())
         )
         
@@ -198,13 +206,55 @@ class ApprovalService:
             if not await self._check_daily_limit(user_id):
                 break  # Hit daily limit
             
+            # Re-evaluate eligibility based on current settings
+            if not self._is_eligible_for_auto_approval(recommendation, settings):
+                continue  # Skip - requires manual approval
+            
             try:
                 result_rec = await self.auto_approve_and_apply(recommendation, user_id)
                 applied.append(result_rec)
-            except Exception:
-                continue  # Skip failed ones
+            except Exception as e:
+                # Log but continue with other recommendations
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Failed to auto-apply recommendation {recommendation.id}: {e}"
+                )
+                continue
         
         return applied
+    
+    def _is_eligible_for_auto_approval(
+        self,
+        recommendation: PriceRecommendation,
+        settings: PricingSettings
+    ) -> bool:
+        """
+        Check if a recommendation is eligible for auto-approval based on current settings.
+        
+        This re-evaluates eligibility at processing time rather than relying on
+        the requires_approval flag that was set at creation time.
+        """
+        
+        # Check confidence threshold
+        if recommendation.confidence_score < settings.auto_approve_min_confidence:
+            return False
+        
+        change_percent = recommendation.change_percent
+        
+        # Check increase threshold
+        if change_percent > 0 and change_percent > settings.auto_approve_max_increase:
+            return False
+        
+        # Check decrease threshold
+        if change_percent < 0 and abs(change_percent) > settings.auto_approve_max_decrease:
+            return False
+        
+        # Check high-value product threshold if configured
+        if settings.require_approval_above_price:
+            if recommendation.current_price > settings.require_approval_above_price:
+                return False
+        
+        return True
     
     async def _get_recommendation(
         self,
@@ -244,7 +294,7 @@ class ApprovalService:
         stmt = (
             select(func.count(PriceRecommendation.id))
             .where(PriceRecommendation.user_id == user_id)
-            .where(PriceRecommendation.status == RecommendationStatus.AUTO_APPROVED)
+            .where(PriceRecommendation.status == RecommendationStatus.APPLIED)
             .where(PriceRecommendation.applied_at >= today_start)
         )
         
@@ -396,8 +446,8 @@ class ApprovalService:
             avg_confidence_applied = float(avg_confidence)
         
         # Auto vs manual approval ratio
-        auto = by_status.get("auto_approved", 0)
-        manual = by_status.get("approved", 0)
+        auto = by_status.get("AUTO_APPROVED", 0)
+        manual = by_status.get("APPROVED", 0)
         auto_approval_ratio: float = 0.0
         if (auto + manual) > 0:
             auto_approval_ratio = float(auto) / float(auto + manual)
