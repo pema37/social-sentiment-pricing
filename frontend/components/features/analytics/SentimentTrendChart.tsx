@@ -32,8 +32,8 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
         month: 'short', 
         day: 'numeric' 
       }),
-      score: point.score,
-      mentions: point.mention_count,
+      score: point.score ?? 0,           // ✅ Added null safety
+      mentions: point.mention_count ?? 0, // ✅ Added null safety
     }));
   }, [data]);
 
@@ -63,9 +63,9 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
           <p className="text-sm text-gray-500 mt-1">Last {days} days</p>
         </div>
         <div className="flex items-center gap-2">
-          <TrendIcon className={`w-5 h-5 ${trendConfig[currentTrend].color}`} />
-          <span className={`text-sm font-medium ${trendConfig[currentTrend].color}`}>
-            {trendConfig[currentTrend].label}
+          <TrendIcon className={`w-5 h-5 ${trendConfig[currentTrend]?.color || 'text-gray-500'}`} />
+          <span className={`text-sm font-medium ${trendConfig[currentTrend]?.color || 'text-gray-500'}`}>
+            {trendConfig[currentTrend]?.label || 'Stable'}
           </span>
           {typeof data?.change === 'number' && (
             <span className={`text-sm ${data.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -127,3 +127,4 @@ export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChar
     </Card>
   );
 }
+

@@ -100,7 +100,7 @@ function PriceChangeIndicator({ change }: PriceChangeIndicatorProps) {
   return (
     <span className={`text-sm font-medium ${colorClass}`}>
       {isPositive && '+'}
-      {change.toFixed(1)}% from current
+      {(change ?? 0).toFixed(1)}% from current
     </span>
   );
 }
@@ -170,17 +170,17 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
         )}
 
         {/* Confidence */}
-        {suggestion.confidence !== undefined && (
+        {suggestion.confidence != null && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">Confidence:</span>
             <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full"
-                style={{ width: `${suggestion.confidence * 100}%` }}
+                style={{ width: `${(suggestion.confidence ?? 0) * 100}%` }}
               />
             </div>
             <span className="text-sm font-medium text-gray-700">
-              {(suggestion.confidence * 100).toFixed(0)}%
+              {((suggestion.confidence ?? 0) * 100).toFixed(0)}%
             </span>
           </div>
         )}
@@ -200,3 +200,4 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
 }
 
 export default PriceSuggestionCard;
+

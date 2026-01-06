@@ -14,7 +14,10 @@ function formatDate(timestamp: string): string {
 }
 
 export const SentimentChart = memo(function SentimentChart({ data, className }: SentimentChartProps) {
-  const chartData = useMemo(() => data.map((point) => ({ date: formatDate(point.timestamp), score: point.score })), [data]);
+  const chartData = useMemo(() => data.map((point) => ({ 
+    date: formatDate(point.timestamp), 
+    score: point.score ?? 0  // ✅ Added null safety
+  })), [data]);
 
   if (chartData.length === 0) return null;
 
@@ -27,9 +30,16 @@ export const SentimentChart = memo(function SentimentChart({ data, className }: 
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" tickLine={false} />
-              <YAxis domain={[-1, 1]} tick={{ fontSize: 12 }} stroke="#9ca3af" tickFormatter={(v) => (v * 100).toFixed(0)} tickLine={false} axisLine={false} />
+              <YAxis 
+                domain={[-1, 1]} 
+                tick={{ fontSize: 12 }} 
+                stroke="#9ca3af" 
+                tickFormatter={(v) => ((v ?? 0) * 100).toFixed(0)}  // ✅ Added null safety
+                tickLine={false} 
+                axisLine={false} 
+              />
               <Tooltip 
-                formatter={((v: unknown) => [(typeof v === 'number' ? (v * 100).toFixed(1) : v), 'Score']) as never} 
+                formatter={((v: unknown) => [(typeof v === 'number' ? (v * 100).toFixed(1) : '0'), 'Score']) as never} 
                 contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} 
               />
               <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 4 }} activeDot={{ r: 6 }} />
@@ -40,3 +50,5 @@ export const SentimentChart = memo(function SentimentChart({ data, className }: 
     </Card>
   );
 });
+
+

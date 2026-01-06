@@ -19,6 +19,9 @@ import type {
   Payment,
   PaymentHistoryResponse,
   SubscriptionTier,
+  SubscriptionStatus,
+  PaymentStatus,
+  PaymentType,
 } from '@/types/payment';
 
 // =============================================================================
@@ -100,7 +103,7 @@ export async function getPlans(): Promise<PlansResponse> {
   const plans: SubscriptionPlan[] = apiPlans.map((plan) => ({
     id: plan.tier as SubscriptionTier,
     name: plan.name,
-    monthly_price: plan.price_monthly.toFixed(2),
+    monthly_price: (plan.price_monthly ?? 0).toFixed(2),
     products_limit: plan.product_limit,
     competitors_limit: plan.tier === 'enterprise' ? -1 : plan.tier === 'professional' ? 10 : plan.tier === 'starter' ? 3 : 0,
     api_calls_limit: plan.tier === 'enterprise' ? -1 : plan.tier === 'professional' ? 100000 : plan.tier === 'starter' ? 10000 : 1000,
@@ -143,7 +146,7 @@ export async function getSubscription(): Promise<Subscription> {
   return {
     tier: apiSub.tier as SubscriptionTier,
     name: tierNames[apiSub.tier] || apiSub.tier,
-    status: apiSub.status as any,
+    status: apiSub.status as SubscriptionStatus,  // ✅ Fixed
     monthly_price: tierPrices[apiSub.tier] || '0.00',
     current_period_start: apiSub.current_period_start,
     current_period_end: apiSub.current_period_end,
@@ -160,7 +163,13 @@ export async function getSubscription(): Promise<Subscription> {
  * Subscribe to a plan (creates payment request)
  */
 export async function subscribe(data: SubscribeRequest): Promise<PaymentRequest> {
-  const response = await api.post<any>('/api/v1/payments/subscribe', data);
+  const response = await api.post<{
+    payment_id: string;
+    amount: string;
+    recipient_address: string;
+    memo: string;
+    expires_at: string;
+  }>('/api/v1/payments/subscribe', data);  // ✅ Fixed - proper type instead of any
   
   // Transform response to match frontend type
   return {
@@ -198,8 +207,8 @@ export async function getPayment(paymentId: string): Promise<Payment> {
     amount: apiPayment.amount,
     amount_raw: parseFloat(apiPayment.amount) * 100000,
     currency: 'MNEE',
-    status: apiPayment.status as any,
-    payment_type: apiPayment.payment_type as any,
+    status: apiPayment.status as PaymentStatus,  // ✅ Fixed
+    payment_type: apiPayment.payment_type as PaymentType,  // ✅ Fixed
     txid: apiPayment.transaction_hash,
     from_address: null,
     to_address: null,
@@ -228,8 +237,8 @@ export async function getPaymentHistory(
     amount: p.amount,
     amount_raw: parseFloat(p.amount) * 100000,
     currency: 'MNEE',
-    status: p.status as any,
-    payment_type: p.payment_type as any,
+    status: p.status as PaymentStatus,  // ✅ Fixed
+    payment_type: p.payment_type as PaymentType,  // ✅ Fixed
     txid: p.transaction_hash,
     from_address: null,
     to_address: null,
@@ -279,6 +288,7 @@ export function isValidBsvAddress(address: string): boolean {
  */
 export function formatMneeAmount(amount: string | number): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0.00 MNEE';
   return `${num.toFixed(2)} MNEE`;
 }
 
@@ -287,5 +297,7 @@ export function formatMneeAmount(amount: string | number): string {
  */
 export function formatUsdAmount(amount: string | number): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '$0.00 USD';
   return `$${num.toFixed(2)} USD`;
 }
+

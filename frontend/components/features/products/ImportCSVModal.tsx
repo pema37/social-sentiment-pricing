@@ -424,7 +424,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
                           <tr key={i}>
                             <td className="px-3 py-2 text-gray-900">{product.name}</td>
                             <td className="px-3 py-2 text-gray-500">{product.sku || '-'}</td>
-                            <td className="px-3 py-2 text-gray-900">${product.base_price.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-gray-900">${(product.base_price ?? 0).toFixed(2)}</td>
                             <td className="px-3 py-2 text-gray-500">{product.category || '-'}</td>
                           </tr>
                         ))}
@@ -463,3 +463,5 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
 }
 
 export default ImportCSVModal;
+
+

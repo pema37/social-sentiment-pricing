@@ -256,26 +256,26 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
                       <span
                         className={cn(
                           'ml-1 font-medium',
-                          analyzeMutation.data.sentiment_score >= 0.05
+                          (analyzeMutation.data.sentiment_score ?? 0) >= 0.05
                             ? 'text-green-600'
-                            : analyzeMutation.data.sentiment_score <= -0.05
+                            : (analyzeMutation.data.sentiment_score ?? 0) <= -0.05
                             ? 'text-red-600'
                             : 'text-gray-600'
                         )}
                       >
-                        {(analyzeMutation.data.sentiment_score * 100).toFixed(0)}
+                        {((analyzeMutation.data.sentiment_score ?? 0) * 100).toFixed(0)}
                       </span>
                     </div>
                     <div>
                       <span className="text-gray-600">Label:</span>
                       <span className="ml-1 font-medium capitalize">
-                        {analyzeMutation.data.sentiment_label.replace('_', ' ')}
+                        {analyzeMutation.data.sentiment_label?.replace('_', ' ') ?? 'N/A'}
                       </span>
                     </div>
                     <div>
                       <span className="text-gray-600">Confidence:</span>
                       <span className="ml-1 font-medium">
-                        {(analyzeMutation.data.confidence * 100).toFixed(0)}%
+                        {((analyzeMutation.data.confidence ?? 0) * 100).toFixed(0)}%
                       </span>
                     </div>
                   </div>
@@ -301,4 +301,5 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
     </div>
   );
 }
+
 
