@@ -25,6 +25,12 @@ function formatDate(dateString: string): string {
   });
 }
 
+function safeParseMultiplier(value: unknown, defaultValue = 0.2): number {
+  if (value == null) return defaultValue;
+  const num = typeof value === 'number' ? value : parseFloat(String(value));
+  return isNaN(num) ? defaultValue : num;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,6 +88,9 @@ export function AutoPricingCard({ product }: AutoPricingCardProps) {
     });
   };
 
+  // Safe multiplier calculation
+  const multiplierPercent = (safeParseMultiplier(product.sentiment_multiplier) * 100).toFixed(0);
+
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -113,7 +122,7 @@ export function AutoPricingCard({ product }: AutoPricingCardProps) {
         />
         <InfoRow
           label="Sentiment Multiplier"
-          value={`${((parseFloat(product.sentiment_multiplier) || 0.2) * 100).toFixed(0)}%`}
+          value={`${multiplierPercent}%`}
         />
         <InfoRow
           label="Last Updated"
@@ -136,3 +145,5 @@ export function AutoPricingCard({ product }: AutoPricingCardProps) {
 }
 
 export default AutoPricingCard;
+
+

@@ -10,7 +10,7 @@ export function AIBadge({ size = 'sm' }: AIBadgeProps) {
     <span
       className={`
         inline-flex items-center gap-1 px-2 py-0.5 
-        bg-gradient-to-r from-purple-100 to-blue-100 
+        bg-linear-to-r from-purple-100 to-blue-100 
         text-purple-700 rounded-full font-medium
         ${size === 'sm' ? 'text-xs' : 'text-sm'}
       `}

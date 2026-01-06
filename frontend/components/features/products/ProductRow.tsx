@@ -32,15 +32,26 @@ interface ProductRowProps {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+function safeNumber(value: unknown, defaultValue = 0): number {
+  if (value == null) return defaultValue;
+  const num = Number(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
 function formatCurrency(value: number | string | null | undefined): string {
-  const num = Number(value) || 0;
+  const num = safeNumber(value);
   return `$${num.toFixed(2)}`;
 }
 
 function calculatePriceChange(current: number, base: number) {
-  const change = current - base;
-  const percent = base > 0 ? (change / base) * 100 : 0;
-  return { change, percent };
+  const safeCurrent = safeNumber(current);
+  const safeBase = safeNumber(base);
+  const change = safeCurrent - safeBase;
+  const percent = safeBase > 0 ? (change / safeBase) * 100 : 0;
+  return { 
+    change: isNaN(change) ? 0 : change, 
+    percent: isNaN(percent) ? 0 : percent 
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,7 +139,7 @@ function PriceCell({ currentPrice, basePrice }: PriceCellProps) {
           )}
           <span>
             {change > 0 ? '+' : ''}
-            {percent.toFixed(1)}%
+            {(percent ?? 0).toFixed(1)}%
           </span>
         </div>
       )}
@@ -263,8 +274,8 @@ function ActionsMenu({ product, onPriceSuggestion, onDelete }: ActionsMenuProps)
 export function ProductRow({ product, onPriceSuggestion, onDelete }: ProductRowProps) {
   const toggleAutoPricing = useToggleAutoPricing();
 
-  const basePrice = Number(product.base_price) || 0;
-  const currentPrice = Number(product.current_price) || 0;
+  const basePrice = safeNumber(product.base_price);
+  const currentPrice = safeNumber(product.current_price);
 
   const handleToggleAutoPricing = () => {
     toggleAutoPricing.mutate({
@@ -319,3 +330,5 @@ export function ProductRow({ product, onPriceSuggestion, onDelete }: ProductRowP
 }
 
 export default ProductRow;
+
+

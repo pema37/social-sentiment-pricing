@@ -80,6 +80,13 @@ export function LinkProductForm({
   const products = productsData?.items ?? [];
   const competitors = competitorsData?.items ?? [];
 
+  // Helper to safely format price
+  const formatPrice = (price: string | number | null | undefined): string => {
+    if (price == null || price === '') return '0.00';
+    const num = typeof price === 'number' ? price : parseFloat(price);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -139,7 +146,7 @@ export function LinkProductForm({
               </option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} - ${parseFloat(product.current_price).toFixed(2)}
+                  {product.name} - ${formatPrice(product.current_price)}
                 </option>
               ))}
             </select>
@@ -281,3 +288,5 @@ export function LinkProductForm({
     </div>
   );
 }
+
+

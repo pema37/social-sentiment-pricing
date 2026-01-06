@@ -37,7 +37,15 @@ function calculatePriceChange(current: string | number, base: string | number): 
   const currentNum = toNumber(current);
   const baseNum = toNumber(base);
   if (currentNum === null || baseNum === null || baseNum === 0) return null;
-  return ((currentNum - baseNum) / baseNum) * 100;
+  const change = ((currentNum - baseNum) / baseNum) * 100;
+  return isNaN(change) ? null : change; // Extra safety for edge cases
+}
+
+function formatPriceChange(priceChange: number | null): string | undefined {
+  if (priceChange === null || typeof priceChange !== 'number' || isNaN(priceChange)) {
+    return undefined;
+  }
+  return `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(1)}% from base`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +111,7 @@ function KeywordBadge({ keyword }: KeywordBadgeProps) {
 export function ProductInfoCard({ product }: ProductInfoCardProps) {
   const priceChange = calculatePriceChange(product.current_price, product.base_price);
 
-  const priceChangeColor = priceChange
+  const priceChangeColor = priceChange !== null && typeof priceChange === 'number'
     ? priceChange > 0
       ? 'text-green-600'
       : priceChange < 0
@@ -111,9 +119,7 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
         : 'text-gray-500'
     : 'text-gray-500';
 
-  const priceChangeText = priceChange !== null
-    ? `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(1)}% from base`
-    : undefined;
+  const priceChangeText = formatPriceChange(priceChange);
 
   return (
     <Card className="p-6">
@@ -201,3 +207,5 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
 }
 
 export default ProductInfoCard;
+
+

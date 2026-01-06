@@ -146,6 +146,14 @@ export function EthWalletCard() {
     setAddressError('');
   };
 
+  // Safe balance formatting helper
+  const formatBalance = (bal: unknown): string => {
+    if (bal == null) return '0.00';
+    const num = Number(bal);
+    if (isNaN(num)) return '0.00';
+    return num.toFixed(2);
+  };
+
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -298,10 +306,10 @@ export function EthWalletCard() {
                 <div className="h-8 w-24 bg-purple-100 animate-pulse rounded" />
               ) : (
                 <p className="text-2xl font-bold text-purple-900">
-                  {balance ? Number(balance).toFixed(2) : '0.00'} MNEE
+                  {formatBalance(balance)} MNEE
                 </p>
               )}
-              <p className="text-xs text-purple-600 mt-1">≈ ${balance ? Number(balance).toFixed(2) : '0.00'} USD</p>
+              <p className="text-xs text-purple-600 mt-1">≈ ${formatBalance(balance)} USD</p>
             </div>
           )}
 
@@ -365,3 +373,5 @@ export function EthWalletCard() {
 }
 
 export default EthWalletCard;
+
+

@@ -14,6 +14,8 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
   const priceChangePercent = product.price_change_percent ?? 0;
   // Safe fallback for sentiment_score
   const sentimentScore = product.sentiment_score ?? null;
+  // Safe parse for current_price
+  const currentPrice = parseFloat(product.current_price || '0') || 0;
 
   const priceChangeColor =
     priceChangePercent > 0
@@ -44,11 +46,11 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
       <div className="mt-3 flex items-end justify-between">
         <div>
           <p className="text-lg font-semibold text-gray-900">
-            ${parseFloat(product.current_price || '0').toFixed(2)}
+            ${currentPrice.toFixed(2)}
           </p>
           <p className={`text-sm ${priceChangeColor}`}>
             {priceChangePercent > 0 ? '+' : ''}
-            {priceChangePercent.toFixed(1)}% from base
+            {(priceChangePercent ?? 0).toFixed(1)}% from base
           </p>
         </div>
         <div className="text-right">
@@ -59,7 +61,7 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
               }`}
             >
               {sentimentScore >= 0 ? '+' : ''}
-              {sentimentScore.toFixed(2)}
+              {(sentimentScore ?? 0).toFixed(2)}
             </p>
           )}
           <p className="text-xs text-gray-500">{product.mention_count_24h ?? 0} mentions</p>

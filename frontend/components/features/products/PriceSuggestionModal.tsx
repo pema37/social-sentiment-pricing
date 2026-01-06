@@ -30,8 +30,16 @@ interface PriceSuggestionModalProps {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number | string): string {
-  return `$${Number(value).toFixed(2)}`;
+function formatCurrency(value: number | string | null | undefined): string {
+  if (value == null) return '$0.00';
+  const num = Number(value);
+  return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`;
+}
+
+function safeNumber(value: unknown, defaultValue = 0): number {
+  if (value == null) return defaultValue;
+  const num = Number(value);
+  return isNaN(num) ? defaultValue : num;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +100,7 @@ interface PriceComparisonProps {
 
 function PriceComparison({ currentPrice, suggestedPrice, changePercent }: PriceComparisonProps) {
   const isPositive = changePercent >= 0;
+  const safeChangePercent = safeNumber(changePercent);
 
   return (
     <div className="grid grid-cols-2 gap-4">
@@ -116,7 +125,7 @@ function PriceComparison({ currentPrice, suggestedPrice, changePercent }: PriceC
             }`}
           >
             {isPositive ? '+' : ''}
-            {changePercent.toFixed(1)}%
+            {safeChangePercent.toFixed(1)}%
           </span>
         </div>
       </div>
@@ -129,7 +138,8 @@ interface ConfidenceBarProps {
 }
 
 function ConfidenceBar({ confidence }: ConfidenceBarProps) {
-  const percent = confidence * 100;
+  const safeConfidence = safeNumber(confidence);
+  const percent = safeConfidence * 100;
 
   return (
     <div>
@@ -153,17 +163,19 @@ interface FactorsGridProps {
 }
 
 function FactorsGrid({ sentimentScore, mentionVolume }: FactorsGridProps) {
+  const displaySentiment = sentimentScore != null && typeof sentimentScore === 'number'
+    ? `${(safeNumber(sentimentScore) * 100).toFixed(0)}%`
+    : 'N/A';
+
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="text-center p-3 bg-gray-50 rounded-lg">
         <p className="text-xs text-gray-500">Sentiment</p>
-        <p className="font-semibold">
-          {sentimentScore !== null ? `${(sentimentScore * 100).toFixed(0)}%` : 'N/A'}
-        </p>
+        <p className="font-semibold">{displaySentiment}</p>
       </div>
       <div className="text-center p-3 bg-gray-50 rounded-lg">
         <p className="text-xs text-gray-500">Mentions</p>
-        <p className="font-semibold">{mentionVolume}</p>
+        <p className="font-semibold">{mentionVolume ?? 0}</p>
       </div>
     </div>
   );
@@ -225,12 +237,12 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
               <ProductInfo product={product} />
 
               <PriceComparison
-                currentPrice={Number(product.current_price)}
-                suggestedPrice={Number(suggestion.suggested_price)}
-                changePercent={Number(suggestion.change_percent)}
+                currentPrice={safeNumber(product.current_price)}
+                suggestedPrice={safeNumber(suggestion.suggested_price)}
+                changePercent={safeNumber(suggestion.change_percent)}
               />
 
-              <ConfidenceBar confidence={Number(suggestion.confidence)} />
+              <ConfidenceBar confidence={safeNumber(suggestion.confidence)} />
 
               {suggestion.reasoning && (
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -267,3 +279,5 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
 }
 
 export default PriceSuggestionModal;
+
+

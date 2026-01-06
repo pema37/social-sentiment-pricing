@@ -15,6 +15,10 @@ interface PendingRecommendationsProps {
 function RecommendationRow({ recommendation }: { recommendation: PriceRecommendation }) {
   const changePercent = recommendation.change_percent ?? 0;  
   const isIncrease = changePercent > 0;
+  
+  // Safe price parsing - handles null, undefined, empty string, and NaN
+  const currentPrice = parseFloat(recommendation.current_price || '0') || 0;
+  const recommendedPrice = parseFloat(recommendation.recommended_price || '0') || 0;
 
   return (
     <Link
@@ -37,7 +41,7 @@ function RecommendationRow({ recommendation }: { recommendation: PriceRecommenda
         </p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-gray-500">
-            ${parseFloat(recommendation.current_price || '0').toFixed(2)}
+            ${currentPrice.toFixed(2)}
           </span>
           <ArrowRight className="w-3 h-3 text-gray-400" />
           <span
@@ -45,7 +49,7 @@ function RecommendationRow({ recommendation }: { recommendation: PriceRecommenda
               isIncrease ? 'text-green-600' : 'text-red-600'
             }`}
           >
-            ${parseFloat(recommendation.recommended_price || '0').toFixed(2)}
+            ${recommendedPrice.toFixed(2)}
           </span>
         </div>
       </div>
@@ -57,7 +61,7 @@ function RecommendationRow({ recommendation }: { recommendation: PriceRecommenda
           }`}
         >
           {isIncrease ? '+' : ''}
-          {changePercent.toFixed(1)}%
+          {(changePercent ?? 0).toFixed(1)}%
         </p>
         <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">
           <Clock className="w-3 h-3" />
@@ -113,3 +117,4 @@ export function PendingRecommendations({
     </div>
   );
 }
+
