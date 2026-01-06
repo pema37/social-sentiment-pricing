@@ -115,10 +115,10 @@ export function CompetitorProductCard({
                 <p className={`font-semibold ${
                   priceDiff > 0 ? 'text-red-600' : priceDiff < 0 ? 'text-green-600' : 'text-gray-600'
                 }`}>
-                  {priceDiff > 0 ? '+' : ''}{(priceDiff ?? 0).toFixed(2)}
+                  {priceDiff > 0 ? '+' : ''}{(Number(priceDiff ?? 0)).toFixed(2)}
                   {priceDiffPercent !== null && (
                     <span className="text-xs ml-1">
-                      ({priceDiffPercent > 0 ? '+' : ''}{(priceDiffPercent ?? 0).toFixed(1)}%)
+                      (Number({priceDiffPercent > 0 ? '+' : ''}{(priceDiffPercent ?? 0)).toFixed(1)}%)
                     </span>
                   )}
                 </p>

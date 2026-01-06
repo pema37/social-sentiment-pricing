@@ -61,7 +61,7 @@ function RecommendationRow({ recommendation }: { recommendation: PriceRecommenda
           }`}
         >
           {isIncrease ? '+' : ''}
-          {(changePercent ?? 0).toFixed(1)}%
+          {(Number(changePercent ?? 0)).toFixed(1)}%
         </p>
         <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">
           <Clock className="w-3 h-3" />

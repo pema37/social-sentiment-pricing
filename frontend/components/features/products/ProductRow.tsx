@@ -139,7 +139,7 @@ function PriceCell({ currentPrice, basePrice }: PriceCellProps) {
           )}
           <span>
             {change > 0 ? '+' : ''}
-            {(percent ?? 0).toFixed(1)}%
+            {(Number(percent ?? 0)).toFixed(1)}%
           </span>
         </div>
       )}

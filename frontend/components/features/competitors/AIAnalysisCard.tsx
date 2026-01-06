@@ -138,7 +138,7 @@ export function AIAnalysisCard({ competitorId, competitorName }: AIAnalysisCardP
               />
             </div>
             <span className="text-xs font-medium text-gray-600">
-              {((analysis.confidence ?? 0) * 100).toFixed(0)}%
+              {(Number(analysis.confidence ?? 0) * 100).toFixed(0)}%
             </span>
           </div>
 

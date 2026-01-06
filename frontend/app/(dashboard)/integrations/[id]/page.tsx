@@ -248,7 +248,7 @@ export default function IntegrationDetailPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-600">
                       {log.duration_seconds != null
-                        ? `${(log.duration_seconds ?? 0).toFixed(1)}s`
+                        ? `${(Number(log.duration_seconds ?? 0)).toFixed(1)}s`
                         : '-'}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">
@@ -303,7 +303,7 @@ export default function IntegrationDetailPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-600">
                       {link.external_price != null
-                        ? `$${(link.external_price ?? 0).toFixed(2)}`
+                        ? `$${(Number(link.external_price ?? 0)).toFixed(2)}`
                         : '-'}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">

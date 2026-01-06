@@ -250,7 +250,7 @@ function ProductRow({
       <td className="whitespace-nowrap px-4 py-3 text-sm">
         {link.external_price !== null ? (
           <span className="font-medium text-gray-900">
-            ${(link.external_price ?? 0).toFixed(2)}
+            ${(Number(link.external_price ?? 0)).toFixed(2)}
           </span>
         ) : (
           <span className="text-gray-400">—</span>
@@ -262,7 +262,7 @@ function ProductRow({
         <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
           {link.external_compare_at_price !== null ? (
             <span className="line-through">
-              ${(link.external_compare_at_price ?? 0).toFixed(2)}
+              ${(Number(link.external_compare_at_price ?? 0)).toFixed(2)}
             </span>
           ) : (
             '—'

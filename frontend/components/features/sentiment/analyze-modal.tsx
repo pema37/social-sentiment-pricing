@@ -263,7 +263,7 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
                             : 'text-gray-600'
                         )}
                       >
-                        {((analyzeMutation.data.sentiment_score ?? 0) * 100).toFixed(0)}
+                        {(Number(analyzeMutation.data.sentiment_score ?? 0) * 100).toFixed(0)}
                       </span>
                     </div>
                     <div>
@@ -275,7 +275,7 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
                     <div>
                       <span className="text-gray-600">Confidence:</span>
                       <span className="ml-1 font-medium">
-                        {((analyzeMutation.data.confidence ?? 0) * 100).toFixed(0)}%
+                        {(Number(analyzeMutation.data.confidence ?? 0) * 100).toFixed(0)}%
                       </span>
                     </div>
                   </div>

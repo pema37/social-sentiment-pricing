@@ -50,7 +50,7 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
           </p>
           <p className={`text-sm ${priceChangeColor}`}>
             {priceChangePercent > 0 ? '+' : ''}
-            {(priceChangePercent ?? 0).toFixed(1)}% from base
+            {(Number(priceChangePercent ?? 0)).toFixed(1)}% from base
           </p>
         </div>
         <div className="text-right">
@@ -61,7 +61,7 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
               }`}
             >
               {sentimentScore >= 0 ? '+' : ''}
-              {(sentimentScore ?? 0).toFixed(2)}
+              {(Number(sentimentScore ?? 0)).toFixed(2)}
             </p>
           )}
           <p className="text-xs text-gray-500">{product.mention_count_24h ?? 0} mentions</p>

@@ -100,7 +100,7 @@ function PriceChangeIndicator({ change }: PriceChangeIndicatorProps) {
   return (
     <span className={`text-sm font-medium ${colorClass}`}>
       {isPositive && '+'}
-      {(change ?? 0).toFixed(1)}% from current
+      {(Number(change ?? 0)).toFixed(1)}% from current
     </span>
   );
 }
@@ -180,7 +180,7 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
               />
             </div>
             <span className="text-sm font-medium text-gray-700">
-              {((suggestion.confidence ?? 0) * 100).toFixed(0)}%
+              {(Number(suggestion.confidence ?? 0) * 100).toFixed(0)}%
             </span>
           </div>
         )}
