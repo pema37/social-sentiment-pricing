@@ -7,12 +7,15 @@ to fix PostgreSQL TIMESTAMP WITHOUT TIME ZONE compatibility issues.
 
 FIX APPLIED: process_auto_approvals now re-evaluates eligibility based on
 current settings instead of relying on the stored requires_approval flag.
+
+FIX APPLIED: Fixed greenlet_spawn error by extracting values before async operations.
 """
 
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func
@@ -23,6 +26,8 @@ from models.price_recommendation import PriceRecommendation, RecommendationStatu
 from models.price_history import PriceHistory, ChangeReason
 from models.pricing_settings import PricingSettings
 from models.integration import Integration, ProductIntegrationLink, IntegrationStatus
+
+logger = logging.getLogger(__name__)
 
 
 class ApprovalService:
@@ -156,20 +161,20 @@ class ApprovalService:
         
     async def auto_approve_and_apply(
         self,
-        recommendation: PriceRecommendation,
+        recommendation_id: UUID,
         user_id: UUID
     ) -> PriceRecommendation:
         """Auto-approve and immediately apply a recommendation."""
         
         # Check daily limit
         if not await self._check_daily_limit(user_id):
-            return recommendation  # Leave as pending
+            raise ValueError("Daily auto-approval limit reached")
         
         # Approve
-        recommendation = await self.approve(recommendation.id, user_id, auto=True)
+        recommendation = await self.approve(recommendation_id, user_id, auto=True)
         
         # Apply
-        recommendation = await self.apply_price(recommendation.id, user_id)
+        recommendation = await self.apply_price(recommendation_id, user_id)
         
         return recommendation
     
@@ -180,14 +185,24 @@ class ApprovalService:
         FIXED: Now re-evaluates eligibility based on current settings instead of
         relying on the stored requires_approval flag. This ensures recommendations
         that were reset to PENDING are properly processed.
+        
+        FIXED: Extract values before async operations to avoid greenlet errors.
         """
         
         settings = await self._get_user_settings(user_id)
         if not settings or not settings.auto_approve_enabled:
+            logger.info(f"Auto-approve disabled for user {user_id}")
             return []
+        
+        # Extract settings values upfront (avoid lazy loading issues)
+        max_increase = float(settings.auto_approve_max_increase)
+        max_decrease = float(settings.auto_approve_max_decrease)
+        min_confidence = float(settings.auto_approve_min_confidence)
+        require_above_price = float(settings.require_approval_above_price) if settings.require_approval_above_price else None
         
         # Check blackout hours
         if self._in_blackout_period(settings):
+            logger.info(f"In blackout period for user {user_id}")
             return []
         
         # Get ALL pending recommendations (not just requires_approval=False)
@@ -200,58 +215,88 @@ class ApprovalService:
         
         result = await self.db.execute(stmt)
         pending = list(result.scalars().all())
+        
+        logger.info(f"Found {len(pending)} pending recommendations for user {user_id}")
+        
+        # Extract recommendation data upfront to avoid greenlet issues
+        recommendations_data = []
+        for rec in pending:
+            recommendations_data.append({
+                "id": rec.id,
+                "change_percent": float(rec.change_percent),
+                "confidence_score": float(rec.confidence_score),
+                "current_price": float(rec.current_price),
+            })
+        
         applied: list[PriceRecommendation] = []
         
-        for recommendation in pending:
+        for rec_data in recommendations_data:
+            rec_id = rec_data["id"]
+            change_percent = rec_data["change_percent"]
+            confidence_score = rec_data["confidence_score"]
+            current_price = rec_data["current_price"]
+            
+            # Check daily limit
             if not await self._check_daily_limit(user_id):
-                break  # Hit daily limit
+                logger.info(f"Hit daily limit for user {user_id}")
+                break
             
             # Re-evaluate eligibility based on current settings
-            if not self._is_eligible_for_auto_approval(recommendation, settings):
-                continue  # Skip - requires manual approval
+            eligible = self._check_eligibility(
+                change_percent=change_percent,
+                confidence_score=confidence_score,
+                current_price=current_price,
+                max_increase=max_increase,
+                max_decrease=max_decrease,
+                min_confidence=min_confidence,
+                require_above_price=require_above_price,
+            )
+            
+            if not eligible:
+                logger.debug(f"Recommendation {rec_id} not eligible: change={change_percent}%, conf={confidence_score}")
+                continue
             
             try:
-                result_rec = await self.auto_approve_and_apply(recommendation, user_id)
+                result_rec = await self.auto_approve_and_apply(rec_id, user_id)
                 applied.append(result_rec)
+                logger.info(f"Auto-applied recommendation {rec_id}")
             except Exception as e:
-                # Log but continue with other recommendations
-                import logging
-                logging.getLogger(__name__).warning(
-                    f"Failed to auto-apply recommendation {recommendation.id}: {e}"
-                )
+                logger.warning(f"Failed to auto-apply recommendation {rec_id}: {e}")
                 continue
         
         return applied
     
-    def _is_eligible_for_auto_approval(
+    def _check_eligibility(
         self,
-        recommendation: PriceRecommendation,
-        settings: PricingSettings
+        change_percent: float,
+        confidence_score: float,
+        current_price: float,
+        max_increase: float,
+        max_decrease: float,
+        min_confidence: float,
+        require_above_price: Optional[float],
     ) -> bool:
         """
-        Check if a recommendation is eligible for auto-approval based on current settings.
+        Check if a recommendation is eligible for auto-approval based on settings.
         
-        This re-evaluates eligibility at processing time rather than relying on
-        the requires_approval flag that was set at creation time.
+        Uses plain Python values to avoid ORM lazy loading issues.
         """
         
         # Check confidence threshold
-        if recommendation.confidence_score < settings.auto_approve_min_confidence:
+        if confidence_score < min_confidence:
             return False
         
-        change_percent = recommendation.change_percent
-        
         # Check increase threshold
-        if change_percent > 0 and change_percent > settings.auto_approve_max_increase:
+        if change_percent > 0 and change_percent > max_increase:
             return False
         
         # Check decrease threshold
-        if change_percent < 0 and abs(change_percent) > settings.auto_approve_max_decrease:
+        if change_percent < 0 and abs(change_percent) > max_decrease:
             return False
         
         # Check high-value product threshold if configured
-        if settings.require_approval_above_price:
-            if recommendation.current_price > settings.require_approval_above_price:
+        if require_above_price is not None:
+            if current_price > require_above_price:
                 return False
         
         return True
@@ -286,7 +331,7 @@ class ApprovalService:
         if not settings:
             return False
         
-        # Count today's auto-applied recommendations
+        # Count today's applied recommendations (both auto and manual)
         today_start = datetime.utcnow().replace(
             hour=0, minute=0, second=0, microsecond=0
         )
@@ -458,6 +503,4 @@ class ApprovalService:
             "avg_confidence_applied": avg_confidence_applied,
             "auto_approval_ratio": auto_approval_ratio,
         }
-    
 
-    
