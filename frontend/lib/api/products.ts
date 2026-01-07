@@ -88,3 +88,4 @@ export const productsApi = {
     return res.json();
   },
 };
+

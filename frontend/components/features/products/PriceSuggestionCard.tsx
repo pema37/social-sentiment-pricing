@@ -1,7 +1,7 @@
 // components/products/PriceSuggestionCard.tsx
 'use client';
 
-import { TrendingUp, Check, RefreshCw } from 'lucide-react';
+import { TrendingUp, Check, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
@@ -53,32 +53,21 @@ function LoadingState() {
   );
 }
 
-function ErrorState({ onRetry }: { onRetry: () => void }) {
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-4">
         <TrendingUp className="h-5 w-5 text-blue-500" />
         <h3 className="font-semibold text-gray-900">Price Suggestion</h3>
       </div>
-      <p className="text-sm text-gray-500 mb-3">Unable to load suggestion</p>
+      <div className="flex items-start gap-2 mb-3">
+        <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-sm text-gray-600">{message}</p>
+      </div>
       <Button variant="secondary" size="sm" onClick={onRetry}>
         <RefreshCw className="h-4 w-4 mr-1" />
         Retry
       </Button>
-    </Card>
-  );
-}
-
-function NoSuggestionState() {
-  return (
-    <Card className="p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="h-5 w-5 text-blue-500" />
-        <h3 className="font-semibold text-gray-900">Price Suggestion</h3>
-      </div>
-      <p className="text-sm text-gray-500">
-        No price suggestion available. Enable auto-pricing or add sentiment data.
-      </p>
     </Card>
   );
 }
@@ -127,22 +116,35 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
     return <LoadingState />;
   }
 
-  // Error state
+  // Error state - show actual error message
   if (error) {
-    return <ErrorState onRetry={() => refetch()} />;
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unable to load suggestion. Please try again.';
+    return <ErrorState message={errorMessage} onRetry={() => refetch()} />;
   }
 
-  // No suggestion available
-  if (!suggestion?.suggested_price) {
-    return <NoSuggestionState />;
+  // No suggestion data returned
+  if (!suggestion) {
+    return (
+      <ErrorState 
+        message="No suggestion data available. Try refreshing." 
+        onRetry={() => refetch()} 
+      />
+    );
   }
 
-  const change = calculateChange(suggestion.suggested_price, currentPriceNum);
+  // Suggestion exists - always show it, even with low confidence or no change
+  const suggestedPrice = Number(suggestion.suggested_price) || currentPriceNum;
+  const change = calculateChange(suggestedPrice, currentPriceNum);
+  const confidence = Number(suggestion.confidence) || 0;
+  const isLowConfidence = confidence < 0.3;
+  const noChangeRecommended = Math.abs(change) < 0.01;
 
   const handleApply = () => {
     applyPrice.mutate({
       id: productId,
-      price: suggestion.suggested_price,
+      price: suggestedPrice,
     });
   };
 
@@ -157,10 +159,22 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
         {/* Suggested Price */}
         <div>
           <p className="text-3xl font-bold text-blue-600">
-            {formatCurrency(suggestion.suggested_price)}
+            {formatCurrency(suggestedPrice)}
           </p>
           <PriceChangeIndicator change={change} />
         </div>
+
+        {/* Low confidence or no change warning */}
+        {(isLowConfidence || noChangeRecommended) && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-700">
+              {noChangeRecommended 
+                ? 'Current price is optimal based on available data.'
+                : 'Limited data available. Consider adding more sentiment keywords or competitor links.'}
+            </p>
+          </div>
+        )}
 
         {/* Reasoning */}
         {suggestion.reasoning && (
@@ -170,30 +184,32 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
         )}
 
         {/* Confidence */}
-        {suggestion.confidence != null && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Confidence:</span>
-            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full"
-                style={{ width: `${(suggestion.confidence ?? 0) * 100}%` }}
-              />
-            </div>
-            <span className="text-sm font-medium text-gray-700">
-              {(Number(suggestion.confidence ?? 0) * 100).toFixed(0)}%
-            </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Confidence:</span>
+          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full ${
+                confidence >= 0.5 ? 'bg-blue-500' : confidence >= 0.3 ? 'bg-amber-400' : 'bg-gray-400'
+              }`}
+              style={{ width: `${Math.max(confidence * 100, 5)}%` }}
+            />
           </div>
-        )}
+          <span className="text-sm font-medium text-gray-700">
+            {(confidence * 100).toFixed(0)}%
+          </span>
+        </div>
 
-        {/* Apply Button */}
-        <Button
-          onClick={handleApply}
-          isLoading={applyPrice.isPending}
-          className="w-full"
-        >
-          <Check className="h-4 w-4 mr-2" />
-          Apply Suggested Price
-        </Button>
+        {/* Apply Button - only show if there's a price change */}
+        {!noChangeRecommended && (
+          <Button
+            onClick={handleApply}
+            isLoading={applyPrice.isPending}
+            className="w-full"
+          >
+            <Check className="h-4 w-4 mr-2" />
+            Apply Suggested Price
+          </Button>
+        )}
       </div>
     </Card>
   );
