@@ -19,6 +19,20 @@ interface AuthState {
   checkAuth: () => Promise<void>;
 }
 
+// Helper to extract error message from various error types
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return fallback;
+}
+
 // Create the store
 export const useAuthStore = create<AuthState>((set) => ({
   // Initial state
@@ -42,8 +56,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user, isAuthenticated: true });
       
       return { success: true };
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Login failed';
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Login failed. Please try again.');
       return { success: false, error: message };
     }
   },
@@ -56,8 +70,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       
       // Registration successful (user still needs to login)
       return { success: true };
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Registration failed';
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Registration failed. Please try again.');
       return { success: false, error: message };
     }
   },
@@ -94,3 +108,5 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
+
+

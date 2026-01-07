@@ -12,8 +12,9 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const { login } = useAuthStore();
   
-  // Check if session expired
+  // Check URL params for messages
   const sessionExpired = searchParams.get('expired') === 'true';
+  const justRegistered = searchParams.get('registered') === 'true';
   
   // Form state
   const [email, setEmail] = useState('');
@@ -30,7 +31,7 @@ export default function LoginPage() {
     const result = await login(email, password);
 
     if (result.success) {
-      // Check if there's a redirect path stored
+      // Check if there's a redirect path stored (from session expiry)
       const redirectPath = sessionStorage.getItem('redirectAfterLogin');
       if (redirectPath) {
         sessionStorage.removeItem('redirectAfterLogin');
@@ -56,6 +57,15 @@ export default function LoginPage() {
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <p className="text-sm text-amber-700">
             Your session has expired. Please sign in again.
+          </p>
+        </div>
+      )}
+
+      {/* Registration success message */}
+      {justRegistered && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-sm text-green-700">
+            Account created successfully! Please sign in.
           </p>
         </div>
       )}
@@ -125,4 +135,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
 

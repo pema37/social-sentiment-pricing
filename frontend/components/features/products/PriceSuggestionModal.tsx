@@ -332,3 +332,4 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
 
 export default PriceSuggestionModal;
 
+

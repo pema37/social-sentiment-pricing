@@ -217,3 +217,4 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
 
 export default PriceSuggestionCard;
 
+
