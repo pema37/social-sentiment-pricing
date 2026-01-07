@@ -334,7 +334,6 @@ async def _process_pending_mentions(task_self, batch_size: int):
                 
                 # Mark mention as processed
                 mention.processed = True
-                mention.processed_at = datetime.now(timezone.utc)
                 processed_count += 1
                 
                 logger.debug(
