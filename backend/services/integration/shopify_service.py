@@ -503,6 +503,5 @@ class ShopifyService(EcommerceService):
             return None
         match = re.search(r'<[^>]*page_info=([^>&]+)[^>]*>;\s*rel="next"', link_header)
         return match.group(1) if match else None
-
-
-        
+    
+    

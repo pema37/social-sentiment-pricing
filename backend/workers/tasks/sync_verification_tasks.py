@@ -467,3 +467,4 @@ def get_sync_status():
     """
     return run_async(_get_sync_status_report())
 
+

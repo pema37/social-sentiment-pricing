@@ -97,3 +97,4 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+
