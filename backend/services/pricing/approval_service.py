@@ -9,6 +9,11 @@ FIX APPLIED: process_auto_approvals now re-evaluates eligibility based on
 current settings instead of relying on the stored requires_approval flag.
 
 FIX APPLIED: Fixed greenlet_spawn error by extracting values before async operations.
+
+FIX APPLIED (2025-01-07): Made auto_approve_and_apply() atomic - single commit at the end.
+Previously, approve() committed first, then apply_price() would fail and rollback,
+but the AUTO_APPROVED status was already committed, leaving recommendations stuck.
+Now pushes to e-commerce BEFORE committing anything, and goes directly to APPLIED status.
 """
 
 from datetime import datetime, timedelta
@@ -42,7 +47,11 @@ class ApprovalService:
         user_id: UUID,
         auto: bool = False
     ) -> PriceRecommendation:
-        """Approve a recommendation."""
+        """
+        Approve a recommendation (manual approval only).
+        
+        For auto-approval with immediate application, use auto_approve_and_apply() instead.
+        """
         
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
@@ -98,7 +107,12 @@ class ApprovalService:
         recommendation_id: UUID,
         user_id: UUID
     ) -> PriceRecommendation:
-        """Apply an approved recommendation - update product and push to e-commerce."""
+        """
+        Apply an approved recommendation - update product and push to e-commerce.
+        
+        Use this for manually approved recommendations.
+        For auto-approval flow, use auto_approve_and_apply() instead.
+        """
         
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
@@ -158,23 +172,106 @@ class ApprovalService:
         await self.db.refresh(recommendation)
         
         return recommendation
-        
+    
     async def auto_approve_and_apply(
         self,
         recommendation_id: UUID,
         user_id: UUID
     ) -> PriceRecommendation:
-        """Auto-approve and immediately apply a recommendation."""
+        """
+        Auto-approve and immediately apply a recommendation - ATOMIC TRANSACTION.
         
-        # Check daily limit
+        This method ensures that either:
+        - Both approval AND price push succeed (commit once at the end)
+        - OR everything is rolled back (nothing committed)
+        
+        FIX: Previously this called approve() which committed, then apply_price()
+        which could fail and rollback - but the AUTO_APPROVED status was already
+        committed, leaving recommendations stuck. Now we do everything in one
+        transaction and skip the AUTO_APPROVED status entirely.
+        """
+        
+        # Check daily limit first (before any DB changes)
         if not await self._check_daily_limit(user_id):
             raise ValueError("Daily auto-approval limit reached")
         
-        # Approve
-        recommendation = await self.approve(recommendation_id, user_id, auto=True)
+        # Get and validate recommendation
+        recommendation = await self._get_recommendation(recommendation_id, user_id)
         
-        # Apply
-        recommendation = await self.apply_price(recommendation_id, user_id)
+        if recommendation.status != RecommendationStatus.PENDING:
+            raise ValueError(f"Cannot auto-approve recommendation with status: {recommendation.status}")
+        
+        # Check expiration
+        if recommendation.valid_until < datetime.utcnow():
+            recommendation.status = RecommendationStatus.EXPIRED
+            self.db.add(recommendation)
+            await self.db.commit()
+            raise ValueError("Recommendation has expired")
+        
+        # Get product
+        product = await self.db.get(Product, recommendation.product_id)
+        if not product:
+            raise ValueError("Product not found")
+        
+        # Store old price for potential rollback
+        old_price = product.current_price
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # ATOMIC TRANSACTION - ALL CHANGES, SINGLE COMMIT
+        # ═══════════════════════════════════════════════════════════════════════
+        
+        # Step 1: Update product price (not committed yet)
+        product.current_price = recommendation.recommended_price
+        product.updated_at = datetime.utcnow()
+        self.db.add(product)
+        
+        # Step 2: Push to e-commerce platform BEFORE committing anything
+        # This is the key fix - if push fails, we haven't committed anything yet
+        platform_result = await self._push_to_ecommerce(product, user_id)
+        
+        if not platform_result.get("success"):
+            # Revert in-memory change and rollback any pending changes
+            product.current_price = old_price
+            await self.db.rollback()
+            
+            error_msg = platform_result.get("error", "Unknown error pushing to platform")
+            error_code = platform_result.get("error_code", "UNKNOWN")
+            logger.warning(
+                f"Auto-apply failed for recommendation {recommendation_id}: "
+                f"[{error_code}] {error_msg}"
+            )
+            raise ValueError(f"Failed to push price to platform: {error_msg}")
+        
+        # Step 3: Create price history record (push succeeded)
+        history = PriceHistory(
+            user_id=user_id,
+            product_id=product.id,
+            old_price=old_price,
+            new_price=recommendation.recommended_price,
+            change_percent=recommendation.change_percent,
+            change_reason=ChangeReason.RECOMMENDATION_APPLIED.value,
+            recommendation_id=recommendation.id,
+        )
+        self.db.add(history)
+        
+        # Step 4: Update recommendation status to APPLIED directly
+        # Skip AUTO_APPROVED - go straight to APPLIED since push succeeded
+        recommendation.status = RecommendationStatus.APPLIED
+        recommendation.reviewed_by = user_id
+        recommendation.reviewed_at = datetime.utcnow()
+        recommendation.applied_at = datetime.utcnow()
+        recommendation.applied_to_platform = platform_result.get("platform")
+        self.db.add(recommendation)
+        
+        # Step 5: SINGLE COMMIT - all or nothing
+        await self.db.commit()
+        await self.db.refresh(recommendation)
+        
+        logger.info(
+            f"Auto-applied recommendation {recommendation_id}: "
+            f"${old_price} -> ${recommendation.recommended_price} "
+            f"(pushed to {platform_result.get('platform')})"
+        )
         
         return recommendation
     
@@ -187,6 +284,9 @@ class ApprovalService:
         that were reset to PENDING are properly processed.
         
         FIXED: Extract values before async operations to avoid greenlet errors.
+        
+        FIXED: Uses atomic auto_approve_and_apply() so failures don't leave
+        recommendations stuck in AUTO_APPROVED status.
         """
         
         settings = await self._get_user_settings(user_id)
@@ -257,10 +357,12 @@ class ApprovalService:
                 continue
             
             try:
+                # Use atomic auto_approve_and_apply - either fully succeeds or fully fails
                 result_rec = await self.auto_approve_and_apply(rec_id, user_id)
                 applied.append(result_rec)
                 logger.info(f"Auto-applied recommendation {rec_id}")
             except Exception as e:
+                # Recommendation stays PENDING, can be retried later
                 logger.warning(f"Failed to auto-apply recommendation {rec_id}: {e}")
                 continue
         
@@ -383,22 +485,43 @@ class ApprovalService:
             link = result.scalars().first()
             
             if not link:
-                return {"platform": None, "success": False, "error": "Product not linked to any platform"}
+                logger.warning(f"Product {product.id} not linked to any platform")
+                return {
+                    "platform": None, 
+                    "success": False, 
+                    "error": "Product not linked to any platform",
+                    "error_code": "NO_INTEGRATION_LINK"
+                }
             
             # Get the integration
             integration = await self.db.get(Integration, link.integration_id)
             
             if not integration:
-                return {"platform": None, "success": False, "error": "Integration not found"}
+                return {
+                    "platform": None, 
+                    "success": False, 
+                    "error": "Integration not found",
+                    "error_code": "INTEGRATION_NOT_FOUND"
+                }
             
             if integration.status != IntegrationStatus.ACTIVE:
-                return {"platform": integration.platform.value, "success": False, "error": f"Integration status: {integration.status.value}"}
+                return {
+                    "platform": integration.platform.value, 
+                    "success": False, 
+                    "error": f"Integration status: {integration.status.value}",
+                    "error_code": "INTEGRATION_INACTIVE"
+                }
             
             # Decrypt access token
             try:
                 access_token = decrypt_token(integration.access_token_encrypted)
             except Exception as e:
-                return {"platform": integration.platform.value, "success": False, "error": f"Failed to decrypt token: {str(e)}"}
+                return {
+                    "platform": integration.platform.value, 
+                    "success": False, 
+                    "error": f"Failed to decrypt token: {str(e)}",
+                    "error_code": "TOKEN_DECRYPT_FAILED"
+                }
             
             # Build price update request
             request = PriceUpdateRequest(
@@ -423,12 +546,17 @@ class ApprovalService:
                     request=request
                 )
             else:
-                return {"platform": integration.platform.value, "success": False, "error": "Unsupported platform"}
+                return {
+                    "platform": integration.platform.value, 
+                    "success": False, 
+                    "error": "Unsupported platform",
+                    "error_code": "UNSUPPORTED_PLATFORM"
+                }
             
-            # Update link metadata
+            # Update link metadata on success
             if response.result == PriceUpdateResult.SUCCESS:
                 link.last_price_push_at = datetime.utcnow()
-                link.external_price = float(product.current_price)
+                link.external_price = Decimal(str(product.current_price))
                 link.updated_at = datetime.utcnow()
                 self.db.add(link)
             
@@ -439,10 +567,17 @@ class ApprovalService:
                 "new_price": float(product.current_price),
                 "old_price": response.old_price,
                 "error": response.error,
+                "error_code": "API_ERROR" if response.error else None,
             }
             
         except Exception as e:
-            return {"platform": None, "success": False, "error": str(e)}
+            logger.exception(f"Error pushing to e-commerce for product {product.id}")
+            return {
+                "platform": None, 
+                "success": False, 
+                "error": str(e),
+                "error_code": "EXCEPTION"
+            }
     
     async def get_approval_stats(self, user_id: UUID, days: int = 30) -> dict:
         """Get approval statistics for a user."""
@@ -503,5 +638,6 @@ class ApprovalService:
             "avg_confidence_applied": avg_confidence_applied,
             "auto_approval_ratio": auto_approval_ratio,
         }
+    
 
 
