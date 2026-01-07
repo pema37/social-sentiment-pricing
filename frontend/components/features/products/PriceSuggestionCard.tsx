@@ -1,9 +1,11 @@
 // components/products/PriceSuggestionCard.tsx
+// PATCHED: Added error code handling and competitor-only badge
 'use client';
 
-import { TrendingUp, Check, RefreshCw, AlertCircle } from 'lucide-react';
+import { TrendingUp, Check, RefreshCw, AlertCircle, Info, ExternalLink } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import Link from 'next/link';
 import {
   usePriceSuggestion,
   useApplyPriceSuggestion,
@@ -16,6 +18,14 @@ import {
 interface PriceSuggestionCardProps {
   productId: string;
   currentPrice: string | number;
+}
+
+interface ApiError {
+  error?: string;
+  error_code?: string;
+  suggestion?: string;
+  detail?: string;
+  message?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,6 +43,44 @@ function calculateChange(suggested: number, current: number): number {
   if (!current || current === 0) return 0;
   return ((suggested - current) / current) * 100;
 }
+
+// ========== PATCH: Parse error codes from API responses ==========
+function parseApiError(error: unknown): { message: string; code?: string; suggestion?: string } {
+  if (!error) return { message: 'Unknown error' };
+  
+  // Handle axios/fetch error with response.data
+  if (typeof error === 'object' && error !== null) {
+    const err = error as Record<string, unknown>;
+    
+    // Check for response.data (axios style)
+    const responseData = (err.response as Record<string, unknown>)?.data as ApiError;
+    if (responseData) {
+      return {
+        message: responseData.error || responseData.detail || responseData.message || 'Request failed',
+        code: responseData.error_code,
+        suggestion: responseData.suggestion,
+      };
+    }
+    
+    // Direct error object with error_code
+    const directErr = err as ApiError;
+    if (directErr.error_code) {
+      return {
+        message: directErr.error || directErr.detail || directErr.message || 'Request failed',
+        code: directErr.error_code,
+        suggestion: directErr.suggestion,
+      };
+    }
+  }
+  
+  // Standard Error object
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  
+  return { message: String(error) };
+}
+// ========== END PATCH ==========
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -53,7 +101,26 @@ function LoadingState() {
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+// ========== PATCH: Enhanced error state with action buttons ==========
+function ErrorState({ 
+  message, 
+  code,
+  suggestion,
+  onRetry 
+}: { 
+  message: string; 
+  code?: string;
+  suggestion?: string;
+  onRetry: () => void;
+}) {
+  // Show "Go to Integrations" for link-related errors
+  const showIntegrationsLink = 
+    code === 'MISSING_INTEGRATION_LINK' || 
+    code === 'INVALID_CREDENTIALS' ||
+    code === 'INTEGRATION_NOT_FOUND' ||
+    code === 'INTEGRATION_INACTIVE' ||
+    code === 'SYNC_DISABLED';
+
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-4">
@@ -62,15 +129,33 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       </div>
       <div className="flex items-start gap-2 mb-3">
         <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-        <p className="text-sm text-gray-600">{message}</p>
+        <div className="space-y-1">
+          <p className="text-sm text-gray-600">{message}</p>
+          {suggestion && (
+            <p className="text-xs text-gray-500">{suggestion}</p>
+          )}
+        </div>
       </div>
-      <Button variant="secondary" size="sm" onClick={onRetry}>
-        <RefreshCw className="h-4 w-4 mr-1" />
-        Retry
-      </Button>
+      
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" onClick={onRetry}>
+          <RefreshCw className="h-4 w-4 mr-1" />
+          Retry
+        </Button>
+        
+        {showIntegrationsLink && (
+          <Link href="/integrations">
+            <Button variant="secondary" size="sm">
+              <ExternalLink className="h-4 w-4 mr-1" />
+              Go to Integrations
+            </Button>
+          </Link>
+        )}
+      </div>
     </Card>
   );
 }
+// ========== END PATCH ==========
 
 interface PriceChangeIndicatorProps {
   change: number;
@@ -116,13 +201,19 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
     return <LoadingState />;
   }
 
-  // Error state - show actual error message
+  // ========== PATCH: Use parseApiError for better error display ==========
   if (error) {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'Unable to load suggestion. Please try again.';
-    return <ErrorState message={errorMessage} onRetry={() => refetch()} />;
+    const { message, code, suggestion: errorSuggestion } = parseApiError(error);
+    return (
+      <ErrorState 
+        message={message}
+        code={code}
+        suggestion={errorSuggestion}
+        onRetry={() => refetch()} 
+      />
+    );
   }
+  // ========== END PATCH ==========
 
   // No suggestion data returned
   if (!suggestion) {
@@ -141,18 +232,52 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
   const isLowConfidence = confidence < 0.3;
   const noChangeRecommended = Math.abs(change) < 0.01;
 
+  // ========== PATCH: Detect competitor-only recommendations (FIXED TS ERROR) ==========
+  // Safely access factors - cast suggestion to unknown first to avoid TS error
+  const suggestionAny = suggestion as unknown as Record<string, unknown>;
+  const factors = suggestionAny.factors as Record<string, unknown> | undefined;
+  const dataSource = factors?.data_source ?? suggestionAny.data_source;
+  const matchDetails = factors?.match_details as Record<string, unknown> | undefined;
+  const isCompetitorOnly = 
+    dataSource === 'competitor_only' || 
+    matchDetails?.rule_type === 'competitor_fallback';
+  const competitorPrice = matchDetails?.competitor_price as number | undefined;
+  // ========== END PATCH ==========
+
   const handleApply = () => {
-    applyPrice.mutate({
-      id: productId,
-      price: suggestedPrice,
-    });
+    applyPrice.mutate(
+      {
+        id: productId,
+        price: suggestedPrice,
+      },
+      {
+        // ========== PATCH: Handle apply errors with codes ==========
+        onError: (err) => {
+          const { message, code } = parseApiError(err);
+          console.error('Apply price failed:', { message, code });
+          // Toast is handled by the mutation hook, but we log for debugging
+        },
+        // ========== END PATCH ==========
+      }
+    );
   };
 
   return (
     <Card className="p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="h-5 w-5 text-blue-500" />
-        <h3 className="font-semibold text-gray-900">Price Suggestion</h3>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-blue-500" />
+          <h3 className="font-semibold text-gray-900">Price Suggestion</h3>
+        </div>
+        
+        {/* ========== PATCH: Show competitor-only badge ========== */}
+        {isCompetitorOnly && (
+          <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+            <Info className="h-3 w-3 mr-1" />
+            Competitor-based
+          </span>
+        )}
+        {/* ========== END PATCH ========== */}
       </div>
 
       <div className="space-y-4">
@@ -164,8 +289,17 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
           <PriceChangeIndicator change={change} />
         </div>
 
-        {/* Low confidence or no change warning */}
-        {(isLowConfidence || noChangeRecommended) && (
+        {/* ========== PATCH: Show competitor price context ========== */}
+        {isCompetitorOnly && competitorPrice && (
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 p-2 rounded">
+            <Info className="h-3 w-3" />
+            <span>Based on competitor price: {formatCurrency(competitorPrice)}</span>
+          </div>
+        )}
+        {/* ========== END PATCH ========== */}
+
+        {/* Low confidence or no change warning - but not for competitor-only */}
+        {(isLowConfidence || noChangeRecommended) && !isCompetitorOnly && (
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
             <p className="text-sm text-amber-700">
@@ -175,6 +309,17 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
             </p>
           </div>
         )}
+
+        {/* ========== PATCH: Competitor-only info box ========== */}
+        {isCompetitorOnly && (
+          <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-blue-700">
+              This suggestion is based on competitor pricing only. Add sentiment keywords for more accurate recommendations.
+            </p>
+          </div>
+        )}
+        {/* ========== END PATCH ========== */}
 
         {/* Reasoning */}
         {suggestion.reasoning && (
@@ -189,7 +334,9 @@ export function PriceSuggestionCard({ productId, currentPrice }: PriceSuggestion
           <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full ${
-                confidence >= 0.5 ? 'bg-blue-500' : confidence >= 0.3 ? 'bg-amber-400' : 'bg-gray-400'
+                confidence >= 0.7 ? 'bg-green-500' :
+                confidence >= 0.5 ? 'bg-blue-500' : 
+                confidence >= 0.3 ? 'bg-amber-400' : 'bg-gray-400'
               }`}
               style={{ width: `${Math.max(confidence * 100, 5)}%` }}
             />

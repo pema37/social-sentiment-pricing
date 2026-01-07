@@ -1,6 +1,8 @@
 # backend/services/pricing/recommendation_service.py
 """
 Recommendation Service - Generates price recommendations based on rules and signals.
+
+PATCHED: Added competitor-only fallback when no rules match (Issue 1 fix)
 """
 
 import logging
@@ -57,15 +59,28 @@ class RecommendationService:
         # Find matching rule
         result = await self.rule_evaluator.find_matching_rule(product, user_id, signals) 
 
+        # ========== PATCH START: COMPETITOR-ONLY FALLBACK ==========
+        # If no rule matches but we have competitor data, generate competitor-based recommendation
         if not result:
+            logger.info(f"No rule matched for product {product.id}, trying competitor fallback...")
+            recommendation = await self._generate_competitor_fallback(product, user_id, signals)
+            if recommendation:
+                return recommendation
+            logger.info(f"No competitor fallback possible for product {product.id}")
             return None
+        # ========== PATCH END ==========
         
         # Use highest priority triggered rule
         rule, match_details = result
         
         # Double-check rule is valid (in case tuple returned with None rule)
         if rule is None:
+            # ========== PATCH: Also try fallback here ==========
+            recommendation = await self._generate_competitor_fallback(product, user_id, signals)
+            if recommendation:
+                return recommendation
             return None
+            # ========== END ==========
 
         # Calculate new price
         new_price = self._calculate_new_price(product, rule, signals)
@@ -139,13 +154,159 @@ class RecommendationService:
             try:
                 from services.pricing.approval_service import ApprovalService
                 approval_service = ApprovalService(self.db)
-                recommendation = await approval_service.auto_approve_and_apply(recommendation, user_id)
+                recommendation = await approval_service.auto_approve_and_apply(recommendation.id, user_id)
                 logger.info(f"Auto-applied recommendation {recommendation.id} for product {product.id}")
             except Exception as e:
                 # Log error but don't fail - recommendation stays as pending
                 logger.warning(f"Auto-apply failed for recommendation {recommendation.id}: {str(e)}")
         
         return recommendation
+    
+    # ========== PATCH START: NEW METHOD ==========
+    async def _generate_competitor_fallback(
+        self,
+        product: Product,
+        user_id: UUID,
+        signals: MarketSignals
+    ) -> Optional[PriceRecommendation]:
+        """
+        Generate a recommendation based on competitor price alone.
+        
+        Called when no pricing rules match (e.g., insufficient sentiment data).
+        Uses competitor pricing to provide a basic recommendation.
+        
+        Returns:
+            PriceRecommendation with data_source='competitor_only', or None
+        """
+        # Check if we have any competitor prices
+        if not signals.competitor_prices:
+            logger.debug(f"No competitor prices available for product {product.id}")
+            return None
+        
+        # Find the first valid competitor price
+        competitor_price = None
+        competitor_id = None
+        
+        for comp_id, price in signals.competitor_prices.items():
+            # Skip invalid prices (null, zero, or likely scraping errors >$5000)
+            if price and price > 0 and price < Decimal("5000"):
+                competitor_price = Decimal(str(price))
+                competitor_id = comp_id
+                logger.debug(f"Using competitor {comp_id} price: ${price}")
+                break
+        
+        if not competitor_price:
+            logger.debug(f"No valid competitor prices for product {product.id} (filtered as invalid)")
+            return None
+        
+        # Validate current price
+        current_price = product.current_price
+        if not current_price or current_price <= 0:
+            logger.warning(f"Product {product.id} has invalid current_price: {current_price}")
+            return None
+        
+        # Calculate price difference percentage
+        # Positive = we're above competitor, Negative = we're below
+        price_diff_pct = ((current_price - competitor_price) / competitor_price) * Decimal("100")
+        
+        # Determine action based on price position
+        new_price = None
+        reasoning = ""
+        
+        if price_diff_pct > Decimal("10"):
+            # We're >10% above competitor - suggest matching at 98% of competitor
+            new_price = competitor_price * Decimal("0.98")
+            reasoning = (
+                f"Your price (${current_price:.2f}) is {price_diff_pct:.1f}% above competitor "
+                f"(${competitor_price:.2f}). Recommending price match at 98% of competitor price."
+            )
+            logger.info(f"Product {product.id}: {price_diff_pct:.1f}% above competitor, suggesting decrease")
+            
+        elif price_diff_pct < Decimal("-15"):
+            # We're >15% below competitor - opportunity for increase
+            new_price = current_price * Decimal("1.05")  # 5% increase
+            reasoning = (
+                f"Your price (${current_price:.2f}) is {abs(price_diff_pct):.1f}% below competitor "
+                f"(${competitor_price:.2f}). Room for a 5% price increase."
+            )
+            logger.info(f"Product {product.id}: {abs(price_diff_pct):.1f}% below competitor, suggesting increase")
+            
+        else:
+            # Price is competitive (within -15% to +10%), no change needed
+            logger.info(f"Product {product.id} price is competitive ({price_diff_pct:.1f}% vs competitor)")
+            return None
+        
+        # Apply product min/max constraints
+        if product.min_price and new_price < product.min_price:
+            new_price = product.min_price
+            logger.debug(f"Adjusted to min_price: ${product.min_price}")
+        if product.max_price and new_price > product.max_price:
+            new_price = product.max_price
+            logger.debug(f"Adjusted to max_price: ${product.max_price}")
+        
+        # Round to 2 decimal places
+        new_price = new_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        
+        # Calculate actual change percentage
+        change_percent = ((new_price - current_price) / current_price) * Decimal("100")
+        change_percent = change_percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        
+        # Skip if change is too small (<1%)
+        if abs(change_percent) < Decimal("1"):
+            logger.debug(f"Change too small ({change_percent}%), skipping")
+            return None
+        
+        # Get user settings
+        settings = await self._get_user_settings(user_id)
+        valid_hours = settings.recommendation_valid_hours if settings else 48
+        valid_until = datetime.utcnow() + timedelta(hours=valid_hours)
+        
+        # Build factors dict - includes data_source flag for frontend
+        factors = {
+            "match_details": {
+                "rule_type": "competitor_fallback",
+                "competitor_id": str(competitor_id) if competitor_id else None,
+                "competitor_price": float(competitor_price),
+                "price_diff_pct": float(price_diff_pct),
+            },
+            "price_impacts": {
+                "competitor": float(new_price - current_price),
+            },
+            "confidence_breakdown": {
+                "base_confidence": 0.65,
+                "reason": "competitor_only",
+                "note": "Lower confidence - based on competitor price only, no sentiment data"
+            },
+            "data_source": "competitor_only",  # Frontend uses this to show badge
+        }
+        
+        # Create recommendation with lower confidence (65% for competitor-only)
+        recommendation = PriceRecommendation(
+            user_id=user_id,
+            product_id=product.id,
+            triggered_rule_id=None,  # No rule triggered - this is a fallback
+            current_price=current_price,
+            recommended_price=new_price,
+            change_percent=change_percent,
+            confidence_score=Decimal("0.65"),  # Lower confidence without sentiment
+            reasoning=reasoning,
+            factors=factors,
+            status=RecommendationStatus.PENDING,
+            requires_approval=True,  # Always require approval for fallback
+            valid_until=valid_until,
+        )
+        
+        self.db.add(recommendation)
+        await self.db.commit()
+        await self.db.refresh(recommendation)
+        
+        logger.info(
+            f"Generated competitor fallback for product {product.id}: "
+            f"${current_price} → ${new_price} ({change_percent:+.1f}%)"
+        )
+        
+        return recommendation
+    # ========== PATCH END ==========
     
     def _calculate_new_price(
         self,
@@ -345,5 +506,6 @@ class RecommendationService:
         await self.db.commit()
         
         return len(expired)
+    
 
-
+    

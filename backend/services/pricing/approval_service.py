@@ -504,3 +504,4 @@ class ApprovalService:
             "auto_approval_ratio": auto_approval_ratio,
         }
 
+

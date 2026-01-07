@@ -4,6 +4,8 @@
 Price Push Service - PUSH operations
 
 Pushes price changes FROM SSP TO e-commerce platforms.
+
+PATCHED: Added error codes for frontend handling (Issue 2 fix)
 """
 
 import asyncio
@@ -42,6 +44,8 @@ class PricePushService:
     Methods:
     - push_price_to_platform: Push single product price
     - push_all_pending_prices: Push all products with price differences
+    
+    PATCHED: Returns error_code field for frontend to show specific messages
     """
     
     PUSH_TIMEOUT_SECONDS = 30
@@ -76,9 +80,31 @@ class PricePushService:
         Push a price update to the e-commerce platform.
         
         Returns:
-            dict with result details
+            dict with result details including error_code for frontend
         """
-        integration = await self._get_integration(integration_id, user_id)
+        # ========== PATCH: Better error handling for integration lookup ==========
+        try:
+            integration = await self._get_integration(integration_id, user_id)
+        except ValueError as e:
+            error_msg = str(e)
+            if "not found" in error_msg.lower():
+                return {
+                    "success": False,
+                    "product_id": str(product_id),
+                    "error": "Store integration not found",
+                    "error_code": "INTEGRATION_NOT_FOUND",
+                    "suggestion": "Reconnect your store in the Integrations page."
+                }
+            elif "not active" in error_msg.lower():
+                return {
+                    "success": False,
+                    "product_id": str(product_id),
+                    "error": "Store integration is not active",
+                    "error_code": "INTEGRATION_INACTIVE",
+                    "suggestion": "Check your store connection status in Integrations."
+                }
+            raise
+        # ========== END PATCH ==========
         
         # Get the product link
         stmt = select(ProductIntegrationLink).where(
@@ -89,11 +115,53 @@ class PricePushService:
         result = await self.db.execute(stmt)
         link = result.scalars().first()
         
+        # ========== PATCH: Detailed error for missing/disabled link ==========
         if not link:
-            raise ValueError(f"No active integration link for product {product_id}")
+            # Check if link exists but sync is disabled
+            stmt_check = select(ProductIntegrationLink).where(
+                ProductIntegrationLink.integration_id == integration_id,
+                ProductIntegrationLink.product_id == product_id,
+            )
+            result_check = await self.db.execute(stmt_check)
+            link_disabled = result_check.scalars().first()
+            
+            if link_disabled:
+                # Link exists but sync_enabled = False
+                logger.warning(f"Sync disabled for product {product_id}")
+                return {
+                    "success": False,
+                    "product_id": str(product_id),
+                    "error": "Price sync is disabled for this product",
+                    "error_code": "SYNC_DISABLED",
+                    "suggestion": "Enable sync for this product in the Integrations page."
+                }
+            
+            # No link at all - THIS IS THE MAIN ISSUE
+            logger.error(f"No ProductIntegrationLink for product {product_id}")
+            return {
+                "success": False,
+                "product_id": str(product_id),
+                "error": "Product not linked to store. Please sync your products first.",
+                "error_code": "MISSING_INTEGRATION_LINK",
+                "suggestion": "Go to Integrations → Your Store → Sync Products"
+            }
+        # ========== END PATCH ==========
         
         service = SyncService.get_service(integration.platform)
-        access_token = decrypt_token(integration.access_token_encrypted)
+        
+        # ========== PATCH: Better credential error ==========
+        try:
+            access_token = decrypt_token(integration.access_token_encrypted)
+        except Exception as e:
+            logger.error(f"Failed to decrypt credentials for integration {integration_id}: {e}")
+            return {
+                "success": False,
+                "product_id": str(product_id),
+                "error": "Failed to decrypt store credentials",
+                "error_code": "CREDENTIAL_ERROR",
+                "suggestion": "Reconnect your store to refresh credentials."
+            }
+        # ========== END PATCH ==========
         
         request = PriceUpdateRequest(
             external_product_id=link.external_product_id,
@@ -115,7 +183,9 @@ class PricePushService:
             return {
                 "success": False,
                 "product_id": str(product_id),
-                "error": "Request timed out",
+                "error": "Request timed out - store not responding",
+                "error_code": "TIMEOUT",
+                "suggestion": "Your store may be slow. Please try again later."
             }
         
         if response.result == PriceUpdateResult.SUCCESS:
@@ -145,13 +215,31 @@ class PricePushService:
                 "new_price": new_price,
             }
         else:
-            logger.error(f"Price push failed for product {product_id}: {response.error}")
+            # ========== PATCH: Map PriceUpdateResult to error codes ==========
+            error_code = "UPDATE_FAILED"
+            suggestion = "Check your store and try again."
+            
+            if response.result == PriceUpdateResult.UNAUTHORIZED:
+                error_code = "INVALID_CREDENTIALS"
+                suggestion = "Your store credentials have expired. Please reconnect your store."
+            elif response.result == PriceUpdateResult.PRODUCT_NOT_FOUND:
+                error_code = "PRODUCT_NOT_FOUND_IN_STORE"
+                suggestion = "This product may have been deleted from your store. Re-sync products."
+            elif response.result == PriceUpdateResult.RATE_LIMITED:
+                error_code = "RATE_LIMITED"
+                suggestion = "Too many requests to your store. Please wait a few minutes."
+            
+            logger.error(f"Price push failed for product {product_id}: {response.error} (code: {error_code})")
+            
             return {
                 "success": False,
                 "product_id": str(product_id),
                 "external_product_id": link.external_product_id,
                 "error": response.error or response.result.value,
+                "error_code": error_code,
+                "suggestion": suggestion,
             }
+            # ========== END PATCH ==========
     
     async def push_all_pending_prices(
         self,
@@ -205,6 +293,7 @@ class PricePushService:
                         "product_id": str(product.id),
                         "product_name": product.name,
                         "error": push_result.get("error"),
+                        "error_code": push_result.get("error_code"),  # Include error code
                     })
                     
             except Exception as e:
@@ -214,6 +303,7 @@ class PricePushService:
                     "product_id": str(product.id),
                     "product_name": product.name,
                     "error": str(e),
+                    "error_code": "UNKNOWN_ERROR",
                 })
         
         logger.info(f"Price push completed for {integration.store_url}: pushed={pushed}, failed={failed}, skipped={skipped}")
@@ -226,4 +316,70 @@ class PricePushService:
             "errors": errors[:10],
         }
     
+    # ========== PATCH: New helper method ==========
+    async def check_product_can_push(
+        self,
+        product_id: UUID,
+        user_id: UUID,
+    ) -> dict:
+        """
+        Check if a product is ready for price push.
+        
+        Useful for frontend to show status before attempting push.
+        Returns details about what's missing if not ready.
+        """
+        # Get user's active integrations
+        int_stmt = select(Integration).where(
+            Integration.user_id == user_id,
+            Integration.status == IntegrationStatus.ACTIVE
+        )
+        int_result = await self.db.execute(int_stmt)
+        integrations = list(int_result.scalars().all())
+        
+        if not integrations:
+            return {
+                "ready": False,
+                "error_code": "NO_ACTIVE_INTEGRATION",
+                "message": "No active store connection found.",
+                "suggestion": "Connect your WooCommerce or Shopify store first."
+            }
+        
+        # Check for product integration link
+        link_stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.product_id == product_id,
+            ProductIntegrationLink.integration_id.in_([i.id for i in integrations])
+        )
+        link_result = await self.db.execute(link_stmt)
+        link = link_result.scalars().first()
+        
+        if not link:
+            return {
+                "ready": False,
+                "error_code": "MISSING_INTEGRATION_LINK",
+                "message": "Product not linked to store.",
+                "suggestion": "Go to Integrations → Your Store → Sync Products"
+            }
+        
+        if not link.sync_enabled:
+            return {
+                "ready": False,
+                "error_code": "SYNC_DISABLED",
+                "message": "Price sync is disabled for this product.",
+                "suggestion": "Enable sync in the product's integration settings."
+            }
+        
+        # Find the integration for this link
+        integration = next((i for i in integrations if i.id == link.integration_id), None)
+        
+        return {
+            "ready": True,
+            "integration_id": str(link.integration_id),
+            "platform": integration.platform.value if integration else None,
+            "store_url": integration.store_url if integration else None,
+            "external_product_id": link.external_product_id,
+            "last_push_at": link.last_price_push_at.isoformat() if link.last_price_push_at else None,
+            "current_external_price": link.external_price
+        }
+    # ========== END PATCH ==========
+
     
