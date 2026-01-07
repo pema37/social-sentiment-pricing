@@ -2,14 +2,18 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { Button, Input } from '@/components/ui';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuthStore();
+  
+  // Check if session expired
+  const sessionExpired = searchParams.get('expired') === 'true';
   
   // Form state
   const [email, setEmail] = useState('');
@@ -26,7 +30,14 @@ export default function LoginPage() {
     const result = await login(email, password);
 
     if (result.success) {
-      router.push('/dashboard');
+      // Check if there's a redirect path stored
+      const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+      if (redirectPath) {
+        sessionStorage.removeItem('redirectAfterLogin');
+        router.push(redirectPath);
+      } else {
+        router.push('/dashboard');
+      }
     } else {
       setError(result.error || 'Login failed');
       setIsLoading(false);
@@ -39,6 +50,15 @@ export default function LoginPage() {
       <h2 className="text-xl font-semibold text-gray-900 mb-6">
         Sign in to your account
       </h2>
+
+      {/* Session expired warning */}
+      {sessionExpired && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700">
+            Your session has expired. Please sign in again.
+          </p>
+        </div>
+      )}
 
       {/* Error message */}
       {error && (

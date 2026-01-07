@@ -79,3 +79,5 @@ async def require_admin(
             detail="Not enough permissions",
         )
     return current_user
+
+

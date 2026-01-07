@@ -1,5 +1,5 @@
 // API Client - handles fetch, auth, and errors
-import { getToken } from '@/lib/auth/token';
+import { getToken, removeToken } from '@/lib/auth/token';
 
 const getApiBaseUrl = () => {
   // Use env var if set (works for both client and server)
@@ -48,6 +48,23 @@ function buildQueryString(params?: Record<string, string | number | boolean | un
   return queryString ? `?${queryString}` : '';
 }
 
+// Handle 401 errors - clear token and redirect to login
+function handleAuthError() {
+  // Only run in browser
+  if (typeof window === 'undefined') return;
+  
+  // Clear the invalid token
+  removeToken();
+  
+  // Redirect to login with a message
+  const currentPath = window.location.pathname;
+  if (currentPath !== '/login' && currentPath !== '/register') {
+    // Store the current path so we can redirect back after login
+    sessionStorage.setItem('redirectAfterLogin', currentPath);
+    window.location.href = '/login?expired=true';
+  }
+}
+
 // Extract error message from API response
 function parseErrorMessage(status: number, errorData: unknown): string {
   // Try to extract message from response body first
@@ -76,6 +93,16 @@ function parseErrorMessage(status: number, errorData: unknown): string {
       if (detail.toLowerCase().includes('deactivated')) {
         return 'This account has been deactivated. Please contact support.';
       }
+      // Token-related errors
+      if (detail.toLowerCase().includes('invalid') && detail.toLowerCase().includes('token')) {
+        return 'Your session has expired. Please log in again.';
+      }
+      if (detail.toLowerCase().includes('expired')) {
+        return 'Your session has expired. Please log in again.';
+      }
+      if (detail.toLowerCase().includes('could not validate credentials')) {
+        return 'Your session has expired. Please log in again.';
+      }
       
       return detail;
     }
@@ -91,7 +118,7 @@ function parseErrorMessage(status: number, errorData: unknown): string {
     case 400:
       return 'Invalid request. Please check your input.';
     case 401:
-      return 'Invalid credentials. Please try again.';
+      return 'Your session has expired. Please log in again.';
     case 403:
       return 'Access denied.';
     case 404:
@@ -139,6 +166,15 @@ export async function apiClient<T>(
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        // Don't redirect for login/register endpoints
+        if (!endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+          handleAuthError();
+        }
+      }
+      
       throw new ApiError(
         response.status,
         parseErrorMessage(response.status, errorData),
@@ -183,4 +219,5 @@ export const api = {
   delete: <T>(endpoint: string) =>
     apiClient<T>(endpoint, { method: 'DELETE' }),
 };
+
 
