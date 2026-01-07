@@ -1,5 +1,6 @@
 // components/products/PriceSuggestionCard.tsx
 // PATCHED: Added error code handling and competitor-only badge
+// PATCHED (2025-01-07): Fixed parseApiError to handle ApiError class from client.ts
 'use client';
 
 import { TrendingUp, Check, RefreshCw, AlertCircle, Info, ExternalLink } from 'lucide-react';
@@ -20,11 +21,11 @@ interface PriceSuggestionCardProps {
   currentPrice: string | number;
 }
 
-interface ApiError {
+interface ApiErrorDetails {
   error?: string;
   error_code?: string;
   suggestion?: string;
-  detail?: string;
+  detail?: string | Array<{ msg?: string; loc?: string[] }>;
   message?: string;
 }
 
@@ -44,38 +45,100 @@ function calculateChange(suggested: number, current: number): number {
   return ((suggested - current) / current) * 100;
 }
 
-// ========== PATCH: Parse error codes from API responses ==========
+// ========== PATCH: Fixed parseApiError to handle ApiError class from client.ts ==========
 function parseApiError(error: unknown): { message: string; code?: string; suggestion?: string } {
   if (!error) return { message: 'Unknown error' };
   
-  // Handle axios/fetch error with response.data
+  // Handle our ApiError class from lib/api/client.ts
+  // ApiError has: status (number), message (string), details (unknown)
+  if (error instanceof Error) {
+    const err = error as Error & { 
+      status?: number; 
+      details?: ApiErrorDetails;
+    };
+    
+    // If it's our ApiError with details, extract the good stuff
+    if ('details' in err && err.details && typeof err.details === 'object') {
+      const details = err.details;
+      
+      // Handle FastAPI validation errors (detail is an array)
+      if (Array.isArray(details.detail)) {
+        const messages = details.detail
+          .map((item) => item.msg || 'Validation error')
+          .join(', ');
+        return {
+          message: messages || err.message,
+          code: details.error_code,
+          suggestion: details.suggestion,
+        };
+      }
+      
+      // Handle string detail
+      if (typeof details.detail === 'string') {
+        return {
+          message: details.detail,
+          code: details.error_code,
+          suggestion: details.suggestion,
+        };
+      }
+      
+      // Handle error field
+      if (details.error) {
+        return {
+          message: details.error,
+          code: details.error_code,
+          suggestion: details.suggestion,
+        };
+      }
+      
+      // Has details but no specific message - use the Error message
+      return {
+        message: err.message,
+        code: details.error_code,
+        suggestion: details.suggestion,
+      };
+    }
+    
+    // Plain Error without details - just use message
+    // But make the "Network error" more helpful
+    if (err.message === 'Network error. Please try again.') {
+      return {
+        message: 'Unable to fetch price suggestion. Please check your connection and try again.',
+      };
+    }
+    
+    return { message: err.message };
+  }
+  
+  // Handle plain objects (shouldn't happen with our client, but just in case)
   if (typeof error === 'object' && error !== null) {
     const err = error as Record<string, unknown>;
     
-    // Check for response.data (axios style)
-    const responseData = (err.response as Record<string, unknown>)?.data as ApiError;
+    // Check for response.data (axios style - legacy support)
+    const responseData = (err.response as Record<string, unknown>)?.data as ApiErrorDetails;
     if (responseData) {
       return {
-        message: responseData.error || responseData.detail || responseData.message || 'Request failed',
+        message: responseData.error || 
+                 (typeof responseData.detail === 'string' ? responseData.detail : '') || 
+                 responseData.message || 
+                 'Request failed',
         code: responseData.error_code,
         suggestion: responseData.suggestion,
       };
     }
     
     // Direct error object with error_code
-    const directErr = err as ApiError;
-    if (directErr.error_code) {
+    const directErr = err as ApiErrorDetails;
+    if (directErr.error_code || directErr.error || directErr.detail) {
       return {
-        message: directErr.error || directErr.detail || directErr.message || 'Request failed',
+        message: directErr.error || 
+                 (typeof directErr.detail === 'string' ? directErr.detail : '') || 
+                 directErr.message || 
+                 'Request failed',
         code: directErr.error_code,
         suggestion: directErr.suggestion,
       };
     }
-  }
-  
-  // Standard Error object
-  if (error instanceof Error) {
-    return { message: error.message };
   }
   
   return { message: String(error) };

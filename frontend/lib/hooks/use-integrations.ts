@@ -135,12 +135,25 @@ export function useIntegrationHealth(id: string | null) {
  * Get current sync status
  */
 export function useSyncStatus(integrationId: string | null, options?: { polling?: boolean }) {
+  const queryClient = useQueryClient();
+  
   return useQuery({
     queryKey: integrationKeys.syncStatus(integrationId || ''),
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
     staleTime: 5 * 1000,
-    refetchInterval: options?.polling ? 2000 : false, // Poll every 2s if enabled
+    // FIXED: Function-based interval that auto-stops and refreshes UI
+    refetchInterval: options?.polling 
+      ? (query) => {
+          const data = query.state.data as SyncStatusResponse | undefined;
+          if (data?.sync_status === 'idle' || data?.sync_status === 'error') {
+            queryClient.invalidateQueries({ queryKey: integrationKeys.list() });
+            queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integrationId!) });
+            return false;
+          }
+          return 2000;
+        }
+      : false,
   });
 }
 

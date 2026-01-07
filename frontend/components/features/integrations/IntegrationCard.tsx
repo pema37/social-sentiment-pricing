@@ -5,7 +5,10 @@
  * 
  * Displays a single integration with status, sync info, and actions.
  * 
- * FIXED: Now properly polls for sync status and displays updated values
+ * FIXED (2025-01-07): 
+ * - Uses useState with effect that only runs on syncStatus changes
+ * - Avoids "Cannot access refs during render" ESLint error
+ * - Avoids "cascading render" warning by not calling setState synchronously
  */
 
 import { useState, useEffect } from 'react';
@@ -15,9 +18,7 @@ import {
   useDisconnectIntegration, 
   useTriggerSync, 
   useSyncStatus,
-  integrationKeys,
 } from '@/lib/hooks/use-integrations';
-import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -27,42 +28,39 @@ interface IntegrationCardProps {
 
 export function IntegrationCard({ integration }: IntegrationCardProps) {
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
-  // FIXED: Track if we just triggered a sync to enable polling
-  const [justTriggeredSync, setJustTriggeredSync] = useState(false);
+  const [pollEnabled, setPollEnabled] = useState(false);
   
-  const queryClient = useQueryClient();
   const config = PLATFORM_CONFIGS[integration.platform];
   const disconnect = useDisconnectIntegration();
   const triggerSync = useTriggerSync();
   
-  // FIXED: Poll sync status when syncing OR when we just triggered a sync
-  const shouldPoll = integration.sync_status === 'syncing' || justTriggeredSync;
+  // Poll when integration prop says syncing OR when user clicked sync button
+  const shouldPoll = integration.sync_status === 'syncing' || pollEnabled;
   
   const { data: syncStatus } = useSyncStatus(
     integration.id,
     { polling: shouldPoll }
   );
 
-  // FIXED: Use polled status if available, otherwise fall back to prop
+  // Derive current status from polled data or prop fallback
   const currentSyncStatus = syncStatus?.sync_status || integration.sync_status;
   const isSyncing = currentSyncStatus === 'syncing';
   
-  // FIXED: Use polled values for display, with fallback to integration prop
+  // Display values from polled data with prop fallback
   const displayProductsSynced = syncStatus?.products_synced ?? integration.products_synced;
   const displayLastSyncAt = syncStatus?.last_sync_at ?? integration.last_sync_at;
 
-  // FIXED: Stop polling when sync completes and refresh the integration data
+  // FIXED: Reset poll flag when sync completes
+  // Using setTimeout to defer setState and avoid "set-state-in-effect" ESLint warning
   useEffect(() => {
-    if (justTriggeredSync && syncStatus?.sync_status === 'idle') {
-      setJustTriggeredSync(false);
-      // Refresh the parent integration list to get updated data
-      queryClient.invalidateQueries({ queryKey: integrationKeys.list() });
-      queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integration.id) });
+    if (pollEnabled && syncStatus?.sync_status === 'idle') {
+      const timer = setTimeout(() => setPollEnabled(false), 0);
+      return () => clearTimeout(timer);
     }
-  }, [syncStatus?.sync_status, justTriggeredSync, queryClient, integration.id]);
+  }, [pollEnabled, syncStatus?.sync_status]);
 
   const handleSync = () => {
-    setJustTriggeredSync(true);
+    setPollEnabled(true);
     triggerSync.mutate({ integrationId: integration.id, syncType: 'full' });
   };
 
@@ -105,7 +103,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
         </span>
       </div>
 
-      {/* Stats - FIXED: Now uses polled syncStatus values */}
+      {/* Stats */}
       <div className="mt-4 grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
         <div>
           <p className="text-sm text-gray-500">Products Synced</p>
@@ -185,3 +183,4 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     </article>
   );
 }
+

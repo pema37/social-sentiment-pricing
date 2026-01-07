@@ -34,6 +34,71 @@ interface RuleFormProps {
 // HELPERS
 // ============================================
 
+/**
+ * FIXED: Parse and normalize string to valid decimal string for API
+ * - Handles empty strings → undefined
+ * - Handles ".00" → "0.00" (Pydantic requires leading zero)
+ * - Handles "5%" → "5" (strips % sign)
+ * - Returns undefined for invalid values
+ * - Returns STRING for TypeScript compatibility
+ */
+function normalizeDecimalString(value: string | undefined | null): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  
+  // Remove % sign if present (user might type "5%")
+  let cleaned = value.toString().trim().replace(/%/g, '');
+  
+  // Handle ".00" → "0.00" (add leading zero - required by Pydantic Decimal)
+  if (cleaned.startsWith('.')) {
+    cleaned = '0' + cleaned;
+  }
+  
+  // Handle "-.5" → "-0.5"
+  if (cleaned.startsWith('-.')) {
+    cleaned = '-0' + cleaned.substring(1);
+  }
+  
+  // Handle empty after cleanup
+  if (cleaned === '' || cleaned === '-') {
+    return undefined;
+  }
+  
+  // Validate it's a valid number
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) {
+    return undefined;
+  }
+  
+  // Return the cleaned string (not the number) for TypeScript
+  return cleaned;
+}
+
+/**
+ * Check if a string represents a valid decimal
+ */
+function isValidDecimal(value: string | undefined | null): boolean {
+  return normalizeDecimalString(value) !== undefined;
+}
+
+/**
+ * Parse string to integer, handling edge cases
+ */
+function parseInteger(value: string | undefined | null): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  
+  const num = parseInt(value.toString().trim(), 10);
+  
+  if (isNaN(num)) {
+    return undefined;
+  }
+  
+  return num;
+}
+
 const getInitialData = (data?: Partial<PricingRule>): RuleFormData => {
   const scopeType = data?.applies_to_all_products ? 'all'
     : data?.applies_to_categories?.length ? 'categories'
@@ -105,6 +170,24 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
     if (!ACTIONS_WITHOUT_VALUE.includes(formData.action) && !formData.action_value.trim()) {
       errs.action_value = 'Action value is required';
     }
+    
+    // FIXED: Validate action_value is a valid number
+    if (!ACTIONS_WITHOUT_VALUE.includes(formData.action) && formData.action_value.trim()) {
+      if (!isValidDecimal(formData.action_value)) {
+        errs.action_value = 'Must be a valid number';
+      }
+    }
+
+    // FIXED: Validate decimal fields
+    if (formData.max_change_percent && !isValidDecimal(formData.max_change_percent)) {
+      errs.max_change_percent = 'Must be a valid number (e.g., 5 or 5.5)';
+    }
+    if (formData.min_price && !isValidDecimal(formData.min_price)) {
+      errs.min_price = 'Must be a valid price (e.g., 0.00 or 10.99)';
+    }
+    if (formData.max_price && !isValidDecimal(formData.max_price)) {
+      errs.max_price = 'Must be a valid price (e.g., 99.99)';
+    }
 
     // Scope validation
     if (formData.scope_type === 'single' && !formData.product_id) errs.product_id = 'Select a product';
@@ -122,6 +205,11 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
   }, [formData]);
 
   const buildPayload = useCallback((): CreatePricingRuleRequest => {
+    // FIXED: Normalize action_value to valid decimal string
+    const actionValueStr = ACTIONS_WITHOUT_VALUE.includes(formData.action) 
+      ? '0' 
+      : (normalizeDecimalString(formData.action_value) ?? '0');
+    
     const payload: CreatePricingRuleRequest = {
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
@@ -129,7 +217,7 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
       is_active: formData.is_active,
       priority: formData.priority,
       action: formData.action,
-      action_value: ACTIONS_WITHOUT_VALUE.includes(formData.action) ? '0' : formData.action_value.trim(),
+      action_value: actionValueStr,  // FIXED: String for TypeScript, normalized for Pydantic
       cooldown_hours: parseInt(formData.cooldown_hours) || 24,
     };
 
@@ -147,9 +235,10 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
       payload.applies_to_all_products = true;
     }
 
-    // Type-specific
+    // Type-specific - sentiment_threshold needs to be a number for the API
     if (formData.rule_type === 'sentiment_threshold') {
-      payload.sentiment_threshold = parseFloat(formData.sentiment_threshold);
+      const threshold = normalizeDecimalString(formData.sentiment_threshold);
+      payload.sentiment_threshold = threshold ? parseFloat(threshold) : undefined;
       payload.sentiment_direction = formData.sentiment_direction;
     }
     if (formData.rule_type === 'competitor_relative') {
@@ -157,20 +246,24 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
       payload.price_position = formData.price_position;
     }
     if (formData.rule_type === 'time_based') payload.time_days = formData.time_days;
-    if (formData.rule_type === 'volume_surge') payload.volume_threshold = parseInt(formData.volume_threshold);
-    if (formData.rule_type === 'viral_detection') payload.viral_threshold_reach = parseInt(formData.viral_threshold_reach);
+    if (formData.rule_type === 'volume_surge') payload.volume_threshold = parseInteger(formData.volume_threshold);
+    if (formData.rule_type === 'viral_detection') payload.viral_threshold_reach = parseInteger(formData.viral_threshold_reach);
 
-    // Constraints
-    if (formData.max_change_percent) payload.max_change_percent = formData.max_change_percent;
-    if (formData.min_price) payload.min_price = formData.min_price;
-    if (formData.max_price) payload.max_price = formData.max_price;
+    // FIXED: Constraints - normalize to valid decimal strings
+    const maxChangePercent = normalizeDecimalString(formData.max_change_percent);
+    const minPrice = normalizeDecimalString(formData.min_price);
+    const maxPrice = normalizeDecimalString(formData.max_price);
+    
+    if (maxChangePercent !== undefined) payload.max_change_percent = maxChangePercent;
+    if (minPrice !== undefined) payload.min_price = minPrice;
+    if (maxPrice !== undefined) payload.max_price = maxPrice;
 
     return payload;
   }, [formData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return toast.error('Please fix errors');
+    if (!validate()) return toast.error('Please fix the errors before submitting');
 
     try {
       if (isEditing) {
@@ -181,8 +274,10 @@ export function RuleForm({ initialData, ruleId, onSuccess, onCancel }: RuleFormP
         toast.success('Rule created');
       }
       onSuccess?.();
-    } catch {
-      toast.error(isEditing ? 'Failed to update' : 'Failed to create');
+    } catch (err) {
+      // FIXED: Show more specific error message if available
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      toast.error(isEditing ? `Failed to update: ${message}` : `Failed to create: ${message}`);
     }
   };
 
