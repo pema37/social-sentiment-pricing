@@ -1,8 +1,23 @@
-// API Client - handles fetch, auth, and errors
-import { getToken, removeToken } from '@/lib/auth/token';
+// frontend/lib/api/client.ts
+
+/**
+ * API Client - handles fetch, auth, and errors
+ * 
+ * PATCHED (2025-01-07): Added automatic token refresh on 401 errors.
+ * - When a 401 is received, attempts to refresh the token
+ * - If refresh succeeds, retries the original request
+ * - If refresh fails, redirects to login
+ */
+
+import { 
+  getToken, 
+  setToken, 
+  setRefreshToken,
+  getRefreshToken, 
+  removeAllTokens 
+} from '@/lib/auth/token';
 
 const getApiBaseUrl = () => {
-  // Use env var if set (works for both client and server)
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl) {
     if (envUrl.includes('railway.app')) {
@@ -10,8 +25,6 @@ const getApiBaseUrl = () => {
     }
     return envUrl;
   }
-  
-  // Fallback for local development
   return 'http://localhost:8000';
 };
 
@@ -33,6 +46,7 @@ interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   params?: Record<string, string | number | boolean | undefined>;
+  _isRetry?: boolean; // Internal flag to prevent infinite retry loops
 }
 
 // Build query string from params
@@ -48,18 +62,80 @@ function buildQueryString(params?: Record<string, string | number | boolean | un
   return queryString ? `?${queryString}` : '';
 }
 
-// Handle 401 errors - clear token and redirect to login
+// Track if we're currently refreshing to prevent multiple refresh calls
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+/**
+ * Attempt to refresh the access token using the refresh token.
+ * Returns true if successful, false otherwise.
+ */
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  
+  if (!refreshToken) {
+    return false;
+  }
+  
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const data = await response.json();
+    
+    // Save new tokens
+    if (data.access_token) {
+      setToken(data.access_token);
+    }
+    if (data.refresh_token) {
+      setRefreshToken(data.refresh_token);
+    }
+    
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Handle token refresh with deduplication.
+ * Multiple concurrent 401s will share the same refresh request.
+ */
+async function handleTokenRefresh(): Promise<boolean> {
+  // If already refreshing, wait for that to complete
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+  
+  isRefreshing = true;
+  refreshPromise = refreshAccessToken();
+  
+  try {
+    const result = await refreshPromise;
+    return result;
+  } finally {
+    isRefreshing = false;
+    refreshPromise = null;
+  }
+}
+
+// Handle final auth failure - clear tokens and redirect to login
 function handleAuthError() {
-  // Only run in browser
   if (typeof window === 'undefined') return;
   
-  // Clear the invalid token
-  removeToken();
+  removeAllTokens();
   
-  // Redirect to login with a message
   const currentPath = window.location.pathname;
   if (currentPath !== '/login' && currentPath !== '/register') {
-    // Store the current path so we can redirect back after login
     sessionStorage.setItem('redirectAfterLogin', currentPath);
     window.location.href = '/login?expired=true';
   }
@@ -67,11 +143,10 @@ function handleAuthError() {
 
 // Extract error message from API response
 function parseErrorMessage(status: number, errorData: unknown): string {
-  // Try to extract message from response body first
   if (errorData && typeof errorData === 'object') {
     const err = errorData as Record<string, unknown>;
     
-    // FastAPI validation errors: { detail: [{ msg: "...", loc: [...] }] }
+    // FastAPI validation errors
     if (Array.isArray(err.detail)) {
       const messages = err.detail
         .map((item: { msg?: string }) => item.msg || 'Validation error')
@@ -79,11 +154,10 @@ function parseErrorMessage(status: number, errorData: unknown): string {
       return messages || 'Please check your input';
     }
     
-    // Simple string error: { detail: "User already exists" }
+    // Simple string error
     if (typeof err.detail === 'string') {
       const detail = err.detail;
       
-      // Make certain backend messages more user-friendly
       if (detail.toLowerCase().includes('already exists')) {
         return 'This email is already registered. Please sign in instead.';
       }
@@ -93,7 +167,6 @@ function parseErrorMessage(status: number, errorData: unknown): string {
       if (detail.toLowerCase().includes('deactivated')) {
         return 'This account has been deactivated. Please contact support.';
       }
-      // Token-related errors
       if (detail.toLowerCase().includes('invalid') && detail.toLowerCase().includes('token')) {
         return 'Your session has expired. Please log in again.';
       }
@@ -107,13 +180,11 @@ function parseErrorMessage(status: number, errorData: unknown): string {
       return detail;
     }
     
-    // Generic message field
     if (typeof err.message === 'string') {
       return err.message;
     }
   }
   
-  // Fallback based on status code
   switch (status) {
     case 400:
       return 'Invalid request. Please check your input.';
@@ -136,12 +207,12 @@ function parseErrorMessage(status: number, errorData: unknown): string {
   }
 }
 
-// Main API client - throws on error, returns data on success
+// Main API client
 export async function apiClient<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { method = 'GET', body, headers = {}, params } = options;
+  const { method = 'GET', body, headers = {}, params, _isRetry = false } = options;
   
   const token = getToken();
   const queryString = buildQueryString(params);
@@ -167,10 +238,31 @@ export async function apiClient<T>(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       
-      // Handle 401 Unauthorized - token expired or invalid
+      // Handle 401 Unauthorized
       if (response.status === 401) {
-        // Don't redirect for login/register endpoints
-        if (!endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+        // Don't try to refresh for auth endpoints themselves
+        const isAuthEndpoint = endpoint.includes('/auth/login') || 
+                               endpoint.includes('/auth/register') ||
+                               endpoint.includes('/auth/refresh');
+        
+        // If this is already a retry, or it's an auth endpoint, give up
+        if (_isRetry || isAuthEndpoint) {
+          handleAuthError();
+          throw new ApiError(
+            response.status,
+            parseErrorMessage(response.status, errorData),
+            errorData
+          );
+        }
+        
+        // Try to refresh the token
+        const refreshed = await handleTokenRefresh();
+        
+        if (refreshed) {
+          // Retry the original request with the new token
+          return apiClient<T>(endpoint, { ...options, _isRetry: true });
+        } else {
+          // Refresh failed, redirect to login
           handleAuthError();
         }
       }
@@ -182,7 +274,6 @@ export async function apiClient<T>(
       );
     }
     
-    // Handle 204 No Content
     if (response.status === 204) {
       return undefined as T;
     }
@@ -192,7 +283,6 @@ export async function apiClient<T>(
     if (error instanceof ApiError) {
       throw error;
     }
-    // Network errors (no response from server)
     throw new ApiError(
       0,
       error instanceof Error && error.message.includes('fetch')
@@ -219,5 +309,6 @@ export const api = {
   delete: <T>(endpoint: string) =>
     apiClient<T>(endpoint, { method: 'DELETE' }),
 };
+
 
 

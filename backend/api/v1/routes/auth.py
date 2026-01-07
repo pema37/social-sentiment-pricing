@@ -1,5 +1,13 @@
 # backend/api/v1/routes/auth.py
 
+"""
+Authentication Routes.
+
+PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
+- Login now returns both access_token and refresh_token
+- New /auth/refresh endpoint to get new access token using refresh token
+"""
+
 from typing import Callable
 from uuid import UUID
 
@@ -12,7 +20,9 @@ from core.security import (
     hash_password,
     verify_password,
     create_access_token,
+    create_refresh_token,
     decode_access_token,
+    decode_refresh_token,
     create_reset_token,
     decode_reset_token,
 )
@@ -26,6 +36,7 @@ from schemas.auth import (
     TokenResponse,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    RefreshRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -146,7 +157,7 @@ async def login(
     payload: LoginRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Login and receive a JWT token (JSON body)."""
+    """Login and receive JWT tokens (JSON body)."""
     email = payload.email.lower()
     result = await session.execute(select(User).where(User.email == email))
     user = result.scalars().first()
@@ -163,12 +174,18 @@ async def login(
             detail="User account is deactivated",
         )
 
-    token = create_access_token({
+    token_data = {
         "sub": str(user.id),
         "role": user.role,
-    })
+    }
+    
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
 
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
 
 
 @router.post("/login/oauth", response_model=TokenResponse)
@@ -195,12 +212,85 @@ async def login_oauth(
             detail="User account is deactivated",
         )
 
-    token = create_access_token({
+    token_data = {
         "sub": str(user.id),
         "role": user.role,
-    })
+    }
+    
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
 
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def refresh_tokens(
+    request: Request,
+    payload: RefreshRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get new access token using a valid refresh token.
+    
+    This endpoint allows the frontend to silently refresh the session
+    without forcing the user to re-login.
+    """
+    # Decode the refresh token
+    token_payload = decode_refresh_token(payload.refresh_token)
+    
+    if token_payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    
+    user_id = token_payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token payload",
+        )
+    
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID in token",
+        )
+    
+    # Verify user still exists and is active
+    user = await session.get(User, user_uuid)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated",
+        )
+    
+    # Create new tokens
+    token_data = {
+        "sub": str(user.id),
+        "role": user.role,
+    }
+    
+    new_access_token = create_access_token(token_data)
+    new_refresh_token = create_refresh_token(token_data)
+    
+    return TokenResponse(
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+    )
 
 
 @router.get("/me", response_model=UserResponse)

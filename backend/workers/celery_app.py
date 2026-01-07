@@ -6,6 +6,8 @@ This module configures the Celery app with:
 - Redis as broker and backend
 - Task includes for all worker modules
 - Beat schedule for periodic tasks
+
+PATCHED (2025-01-07): Added sync_verification_tasks for periodic price sync checks
 """
 
 import os
@@ -23,6 +25,7 @@ celery_app = Celery(
     include=[
         "workers.tasks.ingestion_tasks",
         "workers.tasks.pricing_tasks",
+        "workers.tasks.sync_verification_tasks",  # NEW: Price sync verification
     ]
 )
 
@@ -80,6 +83,16 @@ celery_app.conf.beat_schedule = {
     "expire-recommendations": {
         "task": "workers.tasks.pricing_tasks.expire_recommendations",
         "schedule": crontab(minute=0, hour="*/6"),
+        "options": {"queue": "celery"},
+    },
+    
+    # === NEW: Sync Verification tasks ===
+    
+    # Verify price syncs every 6 hours (at minute 30)
+    # Catches price drift from manual edits in WooCommerce/Shopify
+    "verify-price-syncs": {
+        "task": "workers.tasks.sync_verification_tasks.verify_price_syncs",
+        "schedule": crontab(minute=30, hour="*/6"),
         "options": {"queue": "celery"},
     },
 }
