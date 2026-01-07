@@ -202,8 +202,17 @@ function parseErrorMessage(status: number, errorData: unknown): string {
       return 'Too many attempts. Please wait a moment and try again.';
     case 500:
       return 'Server error. Please try again later.';
+    case 502:
+      return 'Server is starting up. Please try again in a moment.';
+    case 503:
+      return 'Service temporarily unavailable. Please try again later.';
+    case 504:
+      return 'Server timeout. Please try again.';
     default:
-      return 'An error occurred. Please try again.';
+      // Always include status code for unknown errors so we can diagnose
+      return status > 0 
+        ? `Request failed (error ${status}). Please try again.`
+        : 'Unable to connect to server. Please check your connection.';
   }
 }
 
@@ -309,6 +318,4 @@ export const api = {
   delete: <T>(endpoint: string) =>
     apiClient<T>(endpoint, { method: 'DELETE' }),
 };
-
-
 

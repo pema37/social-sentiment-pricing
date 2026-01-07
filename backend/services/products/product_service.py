@@ -6,6 +6,11 @@ Product Service
 Business logic for product CRUD operations.
 Controllers call this service - they don't contain business logic themselves.
 
+PATCHED (2025-01-07): Fixed price suggestion to include competitor prices.
+- Now fetches CompetitorProduct records linked to the product
+- Passes competitor prices to pricing_engine.calculate_suggestion()
+- Falls back gracefully when no sentiment OR competitor data exists
+
 Best Practices Applied:
 - Thin Controllers: Route handlers just validate and delegate
 - Dependency Injection: Session passed in, not created
@@ -25,9 +30,11 @@ from sqlmodel import select, func
 from models.product import Product
 from models.user import User
 from models.sentiment import Sentiment
+from models.competitor_product import CompetitorProduct
+from models.competitor import Competitor
 from schemas.product import ProductCreate, ProductUpdate
 from services.sentiment_analyzer import sentiment_analyzer
-from services.pricing_engine import pricing_engine
+from services.pricing_engine import pricing_engine, CompetitorPriceData
 from .cascade_delete import cascade_delete_product
 
 logger = logging.getLogger(__name__)
@@ -236,13 +243,58 @@ class ProductService:
     # AI PRICE SUGGESTION
     # ═══════════════════════════════════════════════════════════════════════
     
+    async def _fetch_competitor_prices(
+        self,
+        product_id: UUID,
+    ) -> List[CompetitorPriceData]:
+        """
+        Fetch competitor prices linked to this product.
+        
+        Returns:
+            List of CompetitorPriceData objects for the pricing engine
+        """
+        # Query competitor products linked to this product
+        stmt = (
+            select(CompetitorProduct, Competitor)
+            .join(Competitor, CompetitorProduct.competitor_id == Competitor.id)
+            .where(CompetitorProduct.product_id == product_id)
+            .where(CompetitorProduct.is_active == True)
+        )
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        
+        competitor_prices = []
+        for cp, competitor in rows:
+            # Skip if no price set or price is invalid
+            if not cp.current_price or cp.current_price <= 0:
+                logger.debug(f"Skipping competitor {competitor.name}: no valid price")
+                continue
+            
+            # Skip obviously bad prices (scraping errors)
+            if cp.current_price > Decimal("10000"):
+                logger.debug(f"Skipping competitor {competitor.name}: price too high ({cp.current_price})")
+                continue
+            
+            competitor_prices.append(CompetitorPriceData(
+                competitor_name=competitor.name,
+                competitor_price=cp.current_price,
+                price_difference=Decimal("0"),  # Will be calculated by pricing engine
+                price_difference_percent=Decimal("0"),
+                last_updated=cp.last_checked_at or datetime.now(timezone.utc),
+                is_promotion=getattr(cp, 'is_promotion', False),
+            ))
+        
+        return competitor_prices
+    
     async def get_price_suggestion(
         self,
         product_id: UUID,
         user_id: UUID,
     ) -> Optional[dict]:
         """
-        Get AI-powered price suggestion based on sentiment.
+        Get AI-powered price suggestion based on sentiment AND competitor data.
+        
+        PATCHED: Now includes competitor prices in the calculation.
         
         Returns:
             Price suggestion dict or None if product not found
@@ -252,7 +304,9 @@ class ProductService:
         if not product:
             return None
         
-        # Fetch sentiment records
+        # ════════════════════════════════════════════════════════════════════
+        # STEP 1: Fetch sentiment data
+        # ════════════════════════════════════════════════════════════════════
         stmt = select(Sentiment).where(Sentiment.product_id == product_id)
         result = await self.session.execute(stmt)
         sentiments = result.scalars().all()
@@ -276,12 +330,46 @@ class ProductService:
             sentiment_score = Decimal("0")
             mention_volume = 0
         
-        # Generate suggestion
+        # ════════════════════════════════════════════════════════════════════
+        # STEP 2: Fetch competitor prices (NEW!)
+        # ════════════════════════════════════════════════════════════════════
+        competitor_prices = await self._fetch_competitor_prices(product_id)
+        
+        logger.debug(
+            f"Product {product_id}: sentiment_score={sentiment_score}, "
+            f"mentions={mention_volume}, competitors={len(competitor_prices)}"
+        )
+        
+        # ════════════════════════════════════════════════════════════════════
+        # STEP 3: Generate suggestion with ALL available data
+        # ════════════════════════════════════════════════════════════════════
         suggestion = pricing_engine.calculate_suggestion(
             product=product,
             sentiment_score=sentiment_score,
             mention_volume=mention_volume,
+            competitor_prices=competitor_prices if competitor_prices else None,  # NEW!
         )
         
+        # ════════════════════════════════════════════════════════════════════
+        # STEP 4: Add data source flag for frontend (NEW!)
+        # ════════════════════════════════════════════════════════════════════
+        has_sentiment = mention_volume > 0
+        has_competitors = len(competitor_prices) > 0
+        
+        if has_sentiment and has_competitors:
+            suggestion["factors"]["data_source"] = "sentiment_and_competitor"
+        elif has_competitors:
+            suggestion["factors"]["data_source"] = "competitor_only"
+        elif has_sentiment:
+            suggestion["factors"]["data_source"] = "sentiment_only"
+        else:
+            suggestion["factors"]["data_source"] = "none"
+            suggestion["factors"]["warning"] = (
+                "No sentiment or competitor data available. "
+                "Add keywords for sentiment tracking or link competitor products."
+            )
+        
         return suggestion
+    
+
     

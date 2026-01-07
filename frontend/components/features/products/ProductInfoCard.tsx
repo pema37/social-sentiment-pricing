@@ -1,6 +1,13 @@
 // components/products/ProductInfoCard.tsx
 'use client';
 
+/**
+ * PATCHED (2025-01-07): Fixed "— - —" display for missing price ranges
+ * - Shows "No limits set" when both min and max are null
+ * - Shows "Min: $X" or "Max: $X" when only one is set
+ * - Shows proper range when both are set
+ */
+
 import { Package, Tag } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import type { Product } from '@/types';
@@ -33,12 +40,45 @@ function formatCurrency(value: string | number | null | undefined): string {
   }).format(num);
 }
 
+/**
+ * Format price range with better handling for null values.
+ * - Both null: "No limits set"
+ * - Only min: "Min: $X"
+ * - Only max: "Max: $X"  
+ * - Both set: "$X - $Y"
+ */
+function formatPriceRange(
+  minPrice: string | number | null | undefined,
+  maxPrice: string | number | null | undefined
+): { value: string; isSet: boolean } {
+  const min = toNumber(minPrice);
+  const max = toNumber(maxPrice);
+  
+  const formatValue = (num: number) => 
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+  
+  if (min === null && max === null) {
+    return { value: 'No limits set', isSet: false };
+  }
+  
+  if (min !== null && max !== null) {
+    return { value: `${formatValue(min)} - ${formatValue(max)}`, isSet: true };
+  }
+  
+  if (min !== null) {
+    return { value: `Min: ${formatValue(min)}`, isSet: true };
+  }
+  
+  // max !== null
+  return { value: `Max: ${formatValue(max!)}`, isSet: true };
+}
+
 function calculatePriceChange(current: string | number, base: string | number): number | null {
   const currentNum = toNumber(current);
   const baseNum = toNumber(base);
   if (currentNum === null || baseNum === null || baseNum === 0) return null;
   const change = ((currentNum - baseNum) / baseNum) * 100;
-  return isNaN(change) ? null : change; // Extra safety for edge cases
+  return isNaN(change) ? null : change;
 }
 
 function formatPriceChange(priceChange: number | null): string | undefined {
@@ -81,13 +121,20 @@ interface PriceGridItemProps {
   subValue?: string;
   subValueColor?: string;
   highlight?: boolean;
+  muted?: boolean;  // NEW: for "not set" state
 }
 
-function PriceGridItem({ label, value, subValue, subValueColor, highlight }: PriceGridItemProps) {
+function PriceGridItem({ label, value, subValue, subValueColor, highlight, muted }: PriceGridItemProps) {
   return (
     <div className={highlight ? 'bg-blue-50 p-3 rounded-lg' : ''}>
       <p className="text-sm text-gray-500">{label}</p>
-      <p className={`font-semibold ${highlight ? 'text-2xl text-blue-600' : 'text-lg'}`}>
+      <p className={`font-semibold ${
+        highlight 
+          ? 'text-2xl text-blue-600' 
+          : muted 
+            ? 'text-lg text-gray-400 italic'
+            : 'text-lg'
+      }`}>
         {value}
       </p>
       {subValue && (
@@ -125,6 +172,9 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
     : 'text-gray-500';
 
   const priceChangeText = formatPriceChange(priceChange);
+  
+  // NEW: Better price range formatting
+  const priceRange = formatPriceRange(product.min_price, product.max_price);
 
   return (
     <Card className="p-6">
@@ -189,7 +239,9 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
         />
         <PriceGridItem
           label="Price Range"
-          value={`${formatCurrency(product.min_price)} - ${formatCurrency(product.max_price)}`}
+          value={priceRange.value}
+          muted={!priceRange.isSet}  // Gray + italic when not set
+          subValue={!priceRange.isSet ? 'Set in product settings' : undefined}
         />
       </div>
 
@@ -212,3 +264,4 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
 }
 
 export default ProductInfoCard;
+

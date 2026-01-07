@@ -1,13 +1,24 @@
 'use client';
 
+/**
+ * AI Support Page
+ * 
+ * PATCHED (2025-01-07): Fixed silent failures
+ * - Use api client instead of raw fetch (includes auth token)
+ * - Check response status before parsing
+ * - Show error state to user
+ */
+
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { MessageCircle, Send, Sparkles, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, Sparkles, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { api } from '@/lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  isError?: boolean;
 }
 
 interface TopicSuggestion {
@@ -16,7 +27,18 @@ interface TopicSuggestion {
   description: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+interface ChatResponse {
+  message: string;
+  topic_detected?: string;
+  suggested_actions?: string[];
+  timestamp: string;
+}
+
+interface TopicsResponse {
+  topics: TopicSuggestion[];
+  default_greeting: string;
+  suggested_questions: string[];
+}
 
 export default function SupportPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,33 +46,40 @@ export default function SupportPage() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
 
   // Fetch topic suggestions
-  const { data: topicsData } = useQuery({
+  const { data: topicsData, isLoading: topicsLoading, error: topicsError } = useQuery({
     queryKey: ['support-topics'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/support/topics`);
-      return res.json();
-    }
+      return api.get<TopicsResponse>('/api/v1/support/topics');
+    },
+    retry: 2,
   });
 
-  // Chat mutation
+  // Chat mutation with proper error handling
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const res = await fetch(`${API_URL}/api/v1/support/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          conversation_history: messages.slice(-10),
-          topic: selectedTopic
-        })
+      return api.post<ChatResponse>('/api/v1/support/chat', {
+        message,
+        conversation_history: messages
+          .filter(m => !m.isError)  // Don't send error messages to AI
+          .slice(-10)
+          .map(m => ({ role: m.role, content: m.content })),
+        topic: selectedTopic
       });
-      return res.json();
     },
     onSuccess: (data) => {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.message,
-        timestamp: data.timestamp
+        timestamp: data.timestamp || new Date().toISOString()
+      }]);
+    },
+    onError: (error: Error) => {
+      // Show error message in chat
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Sorry, I'm having trouble responding right now. ${error.message || 'Please try again.'}`,
+        timestamp: new Date().toISOString(),
+        isError: true
       }]);
     }
   });
@@ -69,6 +98,15 @@ export default function SupportPage() {
     setInput('');
   };
 
+  const handleRetry = () => {
+    // Remove the last error message and retry
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUserMessage) {
+      setMessages(prev => prev.filter(m => !m.isError));
+      chatMutation.mutate(lastUserMessage.content);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] max-w-4xl mx-auto">
       {/* Header */}
@@ -84,6 +122,16 @@ export default function SupportPage() {
           AI Powered
         </span>
       </div>
+
+      {/* Topics Error State */}
+      {topicsError && (
+        <div className="p-4 bg-red-50 border-b border-red-200">
+          <div className="flex items-center gap-2 text-red-600 text-sm">
+            <AlertCircle className="w-4 h-4" />
+            <span>Unable to load topics. The AI assistant is still available.</span>
+          </div>
+        </div>
+      )}
 
       {/* Topic Pills */}
       {messages.length === 0 && topicsData?.topics && (
@@ -113,7 +161,9 @@ export default function SupportPage() {
           <div className="text-center py-12">
             <MessageCircle className="w-12 h-12 mx-auto text-[#D1D5DB] mb-4" />
             <p className="text-[#6B7280]">
-              {topicsData?.default_greeting || "Hi! How can I help you today?"}
+              {topicsLoading 
+                ? "Loading..." 
+                : topicsData?.default_greeting || "Hi! How can I help you today?"}
             </p>
             {topicsData?.suggested_questions && (
               <div className="mt-6 space-y-2">
@@ -140,16 +190,33 @@ export default function SupportPage() {
               className={`max-w-[80%] p-3 rounded-lg ${
                 msg.role === 'user'
                   ? 'bg-[#1F2937] text-white'
-                  : 'bg-white text-[#111827] border border-[#E5E7EB]'
+                  : msg.isError
+                    ? 'bg-red-50 text-red-800 border border-red-200'
+                    : 'bg-white text-[#111827] border border-[#E5E7EB]'
               }`}
             >
-              {msg.role === 'assistant' && (
+              {msg.role === 'assistant' && !msg.isError && (
                 <div className="flex items-center gap-1 mb-1 text-xs text-purple-600">
                   <Sparkles className="w-3 h-3" />
                   AI Response
                 </div>
               )}
+              {msg.isError && (
+                <div className="flex items-center gap-1 mb-1 text-xs text-red-600">
+                  <AlertCircle className="w-3 h-3" />
+                  Error
+                </div>
+              )}
               <p className="whitespace-pre-wrap">{msg.content}</p>
+              {msg.isError && (
+                <button
+                  onClick={handleRetry}
+                  className="mt-2 flex items-center gap-1 text-xs text-red-600 hover:text-red-800"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Try again
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -186,4 +253,5 @@ export default function SupportPage() {
     </div>
   );
 }
+
 
