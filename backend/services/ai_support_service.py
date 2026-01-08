@@ -1,31 +1,39 @@
 # backend/services/ai_support_service.py
 """
-AI Support Chat service with OpenAI + Google Gemini fallback.
+AI Support Chat service with Google Gemini (primary) + OpenAI fallback.
 """
 
 import logging
+import asyncio
 from typing import Dict, List, Optional
 
-from openai import AsyncOpenAI
 from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Try to import new Google GenAI
+# Try to import Google GenAI (primary)
 GEMINI_AVAILABLE = False
+GEMINI_NEW_API = False
 
 try:
     from google import genai
     GEMINI_AVAILABLE = True
     GEMINI_NEW_API = True
 except ImportError:
-    GEMINI_NEW_API = False
     try:
         import google.generativeai as genai_legacy
         GEMINI_AVAILABLE = True
         logger.info("Using legacy google.generativeai package")
     except ImportError:
-        logger.warning("Google GenAI not installed. Gemini fallback unavailable.")
+        logger.warning("Google GenAI not installed. Gemini unavailable.")
+
+# Try to import OpenAI (fallback)
+OPENAI_AVAILABLE = False
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    logger.warning("OpenAI not installed. OpenAI fallback unavailable.")
 
 
 SYSTEM_PROMPT = """You are the AI Support Assistant for ActualPrice, an AI-powered pricing optimization platform for e-commerce merchants.
@@ -93,15 +101,10 @@ SUGGESTED_QUESTIONS = [
 
 
 class AISupportService:
-    """AI-powered support chat service with OpenAI + Gemini fallback."""
+    """AI-powered support chat service with Gemini (primary) + OpenAI (fallback)."""
     
     def __init__(self):
-        # OpenAI (primary)
-        self.openai_client = None
-        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
-            self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        
-        # Gemini (fallback)
+        # Gemini (primary)
         self.gemini_client = None
         self.gemini_model_name = "gemini-2.0-flash-exp"
         self._using_new_api = False
@@ -111,35 +114,43 @@ class AISupportService:
                 from google import genai
                 self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 self._using_new_api = True
+                logger.info("Gemini client initialized (primary) - new API")
             else:
                 import google.generativeai as genai_legacy
                 genai_legacy.configure(api_key=settings.GEMINI_API_KEY)
                 self.gemini_client = genai_legacy.GenerativeModel('gemini-pro')
                 self.gemini_model_name = "gemini-pro"
+                logger.info("Gemini client initialized (primary) - legacy API")
         
-        self.model = "gpt-4o-mini"
+        # OpenAI (fallback)
+        self.openai_client = None
+        self.openai_model = "gpt-4o-mini"
+        if OPENAI_AVAILABLE and settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
+            self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            logger.info("OpenAI client initialized (fallback)")
+        
+        logger.info(f"AI Support - Gemini: {self.gemini_client is not None}, OpenAI: {self.openai_client is not None}")
     
     def is_available(self) -> bool:
         """Check if any AI service is configured."""
-        return self.openai_client is not None or self.gemini_client is not None
+        return self.gemini_client is not None or self.openai_client is not None
     
-    def _get_provider(self) -> str:
-        """Return which provider is active."""
+    def get_available_providers(self) -> List[str]:
+        """Return list of available providers."""
+        providers = []
+        if self.gemini_client:
+            providers.append("gemini")
         if self.openai_client:
-            return "openai"
-        elif self.gemini_client:
-            return "gemini"
-        return "none"
+            providers.append("openai")
+        return providers
     
-    async def _call_openai(self, messages: List[Dict]) -> str:
-        """Call OpenAI API."""
-        response = await self.openai_client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=500,
-            temperature=0.7
-        )
-        return response.choices[0].message.content
+    def _get_primary_provider(self) -> str:
+        """Return which provider will be tried first."""
+        if self.gemini_client:
+            return "gemini"
+        elif self.openai_client:
+            return "openai"
+        return "none"
     
     def _call_gemini_sync(self, messages: List[Dict]) -> str:
         """Call Gemini API (sync) - convert chat format to single prompt."""
@@ -168,9 +179,18 @@ class AISupportService:
     
     async def _call_gemini(self, messages: List[Dict]) -> str:
         """Call Gemini API with async wrapper."""
-        import asyncio
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._call_gemini_sync, messages)
+    
+    async def _call_openai(self, messages: List[Dict]) -> str:
+        """Call OpenAI API."""
+        response = await self.openai_client.chat.completions.create(
+            model=self.openai_model,
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7
+        )
+        return response.choices[0].message.content
     
     async def chat(
         self,
@@ -180,7 +200,7 @@ class AISupportService:
     ) -> Dict:
         """
         Send a message and get AI response.
-        Tries OpenAI first, falls back to Gemini if needed.
+        Tries Gemini first (primary), falls back to OpenAI if needed.
         """
         if not self.is_available():
             return self._fallback_response("I'm having trouble connecting. Please try again or contact support@getactualprice.com")
@@ -197,23 +217,23 @@ class AISupportService:
         if topic and topic in TOPIC_CONTEXT:
             messages.append({"role": "system", "content": f"Context: User selected '{topic}' topic. {TOPIC_CONTEXT[topic]}"})
         
-        # Try OpenAI first, then Gemini
+        # Try Gemini first (primary), then OpenAI (fallback)
         provider = "none"
         assistant_message = None
         
-        if self.openai_client:
-            try:
-                assistant_message = await self._call_openai(messages)
-                provider = "openai"
-            except Exception as e:
-                logger.warning(f"OpenAI failed, trying Gemini: {e}")
-        
-        if assistant_message is None and self.gemini_client:
+        if self.gemini_client:
             try:
                 assistant_message = await self._call_gemini(messages)
                 provider = "gemini"
             except Exception as e:
-                logger.error(f"Gemini also failed: {e}")
+                logger.warning(f"Gemini failed, trying OpenAI: {e}")
+        
+        if assistant_message is None and self.openai_client:
+            try:
+                assistant_message = await self._call_openai(messages)
+                provider = "openai"
+            except Exception as e:
+                logger.error(f"OpenAI also failed: {e}")
                 return self._fallback_response("I apologize, but I'm having trouble right now. Please try again.")
         
         if assistant_message is None:
@@ -265,20 +285,24 @@ class AISupportService:
         return {
             "status": "healthy" if self.is_available() else "degraded",
             "service": "ai_support",
-            "openai_configured": self.openai_client is not None,
             "gemini_configured": self.gemini_client is not None,
-            "active_provider": self._get_provider(),
-            "model": self.model,
+            "openai_configured": self.openai_client is not None,
+            "primary_provider": self._get_primary_provider(),
+            "available_providers": self.get_available_providers(),
+            "gemini_model": self.gemini_model_name if self.gemini_client else None,
+            "openai_model": self.openai_model if self.openai_client else None,
             "features": [
                 "contextual_responses",
                 "conversation_history",
                 "topic_detection",
                 "suggested_actions",
-                "gemini_fallback"
+                "gemini_primary",
+                "openai_fallback"
             ]
         }
 
 
 # Singleton instance
 ai_support_service = AISupportService()
+
 

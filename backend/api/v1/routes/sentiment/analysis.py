@@ -17,29 +17,33 @@ from schemas.sentiment import (
     SentimentBulkRequest,
 )
 from services.sentiment_analyzer import SentimentAnalyzer
-from services.openai_sentiment import openai_sentiment_analyzer
+# Changed: Use hybrid analyzer (Gemini primary, OpenAI fallback) instead of OpenAI-only
+from services.hybrid_sentiment_analyzer import hybrid_sentiment_analyzer
 
 router = APIRouter()
 
 
 async def get_sentiment_result(text: str, use_ai: bool = False):
-    """Get sentiment using VADER or OpenAI."""
-    if use_ai and openai_sentiment_analyzer.is_available():
-        result = await openai_sentiment_analyzer.analyze(text)
+    """Get sentiment using VADER, Gemini, or OpenAI (hybrid approach)."""
+    if use_ai:
+        # Use hybrid analyzer: Gemini (primary) → OpenAI (fallback) → VADER (baseline)
+        result = await hybrid_sentiment_analyzer.analyze(text, use_ai=True)
         return {
-            "score": float(result["compound"]),
-            "label": result["label"],
-            "confidence": float(result["confidence"]),
+            "score": float(result.compound),
+            "label": result.label,
+            "confidence": float(result.confidence),
             "emotions": {
-                "positive": float(result["positive"]),
-                "negative": float(result["negative"]),
-                "neutral": float(result["neutral"]),
+                "positive": float(result.positive),
+                "negative": float(result.negative),
+                "neutral": float(result.neutral),
             },
-            "topics": result.get("topics", []),
-            "is_sarcastic": result.get("is_sarcastic", False),
-            "ai_powered": True,
+            "topics": result.topics,
+            "is_sarcastic": result.is_sarcastic,
+            "ai_powered": "gemini" in result.sources_used or "openai" in result.sources_used,
+            "sources_used": result.sources_used,
         }
     else:
+        # VADER-only for speed (no AI)
         analyzer = SentimentAnalyzer()
         result = await analyzer.analyze(text)
         return {
@@ -50,6 +54,7 @@ async def get_sentiment_result(text: str, use_ai: bool = False):
             "topics": [],
             "is_sarcastic": False,
             "ai_powered": False,
+            "sources_used": ["vader"],
         }
 
 
@@ -58,14 +63,14 @@ async def get_sentiment_result(text: str, use_ai: bool = False):
 async def analyze_text(
     request: Request,
     payload: SentimentAnalyzeRequest,
-    use_ai: bool = Query(False, description="Use OpenAI GPT-4o-mini for analysis"),
+    use_ai: bool = Query(False, description="Use AI (Gemini/OpenAI) for enhanced analysis"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Analyze sentiment of provided text.
     
-    Set use_ai=true to use OpenAI GPT-4o-mini for more accurate analysis
+    Set use_ai=true to use AI-powered analysis (Gemini primary, OpenAI fallback)
     including sarcasm detection, topic extraction, and nuanced understanding.
     """
     result = await get_sentiment_result(payload.text, use_ai)
@@ -88,7 +93,7 @@ async def analyze_and_save(
     request: Request,
     product_id: UUID,
     payload: SentimentAnalyzeRequest,
-    use_ai: bool = Query(False, description="Use OpenAI GPT-4o-mini for analysis"),
+    use_ai: bool = Query(False, description="Use AI (Gemini/OpenAI) for enhanced analysis"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -102,9 +107,20 @@ async def analyze_and_save(
     
     analysis = await get_sentiment_result(payload.text, use_ai)
     
+    # Determine source based on which AI was actually used
+    sources = analysis.get("sources_used", [])
+    if "gemini" in sources:
+        source = "gemini"
+    elif "openai" in sources:
+        source = "openai"
+    elif payload.source:
+        source = payload.source
+    else:
+        source = "vader"
+    
     sentiment_record = Sentiment(
         product_id=product_id,
-        source=payload.source or ("openai" if analysis["ai_powered"] else "manual"),
+        source=source,
         raw_text=payload.text,
         compound_score=analysis["score"],
         positive_score=analysis["emotions"]["positive"],
@@ -136,7 +152,7 @@ async def analyze_bulk(
     request: Request,
     product_id: UUID,
     payload: SentimentBulkRequest,
-    use_ai: bool = Query(False, description="Use OpenAI GPT-4o-mini for analysis"),
+    use_ai: bool = Query(False, description="Use AI (Gemini/OpenAI) for enhanced analysis"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -153,9 +169,18 @@ async def analyze_bulk(
     for item in payload.items:
         analysis = await get_sentiment_result(item.text, use_ai)
         
+        # Determine source
+        sources = analysis.get("sources_used", [])
+        if "gemini" in sources:
+            source = "gemini"
+        elif "openai" in sources:
+            source = "openai"
+        else:
+            source = "vader"
+        
         sentiment_record = Sentiment(
             product_id=product_id,
-            source="openai" if analysis["ai_powered"] else "manual",
+            source=source,
             raw_text=item.text,
             compound_score=analysis["score"],
             positive_score=analysis["emotions"]["positive"],
@@ -172,6 +197,7 @@ async def analyze_bulk(
             "sentiment_label": analysis["label"],
             "confidence": analysis["confidence"],
             "ai_powered": analysis["ai_powered"],
+            "sources_used": analysis.get("sources_used", []),
         })
     
     await session.commit()
@@ -181,8 +207,28 @@ async def analyze_bulk(
 @router.get("/ai-status")
 async def ai_status(current_user: User = Depends(get_current_user)):
     """Check if AI-powered sentiment analysis is available."""
+    available_sources = hybrid_sentiment_analyzer.get_available_sources()
+    
+    # Determine primary provider
+    if "gemini" in available_sources:
+        primary_model = "gemini-2.0-flash-exp"
+        primary_provider = "gemini"
+    elif "openai" in available_sources:
+        primary_model = "gpt-4o-mini"
+        primary_provider = "openai"
+    else:
+        primary_model = "vader"
+        primary_provider = "vader"
+    
     return {
-        "openai_available": openai_sentiment_analyzer.is_available(),
-        "model": "gpt-4o-mini" if openai_sentiment_analyzer.is_available() else None,
-        "features": ["sarcasm_detection", "topic_extraction", "nuanced_analysis"] if openai_sentiment_analyzer.is_available() else [],
+        "ai_available": "gemini" in available_sources or "openai" in available_sources,
+        "available_sources": available_sources,
+        "primary_provider": primary_provider,
+        "primary_model": primary_model,
+        "features": ["sarcasm_detection", "topic_extraction", "nuanced_analysis"] if primary_provider != "vader" else [],
+        # Backward compatibility
+        "openai_available": "openai" in available_sources,
+        "gemini_available": "gemini" in available_sources,
     }
+
+

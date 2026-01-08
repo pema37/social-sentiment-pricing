@@ -1,13 +1,41 @@
 # backend/services/market_trends_service.py
 """
-Market Trends service using OpenAI to analyze trending products.
+Market Trends service using Gemini (primary) + OpenAI (fallback) to analyze trending products.
 """
 
+import asyncio
+import json
+import logging
 from typing import Dict, List, Optional
 from datetime import datetime
-from openai import AsyncOpenAI
-import json
+
 from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Try to import Google GenAI (primary)
+GEMINI_AVAILABLE = False
+GEMINI_NEW_API = False
+
+try:
+    from google import genai
+    GEMINI_AVAILABLE = True
+    GEMINI_NEW_API = True
+except ImportError:
+    try:
+        import google.generativeai as genai_legacy
+        GEMINI_AVAILABLE = True
+        logger.info("Using legacy google.generativeai package")
+    except ImportError:
+        logger.warning("Google GenAI not installed. Gemini unavailable.")
+
+# Try to import OpenAI (fallback)
+OPENAI_AVAILABLE = False
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    logger.warning("OpenAI not installed. OpenAI fallback unavailable.")
 
 
 CATEGORIES = [
@@ -55,14 +83,97 @@ Rules:
 
 
 class MarketTrendsService:
-    """AI-powered market trends analysis service."""
+    """AI-powered market trends analysis service with Gemini (primary) + OpenAI (fallback)."""
     
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
-        self.model = "gpt-4o-mini"
+        # Gemini (primary)
+        self.gemini_client = None
+        self.gemini_model_name = "gemini-2.0-flash-exp"
+        self._using_new_api = False
+        
+        if GEMINI_AVAILABLE and getattr(settings, 'GEMINI_API_KEY', None):
+            if GEMINI_NEW_API:
+                from google import genai
+                self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                self._using_new_api = True
+                logger.info("Market Trends: Gemini client initialized (primary) - new API")
+            else:
+                import google.generativeai as genai_legacy
+                genai_legacy.configure(api_key=settings.GEMINI_API_KEY)
+                self.gemini_client = genai_legacy.GenerativeModel('gemini-pro')
+                self.gemini_model_name = "gemini-pro"
+                logger.info("Market Trends: Gemini client initialized (primary) - legacy API")
+        
+        # OpenAI (fallback)
+        self.openai_client = None
+        self.openai_model = "gpt-4o-mini"
+        if OPENAI_AVAILABLE and settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
+            self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            logger.info("Market Trends: OpenAI client initialized (fallback)")
+        
+        logger.info(f"Market Trends - Gemini: {self.gemini_client is not None}, OpenAI: {self.openai_client is not None}")
     
     def is_available(self) -> bool:
-        return self.client is not None
+        """Check if any AI service is configured."""
+        return self.gemini_client is not None or self.openai_client is not None
+    
+    def get_available_providers(self) -> List[str]:
+        """Return list of available providers."""
+        providers = []
+        if self.gemini_client:
+            providers.append("gemini")
+        if self.openai_client:
+            providers.append("openai")
+        return providers
+    
+    def _get_primary_provider(self) -> str:
+        """Return which provider will be tried first."""
+        if self.gemini_client:
+            return "gemini"
+        elif self.openai_client:
+            return "openai"
+        return "none"
+    
+    def _call_gemini_sync(self, prompt: str) -> str:
+        """Call Gemini API (sync)."""
+        full_prompt = f"{SYSTEM_PROMPT}\n\n---\n\n{prompt}"
+        
+        if self._using_new_api:
+            response = self.gemini_client.models.generate_content(
+                model=self.gemini_model_name,
+                contents=full_prompt
+            )
+            return response.text.strip()
+        else:
+            response = self.gemini_client.generate_content(full_prompt)
+            return response.text.strip()
+    
+    async def _call_gemini(self, prompt: str) -> str:
+        """Call Gemini API with async wrapper."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._call_gemini_sync, prompt)
+    
+    async def _call_openai(self, prompt: str) -> str:
+        """Call OpenAI API."""
+        response = await self.openai_client.chat.completions.create(
+            model=self.openai_model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1500,
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+    
+    def _parse_json_response(self, content: str) -> dict:
+        """Parse JSON from AI response, handling markdown code blocks."""
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        return json.loads(content.strip())
     
     async def get_trends(
         self,
@@ -71,7 +182,7 @@ class MarketTrendsService:
         limit: int = 10
     ) -> Dict:
         """Get trending products with AI analysis."""
-        if not self.client:
+        if not self.is_available():
             return self._fallback_trends(category, limit)
         
         # Build the prompt
@@ -83,42 +194,43 @@ class MarketTrendsService:
             prompt += f" trending on {source}"
         prompt += ". Focus on products that are actually trending right now in late 2024/2025."
         
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.7
-            )
-            
-            content = response.choices[0].message.content
-            
-            # Parse JSON response
+        # Try Gemini first (primary)
+        provider = "none"
+        content = None
+        
+        if self.gemini_client:
             try:
-                # Clean up response if needed
-                content = content.strip()
-                if content.startswith("```"):
-                    content = content.split("```")[1]
-                    if content.startswith("json"):
-                        content = content[4:]
-                
-                data = json.loads(content)
-                
-                return {
-                    "trends": data.get("trends", [])[:limit],
-                    "ai_summary": data.get("ai_summary", "Market analysis complete."),
-                    "generated_at": datetime.utcnow().isoformat(),
-                    "category": category,
-                    "source": source
-                }
-            except json.JSONDecodeError:
+                content = await self._call_gemini(prompt)
+                provider = "gemini"
+            except Exception as e:
+                logger.warning(f"Market Trends: Gemini failed, trying OpenAI: {e}")
+        
+        # Fallback to OpenAI
+        if content is None and self.openai_client:
+            try:
+                content = await self._call_openai(prompt)
+                provider = "openai"
+            except Exception as e:
+                logger.error(f"Market Trends: OpenAI also failed: {e}")
                 return self._fallback_trends(category, limit)
-                
-        except Exception as e:
-            print(f"Market trends error: {e}")
+        
+        if content is None:
+            return self._fallback_trends(category, limit)
+        
+        # Parse JSON response
+        try:
+            data = self._parse_json_response(content)
+            
+            return {
+                "trends": data.get("trends", [])[:limit],
+                "ai_summary": data.get("ai_summary", "Market analysis complete."),
+                "generated_at": datetime.utcnow().isoformat(),
+                "category": category,
+                "source": source,
+                "ai_provider": provider
+            }
+        except json.JSONDecodeError as e:
+            logger.error(f"Market Trends: Failed to parse AI response: {e}")
             return self._fallback_trends(category, limit)
     
     def _fallback_trends(self, category: Optional[str], limit: int) -> Dict:
@@ -239,7 +351,8 @@ class MarketTrendsService:
             "ai_summary": "These are currently trending products based on social media activity and e-commerce data. Consider adding these to your store to capitalize on current demand.",
             "generated_at": datetime.utcnow().isoformat(),
             "category": category,
-            "source": None
+            "source": None,
+            "ai_provider": "fallback"
         }
     
     def get_categories(self) -> List[Dict]:
@@ -255,8 +368,12 @@ class MarketTrendsService:
         return {
             "status": "healthy" if self.is_available() else "degraded",
             "service": "market_trends",
-            "openai_configured": self.is_available(),
-            "model": self.model,
+            "gemini_configured": self.gemini_client is not None,
+            "openai_configured": self.openai_client is not None,
+            "primary_provider": self._get_primary_provider(),
+            "available_providers": self.get_available_providers(),
+            "gemini_model": self.gemini_model_name if self.gemini_client else None,
+            "openai_model": self.openai_model if self.openai_client else None,
             "categories_count": len(CATEGORIES),
             "sources_count": len(SOURCES)
         }
@@ -264,4 +381,5 @@ class MarketTrendsService:
 
 # Singleton instance
 market_trends_service = MarketTrendsService()
+
 

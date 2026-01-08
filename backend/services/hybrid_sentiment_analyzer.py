@@ -1,11 +1,11 @@
 # backend/services/hybrid_sentiment_analyzer.py
 """
-Hybrid Sentiment Analyzer - Combines VADER, OpenAI, and Gemini for robust sentiment analysis.
+Hybrid Sentiment Analyzer - Combines VADER, Gemini, and OpenAI for robust sentiment analysis.
 
 Strategy:
 1. VADER runs always (instant, free baseline)
-2. OpenAI runs if API key configured (better accuracy)
-3. Gemini runs as fallback if OpenAI fails
+2. Gemini runs if API key configured (primary AI - fast and cost-effective)
+3. OpenAI runs as fallback if Gemini fails (backup for accuracy)
 4. Final score = weighted combination of available results
 """
 
@@ -36,17 +36,17 @@ class HybridSentimentResult:
     # Metadata
     sources_used: List[str]  # Which analyzers contributed
     individual_scores: Dict[str, float]  # Score from each analyzer
-    emotions: Dict[str, float]  # Detailed emotions (from OpenAI/Gemini)
-    topics: List[str]  # Extracted topics (from OpenAI/Gemini)
-    is_sarcastic: bool  # Sarcasm detection (from OpenAI/Gemini)
+    emotions: Dict[str, float]  # Detailed emotions (from Gemini/OpenAI)
+    topics: List[str]  # Extracted topics (from Gemini/OpenAI)
+    is_sarcastic: bool  # Sarcasm detection (from Gemini/OpenAI)
 
 
 class HybridSentimentAnalyzer:
     """
     Multi-source sentiment analyzer combining:
     - VADER (always runs - fast, free, good for social media)
-    - OpenAI GPT-4o-mini (if available - better nuance/sarcasm)
-    - Gemini (fallback if OpenAI fails)
+    - Gemini (primary AI - fast, cost-effective)
+    - OpenAI GPT-4o-mini (fallback if Gemini fails - better nuance/sarcasm)
     """
     
     def __init__(self):
@@ -59,17 +59,7 @@ class HybridSentimentAnalyzer:
         except ImportError:
             logger.warning("VADER not installed - pip install vaderSentiment")
         
-        # OpenAI - optional
-        self.openai_client = None
-        if settings.OPENAI_API_KEY:
-            try:
-                from openai import AsyncOpenAI
-                self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-                logger.info("OpenAI sentiment analyzer initialized")
-            except ImportError:
-                logger.warning("OpenAI not installed - pip install openai")
-        
-        # Gemini - optional fallback
+        # Gemini - primary AI
         self.gemini_client = None
         self.gemini_model = "gemini-2.0-flash-exp"
         if getattr(settings, 'GEMINI_API_KEY', None):
@@ -77,21 +67,31 @@ class HybridSentimentAnalyzer:
                 import google.generativeai as genai
                 genai.configure(api_key=settings.GEMINI_API_KEY)
                 self.gemini_client = genai.GenerativeModel(self.gemini_model)
-                logger.info("Gemini sentiment analyzer initialized")
+                logger.info("Gemini sentiment analyzer initialized (primary AI)")
             except ImportError:
                 logger.warning("Google GenAI not installed - pip install google-generativeai")
             except Exception as e:
                 logger.warning(f"Gemini initialization failed: {e}")
+        
+        # OpenAI - fallback
+        self.openai_client = None
+        if settings.OPENAI_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+                self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+                logger.info("OpenAI sentiment analyzer initialized (fallback)")
+            except ImportError:
+                logger.warning("OpenAI not installed - pip install openai")
     
     def get_available_sources(self) -> List[str]:
         """Return list of available analyzers."""
         sources = []
         if self.vader:
             sources.append("vader")
-        if self.openai_client:
-            sources.append("openai")
         if self.gemini_client:
             sources.append("gemini")
+        if self.openai_client:
+            sources.append("openai")
         return sources
     
     async def analyze(self, text: str, use_ai: bool = True) -> HybridSentimentResult:
@@ -100,7 +100,7 @@ class HybridSentimentAnalyzer:
         
         Args:
             text: The text to analyze
-            use_ai: Whether to use OpenAI/Gemini (set False for speed)
+            use_ai: Whether to use Gemini/OpenAI (set False for speed)
         
         Returns:
             HybridSentimentResult with combined scores
@@ -121,32 +121,44 @@ class HybridSentimentAnalyzer:
             except Exception as e:
                 logger.error(f"VADER analysis failed: {e}")
         
-        # 2. OpenAI (if available and use_ai=True)
-        if use_ai and self.openai_client:
+        # 2. Gemini (primary AI - if available and use_ai=True)
+        if use_ai and self.gemini_client:
+            try:
+                gemini_result = await self._analyze_gemini(text)
+                results["gemini"] = float(gemini_result["compound"])
+                sources_used.append("gemini")
+                emotions = gemini_result.get("emotions", {})
+                topics = gemini_result.get("topics", [])
+                is_sarcastic = gemini_result.get("is_sarcastic", False)
+                logger.debug(f"Gemini score: {gemini_result['compound']}")
+            except Exception as e:
+                logger.warning(f"Gemini analysis failed, trying OpenAI: {e}")
+                
+                # 3. OpenAI fallback
+                if self.openai_client:
+                    try:
+                        openai_result = await self._analyze_openai(text)
+                        results["openai"] = float(openai_result["compound"])
+                        sources_used.append("openai")
+                        emotions = openai_result.get("emotions", {})
+                        topics = openai_result.get("topics", [])
+                        is_sarcastic = openai_result.get("is_sarcastic", False)
+                        logger.debug(f"OpenAI score: {openai_result['compound']}")
+                    except Exception as e2:
+                        logger.error(f"OpenAI also failed: {e2}")
+        
+        # If no Gemini but OpenAI is available and use_ai=True
+        elif use_ai and self.openai_client and not self.gemini_client:
             try:
                 openai_result = await self._analyze_openai(text)
                 results["openai"] = float(openai_result["compound"])
                 sources_used.append("openai")
-                # OpenAI provides richer data
                 emotions = openai_result.get("emotions", {})
                 topics = openai_result.get("topics", [])
                 is_sarcastic = openai_result.get("is_sarcastic", False)
                 logger.debug(f"OpenAI score: {openai_result['compound']}")
             except Exception as e:
-                logger.warning(f"OpenAI analysis failed, trying Gemini: {e}")
-                
-                # 3. Gemini fallback
-                if self.gemini_client:
-                    try:
-                        gemini_result = await self._analyze_gemini(text)
-                        results["gemini"] = float(gemini_result["compound"])
-                        sources_used.append("gemini")
-                        emotions = gemini_result.get("emotions", {})
-                        topics = gemini_result.get("topics", [])
-                        is_sarcastic = gemini_result.get("is_sarcastic", False)
-                        logger.debug(f"Gemini score: {gemini_result['compound']}")
-                    except Exception as e2:
-                        logger.error(f"Gemini also failed: {e2}")
+                logger.error(f"OpenAI analysis failed: {e}")
         
         # 4. Combine results
         final_score = self._combine_scores(results)
@@ -191,8 +203,58 @@ class HybridSentimentAnalyzer:
             "neutral": scores["neu"],
         }
     
+    async def _analyze_gemini(self, text: str) -> Dict:
+        """Run Gemini analysis (primary AI)."""
+        prompt = f"""Analyze the sentiment of this social media post about a product.
+
+Post: "{text}"
+
+Return ONLY valid JSON with no markdown formatting:
+{{
+    "sentiment_score": float from -1.0 to 1.0,
+    "sentiment_label": "very_negative" | "negative" | "neutral" | "positive" | "very_positive",
+    "confidence": float from 0.0 to 1.0,
+    "positive_score": float 0-1,
+    "negative_score": float 0-1,
+    "neutral_score": float 0-1,
+    "emotions": {{"joy": 0, "anger": 0, "fear": 0, "surprise": 0, "sadness": 0}},
+    "topics": [],
+    "is_sarcastic": false
+}}"""
+
+        # Run sync Gemini in executor
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self.gemini_client.generate_content(prompt)
+        )
+        
+        result_text = response.text.strip()
+        
+        # Parse JSON (handle markdown code blocks)
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+        result_text = result_text.strip()
+        
+        import json
+        result = json.loads(result_text)
+        
+        return {
+            "compound": result.get("sentiment_score", 0),
+            "positive": result.get("positive_score", 0),
+            "negative": result.get("negative_score", 0),
+            "neutral": result.get("neutral_score", 0),
+            "label": result.get("sentiment_label", "neutral"),
+            "confidence": result.get("confidence", 0.5),
+            "emotions": result.get("emotions", {}),
+            "topics": result.get("topics", []),
+            "is_sarcastic": result.get("is_sarcastic", False),
+        }
+    
     async def _analyze_openai(self, text: str) -> Dict:
-        """Run OpenAI GPT-4o-mini analysis."""
+        """Run OpenAI GPT-4o-mini analysis (fallback)."""
         system_prompt = """You are a sentiment analysis system for e-commerce products.
 Analyze social media posts about products and brands.
 
@@ -244,62 +306,13 @@ Consider context like sarcasm, irony, and cultural nuances."""
             "is_sarcastic": result.get("is_sarcastic", False),
         }
     
-    async def _analyze_gemini(self, text: str) -> Dict:
-        """Run Gemini analysis as fallback."""
-        prompt = f"""Analyze the sentiment of this social media post about a product.
-
-Post: "{text}"
-
-Return ONLY valid JSON:
-{{
-    "sentiment_score": float from -1.0 to 1.0,
-    "sentiment_label": "very_negative" | "negative" | "neutral" | "positive" | "very_positive",
-    "confidence": float from 0.0 to 1.0,
-    "positive_score": float 0-1,
-    "negative_score": float 0-1,
-    "neutral_score": float 0-1,
-    "emotions": {{"joy": 0, "anger": 0, "fear": 0, "surprise": 0, "sadness": 0}},
-    "topics": [],
-    "is_sarcastic": false
-}}"""
-
-        # Run sync Gemini in executor
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: self.gemini_client.generate_content(prompt)
-        )
-        
-        result_text = response.text.strip()
-        
-        # Parse JSON
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
-        
-        import json
-        result = json.loads(result_text)
-        
-        return {
-            "compound": result.get("sentiment_score", 0),
-            "positive": result.get("positive_score", 0),
-            "negative": result.get("negative_score", 0),
-            "neutral": result.get("neutral_score", 0),
-            "label": result.get("sentiment_label", "neutral"),
-            "confidence": result.get("confidence", 0.5),
-            "emotions": result.get("emotions", {}),
-            "topics": result.get("topics", []),
-            "is_sarcastic": result.get("is_sarcastic", False),
-        }
-    
     def _combine_scores(self, results: Dict[str, float]) -> float:
         """
         Combine scores from multiple analyzers with weighted average.
         
         Weights:
-        - OpenAI: 0.5 (most accurate for nuance)
-        - Gemini: 0.4 (good accuracy)
+        - Gemini: 0.5 (primary AI - fast and accurate)
+        - OpenAI: 0.4 (fallback - excellent accuracy)
         - VADER: 0.3 (fast baseline, good for obvious sentiment)
         
         If AI analyzers agree and differ from VADER, trust AI more.
@@ -308,9 +321,9 @@ Return ONLY valid JSON:
             return 0.0
         
         weights = {
-            "openai": 0.5,
-            "gemini": 0.4,
-            "vader": 0.3,
+            "gemini": 0.5,  # Primary AI
+            "openai": 0.4,  # Fallback AI
+            "vader": 0.3,   # Baseline
         }
         
         total_weight = sum(weights.get(k, 0.1) for k in results.keys())
@@ -359,8 +372,8 @@ Return ONLY valid JSON:
         avg_score = sum(scores) / len(scores)
         strength_confidence = abs(avg_score) * 0.3
         
-        # AI bonus - using OpenAI/Gemini increases confidence
-        ai_used = "openai" in sources or "gemini" in sources
+        # AI bonus - using Gemini/OpenAI increases confidence
+        ai_used = "gemini" in sources or "openai" in sources
         ai_confidence = 0.2 if ai_used else 0.0
         
         return min(source_confidence + agreement_confidence + strength_confidence + ai_confidence, 1.0)
@@ -376,4 +389,5 @@ Return ONLY valid JSON:
 
 # Singleton instance
 hybrid_sentiment_analyzer = HybridSentimentAnalyzer()
+
 

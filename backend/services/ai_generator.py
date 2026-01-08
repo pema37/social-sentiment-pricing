@@ -2,47 +2,48 @@
 """
 AI Content Generation Service
 =============================
-Uses OpenAI GPT-4o-mini with Google Gemini fallback.
+Uses Google Gemini (primary) with OpenAI GPT-4o-mini fallback.
 """
 
 import json
 import logging
 from typing import Dict, Optional, List
+import asyncio
 
-from openai import AsyncOpenAI
 from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Try to import new Google GenAI
+# Try to import Google GenAI (primary)
 GEMINI_AVAILABLE = False
+GEMINI_NEW_API = False
 
 try:
     from google import genai
     GEMINI_AVAILABLE = True
     GEMINI_NEW_API = True
 except ImportError:
-    GEMINI_NEW_API = False
     try:
         import google.generativeai as genai_legacy
         GEMINI_AVAILABLE = True
         logger.info("Using legacy google.generativeai package")
     except ImportError:
-        logger.warning("Google GenAI not installed. Gemini fallback unavailable.")
+        logger.warning("Google GenAI not installed. Gemini unavailable.")
+
+# Try to import OpenAI (fallback)
+OPENAI_AVAILABLE = False
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    logger.warning("OpenAI not installed. OpenAI fallback unavailable.")
 
 
 class AIGeneratorService:
-    """AI-powered content generation with OpenAI + Gemini fallback."""
+    """AI-powered content generation with Gemini (primary) + OpenAI (fallback)."""
     
     def __init__(self):
-        # OpenAI (primary)
-        self.openai_client = None
-        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
-            self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        logger.info(f"OpenAI client initialized: {self.openai_client is not None}")
-        logger.info(f"API key starts with: {settings.OPENAI_API_KEY[:10] if settings.OPENAI_API_KEY else 'None'}...")
-        
-        # Gemini (fallback)
+        # Gemini (primary)
         self.gemini_client = None
         self.gemini_model_name = "gemini-2.0-flash-exp"
         self._using_new_api = False
@@ -52,38 +53,43 @@ class AIGeneratorService:
                 from google import genai
                 self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 self._using_new_api = True
+                logger.info("Gemini client initialized (primary) - new API")
             else:
                 import google.generativeai as genai_legacy
                 genai_legacy.configure(api_key=settings.GEMINI_API_KEY)
                 self.gemini_client = genai_legacy.GenerativeModel('gemini-pro')
                 self.gemini_model_name = "gemini-pro"
+                logger.info("Gemini client initialized (primary) - legacy API")
         
-        self.model = "gpt-4o-mini"
+        # OpenAI (fallback)
+        self.openai_client = None
+        self.openai_model = "gpt-4o-mini"
+        if OPENAI_AVAILABLE and settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != 'sk-xxxx':
+            self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            logger.info("OpenAI client initialized (fallback)")
+        
+        logger.info(f"AI Generator - Gemini: {self.gemini_client is not None}, OpenAI: {self.openai_client is not None}")
     
     def is_available(self) -> bool:
         """Check if any AI service is configured."""
-        return self.openai_client is not None or self.gemini_client is not None
+        return self.gemini_client is not None or self.openai_client is not None
     
-    def _get_provider(self) -> str:
-        """Return which provider is being used."""
+    def get_available_providers(self) -> List[str]:
+        """Return list of available providers."""
+        providers = []
+        if self.gemini_client:
+            providers.append("gemini")
         if self.openai_client:
-            return "openai"
-        elif self.gemini_client:
-            return "gemini"
-        return "none"
+            providers.append("openai")
+        return providers
     
-    async def _call_openai(self, system_prompt: str, user_message: str, temperature: float = 0.7, max_tokens: int = 800) -> str:
-        """Call OpenAI API."""
-        response = await self.openai_client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content.strip()
+    def _get_primary_provider(self) -> str:
+        """Return which provider will be tried first."""
+        if self.gemini_client:
+            return "gemini"
+        elif self.openai_client:
+            return "openai"
+        return "none"
     
     def _call_gemini_sync(self, system_prompt: str, user_message: str) -> str:
         """Call Gemini API (sync)."""
@@ -101,30 +107,42 @@ class AIGeneratorService:
     
     async def _call_gemini(self, system_prompt: str, user_message: str) -> str:
         """Call Gemini API with async wrapper."""
-        import asyncio
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._call_gemini_sync, system_prompt, user_message)
     
+    async def _call_openai(self, system_prompt: str, user_message: str, temperature: float = 0.7, max_tokens: int = 800) -> str:
+        """Call OpenAI API."""
+        response = await self.openai_client.chat.completions.create(
+            model=self.openai_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return response.choices[0].message.content.strip()
+    
     async def _generate(self, system_prompt: str, user_message: str, temperature: float = 0.7, max_tokens: int = 800) -> tuple:
         """
-        Generate text using OpenAI with Gemini fallback.
+        Generate text using Gemini (primary) with OpenAI fallback.
         Returns (response_text, provider_used)
         """
-        # Try OpenAI first
-        if self.openai_client:
-            try:
-                result = await self._call_openai(system_prompt, user_message, temperature, max_tokens)
-                return result, "openai"
-            except Exception as e:
-                logger.warning(f"OpenAI failed, trying Gemini: {e}")
-        
-        # Fallback to Gemini
+        # Try Gemini first (primary)
         if self.gemini_client:
             try:
                 result = await self._call_gemini(system_prompt, user_message)
                 return result, "gemini"
             except Exception as e:
-                logger.error(f"Gemini also failed: {e}")
+                logger.warning(f"Gemini failed, trying OpenAI: {e}")
+        
+        # Fallback to OpenAI
+        if self.openai_client:
+            try:
+                result = await self._call_openai(system_prompt, user_message, temperature, max_tokens)
+                return result, "openai"
+            except Exception as e:
+                logger.error(f"OpenAI also failed: {e}")
                 raise ValueError(f"All AI services failed: {e}")
         
         raise ValueError("No AI service available")
@@ -148,7 +166,7 @@ class AIGeneratorService:
     ) -> Dict:
         """Generate SEO-optimized product description."""
         if not self.is_available():
-            raise ValueError("No AI API key configured (OpenAI or Gemini)")
+            raise ValueError("No AI API key configured (Gemini or OpenAI)")
         
         length_words = {"short": 50, "medium": 100, "long": 200}.get(length, 100)
         
@@ -262,8 +280,22 @@ Change: {direction} by ${abs(price_change):.2f}"""
             "ai_generated": False,
             "ai_provider": "none"
         }
+    
+    def get_health(self) -> Dict:
+        """Health check for the service."""
+        return {
+            "status": "healthy" if self.is_available() else "degraded",
+            "service": "ai_generator",
+            "gemini_configured": self.gemini_client is not None,
+            "openai_configured": self.openai_client is not None,
+            "primary_provider": self._get_primary_provider(),
+            "available_providers": self.get_available_providers(),
+            "gemini_model": self.gemini_model_name if self.gemini_client else None,
+            "openai_model": self.openai_model if self.openai_client else None,
+        }
 
 
 # Singleton instance
 ai_generator = AIGeneratorService()
+
 
