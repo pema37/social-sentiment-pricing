@@ -15,6 +15,8 @@ import type { PricingRule, RuleType } from '@/types';
 
 interface RulesListProps {
   rules: PricingRule[];
+  /** Product ID to name mapping */
+  productNames?: Record<string, string>;
   /** Current filter by rule type */
   filterType?: RuleType | 'all';
   /** Current filter by active status */
@@ -201,6 +203,7 @@ function FilterTabs<T extends string>({
 
 export function RulesList({
   rules,
+  productNames = {},
   filterType = 'all',
   filterActive = 'all',
   onFilterTypeChange,
@@ -293,6 +296,7 @@ export function RulesList({
         <div className="space-y-4">
           {filteredRules.map((rule) => (
             <RuleCard
+              productNames={productNames}
               key={rule.id}
               rule={rule}
               onToggle={onToggle}

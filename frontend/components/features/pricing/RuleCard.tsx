@@ -26,6 +26,7 @@ import type { PricingRule, RuleType, RuleAction } from '@/types';
 
 interface RuleCardProps {
   rule: PricingRule;
+  productNames?: Record<string, string>;
   onToggle?: (id: string, isActive: boolean) => void;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -85,6 +86,7 @@ const actionLabels: { [key in RuleAction]: string } = {
 
 export function RuleCard({
   rule,
+  productNames = {},
   onToggle,
   onEdit,
   onDelete,
@@ -101,6 +103,7 @@ export function RuleCard({
     action,
     action_value,
     cooldown_hours,
+    applies_to_all_products,
     applies_to_products,
     applies_to_categories,
   } = rule;
@@ -111,8 +114,18 @@ export function RuleCard({
 
   // Build scope text
   const getScopeText = () => {
+    if (applies_to_all_products) {
+      return 'All products';
+    }
     if (applies_to_products?.length) {
-      return `${applies_to_products.length} product${applies_to_products.length > 1 ? 's' : ''}`;
+      const names = applies_to_products
+        .map((id) => productNames[id] || 'Unknown')
+        .slice(0, 3);
+      const remaining = applies_to_products.length - 3;
+      if (remaining > 0) {
+        return `${names.join(', ')} +${remaining} more`;
+      }
+      return names.join(', ');
     }
     if (applies_to_categories?.length) {
       return `${applies_to_categories.length} categor${applies_to_categories.length > 1 ? 'ies' : 'y'}`;
