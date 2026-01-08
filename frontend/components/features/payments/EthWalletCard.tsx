@@ -34,6 +34,9 @@ export function EthWalletCard() {
   // Use connected wallet address or saved manual address
   const displayAddress = connectedAddress || savedAddress;
   const isManualMode = !isConnected && !!savedAddress;
+  
+  // ========== FIX: Check if RainbowKit is ready ==========
+  const isRainbowKitReady = !!openConnectModal;
 
   // Load saved wallet on mount
   useEffect(() => {
@@ -146,6 +149,17 @@ export function EthWalletCard() {
     setAddressError('');
   };
 
+  // ========== FIX: Safe connect handler with fallback ==========
+  const handleConnect = () => {
+    if (openConnectModal) {
+      openConnectModal();
+    } else {
+      console.error('RainbowKit not initialized - openConnectModal is undefined');
+      // Fallback: switch to manual mode
+      handleStartEditing();
+    }
+  };
+
   // Safe balance formatting helper
   const formatBalance = (bal: unknown): string => {
     if (bal == null) return '0.00';
@@ -241,8 +255,13 @@ export function EthWalletCard() {
             Connect your Ethereum wallet to pay with MNEE ERC-20 tokens.
           </p>
           <div className="space-y-2">
-            <Button onClick={openConnectModal} className="w-full">
-              Connect Wallet
+            {/* ========== FIX: Use handleConnect with loading state ========== */}
+            <Button 
+              onClick={handleConnect} 
+              className="w-full"
+              disabled={!isRainbowKitReady}
+            >
+              {isRainbowKitReady ? 'Connect Wallet' : 'Initializing...'}
             </Button>
             <Button variant="secondary" onClick={handleStartEditing} className="w-full">
               <Edit2 className="w-4 h-4 mr-2" />
@@ -348,13 +367,15 @@ export function EthWalletCard() {
             </Button>
           ) : (
             <div className="flex gap-2">
+              {/* ========== FIX: Use handleConnect ========== */}
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={openConnectModal}
+                onClick={handleConnect}
                 className="flex-1"
+                disabled={!isRainbowKitReady}
               >
-                Connect Wallet
+                {isRainbowKitReady ? 'Connect Wallet' : 'Loading...'}
               </Button>
               <Button
                 variant="ghost"
@@ -373,5 +394,4 @@ export function EthWalletCard() {
 }
 
 export default EthWalletCard;
-
 
