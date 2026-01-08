@@ -66,7 +66,8 @@ export function BsvWalletCard() {
         message: 'Your BSV wallet address has been saved.',
       });
       setIsEditing(false);
-    } catch (error) {
+    } catch {
+      // ========== FIX: Removed unused 'error' variable ==========
       toast.error({
         title: 'Error',
         message: 'Failed to save wallet address. Please try again.',
@@ -81,7 +82,8 @@ export function BsvWalletCard() {
         title: 'Wallet removed',
         message: 'Your wallet address has been removed.',
       });
-    } catch (error) {
+    } catch {
+      // ========== FIX: Removed unused 'error' variable ==========
       toast.error({
         title: 'Error',
         message: 'Failed to remove wallet. Please try again.',
@@ -240,3 +242,4 @@ export function BsvWalletCard() {
     </Card>
   );
 }
+

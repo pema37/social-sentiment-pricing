@@ -2,7 +2,8 @@
 // Types for pricing rules, recommendations, and settings
 // Aligned with backend/schemas/pricing.py
 
-import type { PaginatedResponse, AlertChannel } from './common';
+import type { PaginatedResponse } from './common';
+// ========== FIX: Removed unused 'AlertChannel' import ==========
 
 // ============================================
 // ENUMS / UNION TYPES
@@ -215,5 +216,4 @@ export interface PricingRecommendationStats {
   avg_confidence: number | null;
   avg_price_change_percent: number | null;
 }
-
 
