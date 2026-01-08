@@ -7,9 +7,11 @@ Business logic for product CRUD operations.
 Controllers call this service - they don't contain business logic themselves.
 
 PATCHED (2025-01-07): Fixed price suggestion to include competitor prices.
-- Now fetches CompetitorProduct records linked to the product
-- Passes competitor prices to pricing_engine.calculate_suggestion()
-- Falls back gracefully when no sentiment OR competitor data exists
+PATCHED (2025-01-08): Fixed 3 critical bugs causing price suggestion failures:
+  - Bug 1: Missing await on async method calculate_aggregate
+  - Bug 2: Wrong key name (average_compound vs average_score)
+  - Bug 3: Wrong data format passed to calculate_aggregate (dict vs SentimentResult)
+  - FIX: Now calculates aggregate directly from Sentiment records
 
 Best Practices Applied:
 - Thin Controllers: Route handlers just validate and delegate
@@ -33,7 +35,6 @@ from models.sentiment import Sentiment
 from models.competitor_product import CompetitorProduct
 from models.competitor import Competitor
 from schemas.product import ProductCreate, ProductUpdate
-from services.sentiment_analyzer import sentiment_analyzer
 from services.pricing_engine import pricing_engine, CompetitorPriceData
 from .cascade_delete import cascade_delete_product
 
@@ -294,7 +295,11 @@ class ProductService:
         """
         Get AI-powered price suggestion based on sentiment AND competitor data.
         
-        PATCHED: Now includes competitor prices in the calculation.
+        PATCHED (2025-01-08): Fixed 3 bugs:
+        - Bug 1: Was missing await on async method
+        - Bug 2: Was using wrong key name (average_compound vs average_score)
+        - Bug 3: Was passing wrong data format to calculate_aggregate
+        - FIX: Now calculates aggregate directly from Sentiment records
         
         Returns:
             Price suggestion dict or None if product not found
@@ -311,32 +316,35 @@ class ProductService:
         result = await self.session.execute(stmt)
         sentiments = result.scalars().all()
         
+        # ════════════════════════════════════════════════════════════════════
+        # FIXED: Calculate aggregate directly from Sentiment records
+        # Don't use sentiment_analyzer.calculate_aggregate - it expects 
+        # SentimentResult objects, not dicts or Sentiment models
+        # ════════════════════════════════════════════════════════════════════
         if sentiments:
-            sentiment_data = [
-                {
-                    "compound": s.compound_score,
-                    "label": (
-                        "positive" if s.compound_score > Decimal("0.05")
-                        else "negative" if s.compound_score < Decimal("-0.05")
-                        else "neutral"
-                    )
-                }
-                for s in sentiments
-            ]
-            aggregate = sentiment_analyzer.calculate_aggregate(sentiment_data)
-            sentiment_score = aggregate["average_compound"]
-            mention_volume = aggregate["total_count"]
+            total = len(sentiments)
+            # Sum all compound scores and calculate average
+            score_sum = sum(float(s.compound_score) for s in sentiments)
+            avg_score = score_sum / total if total > 0 else 0.0
+            sentiment_score = Decimal(str(round(avg_score, 3)))
+            mention_volume = total
+            
+            logger.debug(
+                f"Product {product_id}: calculated sentiment from {total} records, "
+                f"avg_score={avg_score:.3f}"
+            )
         else:
             sentiment_score = Decimal("0")
             mention_volume = 0
+            logger.debug(f"Product {product_id}: no sentiment records found")
         
         # ════════════════════════════════════════════════════════════════════
-        # STEP 2: Fetch competitor prices (NEW!)
+        # STEP 2: Fetch competitor prices
         # ════════════════════════════════════════════════════════════════════
         competitor_prices = await self._fetch_competitor_prices(product_id)
         
-        logger.debug(
-            f"Product {product_id}: sentiment_score={sentiment_score}, "
+        logger.info(
+            f"Price suggestion for {product_id}: sentiment_score={sentiment_score}, "
             f"mentions={mention_volume}, competitors={len(competitor_prices)}"
         )
         
@@ -347,11 +355,11 @@ class ProductService:
             product=product,
             sentiment_score=sentiment_score,
             mention_volume=mention_volume,
-            competitor_prices=competitor_prices if competitor_prices else None,  # NEW!
+            competitor_prices=competitor_prices if competitor_prices else None,
         )
         
         # ════════════════════════════════════════════════════════════════════
-        # STEP 4: Add data source flag for frontend (NEW!)
+        # STEP 4: Add data source flag for frontend
         # ════════════════════════════════════════════════════════════════════
         has_sentiment = mention_volume > 0
         has_competitors = len(competitor_prices) > 0
