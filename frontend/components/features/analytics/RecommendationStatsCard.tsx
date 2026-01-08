@@ -30,7 +30,7 @@ export function RecommendationStatsCard({ days = 30 }: RecommendationStatsCardPr
     },
     {
       label: 'Approved',
-      value: data?.total_approved ?? 0,
+      value: data?.total_applied ?? 0,
       icon: CheckCircle,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
@@ -105,8 +105,8 @@ export function RecommendationStatsCard({ days = 30 }: RecommendationStatsCardPr
           <div>
             <p className="text-sm text-gray-500">Avg Confidence</p>
             <p className="text-lg font-semibold text-gray-900">
-              {data?.avg_confidence_score != null 
-                ? `${(Number(data.avg_confidence_score ?? 0) * 100).toFixed(0)}%` 
+              {data?.avg_confidence != null 
+                ? `${(Number(data.avg_confidence ?? 0) * 100).toFixed(0)}%` 
                 : 'N/A'}
             </p>
           </div>
@@ -118,8 +118,8 @@ export function RecommendationStatsCard({ days = 30 }: RecommendationStatsCardPr
           <div>
             <p className="text-sm text-gray-500">Avg Price Change</p>
             <p className="text-lg font-semibold text-gray-900">
-              {data?.avg_adjustment_percent != null 
-                ? `${data.avg_adjustment_percent >= 0 ? '+' : ''}${(Number(data.avg_adjustment_percent ?? 0)).toFixed(1)}%` 
+              {data?.avg_price_change_percent != null 
+                ? `${data.avg_price_change_percent >= 0 ? '+' : ''}${(Number(data.avg_price_change_percent ?? 0)).toFixed(1)}%` 
                 : 'N/A'}
             </p>
           </div>

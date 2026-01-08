@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "generate-api-types": "openapi-typescript https://ssp-api-production.up.railway.app/openapi.json -o types/api-generated.ts"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
@@ -35,6 +36,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.5",
+    "openapi-typescript": "^7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -1,12 +1,13 @@
 // Pricing Module Types
-// Types for pricing rules, recommendations, and settings
-// Aligned with backend/schemas/pricing.py
+// AUTO-SYNCED with backend via openapi-typescript
+// Last synced: 2026-01-08
+// Source: components["schemas"]["PricingRuleCreate"], PricingRuleResponse, etc.
 
 import type { PaginatedResponse } from './common';
-// ========== FIX: Removed unused 'AlertChannel' import ==========
 
 // ============================================
 // ENUMS / UNION TYPES
+// Matches: components["schemas"]["RuleType"], RuleAction, RecommendationStatus
 // ============================================
 
 /** Types of pricing rules that can trigger recommendations */
@@ -41,79 +42,100 @@ export type OutcomeLabel = 'positive' | 'negative' | 'neutral' | 'inconclusive';
 // PRICING RULE TYPES
 // ============================================
 
-/** A pricing rule that defines conditions and actions for automatic pricing */
+/**
+ * A pricing rule response from GET endpoints
+ * Matches: components["schemas"]["PricingRuleResponse"]
+ */
 export interface PricingRule {
   id: string;
   user_id: string;
-  product_id: string | null;  // CHANGED: now nullable
+  product_id: string | null;
   name: string;
   description: string | null;
   rule_type: RuleType;
   is_active: boolean;
   priority: number;
 
-  // Conditions
-  sentiment_threshold: number | null;
+  // Scope
+  applies_to_all_products: boolean;
+  applies_to_products: string[] | null;
+  applies_to_categories: string[] | null;
+
+  // Conditions - all Decimals returned as strings
+  sentiment_threshold: string | null;
   sentiment_direction: string | null;
   competitor_id: string | null;
+  competitor_margin_percent: string | null;
   price_position: string | null;
-  time_days: string | null;  // CHANGED: string not number
+  time_days: string | null;
+  time_start: string | null;
+  time_end: string | null;
   volume_threshold: number | null;
+  volume_window_hours: number | null;
   viral_threshold_reach: number | null;
+  viral_threshold_engagement: number | null;
+  viral_sentiment_min: string | null;
 
-  // Action
+  // Action - Decimals as strings in response
   action: RuleAction;
   action_value: string;
 
-  // Constraints
+  // Constraints - Decimals as strings in response
   max_change_percent: string | null;
   min_price: string | null;
   max_price: string | null;
   cooldown_hours: number;
 
-  // Scope - NEW
-  applies_to_all_products: boolean;  // NEW
-  applies_to_products: string[] | null;
-  applies_to_categories: string[] | null;
-
   created_at: string;
   updated_at: string;
 }
 
-/** Data required to create a new pricing rule */
+/**
+ * Data required to create a new pricing rule
+ * Matches: components["schemas"]["PricingRuleCreate"]
+ * 
+ * Note: Decimal fields accept number | string for flexibility
+ * Backend Pydantic will coerce to Decimal
+ */
 export interface CreatePricingRuleRequest {
-  product_id?: string;  // CHANGED: now optional
+  // Scope
+  product_id?: string | null;
+  applies_to_all_products?: boolean;  // Default: false
+  applies_to_products?: string[] | null;
+  applies_to_categories?: string[] | null;
+
+  // Basic info
   name: string;
-  description?: string;
+  description?: string | null;
   rule_type: RuleType;
   is_active?: boolean;
-  priority?: number;
-  
-  // Scope - NEW
-  applies_to_all_products?: boolean;  // NEW
-  applies_to_products?: string[];
-  applies_to_categories?: string[];
-  
-  // Conditions
-  sentiment_threshold?: number;
-  sentiment_direction?: string;
-  competitor_id?: string;
-  price_position?: string;
-  time_days?: string;  // CHANGED: string not number
-  volume_threshold?: number;
-  viral_threshold_reach?: number;
-  
-  // Action
-  action: RuleAction;
-  action_value: string;
-  
-  // Constraints
-  max_change_percent?: string;
-  min_price?: string;
-  max_price?: string;
-  cooldown_hours?: number;
-}
+  priority?: number;  // Default: 0
 
+  // Conditions - accept number | string for Decimals
+  sentiment_threshold?: number | string | null;
+  sentiment_direction?: string | null;
+  competitor_id?: string | null;
+  competitor_margin_percent?: number | string | null;
+  price_position?: string | null;
+  time_days?: string | null;
+  time_start?: string | null;
+  time_end?: string | null;
+  volume_threshold?: number | null;
+  volume_window_hours?: number | null;  // Default: 24
+  viral_threshold_reach?: number | null;
+  viral_threshold_engagement?: number | null;
+  viral_sentiment_min?: number | string | null;
+
+  // Action - REQUIRED, accepts number | string
+  action: RuleAction;
+  action_value: number | string;
+
+  // Constraints - accept number | string for Decimals
+  min_price?: number | string | null;
+  max_price?: number | string | null;
+  max_change_percent?: number | string;  // Default: 15.0
+  cooldown_hours?: number;               // Default: 24
+}
 
 /** Data for updating an existing pricing rule */
 export type UpdatePricingRuleRequest = Partial<CreatePricingRuleRequest>;
@@ -122,14 +144,17 @@ export type UpdatePricingRuleRequest = Partial<CreatePricingRuleRequest>;
 // PRICE RECOMMENDATION TYPES
 // ============================================
 
-/** A price recommendation generated by the pricing engine */
+/**
+ * A price recommendation generated by the pricing engine
+ * Matches: components["schemas"]["RecommendationResponse"]
+ */
 export interface PriceRecommendation {
   id: string;
   user_id: string;
   product_id: string;
   rule_id: string | null;
-  current_price: string;
-  recommended_price: string;
+  current_price: string;      // Decimal as string
+  recommended_price: string;  // Decimal as string
   change_percent: number;
   confidence_score: number;
   reasoning: string;
@@ -157,13 +182,15 @@ export interface ApproveRecommendationRequest {
 
 /** Data for rejecting a recommendation */
 export interface RejectRecommendationRequest {
-  reason: string;
+  reason?: string | null;  // Optional per backend schema
 }
 
 // ============================================
 // PRICING SETTINGS TYPES
+// Matches: components["schemas"]["PricingSettingsResponse"]
 // ============================================
-/** User's pricing settings/preferences - matches backend PricingSettingsResponse */
+
+/** User's pricing settings/preferences */
 export interface PricingSettings {
   id: string;
   user_id: string;
@@ -186,7 +213,10 @@ export interface PricingSettings {
   updated_at: string | null;
 }
 
-/** Data for updating pricing settings - matches backend PricingSettingsUpdate */
+/**
+ * Data for updating pricing settings
+ * Matches: components["schemas"]["PricingSettingsUpdate"]
+ */
 export interface UpdatePricingSettingsRequest {
   auto_approve_enabled?: boolean;
   auto_approve_max_increase?: number;
@@ -205,7 +235,10 @@ export interface UpdatePricingSettingsRequest {
   notification_slack_webhook?: string | null;
 }
 
-/** Statistics about pricing recommendations (from pricing API) */
+/**
+ * Statistics about pricing recommendations
+ * Matches: components["schemas"]["RecommendationStats"]
+ */
 export interface PricingRecommendationStats {
   total_generated: number;
   total_applied: number;
@@ -216,4 +249,3 @@ export interface PricingRecommendationStats {
   avg_confidence: number | null;
   avg_price_change_percent: number | null;
 }
-

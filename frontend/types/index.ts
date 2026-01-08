@@ -1,4 +1,6 @@
 // Central export for all types
+// AUTO-SYNCED with backend via openapi-typescript
+// Last synced: 2026-01-08
 
 // Base API types
 export * from './api';
@@ -15,11 +17,8 @@ export * from './competitor';
 export * from './integration';
 export * from './pricing';
 export * from './user';
-export * from './payment';  
+export * from './payment';
 
-// Legacy type for backwards compatibility
-export interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-  status: number;
-}
+// Re-export generated types for direct access if needed
+// Usage: import type { components } from '@/types/api-generated';
+export type { components, paths, operations } from './api-generated';

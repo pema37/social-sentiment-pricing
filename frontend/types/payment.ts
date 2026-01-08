@@ -1,12 +1,11 @@
-// frontend/types/payment.ts
+// Payment and Subscription Types
+// AUTO-SYNCED with backend via openapi-typescript
+// Last synced: 2026-01-08
+// Source: components["schemas"]["PaymentInfo"], SubscriptionInfo, etc.
 
-/**
- * Payment and Subscription Types for MNEE BSV Integration
- */
-
-// =============================================================================
-// Enums
-// =============================================================================
+// ============================================
+// ENUMS / UNION TYPES
+// ============================================
 
 export type PaymentStatus = 
   | 'pending' 
@@ -34,30 +33,46 @@ export type SubscriptionStatus =
   | 'cancelled' 
   | 'trialing';
 
-// =============================================================================
-// Wallet
-// =============================================================================
+// ============================================
+// WALLET TYPES
+// ============================================
 
+/**
+ * Wallet info response
+ * Matches: components["schemas"]["WalletInfo"]
+ */
 export interface WalletInfo {
   bsv_wallet_address: string | null;
   balance: string | null;
   balance_raw: number | null;
 }
 
+/**
+ * Wallet update request
+ * Matches: components["schemas"]["WalletUpdateRequest"]
+ */
 export interface WalletUpdateRequest {
   bsv_wallet_address: string;
 }
 
+/**
+ * Balance info response
+ * Matches: components["schemas"]["BalanceInfo"]
+ */
 export interface BalanceInfo {
   address: string;
   balance: string;
   balance_raw: number;
 }
 
-// =============================================================================
-// Subscription Plans
-// =============================================================================
+// ============================================
+// SUBSCRIPTION PLAN TYPES
+// ============================================
 
+/**
+ * Subscription plan info
+ * Matches: components["schemas"]["PlanInfo"]
+ */
 export interface SubscriptionPlan {
   id: SubscriptionTier;
   name: string;
@@ -69,14 +84,10 @@ export interface SubscriptionPlan {
   popular?: boolean;
 }
 
-export interface PlansResponse {
-  plans: SubscriptionPlan[];
-}
-
-// =============================================================================
-// Current Subscription
-// =============================================================================
-
+/**
+ * Current subscription info
+ * Matches: components["schemas"]["SubscriptionInfo"]
+ */
 export interface Subscription {
   tier: SubscriptionTier;
   name: string;
@@ -92,14 +103,22 @@ export interface Subscription {
   features: string[];
 }
 
-// =============================================================================
-// Payment Request (Subscribe)
-// =============================================================================
+// ============================================
+// PAYMENT REQUEST TYPES
+// ============================================
 
+/**
+ * Subscribe request
+ * Matches: components["schemas"]["SubscribeRequest"]
+ */
 export interface SubscribeRequest {
   tier: SubscriptionTier;
 }
 
+/**
+ * Payment request response (for payment initiation)
+ * Matches: components["schemas"]["PaymentRequest"]
+ */
 export interface PaymentRequest {
   payment_id: string;
   status: string;
@@ -117,10 +136,33 @@ export interface PaymentRequest {
   };
 }
 
-// =============================================================================
-// Payment Records
-// =============================================================================
+/**
+ * Confirm payment request
+ * Matches: components["schemas"]["ConfirmPaymentRequest"]
+ */
+export interface ConfirmPaymentRequest {
+  txid: string;
+}
 
+/**
+ * Confirm payment response
+ * Matches: components["schemas"]["ConfirmPaymentResponse"]
+ */
+export interface ConfirmPaymentResponse {
+  success: boolean;
+  message: string;
+  payment_id: string;
+  new_tier: SubscriptionTier | null;
+}
+
+// ============================================
+// PAYMENT RECORD TYPES
+// ============================================
+
+/**
+ * Payment info response
+ * Matches: components["schemas"]["PaymentInfo"]
+ */
 export interface Payment {
   id: string;
   user_id: string;
@@ -141,6 +183,9 @@ export interface Payment {
   confirmed_at: string | null;
 }
 
+/**
+ * Payment history response (array of payments)
+ */
 export interface PaymentHistoryResponse {
   payments: Payment[];
   total: number;
@@ -148,9 +193,22 @@ export interface PaymentHistoryResponse {
   offset: number;
 }
 
-// =============================================================================
-// Helpers
-// =============================================================================
+// ============================================
+// WEBHOOK TYPES
+// ============================================
+
+/**
+ * Webhook response
+ * Matches: components["schemas"]["WebhookResponse"]
+ */
+export interface WebhookResponse {
+  status: string;
+  message: string;
+}
+
+// ============================================
+// UI HELPERS (Frontend-only)
+// ============================================
 
 export const TIER_DISPLAY_NAMES: Record<SubscriptionTier, string> = {
   free: 'Free',
@@ -175,3 +233,7 @@ export const SUBSCRIPTION_STATUS_COLORS: Record<SubscriptionStatus, string> = {
   cancelled: 'red',
   trialing: 'blue',
 };
+
+export interface PlansResponse {
+  plans: SubscriptionPlan[];
+}

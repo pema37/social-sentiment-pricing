@@ -1,86 +1,112 @@
 // Product domain types
+// AUTO-SYNCED with backend via openapi-typescript
+// Last synced: 2026-01-08
+// Source: components["schemas"]["ProductCreate"], ProductRead, ProductUpdate
 
-export type ProductType = 'physical' | 'digital' | 'subscription' | 'service';
+// ============================================
+// PRODUCT TYPES - Matches backend exactly
+// ============================================
 
-// Product from the API
+/**
+ * Product response from GET endpoints
+ * Matches: components["schemas"]["ProductRead"]
+ */
 export interface Product {
   id: string;
   user_id: string;
   name: string;
   sku: string | null;
   description: string | null;
-  base_price: string;
-  current_price: string;
-  currency: string;
-  product_type: ProductType;
   category: string | null;
   image_url: string | null;
-  external_id: string | null;
-  platform: string | null;
-  platform_url: string | null;
-  auto_pricing_enabled: boolean;
-  min_price: string | null;
-  max_price: string | null;
-  sentiment_multiplier: string;
   is_active: boolean;
+  base_price: string;        // Decimal returned as string
+  current_price: string;     // Decimal returned as string
+  cost: string | null;       // Decimal returned as string
+  min_price: string | null;  // Decimal returned as string
+  max_price: string | null;  // Decimal returned as string
+  sentiment_multiplier: string; // Decimal returned as string
+  auto_pricing_enabled: boolean;
   keywords: string[];
-  created_at: string;
-  updated_at: string;
+  created_at: string;        // ISO 8601 datetime
+  updated_at: string;        // ISO 8601 datetime
 }
 
-// Paginated products response
+/**
+ * Create product request
+ * Matches: components["schemas"]["ProductCreate"]
+ * 
+ * Note: Decimal fields accept number | string for flexibility
+ * Backend Pydantic will coerce to Decimal
+ */
+export interface CreateProductRequest {
+  name: string;
+  sku?: string | null;
+  description?: string | null;
+  base_price: number | string;  // Required - accepts both
+  category?: string | null;
+  image_url?: string | null;
+  is_active?: boolean;          // Default: true
+  cost?: number | string | null;
+  min_price?: number | string | null;
+  max_price?: number | string | null;
+  sentiment_multiplier?: number | string; // Default: 0.1
+  auto_pricing_enabled?: boolean;         // Default: false
+  keywords?: string[];                    // Default: []
+}
+
+/**
+ * Update product request
+ * Matches: components["schemas"]["ProductUpdate"]
+ * All fields optional for PATCH semantics
+ */
+export interface UpdateProductRequest {
+  name?: string | null;
+  sku?: string | null;
+  description?: string | null;
+  base_price?: number | string | null;
+  current_price?: number | string | null;
+  category?: string | null;
+  image_url?: string | null;
+  is_active?: boolean | null;
+  cost?: number | string | null;
+  min_price?: number | string | null;
+  max_price?: number | string | null;
+  sentiment_multiplier?: number | string | null;
+  auto_pricing_enabled?: boolean | null;
+  keywords?: string[] | null;
+}
+
+// ============================================
+// PAGINATED RESPONSE
+// ============================================
+
+/**
+ * Paginated products response
+ * Matches: components["schemas"]["PaginatedResponse_ProductRead_"]
+ */
 export interface PaginatedProducts {
   items: Product[];
   total: number;
   page: number;
   page_size: number;
   pages: number;
-  total_pages: number; // Alias for pages
+  total_pages?: number;  // Alias for pages
 }
 
-// Create product request
-export interface CreateProductRequest {
-  name: string;
-  sku?: string;
-  description?: string;
-  base_price: number;
-  current_price?: number;
-  currency?: string;
-  product_type?: ProductType;
-  category?: string;
-  image_url?: string;
-  auto_pricing_enabled?: boolean;
-  min_price?: number;
-  max_price?: number;
-  sentiment_multiplier?: number;
-  keywords?: string[];
-}
+// ============================================
+// PRICE SUGGESTION (AI-generated)
+// ============================================
 
-// Update product request
-export interface UpdateProductRequest {
-  name?: string;
-  sku?: string;
-  description?: string;
-  base_price?: number;
-  current_price?: number;
-  currency?: string;
-  product_type?: ProductType;
-  category?: string;
-  image_url?: string;
-  auto_pricing_enabled?: boolean;
-  min_price?: number;
-  max_price?: number;
-  sentiment_multiplier?: number;
-  is_active?: boolean;
-  keywords?: string[];
-}
-
-// Price suggestion from AI
+/**
+ * Price suggestion from AI endpoint
+ * Note: This is returned from /products/{id}/suggestion
+ */
 export interface PriceSuggestion {
   product_id: string;
   current_price: number;
   suggested_price: number;
-  change_percent: number;          
+  change_percent: number;
   reasoning: string;
   confidence: number;
   factors: {
@@ -94,7 +120,14 @@ export interface PriceSuggestion {
   };
 }
 
-// Price history entry
+// ============================================
+// PRICE HISTORY
+// ============================================
+
+/**
+ * Price history entry
+ * Matches: components["schemas"]["PriceHistoryResponse"]
+ */
 export interface PriceHistoryEntry {
   id: string;
   product_id: string;
@@ -104,16 +137,23 @@ export interface PriceHistoryEntry {
   created_at: string;
 }
 
-// Product summary for dashboard
+// ============================================
+// PRODUCT SUMMARY (Dashboard)
+// ============================================
+
+/**
+ * Product summary for dashboard cards
+ * Matches: components["schemas"]["ProductSummary"]
+ */
 export interface ProductSummary {
   id: string;
   name: string;
-  sku: string | null;
+  sku?: string | null;
   current_price: string;
   base_price: string;
   price_change_percent: number;
-  sentiment_score: number | null;
-  mention_count_24h: number;
-  has_pending_recommendation: boolean;
-  auto_pricing_enabled: boolean;
+  sentiment_score?: number | null;
+  mention_count_24h: number;        // Default: 0
+  has_pending_recommendation: boolean; // Default: false
+  auto_pricing_enabled: boolean;    // Default: false
 }

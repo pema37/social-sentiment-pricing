@@ -110,7 +110,7 @@ export default function ProductsPage() {
       {data && (
         <Pagination
           page={page}
-          totalPages={data.total_pages}
+          totalPages={data.pages}
           total={data.total}
           pageSize={pageSize}
           onPageChange={setPage}

@@ -1,40 +1,104 @@
-// User type - represents a user from the backend database
+// User domain types
+// AUTO-SYNCED with backend via openapi-typescript
+// Last synced: 2026-01-08
+// Source: components["schemas"]["UserResponse"], RegisterRequest, etc.
+
+// ============================================
+// USER TYPES
+// ============================================
+
+/**
+ * User response from /auth/me and other endpoints
+ * Matches: components["schemas"]["UserResponse"]
+ */
 export interface User {
-  id: string;           // Unique identifier (UUID from your backend)
-  email: string;        // User's email address
-  full_name: string;    // User's display name
-  is_active: boolean;   // Is the account active?
-  is_superuser: boolean; // Is this an admin?
-  created_at: string;   // When account was created (ISO date string)
-  updated_at: string;   // When account was last modified
+  id: string;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  created_at: string;
+  updated_at: string | null;
 }
 
-// What the login form sends to the backend
+// ============================================
+// AUTH REQUEST TYPES
+// ============================================
+
+/**
+ * Login request payload
+ * Matches: components["schemas"]["LoginRequest"]
+ */
 export interface LoginCredentials {
-  email: string;        // User's email
-  password: string;     // User's password
+  email: string;
+  password: string;
 }
 
-// What the register form sends to the backend
+/**
+ * Register request payload
+ * Matches: components["schemas"]["RegisterRequest"]
+ */
 export interface RegisterCredentials {
-  email: string;        // User's email
-  password: string;     // User's password
-  full_name: string;    // Extra field needed for registration
+  email: string;
+  password: string;
+  full_name?: string | null;
 }
 
-// What the backend returns after successful login
+/**
+ * Forgot password request
+ * Matches: components["schemas"]["ForgotPasswordRequest"]
+ */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/**
+ * Reset password request
+ * Matches: components["schemas"]["ResetPasswordRequest"]
+ */
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
+}
+
+/**
+ * Refresh token request
+ * Matches: components["schemas"]["RefreshRequest"]
+ */
+export interface RefreshRequest {
+  refresh_token: string;
+}
+
+// ============================================
+// AUTH RESPONSE TYPES
+// ============================================
+
+/**
+ * Token response from login/refresh
+ * Matches: components["schemas"]["TokenResponse"]
+ */
 export interface AuthTokens {
-  access_token: string; // The JWT token from your backend
-  token_type: string;   // Usually "bearer"
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
 }
 
-// Update profile request
+// ============================================
+// PROFILE UPDATE TYPES
+// ============================================
+
+/**
+ * Update profile request
+ */
 export interface UpdateProfileRequest {
-  full_name?: string;
-  email?: string;
+  full_name?: string | null;
+  email?: string | null;
 }
 
-// Change password request
+/**
+ * Change password request
+ */
 export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
