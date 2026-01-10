@@ -40,7 +40,7 @@ export const authApi = {
 
   // Profile management
   updateProfile: (data: UpdateProfileRequest) =>
-    api.put<User>('/api/v1/users/me', data),
+    api.patch<User>('/api/v1/users/me', data),
 
   changePassword: (data: ChangePasswordRequest) =>
     api.post<{ message: string }>('/api/v1/users/me/change-password', data),

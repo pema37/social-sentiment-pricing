@@ -25,6 +25,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 class UserUpdateRequest(BaseModel):
     username: Optional[str] = None
     email: Optional[EmailStr] = None
+    full_name: Optional[str] = None 
 
 
 class PasswordChangeRequest(BaseModel):
@@ -124,6 +125,9 @@ async def update_my_profile(
             )
         current_user.username = payload.username
 
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name
+        
     session.add(current_user)
     await session.commit()
     await session.refresh(current_user)
