@@ -77,7 +77,7 @@ export const wagmiConfig = createConfig({
   ],
   transports: {
     [mainnet.id]: http(),
-    [sepolia.id]: http('https://rpc.sepolia.org'),
+    [sepolia.id]: http(),
   },
 })
 
@@ -125,3 +125,5 @@ export const ERC20_ABI = [
     outputs: [{ name: '', type: 'bool' }],
   },
 ] as const
+
+
