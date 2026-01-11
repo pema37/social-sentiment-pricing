@@ -1,4 +1,3 @@
-# backend/workers/tasks/ingestion_tasks.py
 """
 Ingestion Tasks - Celery tasks for fetching and processing social mentions.
 
@@ -8,6 +7,13 @@ These tasks run on a schedule to:
 
 IMPORTANT: Each task creates its own database session to avoid event loop
 conflicts when running in Celery's forked worker processes.
+
+RATE LIMIT FIX (2026-01-11):
+- Reduced batch_size from 100 to 50
+- Added circuit breaker integration to skip rate-limited APIs
+- Falls back to VADER-only when AI APIs unavailable
+- Commits after EACH mention (survives task timeouts)
+- Always marks mentions as processed (prevents infinite retry loops)
 """
 
 import asyncio
@@ -191,7 +197,7 @@ async def _fetch_for_product(task_self, product_id: str):
         mentions = []
         for item in collected:
             mention = SocialMention(
-                user_id=product.user_id,  # <-- ADD THIS LINE
+                user_id=product.user_id,
                 product_id=product.id,
                 source=item.source.value,
                 source_id=item.source_id,
@@ -235,8 +241,18 @@ async def _fetch_for_product(task_self, product_id: str):
         }
 
 
-@celery_app.task(bind=True, name="ingestion.process_pending_mentions", track_started=True)
-def process_pending_mentions(self, batch_size: int = 100):
+# =============================================================================
+# PROCESS PENDING MENTIONS - With Rate Limit Fix
+# =============================================================================
+
+@celery_app.task(
+    bind=True,
+    name="ingestion.process_pending_mentions",
+    track_started=True,
+    soft_time_limit=270,
+    time_limit=300,
+)
+def process_pending_mentions(self, batch_size: int = 50):
     """
     Process unprocessed social mentions through sentiment analysis.
     
@@ -244,6 +260,13 @@ def process_pending_mentions(self, batch_size: int = 100):
     1. Fetch unprocessed mentions from the database
     2. Run sentiment analysis using VADER + OpenAI + Gemini (hybrid)
     3. Store the sentiment results
+    
+    RATE LIMIT FIX:
+    - batch_size reduced from 100 to 50
+    - Checks circuit breaker before AI API calls
+    - Falls back to VADER-only when rate limited
+    - Commits after EACH mention (survives task timeouts)
+    - Always marks mentions as processed (no infinite loops)
     """
     return run_async(_process_pending_mentions(self, batch_size))
 
@@ -253,9 +276,16 @@ async def _process_pending_mentions(task_self, batch_size: int):
     from decimal import Decimal
     from models.social_mention import SocialMention
     from models.sentiment import Sentiment
-    from services.hybrid_sentiment_analyzer import HybridSentimentAnalyzer
+    from services.hybrid_sentiment_analyzer import HybridSentimentAnalyzer, RateLimitError
+    from services.rate_limit_manager import (
+        get_rate_limit_manager,
+        is_api_available,
+        record_api_success,
+        record_api_rate_limit,
+    )
     
     session_maker = get_task_session_maker()
+    rate_manager = get_rate_limit_manager()
     
     async with session_maker() as session:
         task_self.update_state(state="LOADING", meta={"batch_size": batch_size})
@@ -282,23 +312,81 @@ async def _process_pending_mentions(task_self, batch_size: int):
         logger.info(f"Processing {len(mentions)} pending mentions")
         task_self.update_state(state="PROCESSING", meta={"total": len(mentions)})
         
-        # Initialize hybrid analyzer (VADER + OpenAI + Gemini)
+        # Check circuit breaker state BEFORE starting batch
+        openai_available = is_api_available("openai")
+        gemini_available = is_api_available("gemini")
+        
+        if not gemini_available:
+            logger.warning("Gemini circuit OPEN - will use OpenAI or VADER")
+        if not openai_available:
+            logger.warning("OpenAI circuit OPEN - will use Gemini or VADER")
+        if not gemini_available and not openai_available:
+            logger.warning("Both AI circuits OPEN - using VADER-only for this batch")
+        
+        # Initialize hybrid analyzer
         analyzer = HybridSentimentAnalyzer()
         available_sources = analyzer.get_available_sources()
         logger.info(f"Sentiment analyzers available: {available_sources}")
         
         processed_count = 0
+        degraded_count = 0  # Mentions processed without AI
         errors = []
+        rate_limited_this_batch = False
         
         for i, mention in enumerate(mentions):
             try:
                 task_self.update_state(
                     state="PROCESSING", 
-                    meta={"current": i + 1, "total": len(mentions)}
+                    meta={
+                        "current": i + 1,
+                        "total": len(mentions),
+                        "degraded": degraded_count,
+                    }
                 )
                 
-                # Analyze sentiment using all available analyzers
-                sentiment_result = await analyzer.analyze(mention.content, use_ai=True)
+                # Determine whether to use AI based on circuit state
+                use_ai = (
+                    not rate_limited_this_batch
+                    and (gemini_available or openai_available)
+                )
+                
+                try:
+                    # Analyze sentiment
+                    sentiment_result = await analyzer.analyze(mention.content, use_ai=use_ai)
+                    
+                    # Record success if AI was used
+                    if "gemini" in sentiment_result.sources_used:
+                        record_api_success("gemini")
+                    if "openai" in sentiment_result.sources_used:
+                        record_api_success("openai")
+                        
+                except RateLimitError as e:
+                    # Rate limit hit - record it and disable AI for rest of batch
+                    logger.warning(f"Rate limit hit: {e}")
+                    rate_limited_this_batch = True
+                    record_api_rate_limit(e.api_name, e.retry_after)
+                    
+                    # Retry this mention with VADER only
+                    sentiment_result = await analyzer.analyze(mention.content, use_ai=False)
+                    degraded_count += 1
+                    
+                except Exception as e:
+                    # Check if it's a rate limit error in disguise
+                    error_str = str(e).lower()
+                    if "429" in str(e) or "rate" in error_str or "too many" in error_str:
+                        rate_limited_this_batch = True
+                        record_api_rate_limit("openai", 60)
+                    
+                    # Fall back to VADER only
+                    logger.warning(f"AI analysis failed, using VADER: {e}")
+                    sentiment_result = await analyzer.analyze(mention.content, use_ai=False)
+                    degraded_count += 1
+                
+                # Check if this was a degraded analysis (no AI used)
+                is_degraded = (
+                    "gemini" not in sentiment_result.sources_used
+                    and "openai" not in sentiment_result.sources_used
+                )
                 
                 # Store sentiment in raw_data for aggregator to read
                 raw_data = mention.raw_data or {}
@@ -314,6 +402,7 @@ async def _process_pending_mentions(task_self, batch_size: int):
                     "emotions": sentiment_result.emotions,
                     "topics": sentiment_result.topics,
                     "is_sarcastic": sentiment_result.is_sarcastic,
+                    "is_degraded": is_degraded,  # Track for monitoring
                 }
                 mention.raw_data = raw_data
                 
@@ -332,15 +421,19 @@ async def _process_pending_mentions(task_self, batch_size: int):
                 )
                 session.add(sentiment_record)
                 
-                # Mark mention as processed
+                # CRITICAL: Always mark as processed to prevent infinite retry
                 mention.processed = True
                 processed_count += 1
+                
+                # CRITICAL: Commit after EACH mention to survive task timeouts
+                await session.commit()
                 
                 logger.debug(
                     f"Analyzed mention {mention.id}: "
                     f"score={sentiment_result.compound:.3f}, "
                     f"label={sentiment_result.label}, "
                     f"sources={sentiment_result.sources_used}"
+                    f"{' (DEGRADED)' if is_degraded else ''}"
                 )
                 
             except Exception as e:
@@ -349,19 +442,37 @@ async def _process_pending_mentions(task_self, batch_size: int):
                     "mention_id": str(mention.id),
                     "error": str(e)
                 })
+                
+                # CRITICAL: Even on error, mark as processed to prevent infinite retry
+                # These can be manually reprocessed later if needed
+                try:
+                    mention.processed = True
+                    raw_data = mention.raw_data or {}
+                    raw_data["sentiment_error"] = str(e)
+                    mention.raw_data = raw_data
+                    await session.commit()
+                except Exception:
+                    pass
         
-        # Commit all changes
-        await session.commit()
-        
-        logger.info(f"Processed {processed_count} mentions, {len(errors)} errors")
+        # Log summary with circuit breaker status
+        circuit_status = rate_manager.get_all_status()
+        logger.info(
+            f"Processed {processed_count} mentions "
+            f"({degraded_count} degraded/VADER-only), "
+            f"{len(errors)} errors. "
+            f"Circuits: {circuit_status}"
+        )
         
         return {
             "status": "success",
             "processed_count": processed_count,
+            "degraded_count": degraded_count,
             "error_count": len(errors),
             "analyzers_used": available_sources,
+            "circuit_breakers": circuit_status,
             "errors": errors[:10],
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     
 
+    

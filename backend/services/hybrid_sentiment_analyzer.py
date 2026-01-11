@@ -1,4 +1,3 @@
-# backend/services/hybrid_sentiment_analyzer.py
 """
 Hybrid Sentiment Analyzer - Combines VADER, Gemini, and OpenAI for robust sentiment analysis.
 
@@ -7,6 +6,11 @@ Strategy:
 2. Gemini runs if API key configured (primary AI - fast and cost-effective)
 3. OpenAI runs as fallback if Gemini fails (backup for accuracy)
 4. Final score = weighted combination of available results
+
+RATE LIMIT HANDLING:
+- Detects 429 errors from Gemini/OpenAI
+- Raises RateLimitError for caller to handle
+- Caller should fall back to VADER-only on rate limit
 """
 
 import asyncio
@@ -18,6 +22,24 @@ import logging
 from core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Rate Limit Exception (NEW)
+# =============================================================================
+
+class RateLimitError(Exception):
+    """
+    Raised when an API returns 429 Too Many Requests.
+    
+    The caller should catch this and:
+    1. Record the rate limit with the circuit breaker
+    2. Fall back to VADER-only analysis
+    """
+    def __init__(self, api_name: str, retry_after: int = 60, message: str = ""):
+        self.api_name = api_name
+        self.retry_after = retry_after
+        super().__init__(message or f"{api_name} rate limited, retry after {retry_after}s")
 
 
 @dataclass
@@ -100,10 +122,15 @@ class HybridSentimentAnalyzer:
         
         Args:
             text: The text to analyze
-            use_ai: Whether to use Gemini/OpenAI (set False for speed)
+            use_ai: Whether to use Gemini/OpenAI (set False for VADER-only)
         
         Returns:
             HybridSentimentResult with combined scores
+            
+        Raises:
+            RateLimitError: When Gemini or OpenAI returns 429.
+                           Caller should catch this, record rate limit,
+                           and retry with use_ai=False.
         """
         results = {}
         sources_used = []
@@ -131,6 +158,9 @@ class HybridSentimentAnalyzer:
                 topics = gemini_result.get("topics", [])
                 is_sarcastic = gemini_result.get("is_sarcastic", False)
                 logger.debug(f"Gemini score: {gemini_result['compound']}")
+            except RateLimitError:
+                # Re-raise rate limit errors for caller to handle
+                raise
             except Exception as e:
                 logger.warning(f"Gemini analysis failed, trying OpenAI: {e}")
                 
@@ -144,6 +174,9 @@ class HybridSentimentAnalyzer:
                         topics = openai_result.get("topics", [])
                         is_sarcastic = openai_result.get("is_sarcastic", False)
                         logger.debug(f"OpenAI score: {openai_result['compound']}")
+                    except RateLimitError:
+                        # Re-raise rate limit errors for caller to handle
+                        raise
                     except Exception as e2:
                         logger.error(f"OpenAI also failed: {e2}")
         
@@ -157,6 +190,9 @@ class HybridSentimentAnalyzer:
                 topics = openai_result.get("topics", [])
                 is_sarcastic = openai_result.get("is_sarcastic", False)
                 logger.debug(f"OpenAI score: {openai_result['compound']}")
+            except RateLimitError:
+                # Re-raise rate limit errors for caller to handle
+                raise
             except Exception as e:
                 logger.error(f"OpenAI analysis failed: {e}")
         
@@ -204,7 +240,12 @@ class HybridSentimentAnalyzer:
         }
     
     async def _analyze_gemini(self, text: str) -> Dict:
-        """Run Gemini analysis (primary AI)."""
+        """
+        Run Gemini analysis (primary AI).
+        
+        Raises:
+            RateLimitError: When Gemini returns 429 or quota exceeded.
+        """
         prompt = f"""Analyze the sentiment of this social media post about a product.
 
 Post: "{text}"
@@ -222,39 +263,52 @@ Return ONLY valid JSON with no markdown formatting:
     "is_sarcastic": false
 }}"""
 
-        # Run sync Gemini in executor
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: self.gemini_client.generate_content(prompt)
-        )
-        
-        result_text = response.text.strip()
-        
-        # Parse JSON (handle markdown code blocks)
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
-        result_text = result_text.strip()
-        
-        import json
-        result = json.loads(result_text)
-        
-        return {
-            "compound": result.get("sentiment_score", 0),
-            "positive": result.get("positive_score", 0),
-            "negative": result.get("negative_score", 0),
-            "neutral": result.get("neutral_score", 0),
-            "label": result.get("sentiment_label", "neutral"),
-            "confidence": result.get("confidence", 0.5),
-            "emotions": result.get("emotions", {}),
-            "topics": result.get("topics", []),
-            "is_sarcastic": result.get("is_sarcastic", False),
-        }
+        try:
+            # Run sync Gemini in executor
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.gemini_client.generate_content(prompt)
+            )
+            
+            result_text = response.text.strip()
+            
+            # Parse JSON (handle markdown code blocks)
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+            result_text = result_text.strip()
+            
+            import json
+            result = json.loads(result_text)
+            
+            return {
+                "compound": result.get("sentiment_score", 0),
+                "positive": result.get("positive_score", 0),
+                "negative": result.get("negative_score", 0),
+                "neutral": result.get("neutral_score", 0),
+                "label": result.get("sentiment_label", "neutral"),
+                "confidence": result.get("confidence", 0.5),
+                "emotions": result.get("emotions", {}),
+                "topics": result.get("topics", []),
+                "is_sarcastic": result.get("is_sarcastic", False),
+            }
+        except Exception as e:
+            # Check for rate limit errors
+            error_str = str(e).lower()
+            if "429" in str(e) or "rate" in error_str or "quota" in error_str or "resource" in error_str:
+                logger.warning(f"Gemini rate limit detected: {e}")
+                raise RateLimitError("gemini", 60, str(e))
+            raise
     
     async def _analyze_openai(self, text: str) -> Dict:
-        """Run OpenAI GPT-4o-mini analysis (fallback)."""
+        """
+        Run OpenAI GPT-4o-mini analysis (fallback).
+        
+        Raises:
+            RateLimitError: When OpenAI returns 429.
+        """
         system_prompt = """You are a sentiment analysis system for e-commerce products.
 Analyze social media posts about products and brands.
 
@@ -273,38 +327,51 @@ Return ONLY valid JSON with these exact fields:
 
 Consider context like sarcasm, irony, and cultural nuances."""
 
-        response = await self.openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Analyze this: \"{text}\""}
-            ],
-            temperature=0.1,
-            max_tokens=300
-        )
-        
-        result_text = response.choices[0].message.content.strip()
-        
-        # Parse JSON (handle markdown code blocks)
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
-        
-        import json
-        result = json.loads(result_text)
-        
-        return {
-            "compound": result.get("sentiment_score", 0),
-            "positive": result.get("positive_score", 0),
-            "negative": result.get("negative_score", 0),
-            "neutral": result.get("neutral_score", 0),
-            "label": result.get("sentiment_label", "neutral"),
-            "confidence": result.get("confidence", 0.5),
-            "emotions": result.get("emotions", {}),
-            "topics": result.get("topics", []),
-            "is_sarcastic": result.get("is_sarcastic", False),
-        }
+        try:
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Analyze this: \"{text}\""}
+                ],
+                temperature=0.1,
+                max_tokens=300,
+                timeout=25.0,  # Add timeout to prevent hanging
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Parse JSON (handle markdown code blocks)
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+            
+            import json
+            result = json.loads(result_text)
+            
+            return {
+                "compound": result.get("sentiment_score", 0),
+                "positive": result.get("positive_score", 0),
+                "negative": result.get("negative_score", 0),
+                "neutral": result.get("neutral_score", 0),
+                "label": result.get("sentiment_label", "neutral"),
+                "confidence": result.get("confidence", 0.5),
+                "emotions": result.get("emotions", {}),
+                "topics": result.get("topics", []),
+                "is_sarcastic": result.get("is_sarcastic", False),
+            }
+        except Exception as e:
+            # Check for rate limit errors
+            error_str = str(e).lower()
+            if "429" in str(e) or "rate" in error_str or "too many" in error_str:
+                # Try to extract retry-after from error
+                retry_after = 60
+                if hasattr(e, 'response') and hasattr(e.response, 'headers'):
+                    retry_after = int(e.response.headers.get('retry-after', 60))
+                logger.warning(f"OpenAI rate limit detected: {e}")
+                raise RateLimitError("openai", retry_after, str(e))
+            raise
     
     def _combine_scores(self, results: Dict[str, float]) -> float:
         """
