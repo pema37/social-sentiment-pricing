@@ -312,7 +312,7 @@ export function EthWalletCard() {
                     <Copy className="w-4 h-4 text-gray-500" />
                   )}
                 </button>
-                
+                <a
                   href={`${etherscanUrl}/address/${displayAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -352,7 +352,7 @@ export function EthWalletCard() {
           {/* Contract Info */}
           <div className="text-xs text-gray-500">
             <p>MNEE Contract ({networkName}):</p>
-            
+            <a
               href={`${etherscanUrl}/token/${mneeContract}`}
               target="_blank"
               rel="noopener noreferrer"

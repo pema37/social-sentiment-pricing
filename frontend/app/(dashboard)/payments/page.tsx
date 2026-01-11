@@ -108,9 +108,8 @@ export default function PaymentsPage() {
               Contract ({networkName}): <code className="bg-blue-100 px-1 rounded text-xs">{mneeContract}</code>
             </p>
           ) : (
-            <p>
-              On BSV, use wallets like{' '}
-              
+            <p>On BSV, use wallets like{' '} 
+              <a            
                 href="https://handcash.io"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -119,7 +118,7 @@ export default function PaymentsPage() {
                 HandCash
               </a>{' '}
               or{' '}
-              
+              <a
                 href="https://relayx.com"
                 target="_blank"
                 rel="noopener noreferrer"
