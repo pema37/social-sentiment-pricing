@@ -35,8 +35,8 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            // FIXED: Added http: to img-src for WooCommerce compatibility
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org; frame-ancestors 'none';",
+            // FIXED: Added Ethereum RPC endpoints to connect-src for wallet balance reading
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org https://rpc.sepolia.org https://eth.merkle.io https://*.infura.io https://*.alchemy.com https://cloudflare-eth.com https://ethereum.publicnode.com https://sepolia.publicnode.com; frame-ancestors 'none';",
           },
           {
             key: 'X-Frame-Options',
@@ -86,3 +86,6 @@ const config = process.env.NEXT_PUBLIC_SENTRY_DSN
   : nextConfig;
 
 export default config;
+
+
+
