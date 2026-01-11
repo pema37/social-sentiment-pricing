@@ -1,20 +1,57 @@
 /**
  * Web3 Configuration for MNEE Integration
  * 
- * This configures wagmi for connecting to Ethereum mainnet
+ * This configures wagmi for connecting to Ethereum mainnet/Sepolia
  * and interacting with the MNEE stablecoin contract.
-* */
+ */
 
 import { http, createConfig } from 'wagmi'
 import { mainnet, sepolia } from 'wagmi/chains'
 import { injected, walletConnect } from 'wagmi/connectors'
 
-// MNEE Stablecoin Contract Address (Ethereum Mainnet)
-export const MNEE_CONTRACT_ADDRESS = '0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF' as const
+// MNEE Contract Addresses by Chain ID
+export const MNEE_CONTRACT_ADDRESSES: Record<number, `0x${string}`> = {
+  // Ethereum Mainnet (Chain ID: 1)
+  [mainnet.id]: '0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF',
+  // Sepolia Testnet (Chain ID: 11155111)
+  [sepolia.id]: '0x0e19B3fDa7336373DFeaCB6F945a72d39bFe2dB9',
+}
+
+// Default contract address (Sepolia for demo)
+export const MNEE_CONTRACT_ADDRESS = MNEE_CONTRACT_ADDRESSES[sepolia.id]
+
+// Get contract address for a specific chain
+export function getMneeContractAddress(chainId: number | undefined): `0x${string}` {
+  if (!chainId) return MNEE_CONTRACT_ADDRESS
+  return MNEE_CONTRACT_ADDRESSES[chainId] || MNEE_CONTRACT_ADDRESS
+}
+
+// Get Etherscan URL for a specific chain
+export function getEtherscanUrl(chainId: number | undefined): string {
+  switch (chainId) {
+    case sepolia.id: return 'https://sepolia.etherscan.io'
+    case mainnet.id: return 'https://etherscan.io'
+    default: return 'https://sepolia.etherscan.io'
+  }
+}
+
+// Get network name for display
+export function getNetworkName(chainId: number | undefined): string {
+  switch (chainId) {
+    case mainnet.id: return 'Ethereum Mainnet'
+    case sepolia.id: return 'Sepolia Testnet'
+    default: return 'Unknown Network'
+  }
+}
+
+// Check if network is supported
+export function isSupportedNetwork(chainId: number | undefined): boolean {
+  if (!chainId) return false
+  return chainId in MNEE_CONTRACT_ADDRESSES
+}
 
 // MNEE Token Details
 export const MNEE_TOKEN = {
-  address: MNEE_CONTRACT_ADDRESS,
   symbol: 'MNEE',
   decimals: 18,
   name: 'MNEE Stablecoin',

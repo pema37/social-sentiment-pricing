@@ -1,7 +1,7 @@
-// frontend/app/(dashboard)/payments/page.tsx
 'use client';
 
 import { useState } from 'react';
+import { useChainId } from 'wagmi';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   BsvWalletCard,
@@ -10,11 +10,17 @@ import {
   PaymentHistory,
 } from '@/components/features/payments';
 import { EthWalletCard } from '@/components/features/payments/EthWalletCard';
+import { getMneeContractAddress, getNetworkName } from '@/lib/web3/config';
 
 type PaymentNetwork = 'ethereum' | 'bsv';
 
 export default function PaymentsPage() {
   const [activeNetwork, setActiveNetwork] = useState<PaymentNetwork>('ethereum');
+  const chainId = useChainId();
+  
+  // Get network-aware contract address
+  const mneeContract = getMneeContractAddress(chainId);
+  const networkName = getNetworkName(chainId);
 
   return (
     <div className="space-y-8">
@@ -99,12 +105,12 @@ export default function PaymentsPage() {
           {activeNetwork === 'ethereum' ? (
             <p>
               On Ethereum, MNEE is an ERC-20 token. Connect your wallet (MetaMask, Rainbow, etc.) to pay for subscriptions.
-              Contract: <code className="bg-blue-100 px-1 rounded text-xs">0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF</code>
+              Contract ({networkName}): <code className="bg-blue-100 px-1 rounded text-xs">{mneeContract}</code>
             </p>
           ) : (
             <p>
               On BSV, use wallets like{' '}
-              <a
+              
                 href="https://handcash.io"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -113,7 +119,7 @@ export default function PaymentsPage() {
                 HandCash
               </a>{' '}
               or{' '}
-              <a
+              
                 href="https://relayx.com"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -156,4 +162,3 @@ function BsvIcon() {
     </svg>
   );
 }
-

@@ -2,16 +2,16 @@
  * MNEE Token Hook
  * 
  * Custom hook for interacting with the MNEE stablecoin:
- * - Get balance
+ * - Get balance (network-aware)
  * - Transfer tokens
  * - Approve spending
-* */
+ */
 
 'use client'
 
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi'
 import { formatUnits, parseUnits } from 'viem'
-import { MNEE_CONTRACT_ADDRESS, MNEE_TOKEN, ERC20_ABI } from './config'
+import { getMneeContractAddress, MNEE_TOKEN, ERC20_ABI } from './config'
 
 export interface UseMNEEReturn {
   address: `0x${string}` | undefined
@@ -30,10 +30,16 @@ export interface UseMNEEReturn {
   approveHash: `0x${string}` | undefined
   isApproveConfirmed: boolean
   approveError: Error | null
+  contractAddress: `0x${string}`
+  chainId: number | undefined
 }
 
 export function useMNEE(): UseMNEEReturn {
   const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  
+  // Get the contract address for the current network
+  const contractAddress = getMneeContractAddress(chainId)
   
   // Read MNEE balance
   const { 
@@ -41,7 +47,7 @@ export function useMNEE(): UseMNEEReturn {
     isLoading: isLoadingBalance,
     refetch: refetchBalance,
   } = useReadContract({
-    address: MNEE_CONTRACT_ADDRESS,
+    address: contractAddress,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
@@ -78,7 +84,7 @@ export function useMNEE(): UseMNEEReturn {
   const transfer = (to: string, amount: string) => {
     const amountInWei = parseUnits(amount, MNEE_TOKEN.decimals)
     writeTransfer({
-      address: MNEE_CONTRACT_ADDRESS,
+      address: contractAddress,
       abi: ERC20_ABI,
       functionName: 'transfer',
       args: [to as `0x${string}`, amountInWei],
@@ -89,7 +95,7 @@ export function useMNEE(): UseMNEEReturn {
   const approve = (spender: string, amount: string) => {
     const amountInWei = parseUnits(amount, MNEE_TOKEN.decimals)
     writeApprove({
-      address: MNEE_CONTRACT_ADDRESS,
+      address: contractAddress,
       abi: ERC20_ABI,
       functionName: 'approve',
       args: [spender as `0x${string}`, amountInWei],
@@ -118,6 +124,8 @@ export function useMNEE(): UseMNEEReturn {
     approveHash,
     isApproveConfirmed,
     approveError: approveError as Error | null,
+    contractAddress,
+    chainId,
   }
 }
 

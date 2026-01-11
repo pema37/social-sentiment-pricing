@@ -1,17 +1,14 @@
-// frontend/components/features/payments/EthWalletCard.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useDisconnect } from 'wagmi';
+import { useAccount, useDisconnect, useChainId } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { Wallet, ExternalLink, Copy, Check, LogOut, Loader2, Edit2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useMNEE } from '@/lib/web3/useMNEE';
 import { api } from '@/lib/api/client';
-
-// MNEE ERC-20 Contract on Ethereum
-const MNEE_CONTRACT = '0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF';
+import { getEtherscanUrl, getNetworkName, getMneeContractAddress } from '@/lib/web3/config';
 
 interface WalletResponse {
   eth_wallet_address: string | null;
@@ -22,7 +19,13 @@ export function EthWalletCard() {
   const { address: connectedAddress, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { openConnectModal } = useConnectModal();
+  const chainId = useChainId();
   const { balance, isLoadingBalance } = useMNEE();
+  
+  // Get contract address and etherscan URL based on current network
+  const mneeContract = getMneeContractAddress(chainId);
+  const etherscanUrl = getEtherscanUrl(chainId);
+  const networkName = getNetworkName(chainId);
   
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -35,7 +38,7 @@ export function EthWalletCard() {
   const displayAddress = connectedAddress || savedAddress;
   const isManualMode = !isConnected && !!savedAddress;
   
-  // ========== FIX: Check if RainbowKit is ready ==========
+  // Check if RainbowKit is ready
   const isRainbowKitReady = !!openConnectModal;
 
   // Load saved wallet on mount
@@ -149,13 +152,12 @@ export function EthWalletCard() {
     setAddressError('');
   };
 
-  // ========== FIX: Safe connect handler with fallback ==========
+  // Safe connect handler with fallback
   const handleConnect = () => {
     if (openConnectModal) {
       openConnectModal();
     } else {
       console.error('RainbowKit not initialized - openConnectModal is undefined');
-      // Fallback: switch to manual mode
       handleStartEditing();
     }
   };
@@ -196,6 +198,13 @@ export function EthWalletCard() {
           </span>
         )}
       </div>
+
+      {/* Network indicator when connected */}
+      {isConnected && (
+        <div className="mb-4 px-2 py-1 bg-purple-100 rounded text-xs text-purple-700 inline-block">
+          {networkName}
+        </div>
+      )}
 
       {/* Editing Mode - Manual Address Entry */}
       {isEditing && (
@@ -255,7 +264,6 @@ export function EthWalletCard() {
             Connect your Ethereum wallet to pay with MNEE ERC-20 tokens.
           </p>
           <div className="space-y-2">
-            {/* ========== FIX: Use handleConnect with loading state ========== */}
             <Button 
               onClick={handleConnect} 
               className="w-full"
@@ -304,8 +312,8 @@ export function EthWalletCard() {
                     <Copy className="w-4 h-4 text-gray-500" />
                   )}
                 </button>
-                <a
-                  href={`https://etherscan.io/address/${displayAddress}`}
+                
+                  href={`${etherscanUrl}/address/${displayAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 hover:bg-gray-200 rounded transition-colors"
@@ -343,14 +351,14 @@ export function EthWalletCard() {
 
           {/* Contract Info */}
           <div className="text-xs text-gray-500">
-            <p>MNEE Contract:</p>
-            <a
-              href={`https://etherscan.io/token/${MNEE_CONTRACT}`}
+            <p>MNEE Contract ({networkName}):</p>
+            
+              href={`${etherscanUrl}/token/${mneeContract}`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-purple-600 hover:underline break-all"
             >
-              {MNEE_CONTRACT}
+              {mneeContract}
             </a>
           </div>
 
@@ -367,7 +375,6 @@ export function EthWalletCard() {
             </Button>
           ) : (
             <div className="flex gap-2">
-              {/* ========== FIX: Use handleConnect ========== */}
               <Button
                 variant="secondary"
                 size="sm"
@@ -394,4 +401,3 @@ export function EthWalletCard() {
 }
 
 export default EthWalletCard;
-
