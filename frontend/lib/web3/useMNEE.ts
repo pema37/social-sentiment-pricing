@@ -82,13 +82,20 @@ export function useMNEE(): UseMNEEReturn {
   
   // Transfer function
   const transfer = (to: string, amount: string) => {
-    const amountInWei = parseUnits(amount, MNEE_TOKEN.decimals)
+    console.log('=== MNEE Transfer Debug ===');
+    console.log('to:', to);
+    console.log('amount (string):', amount);
+    console.log('decimals:', MNEE_TOKEN.decimals);
+    
+    const amountInWei = parseUnits(amount, MNEE_TOKEN.decimals);
+    console.log('amountInWei:', amountInWei.toString());
+    
     writeTransfer({
       address: contractAddress,
       abi: ERC20_ABI,
       functionName: 'transfer',
       args: [to as `0x${string}`, amountInWei],
-    })
+    });
   }
   
   // Approve function
