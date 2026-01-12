@@ -53,7 +53,7 @@ export function isSupportedNetwork(chainId: number | undefined): boolean {
 // MNEE Token Details
 export const MNEE_TOKEN = {
   symbol: 'MNEE',
-  decimals: 5,
+  decimals: 18,
   name: 'MNEE Stablecoin',
 } as const
 
