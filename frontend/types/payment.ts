@@ -113,6 +113,7 @@ export interface Subscription {
  */
 export interface SubscribeRequest {
   tier: SubscriptionTier;
+  network?: 'ethereum' | 'bsv';
 }
 
 /**

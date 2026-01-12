@@ -118,12 +118,27 @@ export function useSubscription() {
 
 /**
  * Subscribe to a plan
+ * Updated to accept network parameter for Ethereum/BSV selection
  */
+interface SubscribeParams {
+  tier: SubscriptionTier;
+  network?: 'ethereum' | 'bsv';
+}
+
 export function useSubscribe() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (tier: SubscriptionTier) => subscribe({ tier }),
+    mutationFn: (params: SubscriptionTier | SubscribeParams) => {
+      // Handle both old (tier only) and new (tier + network) formats
+      if (typeof params === 'string') {
+        return subscribe({ tier: params, network: 'bsv' });
+      }
+      return subscribe({ 
+        tier: params.tier, 
+        network: params.network || 'bsv' 
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
       queryClient.invalidateQueries({ queryKey: paymentKeys.history() });
@@ -163,3 +178,5 @@ export function usePaymentHistory(limit: number = 20, offset: number = 0) {
     queryFn: () => getPaymentHistory(limit, offset),
   });
 }
+
+

@@ -1,14 +1,19 @@
-// frontend/components/features/payments/SubscriptionPlans.tsx
-
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, Star, Zap, Building2, Sparkles } from 'lucide-react';
+import { useAccount } from 'wagmi';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { PayWithMNEE } from './PayWithMNEE';
 import { usePlans, useSubscription, useSubscribe } from '@/lib/hooks/use-payments';
 import { useToast } from '@/lib/hooks/use-toast';
 import type { SubscriptionPlan, SubscriptionTier } from '@/types/payment';
+import type { PaymentNetwork } from '@/app/(dashboard)/payments/page';
+
+// =============================================================================
+// Constants
+// =============================================================================
 
 const TIER_ICONS: Record<SubscriptionTier, React.ReactNode> = {
   free: <Sparkles className="h-6 w-6" />,
@@ -24,12 +29,33 @@ const TIER_COLORS: Record<SubscriptionTier, string> = {
   enterprise: 'bg-orange-100 text-orange-600',
 };
 
+// =============================================================================
+// Types
+// =============================================================================
+
+interface SubscriptionPlansProps {
+  activeNetwork: PaymentNetwork;
+}
+
 interface PlanCardProps {
   plan: SubscriptionPlan;
   currentTier: SubscriptionTier;
   onSelect: (tier: SubscriptionTier) => void;
   isLoading: boolean;
 }
+
+interface PaymentInfo {
+  status: string;
+  amount: string;
+  payment_address: string;
+  network: string;
+  memo: string;
+  tier: SubscriptionTier;
+}
+
+// =============================================================================
+// Plan Card Component
+// =============================================================================
 
 function PlanCard({ plan, currentTier, onSelect, isLoading }: PlanCardProps) {
   const isCurrentPlan = plan.id === currentTier;
@@ -127,38 +153,196 @@ function PlanCard({ plan, currentTier, onSelect, isLoading }: PlanCardProps) {
   );
 }
 
-export function SubscriptionPlans() {
+// =============================================================================
+// Ethereum Payment Component
+// =============================================================================
+
+interface EthereumPaymentProps {
+  paymentInfo: PaymentInfo;
+  onSuccess: (txHash: string) => void;
+  onCancel: () => void;
+}
+
+function EthereumPayment({ paymentInfo, onSuccess, onCancel }: EthereumPaymentProps) {
+  const { isConnected } = useAccount();
+  
+  if (!paymentInfo.payment_address) {
+    return (
+      <Card className="p-6 bg-red-50 border-red-200">
+        <h3 className="text-lg font-semibold text-red-800 mb-2">Configuration Error</h3>
+        <p className="text-sm text-red-700">
+          Ethereum payments are not configured. Please use BSV network or contact support.
+        </p>
+        <Button onClick={onCancel} variant="secondary" className="mt-4">
+          Go Back
+        </Button>
+      </Card>
+    );
+  }
+
+  if (!isConnected) {
+    return (
+      <Card className="p-6 bg-yellow-50 border-yellow-200">
+        <h3 className="text-lg font-semibold text-yellow-800 mb-2">Wallet Not Connected</h3>
+        <p className="text-sm text-yellow-700 mb-4">
+          Please connect your MetaMask or WalletConnect wallet to pay with MNEE on Ethereum.
+        </p>
+        <Button onClick={onCancel} variant="secondary">
+          Go Back
+        </Button>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6 bg-purple-50 border-purple-200">
+      <h3 className="text-lg font-semibold text-purple-900 mb-4">
+        Complete Your Payment
+      </h3>
+      
+      <div className="space-y-4 mb-6">
+        <div>
+          <span className="text-sm text-gray-600">Plan:</span>
+          <p className="font-semibold capitalize">{paymentInfo.tier}</p>
+        </div>
+        <div>
+          <span className="text-sm text-gray-600">Amount:</span>
+          <p className="font-bold text-2xl text-purple-700">{paymentInfo.amount} MNEE</p>
+          <p className="text-sm text-gray-500">≈ ${paymentInfo.amount} USD</p>
+        </div>
+        <div>
+          <span className="text-sm text-gray-600">Sending to:</span>
+          <p className="font-mono text-xs bg-white p-2 rounded border break-all">
+            {paymentInfo.payment_address}
+          </p>
+        </div>
+      </div>
+
+      {/* PayWithMNEE triggers MetaMask! */}
+      <PayWithMNEE
+        amount={paymentInfo.amount}
+        recipients={paymentInfo.payment_address}
+        orderId={paymentInfo.memo}
+        onSuccess={onSuccess}
+        onError={(error) => {
+          console.error('Payment failed:', error);
+        }}
+        buttonText={`Pay ${paymentInfo.amount} MNEE`}
+      />
+
+      <Button 
+        onClick={onCancel} 
+        variant="secondary" 
+        className="w-full mt-3"
+      >
+        Cancel
+      </Button>
+    </Card>
+  );
+}
+
+// =============================================================================
+// BSV Payment Component (Manual)
+// =============================================================================
+
+interface BsvPaymentProps {
+  paymentInfo: PaymentInfo;
+  onCancel: () => void;
+}
+
+function BsvPayment({ paymentInfo, onCancel }: BsvPaymentProps) {
+  return (
+    <Card className="p-6 bg-orange-50 border-orange-200">
+      <h3 className="text-lg font-semibold text-orange-900 mb-4">
+        Complete Your Payment
+      </h3>
+      
+      <div className="space-y-3">
+        <div>
+          <span className="text-sm text-gray-600">Amount:</span>
+          <p className="font-bold text-xl">{paymentInfo.amount} MNEE</p>
+        </div>
+        <div>
+          <span className="text-sm text-gray-600">Send to:</span>
+          <p className="font-mono text-sm bg-white p-2 rounded border break-all">
+            {paymentInfo.payment_address}
+          </p>
+        </div>
+        <div>
+          <span className="text-sm text-gray-600">Memo (required):</span>
+          <p className="font-mono text-sm bg-white p-2 rounded border">
+            {paymentInfo.memo}
+          </p>
+        </div>
+        <div className="border-t pt-3">
+          <p className="text-sm font-medium text-gray-700">Instructions:</p>
+          <ol className="list-decimal list-inside text-sm space-y-1 mt-2 text-gray-600">
+            <li>Open your BSV wallet (HandCash or RelayX)</li>
+            <li>Send exactly {paymentInfo.amount} MNEE to the address above</li>
+            <li>Include memo: {paymentInfo.memo}</li>
+            <li>Wait for confirmation (usually &lt; 1 minute)</li>
+          </ol>
+        </div>
+      </div>
+
+      <Button 
+        onClick={onCancel} 
+        variant="secondary" 
+        className="w-full mt-4"
+      >
+        Cancel
+      </Button>
+    </Card>
+  );
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
+
+export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
   const { data: plansData, isLoading: plansLoading } = usePlans();
-  const { data: subscription, isLoading: subLoading } = useSubscription();
+  const { data: subscription, isLoading: subLoading, refetch: refetchSubscription } = useSubscription();
   const subscribeMutation = useSubscribe();
   const toast = useToast();
 
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier | null>(null);
-  const [paymentInfo, setPaymentInfo] = useState<{
-    status: string;
-    amount: string;
-    payment_address: string;
-    memo: string;
-    instructions: {
-      step1: string;
-      step2: string;
-      step3: string;
-      step4: string;
-    };
-  } | null>(null);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+
+  // Reset payment when network changes
+  useEffect(() => {
+    if (paymentInfo !== null || selectedTier !== null) {
+      setPaymentInfo(null);
+      setSelectedTier(null);
+    }
+  }, [activeNetwork]);
 
   const handleSelectPlan = async (tier: SubscriptionTier) => {
     setSelectedTier(tier);
 
     try {
-      const result = await subscribeMutation.mutateAsync(tier);
-      setPaymentInfo(result);
+      // Call backend WITH network parameter
+      const result = await subscribeMutation.mutateAsync({ 
+        tier, 
+        network: activeNetwork  // This is the key fix!
+      });
+      
+      setPaymentInfo({
+        status: 'pending',
+        amount: result.amount,
+        payment_address: result.payment_address,
+        network: activeNetwork,
+        memo: result.memo,
+        tier: tier,
+      });
 
       if (tier === 'free') {
         toast.success({
           title: 'Plan Changed',
           message: 'You are now on the Free plan.',
         });
+        setPaymentInfo(null);
+        refetchSubscription();
       } else {
         toast.info({
           title: 'Payment Required',
@@ -166,13 +350,32 @@ export function SubscriptionPlans() {
         });
       }
     } catch (error) {
+      console.error('Subscribe error:', error);
       toast.error({
         title: 'Error',
         message: 'Failed to process subscription. Please try again.',
       });
+      setSelectedTier(null);
     }
   };
 
+  const handlePaymentSuccess = (txHash: string) => {
+    toast.success({
+      title: 'Payment Successful!',
+      message: 'Your subscription has been upgraded.',
+    });
+    setPaymentInfo(null);
+    setSelectedTier(null);
+    refetchSubscription();
+    console.log('Payment txHash:', txHash);
+  };
+
+  const handleCancelPayment = () => {
+    setPaymentInfo(null);
+    setSelectedTier(null);
+  };
+
+  // Loading state
   if (plansLoading || subLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -192,6 +395,7 @@ export function SubscriptionPlans() {
 
   return (
     <div className="space-y-6">
+      {/* Plan Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plans.map((plan) => (
           <PlanCard
@@ -204,40 +408,27 @@ export function SubscriptionPlans() {
         ))}
       </div>
 
+      {/* Payment Section - Network Aware! */}
       {paymentInfo && paymentInfo.status === 'pending' && (
-        <Card className="p-6 bg-blue-50 border-blue-200">
-          <h3 className="text-lg font-semibold mb-4">Complete Your Payment</h3>
-          <div className="space-y-3">
-            <div>
-              <span className="text-sm text-gray-600">Amount:</span>
-              <p className="font-bold text-xl">{paymentInfo.amount} MNEE</p>
-            </div>
-            <div>
-              <span className="text-sm text-gray-600">Send to:</span>
-              <p className="font-mono text-sm bg-white p-2 rounded border break-all">
-                {paymentInfo.payment_address}
-              </p>
-            </div>
-            <div>
-              <span className="text-sm text-gray-600">Memo (required):</span>
-              <p className="font-mono text-sm bg-white p-2 rounded border">
-                {paymentInfo.memo}
-              </p>
-            </div>
-            <div className="border-t pt-3">
-              <p className="text-sm text-gray-600">
-                <strong>Instructions:</strong>
-              </p>
-              <ol className="list-decimal list-inside text-sm space-y-1 mt-2">
-                <li>{paymentInfo.instructions.step1}</li>
-                <li>{paymentInfo.instructions.step2}</li>
-                <li>{paymentInfo.instructions.step3}</li>
-                <li>{paymentInfo.instructions.step4}</li>
-              </ol>
-            </div>
-          </div>
-        </Card>
+        <>
+          {activeNetwork === 'ethereum' ? (
+            <EthereumPayment
+              paymentInfo={paymentInfo}
+              onSuccess={handlePaymentSuccess}
+              onCancel={handleCancelPayment}
+            />
+          ) : (
+            <BsvPayment
+              paymentInfo={paymentInfo}
+              onCancel={handleCancelPayment}
+            />
+          )}
+        </>
       )}
     </div>
   );
 }
+
+export default SubscriptionPlans;
+
+

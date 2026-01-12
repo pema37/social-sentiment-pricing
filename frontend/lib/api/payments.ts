@@ -146,7 +146,7 @@ export async function getSubscription(): Promise<Subscription> {
   return {
     tier: apiSub.tier as SubscriptionTier,
     name: tierNames[apiSub.tier] || apiSub.tier,
-    status: apiSub.status as SubscriptionStatus,  // ✅ Fixed
+    status: apiSub.status as SubscriptionStatus,
     monthly_price: tierPrices[apiSub.tier] || '0.00',
     current_period_start: apiSub.current_period_start,
     current_period_end: apiSub.current_period_end,
@@ -161,6 +161,7 @@ export async function getSubscription(): Promise<Subscription> {
 
 /**
  * Subscribe to a plan (creates payment request)
+ * Updated to support network parameter for Ethereum/BSV selection
  */
 export async function subscribe(data: SubscribeRequest): Promise<PaymentRequest> {
   const response = await api.post<{
@@ -169,7 +170,15 @@ export async function subscribe(data: SubscribeRequest): Promise<PaymentRequest>
     recipient_address: string;
     memo: string;
     expires_at: string;
-  }>('/api/v1/payments/subscribe', data);  // ✅ Fixed - proper type instead of any
+    network: string;
+  }>('/api/v1/payments/subscribe', {
+    tier: data.tier,
+    billing_cycle: 'monthly',
+    network: data.network || 'bsv',  // Send network to backend!
+  });
+  
+  // Instructions differ based on network
+  const isEthereum = (data.network || 'bsv') === 'ethereum';
   
   // Transform response to match frontend type
   return {
@@ -178,15 +187,22 @@ export async function subscribe(data: SubscribeRequest): Promise<PaymentRequest>
     tier: data.tier,
     amount: response.amount,
     currency: 'MNEE',
-    payment_address: response.recipient_address,
+    payment_address: response.recipient_address,  // Now correct for network!
     memo: response.memo,
     expires_at: response.expires_at,
-    instructions: {
-      step1: 'Open your BSV wallet (HandCash or RelayX)',
-      step2: `Send exactly ${response.amount} MNEE to the address above`,
-      step3: `Include memo: ${response.memo}`,
-      step4: 'Wait for confirmation (usually < 1 minute)',
-    },
+    instructions: isEthereum
+      ? {
+          step1: 'Click "Pay" to open MetaMask',
+          step2: `Confirm sending ${response.amount} MNEE`,
+          step3: 'Wait for transaction confirmation',
+          step4: 'Your subscription will activate automatically',
+        }
+      : {
+          step1: 'Open your BSV wallet (HandCash or RelayX)',
+          step2: `Send exactly ${response.amount} MNEE to the address above`,
+          step3: `Include memo: ${response.memo}`,
+          step4: 'Wait for confirmation (usually < 1 minute)',
+        },
   };
 }
 
@@ -207,8 +223,8 @@ export async function getPayment(paymentId: string): Promise<Payment> {
     amount: apiPayment.amount,
     amount_raw: parseFloat(apiPayment.amount) * 100000,
     currency: 'MNEE',
-    status: apiPayment.status as PaymentStatus,  // ✅ Fixed
-    payment_type: apiPayment.payment_type as PaymentType,  // ✅ Fixed
+    status: apiPayment.status as PaymentStatus,
+    payment_type: apiPayment.payment_type as PaymentType,
     txid: apiPayment.transaction_hash,
     from_address: null,
     to_address: null,
@@ -237,8 +253,8 @@ export async function getPaymentHistory(
     amount: p.amount,
     amount_raw: parseFloat(p.amount) * 100000,
     currency: 'MNEE',
-    status: p.status as PaymentStatus,  // ✅ Fixed
-    payment_type: p.payment_type as PaymentType,  // ✅ Fixed
+    status: p.status as PaymentStatus,
+    payment_type: p.payment_type as PaymentType,
     txid: p.transaction_hash,
     from_address: null,
     to_address: null,

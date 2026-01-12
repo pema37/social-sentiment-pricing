@@ -6,7 +6,7 @@ Separated from routes for maintainability and reusability.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -49,6 +49,10 @@ class SubscribeRequest(BaseModel):
     """Request to subscribe to a plan."""
     tier: str = Field(..., description="Subscription tier: starter, professional, enterprise")
     billing_cycle: str = Field(default="monthly", description="Billing cycle: monthly or yearly")
+    network: Literal["ethereum", "bsv"] = Field(
+        default="bsv", 
+        description="Payment network: ethereum or bsv"
+    )
 
 
 # =============================================================================
@@ -64,6 +68,7 @@ class PaymentRequest(BaseModel):
     recipient_address: str
     memo: str
     expires_at: datetime
+    network: str = "bsv"  # NEW: Which network this payment is for
     network_options: List[str] = ["bsv", "ethereum"]
 
 
@@ -138,3 +143,5 @@ class PaymentError(BaseModel):
     code: str
     details: Optional[dict] = None
 
+
+    

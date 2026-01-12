@@ -75,13 +75,18 @@ async def subscribe(
 ):
     """
     Create a subscription payment request.
+    
     Returns payment details for the user to complete via MNEE.
+    The recipient_address will be network-specific:
+    - For 'ethereum': Returns Ethereum wallet (0x...)
+    - For 'bsv': Returns BSV wallet (1... or $handle)
     """
     try:
         payment_request, _ = await service.create_subscription_payment(
             user=current_user,
             tier=data.tier,
             billing_cycle=data.billing_cycle,
+            network=data.network,  # FIXED: Pass network to service!
         )
         return payment_request
     except ValueError as e:
@@ -169,3 +174,6 @@ async def get_payment_history(
         limit=min(limit, 100),  # Cap at 100
         offset=offset,
     )
+
+
+

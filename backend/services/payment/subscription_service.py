@@ -113,13 +113,15 @@ class SubscriptionService:
     
     def __init__(self, session: AsyncSession):
         self.session = session
+        # BSV wallet address
         self.recipient_address = os.getenv(
             "SSP_MNEE_WALLET_ADDRESS",
             "$pema12@handcash.io"
         )
+        # Ethereum wallet address - MUST be set for ETH payments to work!
         self.eth_recipient = os.getenv(
             "SSP_ETH_WALLET_ADDRESS",
-            "0x742d35Cc6634C0532925a3b844Bc9e7595f..."  # Placeholder
+            ""  # No default - must be configured
         )
     
     # =========================================================================
@@ -175,14 +177,44 @@ class SubscriptionService:
     # PAYMENT CREATION
     # =========================================================================
     
+    def _get_recipient_for_network(self, network: str) -> str:
+        """
+        Get the correct recipient wallet address for the payment network.
+        
+        Args:
+            network: 'ethereum' or 'bsv'
+            
+        Returns:
+            Wallet address for that network
+            
+        Raises:
+            ValueError: If network wallet is not configured
+        """
+        if network == "ethereum":
+            if not self.eth_recipient:
+                raise ValueError(
+                    "Ethereum payments not configured. "
+                    "Please set SSP_ETH_WALLET_ADDRESS environment variable."
+                )
+            return self.eth_recipient
+        else:  # bsv
+            return self.recipient_address
+    
     async def create_subscription_payment(
         self,
         user: User,
         tier: str,
         billing_cycle: str = "monthly",
+        network: str = "bsv",  # NEW: Accept network parameter
     ) -> Tuple[PaymentRequest, Payment]:
         """
         Create a payment request for a subscription.
+        
+        Args:
+            user: The user subscribing
+            tier: Subscription tier
+            billing_cycle: 'monthly' or 'yearly'
+            network: Payment network - 'ethereum' or 'bsv'
         
         Returns the payment request details and the Payment record.
         """
@@ -192,6 +224,13 @@ class SubscriptionService:
         
         if tier == "free":
             raise ValueError("Free tier doesn't require payment")
+        
+        # Validate network
+        if network not in ["ethereum", "bsv"]:
+            raise ValueError(f"Invalid network: {network}. Must be 'ethereum' or 'bsv'")
+        
+        # Get correct recipient address for the network
+        recipient_address = self._get_recipient_for_network(network)
         
         # Get plan pricing
         plan = self.get_plan(tier)
@@ -219,23 +258,30 @@ class SubscriptionService:
             metadata_json=json.dumps({
                 "tier": tier,
                 "billing_cycle": billing_cycle,
+                "network": network,  # Store network for verification
             }),
         )
         self.session.add(payment)
         await self.session.commit()
         await self.session.refresh(payment)
         
-        # Build payment request
+        # Build payment request with CORRECT recipient address
         payment_id_str = str(payment.id)
         payment_request = PaymentRequest(
             payment_id=payment_id_str,
             amount=f"{amount:.2f}",
             amount_raw=amount_raw,
             currency="MNEE",
-            recipient_address=self.recipient_address,
+            recipient_address=recipient_address,  # FIXED: Network-aware!
             memo=f"SSP-{payment_id_str[:8]}",
             expires_at=datetime.utcnow() + timedelta(hours=1),
+            network=network,  # NEW: Tell frontend which network
             network_options=["bsv", "ethereum"],
+        )
+        
+        logger.info(
+            f"Created {network} payment for user {user.id}: "
+            f"tier={tier}, amount={amount}, recipient={recipient_address[:16]}..."
         )
         
         return payment_request, payment
@@ -503,4 +549,6 @@ class SubscriptionService:
         
         return {}
     
+
+
     

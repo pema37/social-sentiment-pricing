@@ -12,7 +12,7 @@ import {
 import { EthWalletCard } from '@/components/features/payments/EthWalletCard';
 import { getMneeContractAddress, getNetworkName } from '@/lib/web3/config';
 
-type PaymentNetwork = 'ethereum' | 'bsv';
+export type PaymentNetwork = 'ethereum' | 'bsv';
 
 export default function PaymentsPage() {
   const [activeNetwork, setActiveNetwork] = useState<PaymentNetwork>('ethereum');
@@ -65,7 +65,7 @@ export default function PaymentsPage() {
       {activeNetwork === 'ethereum' && (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
           <p className="text-sm text-purple-800">
-            <strong>MNEE ERC-20</strong> — Pay using MNEE tokens on Ethereum mainnet. 
+            <strong>MNEE ERC-20</strong> — Pay using MNEE tokens on Ethereum. 
             Connect your MetaMask or WalletConnect-compatible wallet.
           </p>
         </div>
@@ -86,10 +86,10 @@ export default function PaymentsPage() {
         <CurrentPlan />
       </div>
 
-      {/* Subscription Plans */}
+      {/* Subscription Plans - PASS activeNetwork! */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Subscription Plans</h2>
-        <SubscriptionPlans />
+        <SubscriptionPlans activeNetwork={activeNetwork} />
       </div>
 
       {/* Payment History */}
@@ -161,3 +161,5 @@ function BsvIcon() {
     </svg>
   );
 }
+
+
