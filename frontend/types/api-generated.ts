@@ -2305,7 +2305,11 @@ export interface paths {
         /**
          * Subscribe
          * @description Create a subscription payment request.
+         *
          *     Returns payment details for the user to complete via MNEE.
+         *     The recipient_address will be network-specific:
+         *     - For 'ethereum': Returns Ethereum wallet (0x...)
+         *     - For 'bsv': Returns BSV wallet (1... or $handle)
          */
         post: operations["subscribe_api_v1_payments_subscribe_post"];
         delete?: never;
@@ -4111,6 +4115,11 @@ export interface components {
              */
             expires_at: string;
             /**
+             * Network
+             * @default bsv
+             */
+            network: string;
+            /**
              * Network Options
              * @default [
              *       "bsv",
@@ -5179,6 +5188,13 @@ export interface components {
              * @default monthly
              */
             billing_cycle: string;
+            /**
+             * Network
+             * @description Payment network: ethereum or bsv
+             * @default bsv
+             * @enum {string}
+             */
+            network: "ethereum" | "bsv";
         };
         /**
          * SubscriptionInfo
@@ -5470,6 +5486,8 @@ export interface components {
             username?: string | null;
             /** Email */
             email?: string | null;
+            /** Full Name */
+            full_name?: string | null;
         };
         /** ValidationError */
         ValidationError: {
