@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for all API contracts, types, and patterns.
 > **Rule:** Update this file BEFORE writing code. Load into every Claude conversation.
-> **Last Updated:** January 3, 2026
+> **Last Updated:** January 13, 2026
 
 ---
 
@@ -156,6 +156,26 @@
 ---
 
 ## 📦 Types / Schemas
+
+
+## 🔄 Type Generation
+
+**Command:**
+```bash
+cd frontend && npm run generate-api-types
+```
+
+**How it works:**
+- Backend Pydantic schemas → FastAPI auto-generates `/openapi.json` → `openapi-typescript` converts to TypeScript
+- Generated file: `frontend/types/api-generated.ts`
+- Run whenever backend schemas change
+
+**Usage:**
+```typescript
+import type { components } from '@/types/api-generated';
+type Product = components['schemas']['ProductRead'];
+```
+
 
 ### Shared Types
 ```typescript
@@ -363,6 +383,9 @@ interface CompetitorProduct extends BaseEntity {
   last_scraped_at?: string;
 }
 ```
+### Payment Schemas (updated)
+- `network` field added: `"ethereum" | "bsv"` (default: "bsv")
+- `full_name` added to user response schemas
 
 ---
 
@@ -572,6 +595,8 @@ social-sentiment-pricing/
 | 2026-01-03 | Split alerts routes (route ordering fix) | alerts/*.py |
 | 2026-01-03 | Split sync/push services | sync_service.py, price_push_service.py |
 | 2026-01-03 | Added sync timeout (300s) | sync_service.py |
+| 2026-01-13 | Set up openapi-typescript type generation | frontend/package.json, types/api-generated.ts |
+| 2026-01-13 | Regenerated types from staging (network, full_name fields) | types/api-generated.ts |
 
 ---
 
@@ -597,5 +622,11 @@ cd backend && alembic upgrade head
 - ReDoc: http://localhost:8000/redoc
 
 **Staging URLs:**
-- Frontend: https://ssp-staging.vercel.app (or your URL)
-- Backend: https://ssp-backend-staging.railway.app (or your URL)
+- Frontend: https://ssp-staging.vercel.app
+- Backend: https://social-sentiment-pricing-staging-2ecd.up.railway.app
+- OpenAPI: https://social-sentiment-pricing-staging-2ecd.up.railway.app/openapi.json
+
+**Production URLs:**
+- Frontend: https://actualprice.com (or your domain)
+- Backend: ⚠️ NEEDS FIX - ssp-api-production serving wrong app
+
