@@ -155,7 +155,7 @@ export interface paths {
         put?: never;
         /**
          * Login
-         * @description Login and receive JWT tokens (JSON body).
+         * @description Login and receive a JWT token (JSON body).
          */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
@@ -178,29 +178,6 @@ export interface paths {
          * @description Login via OAuth2 form (for Swagger UI).
          */
         post: operations["login_oauth_api_v1_auth_login_oauth_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Refresh Tokens
-         * @description Get new access token using a valid refresh token.
-         *
-         *     This endpoint allows the frontend to silently refresh the session
-         *     without forcing the user to re-login.
-         */
-        post: operations["refresh_tokens_api_v1_auth_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -334,30 +311,6 @@ export interface paths {
          * @description Update current user's profile (username, email).
          */
         patch: operations["update_my_profile_api_v1_users_me_patch"];
-        trace?: never;
-    };
-    "/api/v1/users/me/wallet": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get My Wallet
-         * @description Get current user's wallet addresses.
-         */
-        get: operations["get_my_wallet_api_v1_users_me_wallet_get"];
-        /**
-         * Update My Wallet
-         * @description Update current user's wallet addresses (ETH and/or BSV).
-         */
-        put: operations["update_my_wallet_api_v1_users_me_wallet_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/users/me/change-password": {
@@ -500,38 +453,16 @@ export interface paths {
         post?: never;
         /**
          * Delete Product
-         * @description Delete a product and all related data.
+         * @description Delete a product.
          */
         delete: operations["delete_product_api_v1_products__product_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Product
-         * @description Update a product (partial update).
+         * @description Update a product.
          */
         patch: operations["update_product_api_v1_products__product_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/products/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import Products
-         * @description Import multiple products from CSV data.
-         *
-         *     Compatible with WooCommerce and Shopify CSV exports.
-         */
-        post: operations["import_products_api_v1_products_import_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/products/{product_id}/price-suggestion": {
@@ -554,31 +485,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/products/{product_id}/generate-description": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Generate Description
-         * @description Generate AI-powered SEO-optimized product description.
-         *
-         *     Uses GPT-4o-mini to create compelling product copy based on:
-         *     - Product name and category
-         *     - Keywords configured for sentiment tracking
-         *     - Existing description (if any) for improvement
-         */
-        post: operations["generate_description_api_v1_products__product_id__generate_description_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/pricing/rules": {
         parameters: {
             query?: never;
@@ -588,22 +494,7 @@ export interface paths {
         };
         /**
          * List Rules
-         * @description List pricing rules with pagination and optional filters.
-         *
-         *     Returns a consistent paginated response structure:
-         *     {
-         *         "items": [...],
-         *         "total": 42,
-         *         "page": 1,
-         *         "page_size": 20,
-         *         "total_pages": 3
-         *     }
-         *
-         *     Filters:
-         *     - product_id: Only return rules for a specific product
-         *     - is_active: Only return active (true) or inactive (false) rules
-         *
-         *     Sorting: By priority descending (higher priority first)
+         * @description List pricing rules.
          */
         get: operations["list_rules_api_v1_pricing_rules_get"];
         put?: never;
@@ -627,9 +518,7 @@ export interface paths {
         };
         /**
          * Get Rule
-         * @description Get a specific pricing rule by ID.
-         *
-         *     - Returns 404 if rule doesn't exist or doesn't belong to user
+         * @description Get a specific pricing rule.
          */
         get: operations["get_rule_api_v1_pricing_rules__rule_id__get"];
         put?: never;
@@ -637,94 +526,15 @@ export interface paths {
         /**
          * Delete Rule
          * @description Delete a pricing rule.
-         *
-         *     - Returns 404 if rule doesn't exist or doesn't belong to user
-         *     - Returns 204 No Content on success
          */
         delete: operations["delete_rule_api_v1_pricing_rules__rule_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Rule
-         * @description Update a pricing rule (partial update).
-         *
-         *     - Only updates fields provided in the request body
-         *     - Automatically updates the updated_at timestamp
-         *     - Returns 404 if rule doesn't exist or doesn't belong to user
+         * @description Update a pricing rule.
          */
         patch: operations["update_rule_api_v1_pricing_rules__rule_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/pricing/recommendations/diagnose/{product_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Diagnose Product Recommendations
-         * @description Diagnose why recommendations aren't being generated for a product.
-         *
-         *     Returns detailed information about:
-         *     - Product status
-         *     - Linked competitors and their prices
-         *     - Active pricing rules
-         *     - Current market signals
-         *     - Why rules aren't matching
-         */
-        get: operations["diagnose_product_recommendations_api_v1_pricing_recommendations_diagnose__product_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/recommendations/generate-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Generate All Recommendations
-         * @description Generate recommendations for all products with active rules.
-         *
-         *     Useful for:
-         *     - Initial setup/testing
-         *     - Manual trigger instead of waiting for scheduled task
-         *     - Demo purposes
-         */
-        post: operations["generate_all_recommendations_api_v1_pricing_recommendations_generate_all_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/recommendations/process-auto-approvals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Process Auto Approvals
-         * @description Process all existing PENDING recommendations for auto-approval.
-         */
-        post: operations["process_auto_approvals_api_v1_pricing_recommendations_process_auto_approvals_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/pricing/recommendations/generate/{product_id}": {
@@ -1063,9 +873,6 @@ export interface paths {
         /**
          * Analyze Text
          * @description Analyze sentiment of provided text.
-         *
-         *     Set use_ai=true to use AI-powered analysis (Gemini primary, OpenAI fallback)
-         *     including sarcasm detection, topic extraction, and nuanced understanding.
          */
         post: operations["analyze_text_api_v1_sentiment_analyze_post"];
         delete?: never;
@@ -1108,26 +915,6 @@ export interface paths {
          * @description Analyze multiple texts and save all to database.
          */
         post: operations["analyze_bulk_api_v1_sentiment_analyze__product_id__bulk_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sentiment/ai-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Ai Status
-         * @description Check if AI-powered sentiment analysis is available.
-         */
-        get: operations["ai_status_api_v1_sentiment_ai_status_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1399,31 +1186,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/competitors/{competitor_id}/ai-analysis": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Ai Competitor Analysis
-         * @description Get AI-powered analysis of a competitor's pricing strategy.
-         *
-         *     Analyzes price history patterns to detect:
-         *     - Pricing strategy (aggressive, premium, discount, stable)
-         *     - Seasonal patterns
-         *     - Response recommendations
-         */
-        get: operations["get_ai_competitor_analysis_api_v1_competitors__competitor_id__ai_analysis_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/competitors/": {
         parameters: {
             query?: never;
@@ -1548,29 +1310,6 @@ export interface paths {
         patch: operations["update_alert_configuration_api_v1_alerts_configurations__config_id__patch"];
         trace?: never;
     };
-    "/api/v1/alerts/crisis-detection": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Detect Sentiment Crises
-         * @description AI-powered sentiment crisis detection.
-         *
-         *     Scans all products for significant sentiment drops and provides
-         *     AI-generated analysis of potential PR crises.
-         */
-        get: operations["detect_sentiment_crises_api_v1_alerts_crisis_detection_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/alerts/": {
         parameters: {
             query?: never;
@@ -1631,26 +1370,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/alerts/acknowledge-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Acknowledge All Alerts
-         * @description Acknowledge all pending alerts (optionally filtered).
-         */
-        post: operations["acknowledge_all_alerts_api_v1_alerts_acknowledge_all_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/alerts/{alert_id}": {
         parameters: {
             query?: never;
@@ -1705,6 +1424,26 @@ export interface paths {
          * @description Resolve an alert.
          */
         post: operations["resolve_alert_api_v1_alerts__alert_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/acknowledge-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge All Alerts
+         * @description Acknowledge all pending alerts (optionally filtered).
+         */
+        post: operations["acknowledge_all_alerts_api_v1_alerts_acknowledge_all_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1833,36 +1572,6 @@ export interface paths {
          * @description Trigger a product sync from the e-commerce platform.
          */
         post: operations["trigger_sync_api_v1_integrations__integration_id__sync_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/integrations/{integration_id}/push-prices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Push Prices To Platform
-         * @description Push all pending price changes to the e-commerce platform.
-         *
-         *     Compares local prices with external prices and pushes any differences.
-         *     Skips products where prices match (within $0.01 tolerance).
-         *
-         *     Returns:
-         *         - total: Total linked products
-         *         - pushed: Successfully pushed
-         *         - failed: Failed to push
-         *         - skipped: Prices already match
-         *         - errors: Details of first 10 failures
-         */
-        post: operations["push_prices_to_platform_api_v1_integrations__integration_id__push_prices_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2205,383 +1914,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/payments/wallet": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Wallet
-         * @description Get current user's wallet address and balance.
-         */
-        get: operations["get_wallet_api_v1_payments_wallet_get"];
-        /**
-         * Update Wallet
-         * @description Update user's BSV wallet address.
-         */
-        put: operations["update_wallet_api_v1_payments_wallet_put"];
-        post?: never;
-        /**
-         * Remove Wallet
-         * @description Remove user's wallet address.
-         */
-        delete: operations["remove_wallet_api_v1_payments_wallet_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/balance/{address}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Check Balance
-         * @description Check balance for any BSV address.
-         */
-        get: operations["check_balance_api_v1_payments_balance__address__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/plans": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Plans
-         * @description Get all available subscription plans.
-         */
-        get: operations["get_plans_api_v1_payments_plans_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/subscription": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Subscription
-         * @description Get current user's subscription.
-         */
-        get: operations["get_subscription_api_v1_payments_subscription_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/subscribe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Subscribe
-         * @description Create a subscription payment request.
-         *
-         *     Returns payment details for the user to complete via MNEE.
-         *     The recipient_address will be network-specific:
-         *     - For 'ethereum': Returns Ethereum wallet (0x...)
-         *     - For 'bsv': Returns BSV wallet (1... or $handle)
-         */
-        post: operations["subscribe_api_v1_payments_subscribe_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/{payment_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Payment
-         * @description Get payment status.
-         */
-        get: operations["get_payment_api_v1_payments__payment_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/{payment_id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Confirm Payment
-         * @description Confirm a payment with transaction hash.
-         *     Verifies the transaction on blockchain and activates subscription.
-         */
-        post: operations["confirm_payment_api_v1_payments__payment_id__confirm_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Payment History
-         * @description Get user's payment history.
-         */
-        get: operations["get_payment_history_api_v1_payments_history_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/webhook/mnee": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mnee Webhook
-         * @description Handle MNEE payment webhooks.
-         */
-        post: operations["mnee_webhook_api_v1_payments_webhook_mnee_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/payments/webhook/mnee/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Test Webhook
-         * @description Test endpoint to verify webhook is reachable.
-         */
-        get: operations["test_webhook_api_v1_payments_webhook_mnee_test_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/support/chat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Chat With Support
-         * @description Send a message to the AI support assistant.
-         */
-        post: operations["chat_with_support_api_v1_support_chat_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/support/topics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Support Topics
-         * @description Get available support topics for the chat UI.
-         */
-        get: operations["get_support_topics_api_v1_support_topics_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/support/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Support Health Check
-         * @description Check if AI support service is operational.
-         */
-        get: operations["support_health_check_api_v1_support_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/market-trends/analyze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze Market Trends
-         * @description Get AI-analyzed trending products.
-         *
-         *     Analyzes current market trends and returns trending products
-         *     with AI-generated insights and recommendations.
-         */
-        post: operations["analyze_market_trends_api_v1_market_trends_analyze_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/market-trends/trends": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Trends
-         * @description Get trending products (GET version for easy testing).
-         */
-        get: operations["get_trends_api_v1_market_trends_trends_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/market-trends/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Categories
-         * @description Get available product categories for filtering.
-         */
-        get: operations["get_categories_api_v1_market_trends_categories_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/market-trends/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Sources
-         * @description Get available data sources for filtering.
-         */
-        get: operations["get_sources_api_v1_market_trends_sources_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/market-trends/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Market Trends Health
-         * @description Check if market trends service is operational.
-         */
-        get: operations["market_trends_health_api_v1_market_trends_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/": {
         parameters: {
             query?: never;
@@ -2606,32 +1938,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * AICompetitorAnalysisResponse
-         * @description AI-generated competitor analysis.
-         */
-        AICompetitorAnalysisResponse: {
-            /**
-             * Competitor Id
-             * Format: uuid
-             */
-            competitor_id: string;
-            /** Competitor Name */
-            competitor_name: string;
-            /** Strategy Detected */
-            strategy_detected: string;
-            /** Analysis */
-            analysis: string;
-            /** Recommended Response */
-            recommended_response: string;
-            /** Confidence */
-            confidence: number;
-            /**
-             * Ai Powered
-             * @default true
-             */
-            ai_powered: boolean;
-        };
         /**
          * AccuracyStatsResponse
          * @description Overall accuracy statistics.
@@ -2904,18 +2210,6 @@ export interface components {
          * @enum {string}
          */
         AlertType: "sentiment_drop" | "sentiment_spike" | "volume_surge" | "viral_mention" | "competitor_price_change" | "price_recommendation" | "price_applied" | "trend_detected" | "anomaly_detected";
-        /**
-         * BalanceInfo
-         * @description Response schema for balance check.
-         */
-        BalanceInfo: {
-            /** Address */
-            address: string;
-            /** Balance */
-            balance: string;
-            /** Balance Raw */
-            balance_raw: number;
-        };
         /** Body_login_oauth_api_v1_auth_login_oauth_post */
         Body_login_oauth_api_v1_auth_login_oauth_post: {
             /** Grant Type */
@@ -2939,28 +2233,6 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
-        };
-        /**
-         * CategorySchema
-         * @description Available category for filtering.
-         */
-        CategorySchema: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Icon */
-            icon: string;
-        };
-        /**
-         * ChatMessageSchema
-         * @description A single message in the conversation history.
-         */
-        ChatMessageSchema: {
-            /** Role */
-            role: string;
-            /** Content */
-            content: string;
         };
         /**
          * CompetitorAlert
@@ -3383,101 +2655,6 @@ export interface components {
             scrape_frequency_minutes?: number | null;
         };
         /**
-         * ConfirmPaymentRequest
-         * @description Request to confirm a payment with transaction details.
-         */
-        ConfirmPaymentRequest: {
-            /**
-             * Transaction Hash
-             * @description Blockchain transaction hash/ID
-             */
-            transaction_hash: string;
-            /**
-             * Network
-             * @description Network: bsv or ethereum
-             * @default bsv
-             */
-            network: string;
-            /**
-             * From Address
-             * @description Sender wallet address
-             */
-            from_address?: string | null;
-        };
-        /**
-         * ConfirmPaymentResponse
-         * @description Response after confirming payment.
-         */
-        ConfirmPaymentResponse: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Payment Id */
-            payment_id?: string | null;
-            /** Payment Status */
-            payment_status?: string | null;
-            /** Subscription Tier */
-            subscription_tier?: string | null;
-            /** Subscription Status */
-            subscription_status?: string | null;
-            /**
-             * Verified On Chain
-             * @default false
-             */
-            verified_on_chain: boolean;
-        };
-        /**
-         * CrisisAlert
-         * @description AI-detected sentiment crisis.
-         */
-        CrisisAlert: {
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /** Product Name */
-            product_name: string;
-            /** Severity */
-            severity: string;
-            /** Sentiment Drop */
-            sentiment_drop: number;
-            /** Current Sentiment */
-            current_sentiment: number;
-            /** Previous Sentiment */
-            previous_sentiment: number;
-            /** Period Hours */
-            period_hours: number;
-            /** Negative Mentions */
-            negative_mentions: number;
-            /** Sample Texts */
-            sample_texts: string[];
-            /** Ai Summary */
-            ai_summary: string;
-            /** Recommended Actions */
-            recommended_actions: string[];
-            /**
-             * Ai Powered
-             * @default true
-             */
-            ai_powered: boolean;
-        };
-        /**
-         * CrisisDetectionResponse
-         * @description Response from crisis detection.
-         */
-        CrisisDetectionResponse: {
-            /** Crises Detected */
-            crises_detected: number;
-            /** Alerts */
-            alerts: components["schemas"]["CrisisAlert"][];
-            /** Scan Period Hours */
-            scan_period_hours: number;
-            /** Ai Powered */
-            ai_powered: boolean;
-        };
-        /**
          * DashboardOverview
          * @description Main dashboard summary metrics.
          */
@@ -3522,98 +2699,10 @@ export interface components {
              */
             email: string;
         };
-        /**
-         * GenerateDescriptionRequest
-         * @description Request for AI description generation.
-         */
-        GenerateDescriptionRequest: {
-            /**
-             * Tone
-             * @description Tone: professional, casual, luxury, technical
-             * @default professional
-             */
-            tone: string;
-            /**
-             * Length
-             * @description Length: short, medium, long
-             * @default medium
-             */
-            length: string;
-        };
-        /**
-         * GenerateDescriptionResponse
-         * @description Response from AI description generation.
-         */
-        GenerateDescriptionResponse: {
-            /** Description */
-            description: string;
-            /** Seo Title */
-            seo_title: string;
-            /** Meta Description */
-            meta_description: string;
-            /** Suggested Keywords */
-            suggested_keywords: string[];
-            /**
-             * Ai Generated
-             * @default true
-             */
-            ai_generated: boolean;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * ImportProductRow
-         * @description Single product row from CSV import.
-         *     Compatible with WooCommerce and Shopify CSV exports.
-         */
-        ImportProductRow: {
-            /** Name */
-            name: string;
-            /** Sku */
-            sku?: string | null;
-            /** Base Price */
-            base_price: number | string;
-            /** Description */
-            description?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Image Url */
-            image_url?: string | null;
-            /** Stock Quantity */
-            stock_quantity?: number | null;
-        };
-        /**
-         * ImportProductsRequest
-         * @description Request body for bulk product import.
-         */
-        ImportProductsRequest: {
-            /** Products */
-            products: components["schemas"]["ImportProductRow"][];
-        };
-        /**
-         * ImportProductsResponse
-         * @description Response for bulk product import.
-         */
-        ImportProductsResponse: {
-            /** Created */
-            created: number;
-            /**
-             * Updated
-             * @default 0
-             */
-            updated: number;
-            /**
-             * Skipped
-             * @default 0
-             */
-            skipped: number;
-            /** Failed */
-            failed: number;
-            /** Errors */
-            errors: string[];
         };
         /**
          * IntegrationHealthResponse
@@ -3714,56 +2803,6 @@ export interface components {
             email: string;
             /** Password */
             password: string;
-        };
-        /**
-         * MarketTrendsRequest
-         * @description Request for market trends analysis.
-         */
-        MarketTrendsRequest: {
-            /**
-             * Category
-             * @description Filter by category
-             */
-            category?: string | null;
-            /**
-             * Source
-             * @description Filter by source (amazon, walmart, tiktok)
-             */
-            source?: string | null;
-            /**
-             * Limit
-             * @description Number of trends to return
-             * @default 10
-             */
-            limit: number;
-        };
-        /**
-         * MarketTrendsResponse
-         * @description Response with trending products and AI insights.
-         */
-        MarketTrendsResponse: {
-            /** Trends */
-            trends: components["schemas"]["TrendingProductSchema"][];
-            /**
-             * Ai Summary
-             * @description AI-generated market summary
-             */
-            ai_summary: string;
-            /**
-             * Generated At
-             * @description Timestamp of analysis
-             */
-            generated_at: string;
-            /**
-             * Category
-             * @description Category filter applied
-             */
-            category?: string | null;
-            /**
-             * Source
-             * @description Source filter applied
-             */
-            source?: string | null;
         };
         /**
          * MockSignals
@@ -3981,19 +3020,6 @@ export interface components {
             /** Total Pages */
             total_pages: number;
         };
-        /** PaginatedResponse[PricingRuleResponse] */
-        PaginatedResponse_PricingRuleResponse_: {
-            /** Items */
-            items: components["schemas"]["PricingRuleResponse"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-            /** Total Pages */
-            total_pages: number;
-        };
         /** PaginatedResponse[ProductRead] */
         PaginatedResponse_ProductRead_: {
             /** Items */
@@ -4067,86 +3093,6 @@ export interface components {
             new_password: string;
         };
         /**
-         * PaymentInfo
-         * @description Payment information for display.
-         */
-        PaymentInfo: {
-            /** Id */
-            id: string;
-            /** Amount */
-            amount: string;
-            /** Status */
-            status: string;
-            /** Payment Type */
-            payment_type: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Transaction Hash */
-            transaction_hash?: string | null;
-            /** Network */
-            network?: string | null;
-        };
-        /**
-         * PaymentRequest
-         * @description Payment request details returned after initiating subscription.
-         */
-        PaymentRequest: {
-            /** Payment Id */
-            payment_id: string;
-            /** Amount */
-            amount: string;
-            /** Amount Raw */
-            amount_raw: number;
-            /**
-             * Currency
-             * @default MNEE
-             */
-            currency: string;
-            /** Recipient Address */
-            recipient_address: string;
-            /** Memo */
-            memo: string;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /**
-             * Network
-             * @default bsv
-             */
-            network: string;
-            /**
-             * Network Options
-             * @default [
-             *       "bsv",
-             *       "ethereum"
-             *     ]
-             */
-            network_options: string[];
-        };
-        /**
-         * PlanInfo
-         * @description Subscription plan information.
-         */
-        PlanInfo: {
-            /** Tier */
-            tier: string;
-            /** Name */
-            name: string;
-            /** Price Monthly */
-            price_monthly: number;
-            /** Price Yearly */
-            price_yearly: number;
-            /** Product Limit */
-            product_limit: number;
-            /** Features */
-            features: string[];
-        };
-        /**
          * PricePushRequest
          * @description Request to push a price update to the platform
          */
@@ -4199,33 +3145,18 @@ export interface components {
             product_id: string;
             /** Triggered Rule Id */
             triggered_rule_id: string | null;
-            /**
-             * Current Price
-             * @default 0
-             */
+            /** Current Price */
             current_price: string;
-            /**
-             * Recommended Price
-             * @default 0
-             */
+            /** Recommended Price */
             recommended_price: string;
-            /**
-             * Change Percent
-             * @default 0
-             */
+            /** Change Percent */
             change_percent: string;
-            /**
-             * Confidence Score
-             * @default 0
-             */
+            /** Confidence Score */
             confidence_score: string;
-            /**
-             * Reasoning
-             * @default
-             */
+            /** Reasoning */
             reasoning: string;
             /** Factors */
-            factors?: {
+            factors: {
                 [key: string]: unknown;
             };
             status: components["schemas"]["RecommendationStatus"];
@@ -4276,17 +3207,11 @@ export interface components {
         };
         /** PricingRuleCreate */
         PricingRuleCreate: {
-            /** Product Id */
-            product_id?: string | null;
             /**
-             * Applies To All Products
-             * @default false
+             * Product Id
+             * Format: uuid
              */
-            applies_to_all_products: boolean;
-            /** Applies To Products */
-            applies_to_products?: string[] | null;
-            /** Applies To Categories */
-            applies_to_categories?: string[] | null;
+            product_id: string;
             /** Name */
             name: string;
             /** Description */
@@ -4305,8 +3230,6 @@ export interface components {
             competitor_id?: string | null;
             /** Competitor Margin Percent */
             competitor_margin_percent?: number | string | null;
-            /** Price Position */
-            price_position?: string | null;
             /** Time Days */
             time_days?: string | null;
             /** Time Start */
@@ -4356,17 +3279,11 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
-            /** Product Id */
-            product_id: string | null;
             /**
-             * Applies To All Products
-             * @default false
+             * Product Id
+             * Format: uuid
              */
-            applies_to_all_products: boolean;
-            /** Applies To Products */
-            applies_to_products?: string[] | null;
-            /** Applies To Categories */
-            applies_to_categories?: string[] | null;
+            product_id: string;
             /** Name */
             name: string;
             /** Description */
@@ -4384,8 +3301,6 @@ export interface components {
             competitor_id: string | null;
             /** Competitor Margin Percent */
             competitor_margin_percent: string | null;
-            /** Price Position */
-            price_position: string | null;
             /** Time Days */
             time_days: string | null;
             /** Time Start */
@@ -4425,12 +3340,6 @@ export interface components {
         };
         /** PricingRuleUpdate */
         PricingRuleUpdate: {
-            /** Applies To All Products */
-            applies_to_all_products?: boolean | null;
-            /** Applies To Products */
-            applies_to_products?: string[] | null;
-            /** Applies To Categories */
-            applies_to_categories?: string[] | null;
             /** Name */
             name?: string | null;
             /** Description */
@@ -4447,8 +3356,6 @@ export interface components {
             competitor_id?: string | null;
             /** Competitor Margin Percent */
             competitor_margin_percent?: number | string | null;
-            /** Price Position */
-            price_position?: string | null;
             /** Time Days */
             time_days?: string | null;
             /** Time Start */
@@ -4826,14 +3733,6 @@ export interface components {
          * @enum {string}
          */
         RecommendationStatus: "pending" | "auto_approved" | "approved" | "rejected" | "applied" | "expired";
-        /**
-         * RefreshRequest
-         * @description NEW: Refresh token request payload.
-         */
-        RefreshRequest: {
-            /** Refresh Token */
-            refresh_token: string;
-        };
         /** RegisterRequest */
         RegisterRequest: {
             /**
@@ -4978,26 +3877,17 @@ export interface components {
             url?: string | null;
         };
         /**
-         * SentimentBulkItem
-         * @description Single item for bulk analysis
-         */
-        SentimentBulkItem: {
-            /** Text */
-            text: string;
-            /** Source */
-            source?: string | null;
-            /** Author */
-            author?: string | null;
-            /** Url */
-            url?: string | null;
-        };
-        /**
          * SentimentBulkRequest
          * @description Analyze multiple texts at once
          */
         SentimentBulkRequest: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
             /** Items */
-            items: components["schemas"]["SentimentBulkItem"][];
+            items: components["schemas"]["SentimentAnalyzeRequest"][];
         };
         /**
          * SentimentDataPoint
@@ -5024,24 +3914,15 @@ export interface components {
             /** Text */
             text?: string | null;
             /** Sentiment Score */
-            sentiment_score: number;
+            sentiment_score: string;
             /** Sentiment Label */
             sentiment_label: string;
             /** Confidence */
-            confidence: number;
+            confidence: string;
             /** Emotions */
             emotions?: {
                 [key: string]: unknown;
             } | null;
-            /** Topics */
-            topics?: string[] | null;
-            /** Is Sarcastic */
-            is_sarcastic?: boolean | null;
-            /**
-             * Ai Powered
-             * @default false
-             */
-            ai_powered: boolean;
         };
         /**
          * SentimentSummary
@@ -5173,111 +4054,6 @@ export interface components {
             processed: boolean;
         };
         /**
-         * SubscribeRequest
-         * @description Request to subscribe to a plan.
-         */
-        SubscribeRequest: {
-            /**
-             * Tier
-             * @description Subscription tier: starter, professional, enterprise
-             */
-            tier: string;
-            /**
-             * Billing Cycle
-             * @description Billing cycle: monthly or yearly
-             * @default monthly
-             */
-            billing_cycle: string;
-            /**
-             * Network
-             * @description Payment network: ethereum or bsv
-             * @default bsv
-             * @enum {string}
-             */
-            network: "ethereum" | "bsv";
-        };
-        /**
-         * SubscriptionInfo
-         * @description Current subscription information.
-         */
-        SubscriptionInfo: {
-            /** Tier */
-            tier: string;
-            /** Status */
-            status: string;
-            /** Current Period Start */
-            current_period_start?: string | null;
-            /** Current Period End */
-            current_period_end?: string | null;
-            /** Product Limit */
-            product_limit: number;
-            /**
-             * Products Used
-             * @default 0
-             */
-            products_used: number;
-        };
-        /**
-         * SupportChatRequest
-         * @description Request body for POST /api/v1/support/chat
-         */
-        SupportChatRequest: {
-            /** Message */
-            message: string;
-            /** Conversation History */
-            conversation_history?: components["schemas"]["ChatMessageSchema"][];
-            /** Topic */
-            topic?: string | null;
-        };
-        /**
-         * SupportChatResponse
-         * @description Response body from POST /api/v1/support/chat
-         */
-        SupportChatResponse: {
-            /** Message */
-            message: string;
-            /** Topic Detected */
-            topic_detected?: string | null;
-            /** Suggested Actions */
-            suggested_actions?: string[];
-            /** Timestamp */
-            timestamp?: string;
-        };
-        /**
-         * SupportHealthResponse
-         * @description Response body from GET /api/v1/support/health
-         */
-        SupportHealthResponse: {
-            /** Status */
-            status: string;
-            /**
-             * Service
-             * @default ai_support
-             */
-            service: string;
-            /** Openai Configured */
-            openai_configured: boolean;
-            /**
-             * Model
-             * @default gpt-4o-mini
-             */
-            model: string;
-            /** Features */
-            features: string[];
-        };
-        /**
-         * SupportTopicsResponse
-         * @description Response body from GET /api/v1/support/topics
-         */
-        SupportTopicsResponse: {
-            /** Topics */
-            topics: components["schemas"]["TopicSuggestion"][];
-            /** Default Greeting */
-            default_greeting: string;
-            /** Suggested Questions */
-            suggested_questions: string[];
-        };
-        /**
          * SyncLogResponse
          * @description Sync log entry
          */
@@ -5343,92 +4119,11 @@ export interface components {
         TokenResponse: {
             /** Access Token */
             access_token: string;
-            /** Refresh Token */
-            refresh_token?: string | null;
             /**
              * Token Type
              * @default bearer
              */
             token_type: string;
-        };
-        /**
-         * TopicSuggestion
-         * @description A single topic suggestion.
-         */
-        TopicSuggestion: {
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Description */
-            description: string;
-        };
-        /**
-         * TrendCategoriesResponse
-         * @description Available categories for trend filtering.
-         */
-        TrendCategoriesResponse: {
-            /** Categories */
-            categories: components["schemas"]["CategorySchema"][];
-        };
-        /**
-         * TrendSourcesResponse
-         * @description Available data sources.
-         */
-        TrendSourcesResponse: {
-            /** Sources */
-            sources: string[];
-        };
-        /**
-         * TrendingProductSchema
-         * @description A single trending product from market analysis.
-         */
-        TrendingProductSchema: {
-            /**
-             * Rank
-             * @description Trend rank (1 = most trending)
-             */
-            rank: number;
-            /**
-             * Name
-             * @description Product name
-             */
-            name: string;
-            /**
-             * Category
-             * @description Product category
-             */
-            category: string;
-            /**
-             * Price Range
-             * @description Price range e.g. '$20-$50'
-             */
-            price_range: string;
-            /**
-             * Trend Score
-             * @description Trend score 0-100
-             */
-            trend_score: number;
-            /**
-             * Sentiment
-             * @description positive, neutral, or negative
-             */
-            sentiment: string;
-            /**
-             * Source
-             * @description Data source e.g. Amazon, TikTok
-             */
-            source: string;
-            /**
-             * Reason
-             * @description Why this product is trending
-             */
-            reason: string;
-            /**
-             * Image Url
-             * @description Product image URL
-             */
-            image_url?: string | null;
         };
         /** UserDetailResponse */
         UserDetailResponse: {
@@ -5441,16 +4136,10 @@ export interface components {
             email: string;
             /** Username */
             username: string | null;
-            /** Full Name */
-            full_name: string | null;
             /** Role */
             role: string;
             /** Is Active */
             is_active: boolean;
-            /** Eth Wallet Address */
-            eth_wallet_address: string | null;
-            /** Bsv Wallet Address */
-            bsv_wallet_address: string | null;
         };
         /** UserResponse */
         UserResponse: {
@@ -5486,8 +4175,6 @@ export interface components {
             username?: string | null;
             /** Email */
             email?: string | null;
-            /** Full Name */
-            full_name?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -5497,50 +4184,6 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
-        };
-        /**
-         * WalletAddressUpdate
-         * @description Request schema for updating wallet address.
-         */
-        WalletAddressUpdate: {
-            /** Bsv Wallet Address */
-            bsv_wallet_address: string;
-        };
-        /**
-         * WalletInfo
-         * @description Response schema for wallet info.
-         */
-        WalletInfo: {
-            /** Bsv Wallet Address */
-            bsv_wallet_address: string | null;
-            /** Balance */
-            balance?: string | null;
-            /** Balance Raw */
-            balance_raw?: number | null;
-        };
-        /** WalletResponse */
-        WalletResponse: {
-            /** Eth Wallet Address */
-            eth_wallet_address: string | null;
-            /** Bsv Wallet Address */
-            bsv_wallet_address: string | null;
-        };
-        /** WalletUpdateRequest */
-        WalletUpdateRequest: {
-            /** Eth Wallet Address */
-            eth_wallet_address?: string | null;
-            /** Bsv Wallet Address */
-            bsv_wallet_address?: string | null;
-        };
-        /**
-         * WebhookResponse
-         * @description Webhook response.
-         */
-        WebhookResponse: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
         };
         /**
          * WooCommerceConnectRequest
@@ -5795,39 +4438,6 @@ export interface operations {
             };
         };
     };
-    refresh_tokens_api_v1_auth_refresh_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RefreshRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     read_me_api_v1_auth_me_get: {
         parameters: {
             query?: never;
@@ -6027,59 +4637,6 @@ export interface operations {
             };
         };
     };
-    get_my_wallet_api_v1_users_me_wallet_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WalletResponse"];
-                };
-            };
-        };
-    };
-    update_my_wallet_api_v1_users_me_wallet_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WalletUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WalletResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     change_my_password_api_v1_users_me_change_password_post: {
         parameters: {
             query?: never;
@@ -6243,10 +4800,10 @@ export interface operations {
     list_products_api_v1_products_get: {
         parameters: {
             query?: {
+                /** @description Page number */
                 page?: number;
+                /** @description Items per page */
                 page_size?: number;
-                is_active?: boolean | null;
-                category?: string | null;
             };
             header?: never;
             path?: never;
@@ -6402,45 +4959,9 @@ export interface operations {
             };
         };
     };
-    import_products_api_v1_products_import_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportProductsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportProductsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_price_suggestion_api_v1_products__product_id__price_suggestion_get: {
         parameters: {
-            query?: {
-                /** @description Use AI for enhanced explanation */
-                use_ai?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 product_id: string;
@@ -6469,52 +4990,11 @@ export interface operations {
             };
         };
     };
-    generate_description_api_v1_products__product_id__generate_description_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                product_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GenerateDescriptionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenerateDescriptionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_rules_api_v1_pricing_rules_get: {
         parameters: {
             query?: {
-                /** @description Filter by product ID */
                 product_id?: string | null;
-                /** @description Filter by active status */
                 is_active?: boolean | null;
-                /** @description Page number (1-indexed) */
-                page?: number;
-                /** @description Items per page */
-                page_size?: number;
             };
             header?: never;
             path?: never;
@@ -6528,7 +5008,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedResponse_PricingRuleResponse_"];
+                    "application/json": components["schemas"]["PricingRuleResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -6666,77 +5146,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    diagnose_product_recommendations_api_v1_pricing_recommendations_diagnose__product_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                product_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    generate_all_recommendations_api_v1_pricing_recommendations_generate_all_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    process_auto_approvals_api_v1_pricing_recommendations_process_auto_approvals_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -7297,10 +5706,7 @@ export interface operations {
     };
     analyze_text_api_v1_sentiment_analyze_post: {
         parameters: {
-            query?: {
-                /** @description Use AI (Gemini/OpenAI) for enhanced analysis */
-                use_ai?: boolean;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -7333,10 +5739,7 @@ export interface operations {
     };
     analyze_and_save_api_v1_sentiment_analyze__product_id__post: {
         parameters: {
-            query?: {
-                /** @description Use AI (Gemini/OpenAI) for enhanced analysis */
-                use_ai?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 product_id: string;
@@ -7371,10 +5774,7 @@ export interface operations {
     };
     analyze_bulk_api_v1_sentiment_analyze__product_id__bulk_post: {
         parameters: {
-            query?: {
-                /** @description Use AI (Gemini/OpenAI) for enhanced analysis */
-                use_ai?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 product_id: string;
@@ -7403,26 +5803,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ai_status_api_v1_sentiment_ai_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -7946,37 +6326,6 @@ export interface operations {
             };
         };
     };
-    get_ai_competitor_analysis_api_v1_competitors__competitor_id__ai_analysis_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                competitor_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AICompetitorAnalysisResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_competitors_api_v1_competitors__get: {
         parameters: {
             query?: {
@@ -8331,40 +6680,6 @@ export interface operations {
             };
         };
     };
-    detect_sentiment_crises_api_v1_alerts_crisis_detection_get: {
-        parameters: {
-            query?: {
-                /** @description Period to analyze */
-                hours?: number;
-                /** @description Sentiment drop threshold */
-                threshold?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrisisDetectionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_alerts_api_v1_alerts__get: {
         parameters: {
             query?: {
@@ -8439,38 +6754,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    acknowledge_all_alerts_api_v1_alerts_acknowledge_all_post: {
-        parameters: {
-            query?: {
-                severity?: components["schemas"]["AlertSeverity"] | null;
-                alert_type?: components["schemas"]["AlertType"] | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8555,6 +6838,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_all_alerts_api_v1_alerts_acknowledge_all_post: {
+        parameters: {
+            query?: {
+                severity?: components["schemas"]["AlertSeverity"] | null;
+                alert_type?: components["schemas"]["AlertType"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -8804,37 +7119,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    push_prices_to_platform_api_v1_integrations__integration_id__push_prices_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                integration_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -9359,518 +7643,6 @@ export interface operations {
         };
     };
     webhook_status_api_v1_webhooks_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_wallet_api_v1_payments_wallet_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WalletInfo"];
-                };
-            };
-        };
-    };
-    update_wallet_api_v1_payments_wallet_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WalletAddressUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WalletInfo"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_wallet_api_v1_payments_wallet_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    check_balance_api_v1_payments_balance__address__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                address: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BalanceInfo"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_plans_api_v1_payments_plans_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanInfo"][];
-                };
-            };
-        };
-    };
-    get_subscription_api_v1_payments_subscription_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SubscriptionInfo"];
-                };
-            };
-        };
-    };
-    subscribe_api_v1_payments_subscribe_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SubscribeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaymentRequest"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_payment_api_v1_payments__payment_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                payment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaymentInfo"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    confirm_payment_api_v1_payments__payment_id__confirm_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                payment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfirmPaymentRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfirmPaymentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_payment_history_api_v1_payments_history_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaymentInfo"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mnee_webhook_api_v1_payments_webhook_mnee_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookResponse"];
-                };
-            };
-        };
-    };
-    test_webhook_api_v1_payments_webhook_mnee_test_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    chat_with_support_api_v1_support_chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SupportChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupportChatResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_support_topics_api_v1_support_topics_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupportTopicsResponse"];
-                };
-            };
-        };
-    };
-    support_health_check_api_v1_support_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupportHealthResponse"];
-                };
-            };
-        };
-    };
-    analyze_market_trends_api_v1_market_trends_analyze_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MarketTrendsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MarketTrendsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_trends_api_v1_market_trends_trends_get: {
-        parameters: {
-            query?: {
-                category?: string;
-                source?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MarketTrendsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_categories_api_v1_market_trends_categories_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TrendCategoriesResponse"];
-                };
-            };
-        };
-    };
-    get_sources_api_v1_market_trends_sources_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TrendSourcesResponse"];
-                };
-            };
-        };
-    };
-    market_trends_health_api_v1_market_trends_health_get: {
         parameters: {
             query?: never;
             header?: never;
