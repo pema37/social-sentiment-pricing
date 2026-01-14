@@ -627,6 +627,7 @@ cd backend && alembic upgrade head
 - OpenAPI: https://social-sentiment-pricing-staging-2ecd.up.railway.app/openapi.json
 
 **Production URLs:**
-- Frontend: https://actualprice.com (or your domain)
-- Backend: ⚠️ NEEDS FIX - ssp-api-production serving wrong app
+- Frontend: https://social-sentiment-pricing.vercel.app
+- Backend: https://social-sentiment-pricing-production.up.railway.app
+- OpenAPI: https://social-sentiment-pricing-production.up.railway.app/openapi.json
 
