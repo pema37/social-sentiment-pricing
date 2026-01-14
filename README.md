@@ -105,6 +105,9 @@ npm install
 cp .env.example .env.local
 # Edit .env.local with your API URL
 
+# Generate TypeScript types from backend (run when backend schemas change)
+npm run generate-api-types
+
 # Start development server
 npm run dev
 ```
@@ -201,12 +204,14 @@ social-sentiment-pricing/
 
 ## 🎬 Demo
 
-**Live Demo:** [https://actualprice.vercel.app](https://actualprice.vercel.app)
+**Live Demo:** [https://ssp-staging.vercel.app](https://ssp-staging.vercel.app)
+
+**Staging URLs:**
+- Frontend: https://ssp-staging.vercel.app
+- Backend API: https://social-sentiment-pricing-staging-2ecd.up.railway.app
+- API Docs: https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs
 
 **Demo Video:** [Watch on YouTube](#) *(coming soon)*
-
-
-```
 
 ---
 
@@ -231,6 +236,6 @@ social-sentiment-pricing/
 
 ---
 
----
-
 *Built with ❤️ for the MNEE Hackathon 2026*
+
+
