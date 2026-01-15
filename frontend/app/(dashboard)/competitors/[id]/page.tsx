@@ -18,7 +18,7 @@ import {
   CompetitorProductCard,
   AIAnalysisCard,
 } from '@/components/features/competitors';
-import type { CreateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
+import type { CreateCompetitorRequest, UpdateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
 
 export default function CompetitorDetailPage() {
   const params = useParams();
@@ -33,8 +33,8 @@ export default function CompetitorDetailPage() {
   const updateCompetitor = useUpdateCompetitor();
   const createCompetitorProduct = useCreateCompetitorProduct();
 
-  const handleUpdate = async (formData: CreateCompetitorRequest) => {
-    await updateCompetitor.mutateAsync({ id: competitorId, data: formData });
+  const handleUpdate = async (formData: CreateCompetitorRequest | UpdateCompetitorRequest) => {
+    await updateCompetitor.mutateAsync({ id: competitorId, data: formData as UpdateCompetitorRequest });
     setShowEditForm(false);
   };
 

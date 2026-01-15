@@ -12,7 +12,7 @@ import {
   CompetitorsList,
   CompetitorForm,
 } from '@/components/features/competitors';
-import type { Competitor, CreateCompetitorRequest } from '@/types';
+import type { Competitor, CreateCompetitorRequest, UpdateCompetitorRequest } from '@/types';
 
 export default function CompetitorsPage() {
   const [showForm, setShowForm] = useState(false);
@@ -22,14 +22,15 @@ export default function CompetitorsPage() {
   const createCompetitor = useCreateCompetitor();
   const updateCompetitor = useUpdateCompetitor();
 
-  const handleCreate = async (formData: CreateCompetitorRequest) => {
-    await createCompetitor.mutateAsync(formData);
+
+  const handleCreate = async (formData: CreateCompetitorRequest | UpdateCompetitorRequest) => {
+    await createCompetitor.mutateAsync(formData as CreateCompetitorRequest);
     setShowForm(false);
   };
 
-  const handleUpdate = async (formData: CreateCompetitorRequest) => {
+  const handleUpdate = async (formData: CreateCompetitorRequest | UpdateCompetitorRequest) => {
     if (!editingCompetitor) return;
-    await updateCompetitor.mutateAsync({ id: editingCompetitor.id, data: formData });
+    await updateCompetitor.mutateAsync({ id: editingCompetitor.id, data: formData as UpdateCompetitorRequest });
     setEditingCompetitor(null);
   };
 
