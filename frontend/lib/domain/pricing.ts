@@ -2,91 +2,192 @@
 // Domain layer: Transforms between form data and API shapes
 // Single place to fix when API changes - components don't know API details
 
+import { z } from 'zod';
 import type { PricingRule, CreatePricingRuleRequest, RuleType, RuleAction } from '@/types';
 
 // ============================================
-// FORM DATA TYPES (UI layer)
+// ZOD SCHEMAS
+// ============================================
+
+/** Valid rule types */
+const ruleTypes = [
+  'sentiment_threshold',
+  'competitor_relative',
+  'time_based',
+  'volume_surge',
+  'viral_detection',
+] as const;
+
+/** Valid rule actions */
+const ruleActions = [
+  'increase_percent',
+  'decrease_percent',
+  'set_absolute',
+  'match_competitor',
+  'undercut_competitor',
+] as const;
+
+/** Actions that don't require a value input */
+const ACTIONS_WITHOUT_VALUE: RuleAction[] = ['match_competitor'];
+
+/**
+ * Custom Zod transformer for decimal strings
+ * - Handles empty strings → undefined
+ * - Handles ".5" → "0.5"
+ * - Handles "5%" → "5"
+ * - Returns undefined for invalid values
+ */
+const decimalString = z.string().transform((val) => {
+  if (val === '') return undefined;
+  
+  let cleaned = val.trim().replace(/%/g, '');
+  
+  if (cleaned.startsWith('.')) cleaned = '0' + cleaned;
+  if (cleaned.startsWith('-.')) cleaned = '-0' + cleaned.substring(1);
+  if (cleaned === '' || cleaned === '-') return undefined;
+  
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? undefined : cleaned;
+});
+
+/**
+ * Zod schema for validating a decimal string is valid
+ */
+const validDecimalString = z.string().refine((val) => {
+  if (val === '') return true; // Empty is okay (optional)
+  let cleaned = val.trim().replace(/%/g, '');
+  if (cleaned.startsWith('.')) cleaned = '0' + cleaned;
+  if (cleaned.startsWith('-.')) cleaned = '-0' + cleaned.substring(1);
+  if (cleaned === '' || cleaned === '-') return true;
+  return !isNaN(parseFloat(cleaned));
+}, { message: 'Must be a valid number' });
+
+/**
+ * Form data schema - validates the raw form input
+ */
+export const ruleFormSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string(),
+  rule_type: z.enum(ruleTypes),
+  is_active: z.boolean(),
+  priority: z.number().int().min(0).max(100),
+  scope_type: z.enum(['single', 'multiple', 'categories', 'all']),
+  product_id: z.string(),
+  applies_to_products: z.array(z.string()),
+  applies_to_categories: z.array(z.string()),
+  sentiment_threshold: validDecimalString,
+  sentiment_direction: z.string(),
+  competitor_id: z.string(),
+  price_position: z.string(),
+  time_days: z.string(),
+  volume_threshold: z.string(),
+  viral_threshold_reach: z.string(),
+  action: z.enum(ruleActions),
+  action_value: z.string(),
+  max_change_percent: validDecimalString,
+  min_price: validDecimalString,
+  max_price: validDecimalString,
+  cooldown_hours: z.string(),
+}).superRefine((data, ctx) => {
+  // Conditional validation based on scope_type
+  if (data.scope_type === 'single' && !data.product_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Select a product',
+      path: ['product_id'],
+    });
+  }
+  if (data.scope_type === 'multiple' && data.applies_to_products.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Select at least one product',
+      path: ['applies_to_products'],
+    });
+  }
+  if (data.scope_type === 'categories' && data.applies_to_categories.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Select at least one category',
+      path: ['applies_to_categories'],
+    });
+  }
+
+  // Conditional validation based on rule_type
+  if (data.rule_type === 'sentiment_threshold' && !data.sentiment_threshold) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Required',
+      path: ['sentiment_threshold'],
+    });
+  }
+  if (data.rule_type === 'time_based' && !data.time_days) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Required',
+      path: ['time_days'],
+    });
+  }
+  if (data.rule_type === 'volume_surge' && !data.volume_threshold) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Required',
+      path: ['volume_threshold'],
+    });
+  }
+  if (data.rule_type === 'viral_detection' && !data.viral_threshold_reach) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Required',
+      path: ['viral_threshold_reach'],
+    });
+  }
+
+  // Action value required for most actions
+  if (!ACTIONS_WITHOUT_VALUE.includes(data.action) && !data.action_value.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Action value is required',
+      path: ['action_value'],
+    });
+  }
+});
+
+// ============================================
+// TYPES
 // ============================================
 
 export type ScopeType = 'single' | 'multiple' | 'categories' | 'all';
 
-/** What the form works with - all strings for input fields */
-export interface RuleFormData {
-  name: string;
-  description: string;
-  rule_type: RuleType;
-  is_active: boolean;
-  priority: number;
-  scope_type: ScopeType;
-  product_id: string;
-  applies_to_products: string[];
-  applies_to_categories: string[];
-  sentiment_threshold: string;
-  sentiment_direction: string;
-  competitor_id: string;
-  price_position: string;
-  time_days: string;
-  volume_threshold: string;
-  viral_threshold_reach: string;
-  action: RuleAction;
-  action_value: string;
-  max_change_percent: string;
-  min_price: string;
-  max_price: string;
-  cooldown_hours: string;
-}
+/** Infer form data type from schema */
+export type RuleFormData = z.input<typeof ruleFormSchema>;
 
 export type RuleFormErrors = Partial<Record<keyof RuleFormData, string>>;
 
 // ============================================
-// DECIMAL HANDLING
-// Backend uses Pydantic Decimal, returns strings
-// Frontend forms use strings, API accepts number | string
+// DECIMAL HANDLING UTILITIES
 // ============================================
 
 /**
  * Normalize a string to a valid decimal string for the API
- * - Handles empty strings → undefined
- * - Handles ".5" → "0.5" (Pydantic requires leading zero)
- * - Handles "5%" → "5" (strips % sign)
- * - Returns undefined for invalid values
  */
 export function normalizeDecimal(value: string | number | undefined | null): string | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
-  // If already a number, convert to string
   if (typeof value === 'number') {
     if (isNaN(value)) return undefined;
     return value.toString();
   }
 
-  // Remove % sign if present (user might type "5%")
   let cleaned = value.toString().trim().replace(/%/g, '');
 
-  // Handle ".5" → "0.5" (required by Pydantic Decimal)
-  if (cleaned.startsWith('.')) {
-    cleaned = '0' + cleaned;
-  }
+  if (cleaned.startsWith('.')) cleaned = '0' + cleaned;
+  if (cleaned.startsWith('-.')) cleaned = '-0' + cleaned.substring(1);
+  if (cleaned === '' || cleaned === '-') return undefined;
 
-  // Handle "-.5" → "-0.5"
-  if (cleaned.startsWith('-.')) {
-    cleaned = '-0' + cleaned.substring(1);
-  }
-
-  // Handle empty after cleanup
-  if (cleaned === '' || cleaned === '-') {
-    return undefined;
-  }
-
-  // Validate it's a valid number
   const num = parseFloat(cleaned);
-  if (isNaN(num)) {
-    return undefined;
-  }
-
-  return cleaned;
+  return isNaN(num) ? undefined : cleaned;
 }
 
 /**
@@ -152,10 +253,8 @@ export const DEFAULT_FORM_DATA: RuleFormData = {
 
 /**
  * Transform API PricingRule response to form data
- * Use when editing an existing rule
  */
 export function ruleToFormData(rule: Partial<PricingRule>): RuleFormData {
-  // Determine scope type from API data
   const scopeType: ScopeType = rule.applies_to_all_products
     ? 'all'
     : rule.applies_to_categories?.length
@@ -194,15 +293,10 @@ export function ruleToFormData(rule: Partial<PricingRule>): RuleFormData {
 // TRANSFORMATIONS: Form → API
 // ============================================
 
-/** Actions that don't require a value input */
-const ACTIONS_WITHOUT_VALUE: RuleAction[] = ['match_competitor'];
-
 /**
  * Transform form data to API request payload
- * Use when creating or updating a rule
  */
 export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest {
-  // Handle action value - some actions don't need it
   const actionValue = ACTIONS_WITHOUT_VALUE.includes(form.action)
     ? '0'
     : (normalizeDecimal(form.action_value) ?? '0');
@@ -260,7 +354,7 @@ export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest 
       break;
   }
 
-  // Constraints - only include if provided
+  // Constraints
   const maxChangePercent = normalizeDecimal(form.max_change_percent);
   const minPrice = normalizeDecimal(form.min_price);
   const maxPrice = normalizeDecimal(form.max_price);
@@ -277,66 +371,25 @@ export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest 
 // ============================================
 
 /**
- * Validate form data and return errors
- * Returns empty object if valid
+ * Validate form data using Zod schema
+ * Returns errors object compatible with form state
  */
 export function validateRuleForm(form: RuleFormData): RuleFormErrors {
-  const errors: RuleFormErrors = {};
-
-  // Required fields
-  if (!form.name.trim()) {
-    errors.name = 'Name is required';
+  const result = ruleFormSchema.safeParse(form);
+  
+  if (result.success) {
+    return {};
   }
 
-  // Action value - required for most actions
-  if (!ACTIONS_WITHOUT_VALUE.includes(form.action)) {
-    if (!form.action_value.trim()) {
-      errors.action_value = 'Action value is required';
-    } else if (!isValidDecimal(form.action_value)) {
-      errors.action_value = 'Must be a valid number';
+  // Convert Zod errors to form errors format
+  const errors: RuleFormErrors = {};
+  for (const issue of result.error.issues) {
+    const path = issue.path[0] as keyof RuleFormData;
+    if (path && !errors[path]) {
+      errors[path] = issue.message;
     }
   }
-
-  // Decimal field validation
-  if (form.max_change_percent && !isValidDecimal(form.max_change_percent)) {
-    errors.max_change_percent = 'Must be a valid number (e.g., 5 or 5.5)';
-  }
-  if (form.min_price && !isValidDecimal(form.min_price)) {
-    errors.min_price = 'Must be a valid price (e.g., 0.00 or 10.99)';
-  }
-  if (form.max_price && !isValidDecimal(form.max_price)) {
-    errors.max_price = 'Must be a valid price (e.g., 99.99)';
-  }
-
-  // Scope validation
-  switch (form.scope_type) {
-    case 'single':
-      if (!form.product_id) errors.product_id = 'Select a product';
-      break;
-    case 'multiple':
-      if (!form.applies_to_products.length) errors.applies_to_products = 'Select at least one product';
-      break;
-    case 'categories':
-      if (!form.applies_to_categories.length) errors.applies_to_categories = 'Select at least one category';
-      break;
-  }
-
-  // Rule type-specific validation
-  switch (form.rule_type) {
-    case 'sentiment_threshold':
-      if (!form.sentiment_threshold) errors.sentiment_threshold = 'Required';
-      break;
-    case 'time_based':
-      if (!form.time_days) errors.time_days = 'Required';
-      break;
-    case 'volume_surge':
-      if (!form.volume_threshold) errors.volume_threshold = 'Required';
-      break;
-    case 'viral_detection':
-      if (!form.viral_threshold_reach) errors.viral_threshold_reach = 'Required';
-      break;
-  }
-
+  
   return errors;
 }
 
@@ -344,7 +397,31 @@ export function validateRuleForm(form: RuleFormData): RuleFormErrors {
  * Check if form has validation errors
  */
 export function isFormValid(form: RuleFormData): boolean {
-  return Object.keys(validateRuleForm(form)).length === 0;
+  return ruleFormSchema.safeParse(form).success;
+}
+
+/**
+ * Validate and transform in one step
+ * Returns either the API payload or validation errors
+ */
+export function validateAndTransform(form: RuleFormData): 
+  | { success: true; data: CreatePricingRuleRequest }
+  | { success: false; errors: RuleFormErrors } {
+  
+  const validation = ruleFormSchema.safeParse(form);
+  
+  if (!validation.success) {
+    const errors: RuleFormErrors = {};
+    for (const issue of validation.error.issues) {
+      const path = issue.path[0] as keyof RuleFormData;
+      if (path && !errors[path]) {
+        errors[path] = issue.message;
+      }
+    }
+    return { success: false, errors };
+  }
+  
+  return { success: true, data: formDataToRequest(form) };
 }
 
 
