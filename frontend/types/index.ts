@@ -22,3 +22,4 @@ export * from './payment';
 // Re-export generated types for direct access if needed
 // Usage: import type { components } from '@/types/api-generated';
 export type { components, paths, operations } from './api-generated';
+

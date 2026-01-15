@@ -157,3 +157,5 @@ export interface ProductSummary {
   has_pending_recommendation: boolean; // Default: false
   auto_pricing_enabled: boolean;    // Default: false
 }
+
+

@@ -283,3 +283,5 @@ export const PLATFORM_CONFIGS: Record<EcommercePlatform, PlatformConfig> = {
     docsUrl: 'https://woocommerce.com/document/woocommerce-rest-api/',
   },
 };
+
+

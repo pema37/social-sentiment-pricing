@@ -218,3 +218,5 @@ export interface CompetitorAlert {
   suggested_action: string;
   observed_at: string;
 }
+
+
