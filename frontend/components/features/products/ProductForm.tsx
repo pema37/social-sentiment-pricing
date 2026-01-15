@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { Package, DollarSign, Zap, Tag, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -13,7 +14,17 @@ import {
   useUpdateProduct,
   useProducts,
 } from '@/lib/hooks/use-products';
-import type { Product, CreateProductRequest, UpdateProductRequest } from '@/types';
+import type { Product } from '@/types/product';
+
+// Domain layer - single source of truth for transformations
+import {
+  productToFormData,
+  validateAndCreate,
+  validateAndUpdate,
+  DEFAULT_PRODUCT_FORM,
+  type ProductFormData,
+  type ProductFormErrors,
+} from '@/lib/domain/products';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -25,39 +36,37 @@ interface ProductFormProps {
   onCancel?: () => void;
 }
 
-interface FormData {
-  name: string;
-  sku: string;
-  description: string;
-  category: string;
-  image_url: string;
-  base_price: string;
-  min_price: string;
-  max_price: string;
-  sentiment_multiplier: string;
-  auto_pricing_enabled: boolean;
-  is_active: boolean;
-  keywords: string;
+// Extended form data to handle keywords as comma-separated string in UI
+interface FormState extends Omit<ProductFormData, 'keywords'> {
+  keywords_string: string; // UI shows comma-separated
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildInitialFormData(product?: Product): FormData {
+function toFormState(product?: Product): FormState {
+  if (!product) {
+    return {
+      ...DEFAULT_PRODUCT_FORM,
+      keywords_string: '',
+    };
+  }
+  const formData = productToFormData(product);
   return {
-    name: product?.name || '',
-    sku: product?.sku || '',
-    description: product?.description || '',
-    category: product?.category || '',
-    image_url: product?.image_url || '',
-    base_price: product?.base_price?.toString() || '',
-    min_price: product?.min_price?.toString() || '',
-    max_price: product?.max_price?.toString() || '',
-    sentiment_multiplier: product?.sentiment_multiplier?.toString() || '0.2',
-    auto_pricing_enabled: product?.auto_pricing_enabled ?? false,
-    is_active: product?.is_active ?? true,
-    keywords: product?.keywords?.join(', ') || '',
+    ...formData,
+    keywords_string: formData.keywords.join(', '),
+  };
+}
+
+function toFormData(state: FormState): ProductFormData {
+  const { keywords_string, ...rest } = state;
+  return {
+    ...rest,
+    keywords: keywords_string
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean),
   };
 }
 
@@ -140,8 +149,8 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
   const updateProduct = useUpdateProduct();
   const { data: productsData, isLoading: isLoadingProducts } = useProducts({ page_size: 100 });
   
-  const [formData, setFormData] = useState<FormData>(() => buildInitialFormData(product));
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formState, setFormState] = useState<FormState>(() => toFormState(product));
+  const [errors, setErrors] = useState<ProductFormErrors>({});
   const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   const categories = useMemo(() => {
@@ -152,21 +161,22 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
     return Array.from(cats).sort();
   }, [productsData?.items]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
-  };
+    setFormState(prev => ({ ...prev, [name]: value }));
+    if (errors[name as keyof ProductFormErrors]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
+  }, [errors]);
 
-  const handleCategoryChange = (value: string) => {
-    setFormData(prev => ({ ...prev, category: value }));
-  };
+  const handleCategoryChange = useCallback((value: string) => {
+    setFormState(prev => ({ ...prev, category: value }));
+  }, []);
 
-  const handleToggle = (field: 'auto_pricing_enabled' | 'is_active') => {
-    setFormData(prev => ({ ...prev, [field]: !prev[field] }));
-  };
+  const handleToggle = useCallback((field: 'auto_pricing_enabled' | 'is_active') => {
+    setFormState(prev => ({ ...prev, [field]: !prev[field] }));
+  }, []);
 
-  // Handle AI-generated content - now receives an object with individual fields
   const handleApplyGenerated = useCallback((fields: {
     description?: string;
     seo_title?: string;
@@ -174,59 +184,44 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
     keywords?: string[];
   }) => {
     if (fields.description) {
-      setFormData(prev => ({ ...prev, description: fields.description! }));
+      setFormState(prev => ({ ...prev, description: fields.description! }));
     }
     if (fields.keywords) {
-      setFormData(prev => ({ ...prev, keywords: fields.keywords!.join(', ') }));
+      setFormState(prev => ({ ...prev, keywords_string: fields.keywords!.join(', ') }));
     }
-    // Note: seo_title and meta_description aren't in this form yet
-    // but the modal will still show them for copy/paste
   }, []);
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = 'Product name is required';
-    if (!formData.base_price || Number(formData.base_price) <= 0) {
-      newErrors.base_price = 'Base price must be greater than 0';
-    }
-    if (formData.min_price && formData.max_price && Number(formData.min_price) > Number(formData.max_price)) {
-      newErrors.min_price = 'Min price cannot be greater than max price';
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
-
-    const data: CreateProductRequest | UpdateProductRequest = {
-      name: formData.name.trim(),
-      sku: formData.sku.trim() || undefined,
-      description: formData.description.trim() || undefined,
-      category: formData.category.trim() || undefined,
-      image_url: formData.image_url.trim() || undefined,
-      base_price: Number(formData.base_price),
-      min_price: formData.min_price ? Number(formData.min_price) : undefined,
-      max_price: formData.max_price ? Number(formData.max_price) : undefined,
-      sentiment_multiplier: Number(formData.sentiment_multiplier) || 0.2,
-      auto_pricing_enabled: formData.auto_pricing_enabled,
-      is_active: formData.is_active,
-      keywords: formData.keywords ? formData.keywords.split(',').map(k => k.trim()).filter(Boolean) : [],
-    };
-
-    if (isEdit && product) {
-      updateProduct.mutate({ id: product.id, data }, { onSuccess });
+    
+    const formData = toFormData(formState);
+    
+    if (isEdit) {
+      const result = validateAndUpdate(formData);
+      if (!result.success) {
+        setErrors(result.errors);
+        toast.error('Please fix the errors before saving');
+        return;
+      }
+      updateProduct.mutate(
+        { id: product!.id, data: result.data },
+        { onSuccess: () => { toast.success('Product updated'); onSuccess?.(); } }
+      );
     } else {
-      createProduct.mutate(data as CreateProductRequest, { onSuccess });
+      const result = validateAndCreate(formData);
+      if (!result.success) {
+        setErrors(result.errors);
+        toast.error('Please fix the errors before saving');
+        return;
+      }
+      createProduct.mutate(
+        result.data,
+        { onSuccess: () => { toast.success('Product created'); onSuccess?.(); } }
+      );
     }
   };
 
   const isPending = createProduct.isPending || updateProduct.isPending;
-
-  // For new products, we need a product ID for the API call
-  // The modal requires productId, so we only show the button for existing products
-  // OR we need to handle the "new product" case differently
   const canShowGenerator = isEdit && product?.id;
 
   return (
@@ -239,7 +234,6 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
               <Package className="w-4 h-4" />
               Basic Information
             </h3>
-            {/* AI Generate Button - only show for existing products */}
             {canShowGenerator && (
               <Button
                 type="button"
@@ -261,7 +255,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
               </label>
               <Input
                 name="name"
-                value={formData.name}
+                value={formState.name}
                 onChange={handleChange}
                 placeholder="e.g., Wireless Bluetooth Headphones"
                 className={errors.name ? 'border-red-500' : ''}
@@ -271,13 +265,13 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-              <Input name="sku" value={formData.sku} onChange={handleChange} placeholder="e.g., WBH-001" />
+              <Input name="sku" value={formState.sku} onChange={handleChange} placeholder="e.g., WBH-001" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <CategorySelect
-                value={formData.category}
+                value={formState.category}
                 onChange={handleCategoryChange}
                 categories={categories}
                 isLoading={isLoadingProducts}
@@ -288,7 +282,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
               <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
               <textarea
                 name="description"
-                value={formData.description}
+                value={formState.description}
                 onChange={handleChange}
                 placeholder="Product description..."
                 rows={3}
@@ -298,7 +292,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-              <Input name="image_url" value={formData.image_url} onChange={handleChange} placeholder="https://example.com/image.jpg" />
+              <Input name="image_url" value={formState.image_url} onChange={handleChange} placeholder="https://example.com/image.jpg" />
             </div>
           </div>
         </Card>
@@ -311,10 +305,10 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
           </h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <PriceInput name="base_price" label="Base Price" value={formData.base_price} onChange={handleChange} error={errors.base_price} required />
+            <PriceInput name="base_price" label="Base Price" value={formState.base_price} onChange={handleChange} error={errors.base_price} required />
             <div />
-            <PriceInput name="min_price" label="Min Price" value={formData.min_price} onChange={handleChange} error={errors.min_price} />
-            <PriceInput name="max_price" label="Max Price" value={formData.max_price} onChange={handleChange} />
+            <PriceInput name="min_price" label="Min Price" value={formState.min_price} onChange={handleChange} error={errors.min_price} />
+            <PriceInput name="max_price" label="Max Price" value={formState.max_price} onChange={handleChange} error={errors.max_price} />
           </div>
         </Card>
 
@@ -328,11 +322,11 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sentiment Multiplier</label>
-              <Input name="sentiment_multiplier" type="number" step="0.01" min="0" max="1" value={formData.sentiment_multiplier} onChange={handleChange} placeholder="0.2" />
-              <p className="text-xs text-gray-500 mt-1">How much sentiment affects pricing (0.0 - 1.0). Default: 0.2 = 20% max impact</p>
+              <Input name="sentiment_multiplier" type="number" step="0.01" min="0" max="1" value={formState.sentiment_multiplier} onChange={handleChange} placeholder="0.1" />
+              <p className="text-xs text-gray-500 mt-1">How much sentiment affects pricing (0.0 - 1.0). Default: 0.1 = 10% max impact</p>
             </div>
-            <ToggleSwitch enabled={formData.auto_pricing_enabled} onToggle={() => handleToggle('auto_pricing_enabled')} label="Auto-Pricing" description="Automatically adjust prices based on sentiment" />
-            <ToggleSwitch enabled={formData.is_active} onToggle={() => handleToggle('is_active')} label="Active" description="Product is visible and available" />
+            <ToggleSwitch enabled={formState.auto_pricing_enabled} onToggle={() => handleToggle('auto_pricing_enabled')} label="Auto-Pricing" description="Automatically adjust prices based on sentiment" />
+            <ToggleSwitch enabled={formState.is_active} onToggle={() => handleToggle('is_active')} label="Active" description="Product is visible and available" />
           </div>
         </Card>
 
@@ -342,7 +336,7 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
             <Tag className="w-4 h-4" />
             Social Monitoring Keywords
           </h3>
-          <Input name="keywords" value={formData.keywords} onChange={handleChange} placeholder="keyword1, keyword2, keyword3" />
+          <Input name="keywords_string" value={formState.keywords_string} onChange={handleChange} placeholder="keyword1, keyword2, keyword3" />
           <p className="text-xs text-gray-500 mt-1">Comma-separated keywords to track on social media for this product</p>
         </Card>
 
@@ -355,7 +349,6 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
         </div>
       </form>
 
-      {/* AI Generate Modal - only rendered for existing products */}
       {canShowGenerator && product && (
         <GenerateDescriptionModal
           isOpen={showGenerateModal}
@@ -370,4 +363,5 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
 }
 
 export default ProductForm;
+
 
