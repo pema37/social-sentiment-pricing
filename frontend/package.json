@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate-api-types": "openapi-typescript https://social-sentiment-pricing-production.up.railway.app/openapi.json -o types/api-generated.ts"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "generate-types": "openapi-typescript https://social-sentiment-pricing-staging-2ecd.up.railway.app/openapi.json -o types/api-generated.ts",
+    "generate-types:local": "openapi-typescript http://localhost:8000/openapi.json -o types/api-generated.ts",
+    "generate-types:prod": "openapi-typescript https://ssp-backend-production.up.railway.app/openapi.json -o types/api-generated.ts"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
@@ -38,6 +42,7 @@
     "eslint-config-next": "16.0.5",
     "openapi-typescript": "^7.10.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.17"
   }
 }

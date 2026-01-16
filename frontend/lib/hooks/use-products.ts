@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
+import { productKeys } from '@/lib/api/query-keys';
 import type { 
   Product,
   CreateProductRequest, 
@@ -18,16 +19,8 @@ export type { Product, CreateProductRequest, UpdateProductRequest, PaginatedProd
 export type ProductCreate = CreateProductRequest;
 export type ProductUpdate = UpdateProductRequest;
 
-// Query keys
-export const productKeys = {
-  all: ['products'] as const,
-  list: (params?: { page?: number; page_size?: number }) =>
-    [...productKeys.all, 'list', params] as const,
-  detail: (id: string) => [...productKeys.all, 'detail', id] as const,
-  suggestion: (id: string) => [...productKeys.all, 'suggestion', id] as const,
-  priceHistory: (id: string, params?: { days?: number }) =>
-    [...productKeys.all, 'price-history', id, params] as const,
-};
+// Re-export keys for backwards compatibility (other files may import from here)
+export { productKeys };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Queries
@@ -39,7 +32,6 @@ export function useProducts(params?: { page?: number; page_size?: number }) {
     queryKey: productKeys.list(params),
     queryFn: () => productsApi.getAll(params),
     staleTime: 30 * 1000,
-    // ADDED: Retry configuration to handle transient failures
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
@@ -58,10 +50,10 @@ export function useProduct(id: string | null) {
 // Get price suggestion for a product (with AI explanation)
 export function usePriceSuggestion(id: string | null, useAi: boolean = true) {
   return useQuery({
-    queryKey: [...productKeys.suggestion(id || ''), useAi],
+    queryKey: [...productKeys.priceSuggestion(id || ''), useAi],
     queryFn: () => productsApi.getSuggestion(id!, useAi),
     enabled: !!id,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -104,7 +96,7 @@ export function useUpdateProduct() {
       productsApi.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success({ title: 'Product updated', message: 'Product details have been saved' });
     },
     onError: (error: Error) => {
@@ -113,28 +105,23 @@ export function useUpdateProduct() {
   });
 }
 
-// Delete product - FIXED: Using optimistic update to prevent race condition
+// Delete product
 export function useDeleteProduct() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: string) => productsApi.delete(id),
     
-    // FIXED: Optimistically remove from cache BEFORE the API call completes
     onMutate: async (deletedId: string) => {
-      // Cancel any outgoing refetches to prevent race conditions
       await queryClient.cancelQueries({ queryKey: productKeys.all });
       
-      // Snapshot current data for rollback
       const previousData = queryClient.getQueriesData({ queryKey: productKeys.all });
       
-      // Optimistically remove from all product list caches
       queryClient.setQueriesData(
         { queryKey: productKeys.all },
         (old: PaginatedProducts | Product[] | undefined) => {
           if (!old) return old;
           
-          // Handle paginated response
           if ('items' in old && Array.isArray(old.items)) {
             return {
               ...old,
@@ -143,7 +130,6 @@ export function useDeleteProduct() {
             };
           }
           
-          // Handle array response
           if (Array.isArray(old)) {
             return old.filter((p: Product) => p.id !== deletedId);
           }
@@ -152,29 +138,23 @@ export function useDeleteProduct() {
         }
       );
       
-      // Also remove the detail query
       queryClient.removeQueries({ queryKey: productKeys.detail(deletedId) });
       
       return { previousData };
     },
     
     onSuccess: () => {
-      // Show success toast - delete completed
       toast.success({ title: 'Product deleted', message: 'Product has been removed' });
       
-      // FIXED: Delay the background refetch to avoid immediate re-fetch issues
-      // This gives the backend time to fully process the deletion
       setTimeout(() => {
         queryClient.invalidateQueries({ 
           queryKey: productKeys.all,
-          // Don't refetch if the query is not currently being used
           refetchType: 'active',
         });
       }, 500);
     },
     
     onError: (error: Error, deletedId: string, context) => {
-      // Rollback on error
       if (context?.previousData) {
         context.previousData.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data);
@@ -194,7 +174,7 @@ export function useToggleAutoPricing() {
       productsApi.update(id, { auto_pricing_enabled: enabled }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success({
         title: variables.enabled ? 'Auto-pricing enabled' : 'Auto-pricing disabled',
         message: `Auto-pricing has been ${variables.enabled ? 'enabled' : 'disabled'} for this product`,
@@ -207,13 +187,11 @@ export function useToggleAutoPricing() {
 }
 
 // Apply price suggestion
-// Apply price suggestion
 export function useApplyPriceSuggestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, price }: { id: string; price: number }) => {
-      // Validate price before sending
       if (price == null || isNaN(price)) {
         return Promise.reject(new Error('Invalid price value'));
       }
@@ -221,8 +199,8 @@ export function useApplyPriceSuggestion() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.suggestion(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productKeys.priceSuggestion(variables.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success({ 
         title: 'Price updated', 
         message: `Price has been updated to $${(variables.price ?? 0).toFixed(2)}` 
@@ -280,4 +258,5 @@ export function useImportProducts() {
     },
   });
 }
+
 

@@ -8,6 +8,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as integrationsApi from '@/lib/api/integrations';
+import { integrationKeys } from '@/lib/api/query-keys';
 import type {
   IntegrationUpdate,
   OAuthInitRequest,
@@ -18,17 +19,8 @@ import type {
   PricePushRequest,
 } from '@/types/integration';
 
-// Query keys
-export const integrationKeys = {
-  all: ['integrations'] as const,
-  list: () => [...integrationKeys.all, 'list'] as const,
-  detail: (id: string) => [...integrationKeys.all, 'detail', id] as const,
-  health: (id: string) => [...integrationKeys.all, 'health', id] as const,
-  syncStatus: (id: string) => [...integrationKeys.all, 'sync-status', id] as const,
-  syncLogs: (id: string, params?: { page?: number; pageSize?: number }) =>
-    [...integrationKeys.all, 'sync-logs', id, params] as const,
-  links: (id: string) => [...integrationKeys.all, 'links', id] as const,
-};
+// Re-export keys for backwards compatibility
+export { integrationKeys };
 
 // ==================== List & Detail ====================
 
@@ -37,7 +29,7 @@ export const integrationKeys = {
  */
 export function useIntegrations() {
   return useQuery({
-    queryKey: integrationKeys.list(),
+    queryKey: integrationKeys.lists(),
     queryFn: () => integrationsApi.getIntegrations(),
     staleTime: 30 * 1000,
   });
@@ -109,7 +101,7 @@ export function useUpdateIntegration() {
       integrationsApi.updateIntegration(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: integrationKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: integrationKeys.list() });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
     },
   });
 }
@@ -121,11 +113,11 @@ export function useUpdateIntegration() {
  */
 export function useIntegrationHealth(id: string | null) {
   return useQuery({
-    queryKey: integrationKeys.health(id || ''),
+    queryKey: [...integrationKeys.detail(id || ''), 'health'] as const,
     queryFn: () => integrationsApi.checkHealth(id!),
     enabled: !!id,
-    staleTime: 60 * 1000, // 1 minute
-    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -142,12 +134,11 @@ export function useSyncStatus(integrationId: string | null, options?: { polling?
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
     staleTime: 5 * 1000,
-    // FIXED: Function-based interval that auto-stops and refreshes UI
     refetchInterval: options?.polling 
       ? (query) => {
           const data = query.state.data as SyncStatusResponse | undefined;
           if (data?.sync_status === 'idle' || data?.sync_status === 'error') {
-            queryClient.invalidateQueries({ queryKey: integrationKeys.list() });
+            queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
             queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integrationId!) });
             return false;
           }
@@ -165,7 +156,7 @@ export function useSyncLogs(
   params?: { page?: number; pageSize?: number }
 ) {
   return useQuery({
-    queryKey: integrationKeys.syncLogs(integrationId || '', params),
+    queryKey: [...integrationKeys.detail(integrationId || ''), 'sync-logs', params] as const,
     queryFn: () => integrationsApi.getSyncLogs(integrationId!, params?.page, params?.pageSize),
     enabled: !!integrationId,
     staleTime: 30 * 1000,
@@ -195,7 +186,7 @@ export function useTriggerSync() {
  */
 export function useProductLinks(integrationId: string | null) {
   return useQuery({
-    queryKey: integrationKeys.links(integrationId || ''),
+    queryKey: integrationKeys.linkedProducts(integrationId || ''),
     queryFn: () => integrationsApi.getProductLinks(integrationId!),
     enabled: !!integrationId,
     staleTime: 30 * 1000,
@@ -212,7 +203,7 @@ export function useCreateProductLink() {
     mutationFn: ({ integrationId, data }: { integrationId: string; data: ProductLinkCreate }) =>
       integrationsApi.createProductLink(integrationId, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -227,7 +218,7 @@ export function useDeleteProductLink() {
     mutationFn: ({ integrationId, linkId }: { integrationId: string; linkId: string }) =>
       integrationsApi.deleteProductLink(integrationId, linkId),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -244,7 +235,7 @@ export function usePushPrice() {
     mutationFn: ({ integrationId, data }: { integrationId: string; data: PricePushRequest }) =>
       integrationsApi.pushPrice(integrationId, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -259,7 +250,7 @@ export function usePushPricesBulk() {
     mutationFn: ({ integrationId, updates }: { integrationId: string; updates: PricePushRequest[] }) =>
       integrationsApi.pushPricesBulk(integrationId, { updates }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -274,19 +265,18 @@ export function useSyncPolling(integrationId: string | null) {
   const queryClient = useQueryClient();
   
   return useQuery({
-    queryKey: [...integrationKeys.syncStatus(integrationId || ''), 'polling'],
+    queryKey: [...integrationKeys.syncStatus(integrationId || ''), 'polling'] as const,
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
     refetchInterval: (query) => {
       const data = query.state.data as SyncStatusResponse | undefined;
-      // Stop polling when sync completes or errors
       if (data?.sync_status === 'idle' || data?.sync_status === 'error') {
-        // Invalidate related queries when done
         queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integrationId!) });
-        queryClient.invalidateQueries({ queryKey: integrationKeys.syncLogs(integrationId!) });
         return false;
       }
-      return 2000; // Poll every 2 seconds while syncing
+      return 2000;
     },
   });
 }
+
+

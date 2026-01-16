@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pricingApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
+import { pricingKeys, productKeys } from '@/lib/api/query-keys';
 import type {
   PricingRule,
   CreatePricingRuleRequest,
@@ -24,29 +25,8 @@ export type {
   UpdatePricingRuleRequest,
 };
 
-// ============================================
-// QUERY KEYS
-// ============================================
-
-export const pricingKeys = {
-  all: ['pricing'] as const,
-  
-  // Rules
-  rules: () => [...pricingKeys.all, 'rules'] as const,
-  rulesList: (params?: { page?: number; page_size?: number; rule_type?: string; is_active?: boolean }) =>
-    [...pricingKeys.rules(), 'list', params] as const,
-  ruleDetail: (id: string) => [...pricingKeys.rules(), 'detail', id] as const,
-
-  // Recommendations
-  recommendations: () => [...pricingKeys.all, 'recommendations'] as const,
-  recommendationsList: (params?: { page?: number; page_size?: number; status?: string; product_id?: string }) =>
-    [...pricingKeys.recommendations(), 'list', params] as const,
-  recommendationDetail: (id: string) => [...pricingKeys.recommendations(), 'detail', id] as const,
-  recommendationStats: () => [...pricingKeys.recommendations(), 'stats'] as const,
-
-  // Settings
-  settings: () => [...pricingKeys.all, 'settings'] as const,
-};
+// Re-export keys for backwards compatibility
+export { pricingKeys };
 
 // ============================================
 // PRICING RULES HOOKS
@@ -96,7 +76,7 @@ export function useUpdatePricingRule() {
       pricingApi.updateRule(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.ruleDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.rulesList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.rules() });
       toast.success({ title: 'Rule updated', message: 'Pricing rule has been updated successfully' });
     },
     onError: (error: Error) => {
@@ -130,7 +110,7 @@ export function useTogglePricingRule() {
       pricingApi.updateRule(id, { is_active: isActive }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.ruleDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.rulesList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.rules() });
       toast.success({ 
         title: variables.isActive ? 'Rule activated' : 'Rule deactivated',
         message: `Pricing rule has been ${variables.isActive ? 'activated' : 'deactivated'}`,
@@ -183,8 +163,7 @@ export function useApproveRecommendation() {
       pricingApi.approveRecommendation(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       toast.success({ title: 'Recommendation approved', message: 'You can now apply this price change' });
     },
     onError: (error: Error) => {
@@ -202,8 +181,7 @@ export function useRejectRecommendation() {
       pricingApi.rejectRecommendation(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       toast.success({ title: 'Recommendation rejected', message: 'The recommendation has been rejected' });
     },
     onError: (error: Error) => {
@@ -220,10 +198,9 @@ export function useApplyRecommendation() {
     mutationFn: (id: string) => pricingApi.applyRecommendation(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       // Also invalidate products since prices changed
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
       toast.success({ title: 'Price updated!', message: 'The new price has been applied to your store' });
     },
     onError: (error: Error) => {
@@ -241,7 +218,7 @@ export function usePricingSettings() {
   return useQuery({
     queryKey: pricingKeys.settings(),
     queryFn: () => pricingApi.getSettings(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -260,3 +237,5 @@ export function useUpdatePricingSettings() {
     },
   });
 }
+
+

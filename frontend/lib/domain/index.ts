@@ -1,5 +1,6 @@
 // frontend/lib/domain/index.ts
-// Re-export domain modules with explicit naming to avoid collisions
+// Central export for all domain modules
+// Re-export with explicit naming to avoid collisions
 
 // Pricing - export everything (it was first, so it "owns" shared utility names)
 export * from './pricing';
@@ -26,12 +27,12 @@ export {
   decimalToFormString as productDecimalToFormString,
 } from './products';
 
-// Competitors - no collisions with pricing
+// Competitors - no collisions
 export * from './competitors';
 
-// Integrations - no collisions with pricing
+// Integrations - no collisions
 export * from './integrations';
 
-// Alerts - no collisions with pricing
+// Alerts - no collisions
 export * from './alerts';
 

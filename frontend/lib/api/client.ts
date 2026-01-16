@@ -4,9 +4,7 @@
  * API Client - handles fetch, auth, and errors
  * 
  * PATCHED (2025-01-07): Added automatic token refresh on 401 errors.
- * - When a 401 is received, attempts to refresh the token
- * - If refresh succeeds, retries the original request
- * - If refresh fails, redirects to login
+ * PATCHED (2025-01-15): Integrated centralized error parsing from errors.ts
  */
 
 import { 
@@ -16,6 +14,7 @@ import {
   getRefreshToken, 
   removeAllTokens 
 } from '@/lib/auth/token';
+import { ErrorCodes, type ErrorCode } from '@/lib/api/errors';
 
 const getApiBaseUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -28,12 +27,14 @@ const getApiBaseUrl = () => {
   return 'http://localhost:8000';
 };
 
-// Custom error class for API errors
+// Custom error class for API errors - enhanced with error codes
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public details?: unknown
+    public code: ErrorCode = ErrorCodes.UNKNOWN_ERROR,
+    public details?: unknown,
+    public fieldErrors?: Record<string, string[]>
   ) {
     super(message);
     this.name = 'ApiError';
@@ -46,7 +47,7 @@ interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   params?: Record<string, string | number | boolean | undefined>;
-  _isRetry?: boolean; // Internal flag to prevent infinite retry loops
+  _isRetry?: boolean;
 }
 
 // Build query string from params
@@ -68,7 +69,6 @@ let refreshPromise: Promise<boolean> | null = null;
 
 /**
  * Attempt to refresh the access token using the refresh token.
- * Returns true if successful, false otherwise.
  */
 async function refreshAccessToken(): Promise<boolean> {
   const refreshToken = getRefreshToken();
@@ -92,7 +92,6 @@ async function refreshAccessToken(): Promise<boolean> {
     
     const data = await response.json();
     
-    // Save new tokens
     if (data.access_token) {
       setToken(data.access_token);
     }
@@ -108,10 +107,8 @@ async function refreshAccessToken(): Promise<boolean> {
 
 /**
  * Handle token refresh with deduplication.
- * Multiple concurrent 401s will share the same refresh request.
  */
 async function handleTokenRefresh(): Promise<boolean> {
-  // If already refreshing, wait for that to complete
   if (isRefreshing && refreshPromise) {
     return refreshPromise;
   }
@@ -128,7 +125,7 @@ async function handleTokenRefresh(): Promise<boolean> {
   }
 }
 
-// Handle final auth failure - clear tokens and redirect to login
+// Handle final auth failure
 function handleAuthError() {
   if (typeof window === 'undefined') return;
   
@@ -139,6 +136,57 @@ function handleAuthError() {
     sessionStorage.setItem('redirectAfterLogin', currentPath);
     window.location.href = '/login?expired=true';
   }
+}
+
+// Get error code from status
+function getErrorCode(status: number): ErrorCode {
+  switch (status) {
+    case 400:
+      return ErrorCodes.VALIDATION_ERROR;
+    case 401:
+      return ErrorCodes.AUTHENTICATION_ERROR;
+    case 403:
+      return ErrorCodes.AUTHORIZATION_ERROR;
+    case 404:
+      return ErrorCodes.NOT_FOUND;
+    case 422:
+      return ErrorCodes.VALIDATION_ERROR;
+    case 429:
+      return ErrorCodes.RATE_LIMIT;
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return ErrorCodes.SERVER_ERROR;
+    default:
+      return ErrorCodes.UNKNOWN_ERROR;
+  }
+}
+
+// Parse validation errors into field-specific errors
+function parseFieldErrors(errorData: unknown): Record<string, string[]> | undefined {
+  if (!errorData || typeof errorData !== 'object') return undefined;
+  
+  const err = errorData as Record<string, unknown>;
+  
+  if (Array.isArray(err.detail)) {
+    const fieldErrors: Record<string, string[]> = {};
+    
+    for (const item of err.detail) {
+      if (item && typeof item === 'object' && 'loc' in item && 'msg' in item) {
+        const loc = item.loc as (string | number)[];
+        const field = loc[loc.length - 1]?.toString() || 'unknown';
+        if (!fieldErrors[field]) {
+          fieldErrors[field] = [];
+        }
+        fieldErrors[field].push(item.msg as string);
+      }
+    }
+    
+    return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined;
+  }
+  
+  return undefined;
 }
 
 // Extract error message from API response
@@ -209,7 +257,6 @@ function parseErrorMessage(status: number, errorData: unknown): string {
     case 504:
       return 'Server timeout. Please try again.';
     default:
-      // Always include status code for unknown errors so we can diagnose
       return status > 0 
         ? `Request failed (error ${status}). Please try again.`
         : 'Unable to connect to server. Please check your connection.';
@@ -249,29 +296,25 @@ export async function apiClient<T>(
       
       // Handle 401 Unauthorized
       if (response.status === 401) {
-        // Don't try to refresh for auth endpoints themselves
         const isAuthEndpoint = endpoint.includes('/auth/login') || 
                                endpoint.includes('/auth/register') ||
                                endpoint.includes('/auth/refresh');
         
-        // If this is already a retry, or it's an auth endpoint, give up
         if (_isRetry || isAuthEndpoint) {
           handleAuthError();
           throw new ApiError(
             response.status,
             parseErrorMessage(response.status, errorData),
+            ErrorCodes.AUTHENTICATION_ERROR,
             errorData
           );
         }
         
-        // Try to refresh the token
         const refreshed = await handleTokenRefresh();
         
         if (refreshed) {
-          // Retry the original request with the new token
           return apiClient<T>(endpoint, { ...options, _isRetry: true });
         } else {
-          // Refresh failed, redirect to login
           handleAuthError();
         }
       }
@@ -279,7 +322,9 @@ export async function apiClient<T>(
       throw new ApiError(
         response.status,
         parseErrorMessage(response.status, errorData),
-        errorData
+        getErrorCode(response.status),
+        errorData,
+        parseFieldErrors(errorData)
       );
     }
     
@@ -296,7 +341,8 @@ export async function apiClient<T>(
       0,
       error instanceof Error && error.message.includes('fetch')
         ? 'Unable to connect to server. Please check your internet connection.'
-        : 'Network error. Please try again.'
+        : 'Network error. Please try again.',
+      ErrorCodes.NETWORK_ERROR
     );
   }
 }
@@ -318,4 +364,5 @@ export const api = {
   delete: <T>(endpoint: string) =>
     apiClient<T>(endpoint, { method: 'DELETE' }),
 };
+
 

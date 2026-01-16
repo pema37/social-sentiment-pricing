@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { competitorsApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
+import { competitorKeys, productKeys } from '@/lib/api/query-keys';
 import type { 
   CreateCompetitorRequest, 
   UpdateCompetitorRequest,
@@ -9,20 +10,8 @@ import type {
   UpdateCompetitorProductRequest,
 } from '@/types';
 
-// Query keys
-export const competitorKeys = {
-  all: ['competitors'] as const,
-  list: (params?: { page?: number; page_size?: number; is_active?: boolean }) =>
-    [...competitorKeys.all, 'list', params] as const,
-  detail: (id: string) => [...competitorKeys.all, 'detail', id] as const,
-  products: () => [...competitorKeys.all, 'products'] as const,
-  productsList: (params?: { product_id?: string; competitor_id?: string; is_active?: boolean }) =>
-    [...competitorKeys.products(), 'list', params] as const,
-  productDetail: (id: string) => [...competitorKeys.products(), 'detail', id] as const,
-  priceHistory: (competitorProductId: string, params?: { days?: number }) =>
-    [...competitorKeys.products(), 'history', competitorProductId, params] as const,
-  comparison: (productId: string) => [...competitorKeys.all, 'comparison', productId] as const,
-};
+// Re-export keys for backwards compatibility
+export { competitorKeys };
 
 // ============== Competitor Hooks ==============
 
@@ -70,7 +59,7 @@ export function useUpdateCompetitor() {
       competitorsApi.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: competitorKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: competitorKeys.list() });
+      queryClient.invalidateQueries({ queryKey: competitorKeys.lists() });
       toast.success({ title: 'Competitor updated', message: 'Competitor details have been updated' });
     },
     onError: (error: Error) => {
@@ -106,7 +95,7 @@ export function useCompetitorProducts(params?: {
   page_size?: number;
 }) {
   return useQuery({
-    queryKey: competitorKeys.productsList(params),
+    queryKey: competitorKeys.products(params?.competitor_id || ''),
     queryFn: () => competitorsApi.getProducts(params),
     staleTime: 30 * 1000,
   });
@@ -115,7 +104,7 @@ export function useCompetitorProducts(params?: {
 // Get single competitor product with details
 export function useCompetitorProduct(id: string | null) {
   return useQuery({
-    queryKey: competitorKeys.productDetail(id || ''),
+    queryKey: [...competitorKeys.all, 'product', id] as const,
     queryFn: () => competitorsApi.getProduct(id!),
     enabled: !!id,
     staleTime: 30 * 1000,
@@ -128,16 +117,9 @@ export function useCreateCompetitorProduct() {
 
   return useMutation({
     mutationFn: (data: CreateCompetitorProductRequest) => competitorsApi.createProduct(data),
-    onSuccess: (_, variables) => {
-      // ═══════════════════════════════════════════════════════════════════
-      // INVALIDATE ALL RELEVANT QUERIES (David's bug fix)
-      // Must invalidate competitors list too, not just products
-      // ═══════════════════════════════════════════════════════════════════
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: competitorKeys.all });
-      queryClient.invalidateQueries({ queryKey: competitorKeys.products() });
-      queryClient.invalidateQueries({ queryKey: competitorKeys.comparison(variables.product_id) });
-      // Also invalidate the products list (competitor count may have changed)
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
       toast.success({ title: 'Product linked', message: 'Competitor product has been linked' });
     },
     onError: (error: Error) => {
@@ -146,7 +128,6 @@ export function useCreateCompetitorProduct() {
   });
 }
 
-
 // Update competitor product
 export function useUpdateCompetitorProduct() {
   const queryClient = useQueryClient();
@@ -154,9 +135,8 @@ export function useUpdateCompetitorProduct() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateCompetitorProductRequest }) =>
       competitorsApi.updateProduct(id, data),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: competitorKeys.productDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: competitorKeys.productsList() });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: competitorKeys.all });
       toast.success({ title: 'Product updated', message: 'Competitor product has been updated' });
     },
     onError: (error: Error) => {
@@ -172,7 +152,7 @@ export function useDeleteCompetitorProduct() {
   return useMutation({
     mutationFn: (id: string) => competitorsApi.deleteProduct(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: competitorKeys.products() });
+      queryClient.invalidateQueries({ queryKey: competitorKeys.all });
       toast.success({ title: 'Product unlinked', message: 'Competitor product has been removed' });
     },
     onError: (error: Error) => {
@@ -189,7 +169,7 @@ export function useCompetitorPriceHistory(
   params?: { days?: number }
 ) {
   return useQuery({
-    queryKey: competitorKeys.priceHistory(competitorProductId || '', params),
+    queryKey: [...competitorKeys.all, 'price-history', competitorProductId, params] as const,
     queryFn: () => competitorsApi.getPriceHistory(competitorProductId!, params),
     enabled: !!competitorProductId,
     staleTime: 60 * 1000,
@@ -202,10 +182,8 @@ export function useScrapeCompetitorPrice() {
 
   return useMutation({
     mutationFn: (competitorProductId: string) => competitorsApi.scrapePrice(competitorProductId),
-    onSuccess: (_, competitorProductId) => {
-      queryClient.invalidateQueries({ queryKey: competitorKeys.productDetail(competitorProductId) });
-      queryClient.invalidateQueries({ queryKey: competitorKeys.priceHistory(competitorProductId) });
-      queryClient.invalidateQueries({ queryKey: competitorKeys.productsList() });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: competitorKeys.all });
       toast.success({ title: 'Price updated', message: 'Latest competitor price has been fetched' });
     },
     onError: (error: Error) => {
@@ -219,9 +197,12 @@ export function useScrapeCompetitorPrice() {
 // Get price comparison for a product
 export function usePriceComparison(productId: string | null) {
   return useQuery({
-    queryKey: competitorKeys.comparison(productId || ''),
+    queryKey: competitorKeys.analysis(productId || ''),
     queryFn: () => competitorsApi.comparePrices(productId!),
     enabled: !!productId,
     staleTime: 60 * 1000,
   });
 }
+
+
+

@@ -5,6 +5,9 @@
 import { z } from 'zod';
 import type { PricingRule, CreatePricingRuleRequest, RuleType, RuleAction } from '@/types';
 
+// Import centralized error handling for API responses
+export { parseApiError, getErrorMessage, isAuthError } from '@/lib/api/errors';
+
 // ============================================
 // ZOD SCHEMAS
 // ============================================
