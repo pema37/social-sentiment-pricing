@@ -329,3 +329,5 @@ class TrendDetector:
             "generated_at": datetime.now(timezone.utc).isoformat()
         }
     
+
+    

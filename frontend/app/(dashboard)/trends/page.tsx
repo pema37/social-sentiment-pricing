@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, Sparkles, RefreshCw, Filter } from 'lucide-react';
 import { AIBadge } from '@/components/ui/ai-badge';
@@ -81,14 +82,23 @@ export default function TrendsPage() {
             AI-analyzed trending products across e-commerce platforms
           </p>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F2937] text-white rounded-lg hover:bg-[#374151] disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/trends/analysis"
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            <Sparkles className="h-4 w-4" />
+            AI Analysis
+          </Link>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1F2937] text-white rounded-lg hover:bg-[#374151] disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Category Filters */}
@@ -221,5 +231,6 @@ export default function TrendsPage() {
     </div>
   );
 }
+
 
 

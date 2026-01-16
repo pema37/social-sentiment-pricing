@@ -89,3 +89,6 @@ async def market_trends_health():
     """Check if market trends service is operational."""
     return market_trends_service.get_health()
 
+
+
+
