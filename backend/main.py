@@ -44,6 +44,7 @@ from api.v1.routes import (
     websocket_router,
     health_router,
     payments_router,
+    trust_scoring_router,  # NEW: Bot/Manipulation detection
 )
 from api.v1.routes.support import router as support_router 
 from api.v1.routes.market_trends import router as market_trends_router
@@ -123,6 +124,7 @@ app.include_router(websocket_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(support_router, prefix="/api/v1")  
 app.include_router(market_trends_router, prefix="/api/v1")
+app.include_router(trust_scoring_router, prefix="/api/v1")  # NEW: /api/v1/trust/*
 
 
 @app.get("/")
@@ -134,3 +136,6 @@ async def root():
         "status": "running",
         "docs": "/docs",
     }
+
+
+

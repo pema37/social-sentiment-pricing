@@ -2,7 +2,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, Sparkles } from 'lucide-react';
 import {
   useCompetitors,
   useCreateCompetitor,
@@ -21,7 +22,6 @@ export default function CompetitorsPage() {
   const { data, isLoading, error } = useCompetitors();
   const createCompetitor = useCreateCompetitor();
   const updateCompetitor = useUpdateCompetitor();
-
 
   const handleCreate = async (formData: CreateCompetitorRequest | UpdateCompetitorRequest) => {
     await createCompetitor.mutateAsync(formData as CreateCompetitorRequest);
@@ -54,13 +54,24 @@ export default function CompetitorsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          Add Competitor
-        </button>
+        <div className="flex items-center gap-3">
+          {/* NEW: Auto-find button */}
+          <Link
+            href="/competitors/match"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            Auto-Find
+          </Link>
+
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" />
+            Add Competitor
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -81,6 +92,33 @@ export default function CompetitorsPage() {
             <p className="text-2xl font-bold text-gray-400">
               {data.items.filter((c) => !c.is_active).length}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Find CTA when no competitors */}
+      {data && data.items.length === 0 && !isLoading && (
+        <div className="mb-6 p-6 bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <Sparkles className="w-6 h-6 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900">
+                Automatically discover competitors
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Use our AI-powered search to find competitor products across Amazon, Walmart, 
+                Best Buy, and more. Just enter a product name and we'll find matching listings.
+              </p>
+              <Link
+                href="/competitors/match"
+                className="inline-flex items-center gap-2 mt-3 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              >
+                <Sparkles className="w-4 h-4" />
+                Find Competitors Automatically
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -106,3 +144,4 @@ export default function CompetitorsPage() {
     </div>
   );
 }
+

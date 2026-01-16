@@ -64,6 +64,59 @@ from schemas.alert import (
     AlertListResponse,
 )
 
+# Competitor Matching Schemas
+from schemas.competitor_matching import (
+    CompetitorSearchRequest,
+    ProductMatchRequest,
+    BulkMatchRequest,
+    MatchedProductSchema,
+    CompetitorSearchResponse,
+    ProviderInfoSchema,
+    ProvidersListResponse,
+    BulkMatchResultSchema,
+    BulkMatchResponse,
+    AutoLinkResultSchema,
+    CacheClearResponse,
+    MatchingErrorResponse,
+)
+
+# NEW: Trust Scoring / Bot Detection Schemas
+from schemas.trust_scoring import (
+    # Author scoring
+    AuthorScoreRequest,
+    AuthorScoreResponse,
+    BatchAuthorScoreRequest,
+    BatchAuthorScoreResponse,
+    ComponentScores,
+    # Content analysis
+    ContentAnalysisRequest,
+    ContentAnalysisResponse,
+    BatchContentAnalysisRequest,
+    BatchContentAnalysisResponse,
+    SpamIndicators,
+    # Campaign detection
+    CampaignDetectionRequest,
+    CampaignDetectionResponse,
+    CampaignSignalResponse,
+    MentionInput,
+    # Weighted sentiment
+    WeightedSentimentRequest,
+    WeightedSentimentResponse,
+    RawSentimentStats,
+    AdjustedSentimentStats,
+    QualityMetrics,
+    # Quick checks
+    QuickSpamCheckRequest,
+    QuickSpamCheckResponse,
+    QuickTrustCheckRequest,
+    QuickTrustCheckResponse,
+    # Stats
+    TrustScoringStatsResponse,
+    # Enums
+    TrustLevelEnum,
+    RiskFlagEnum,
+)
+
 
 __all__ = [
     # User
@@ -116,4 +169,47 @@ __all__ = [
     "AlertResolve",
     "AlertStats",
     "AlertListResponse",
+    # Competitor Matching
+    "CompetitorSearchRequest",
+    "ProductMatchRequest",
+    "BulkMatchRequest",
+    "MatchedProductSchema",
+    "CompetitorSearchResponse",
+    "ProviderInfoSchema",
+    "ProvidersListResponse",
+    "BulkMatchResultSchema",
+    "BulkMatchResponse",
+    "AutoLinkResultSchema",
+    "CacheClearResponse",
+    "MatchingErrorResponse",
+    # NEW: Trust Scoring / Bot Detection
+    "AuthorScoreRequest",
+    "AuthorScoreResponse",
+    "BatchAuthorScoreRequest",
+    "BatchAuthorScoreResponse",
+    "ComponentScores",
+    "ContentAnalysisRequest",
+    "ContentAnalysisResponse",
+    "BatchContentAnalysisRequest",
+    "BatchContentAnalysisResponse",
+    "SpamIndicators",
+    "CampaignDetectionRequest",
+    "CampaignDetectionResponse",
+    "CampaignSignalResponse",
+    "MentionInput",
+    "WeightedSentimentRequest",
+    "WeightedSentimentResponse",
+    "RawSentimentStats",
+    "AdjustedSentimentStats",
+    "QualityMetrics",
+    "QuickSpamCheckRequest",
+    "QuickSpamCheckResponse",
+    "QuickTrustCheckRequest",
+    "QuickTrustCheckResponse",
+    "TrustScoringStatsResponse",
+    "TrustLevelEnum",
+    "RiskFlagEnum",
 ]
+
+
+

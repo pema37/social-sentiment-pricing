@@ -12,6 +12,14 @@ import type {
   UpdateCompetitorProductRequest,
   CompetitorPriceHistory,
   CompetitorPriceComparison,
+  // NEW: Matching types
+  CompetitorSearchRequest,
+  CompetitorSearchResponse,
+  ProductMatchRequest,
+  BulkMatchRequest,
+  BulkMatchResponse,
+  ProvidersListResponse,
+  CacheClearResponse,
 } from '@/types';
 
 export const competitorsApi = {
@@ -83,4 +91,41 @@ export const competitorsApi = {
   // Compare prices for a product
   comparePrices: (productId: string) =>
     api.get<CompetitorPriceComparison>(`/api/v1/competitors/compare/${productId}`),
+
+  // ============== NEW: Auto URL Matching ==============
+
+  /**
+   * Search for competitor products by name
+   * Uses Google Shopping, Custom Search, and DuckDuckGo
+   */
+  searchCompetitors: (data: CompetitorSearchRequest) =>
+    api.post<CompetitorSearchResponse>('/api/v1/competitors/match/search', data),
+
+  /**
+   * Find competitors for a specific product in your catalog
+   * Optionally auto-links high-confidence matches
+   */
+  matchProduct: (data: ProductMatchRequest) =>
+    api.post<CompetitorSearchResponse>('/api/v1/competitors/match/product', data),
+
+  /**
+   * Bulk match multiple products at once
+   */
+  bulkMatch: (data: BulkMatchRequest) =>
+    api.post<BulkMatchResponse>('/api/v1/competitors/match/bulk', data),
+
+  /**
+   * Get list of available search providers
+   */
+  getProviders: () =>
+    api.get<ProvidersListResponse>('/api/v1/competitors/match/providers'),
+
+  /**
+   * Clear the search cache
+   */
+  clearCache: () =>
+    api.post<CacheClearResponse>('/api/v1/competitors/match/clear-cache'),
 };
+
+
+

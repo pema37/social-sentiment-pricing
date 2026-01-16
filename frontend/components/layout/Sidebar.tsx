@@ -24,6 +24,7 @@ import {
   Sparkles, 
   TrendingUp,
   LogOut,
+  ShieldCheck,  // NEW: Trust scoring icon
 } from 'lucide-react';
 
 // Navigation items - each page in the dashboard
@@ -34,6 +35,7 @@ const navItems = [
   { label: 'Integrations', href: '/integrations', icon: Plug },
   { label: 'Competitors', href: '/competitors', icon: Users },
   { label: 'Sentiment', href: '/sentiment', icon: MessageSquare },
+  { label: 'Trust Scoring', href: '/sentiment/trust', icon: ShieldCheck },  // NEW
   { label: 'Alerts', href: '/alerts', icon: Bell },
   { label: 'AI Support', href: '/support', icon: Sparkles },
   { label: 'Market Trends', href: '/trends', icon: TrendingUp },
@@ -66,6 +68,13 @@ export function Sidebar({ onLogout }: SidebarProps) {
   const isActive = (href: string) => {
     if (href === '/pricing') {
       return pathname === '/pricing' || pathname?.startsWith('/pricing/recommendations');
+    }
+    // Exact match for sentiment/trust to avoid conflict with /sentiment
+    if (href === '/sentiment/trust') {
+      return pathname === '/sentiment/trust';
+    }
+    if (href === '/sentiment') {
+      return pathname === '/sentiment';
     }
     return pathname === href || pathname?.startsWith(`${href}/`);
   };
@@ -150,4 +159,6 @@ export function Sidebar({ onLogout }: SidebarProps) {
     </aside>
   );
 }
+
+
 
