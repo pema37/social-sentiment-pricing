@@ -113,7 +113,7 @@ function PriceComparison({ currentPrice, suggestedPrice, changePercent }: PriceC
   return (
     <div className="grid grid-cols-2 gap-4">
       <div className="bg-gray-50 rounded-lg p-4">
-        <p className="text-sm text-gray-500 mb-1">Current Price</p>
+        <p className="text-sm text-gray-500 mb-1">SSP Price</p>
         <p className="text-2xl font-bold">{formatCurrency(currentPrice)}</p>
       </div>
       <div className={`rounded-lg p-4 ${noChange ? 'bg-gray-50' : 'bg-blue-50'}`}>

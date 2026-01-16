@@ -227,7 +227,7 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
       {/* Price Grid */}
       <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
         <PriceGridItem
-          label="Current Price"
+          label="SSP Price"
           value={formatCurrency(product.current_price)}
           subValue={priceChangeText}
           subValueColor={priceChangeColor}
