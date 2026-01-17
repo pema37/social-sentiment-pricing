@@ -10,7 +10,7 @@ Provides trust-adjusted sentiment analysis by detecting and filtering:
 - Fake engagement
 
 Usage:
-    from backend.services.trust_scoring import (
+    from services.trust_scoring import (
         calculate_weighted_sentiment,
         is_trustworthy_author,
         filter_trusted_mentions,

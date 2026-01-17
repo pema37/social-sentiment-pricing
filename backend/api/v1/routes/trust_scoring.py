@@ -60,7 +60,7 @@ from services.trust_scoring import (
     is_bot_username,
 )
 
-from backend.services.trust_scoring import (
+from services.trust_scoring import (
     get_trust_scoring_service,
     TrustScoringService,
     AuthorProfile,
@@ -451,7 +451,7 @@ async def quick_spam_check(
     reasons = []
     if spam_score >= 0.5:
         # Determine reasons
-        from backend.services.trust_scoring.utils import (
+        from services.trust_scoring.utils import (
             has_spam_phrases,
             has_excessive_caps,
             has_keyword_stuffing,
