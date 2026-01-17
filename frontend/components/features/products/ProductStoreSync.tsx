@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { productKeys } from '@/lib/api/query-keys';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
@@ -146,7 +147,7 @@ export function ProductStoreSync({ productId }: ProductStoreSyncProps) {
     error,
     refetch 
   } = useQuery({
-    queryKey: ['product-sync-status', productId],
+    queryKey: productKeys.syncStatusDetail(productId),
     queryFn: () => fetchSyncStatus(productId),
   });
   
@@ -155,7 +156,7 @@ export function ProductStoreSync({ productId }: ProductStoreSyncProps) {
     mutationFn: ({ integrationId }: { integrationId?: string }) => 
       syncProduct(productId, integrationId),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['product-sync-status', productId] });
+      queryClient.invalidateQueries({ queryKey: productKeys.syncStatusDetail(productId) });
       
       // Check results
       if (data.results) {
@@ -186,7 +187,7 @@ export function ProductStoreSync({ productId }: ProductStoreSyncProps) {
     mutationFn: ({ integrationId }: { integrationId: string }) =>
       unlinkProduct(productId, integrationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['product-sync-status', productId] });
+      queryClient.invalidateQueries({ queryKey: productKeys.syncStatusDetail(productId) });
       toast.success('Product unlinked from store');
     },
     onError: (error: ApiError) => {
@@ -380,5 +381,7 @@ export function ProductStoreSync({ productId }: ProductStoreSyncProps) {
 }
 
 export default ProductStoreSync;
+
+
 
 

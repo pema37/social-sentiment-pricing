@@ -13,6 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { competitorsApi } from '@/lib/api/competitors';
 import { useToast } from '@/lib/hooks/use-toast';
+import { competitorKeys } from '@/lib/api/query-keys';
 import type {
   CompetitorSearchRequest,
   CompetitorSearchResponse,
@@ -24,14 +25,14 @@ import type {
 } from '@/types';
 
 // ============================================
-// QUERY KEYS
+// QUERY KEYS (re-export from centralized registry for backwards compatibility)
 // ============================================
 
 export const matchingKeys = {
   all: ['competitor-matching'] as const,
-  providers: () => [...matchingKeys.all, 'providers'] as const,
-  search: (query: string) => [...matchingKeys.all, 'search', query] as const,
-  product: (productId: string) => [...matchingKeys.all, 'product', productId] as const,
+  providers: () => competitorKeys.matchingProviders(),
+  search: (query: string) => competitorKeys.matchingSearch(query),
+  product: (productId: string) => competitorKeys.matchingProduct(productId),
 };
 
 // ============================================
@@ -43,7 +44,7 @@ export const matchingKeys = {
  */
 export function useSearchProviders() {
   return useQuery({
-    queryKey: matchingKeys.providers(),
+    queryKey: competitorKeys.matchingProviders(),
     queryFn: () => competitorsApi.getProviders(),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -118,8 +119,8 @@ export function useProductMatch() {
         
         // Invalidate competitor products if auto-link was enabled
         if (variables.auto_link) {
-          queryClient.invalidateQueries({ queryKey: ['competitor-products'] });
-          queryClient.invalidateQueries({ queryKey: ['competitors'] });
+          queryClient.invalidateQueries({ queryKey: competitorKeys.products() });
+          queryClient.invalidateQueries({ queryKey: competitorKeys.all });
         }
       } else {
         toast.info({
@@ -176,8 +177,8 @@ export function useBulkMatch() {
 
       // Invalidate if auto-link was enabled
       if (variables.auto_link) {
-        queryClient.invalidateQueries({ queryKey: ['competitor-products'] });
-        queryClient.invalidateQueries({ queryKey: ['competitors'] });
+        queryClient.invalidateQueries({ queryKey: competitorKeys.products() });
+        queryClient.invalidateQueries({ queryKey: competitorKeys.all });
       }
     },
     onError: (error: Error) => {

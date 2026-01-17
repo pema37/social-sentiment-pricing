@@ -14,6 +14,7 @@ import {
   checkBalance,
   getPlans,
   getSubscription,
+  downgradeToFree,  
   subscribe,
   getPayment,
   getPaymentHistory,
@@ -139,6 +140,22 @@ export function useSubscribe() {
         network: params.network || 'bsv' 
       });
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.history() });
+    },
+  });
+}
+
+/**
+ * Downgrade to free tier
+ * Cancels any active subscription and moves user to free plan
+ */
+export function useDowngradeToFree() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: downgradeToFree,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
       queryClient.invalidateQueries({ queryKey: paymentKeys.history() });

@@ -66,6 +66,18 @@ async def get_subscription(
     """Get current user's subscription."""
     return await service.get_user_subscription(current_user)
 
+@router.post("/downgrade-to-free", response_model=SubscriptionInfo)
+async def downgrade_to_free(
+    current_user: User = Depends(get_current_user),
+    service: SubscriptionService = Depends(get_subscription_service),
+):
+    """
+    Downgrade the current user's subscription to the free tier.
+    
+    This cancels any active paid subscription and moves them to free.
+    No payment required.
+    """
+    return await service.downgrade_to_free(current_user)
 
 @router.post("/subscribe", response_model=PaymentRequest)
 async def subscribe(

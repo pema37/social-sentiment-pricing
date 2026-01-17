@@ -6,7 +6,7 @@ import { useAccount } from 'wagmi';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PayWithMNEE } from './PayWithMNEE';
-import { usePlans, useSubscription, useSubscribe } from '@/lib/hooks/use-payments';
+import { usePlans, useSubscription, useSubscribe, useDowngradeToFree } from '@/lib/hooks/use-payments';
 import { useToast } from '@/lib/hooks/use-toast';
 import { api } from '@/lib/api/client';
 import type { SubscriptionPlan, SubscriptionTier } from '@/types/payment';
@@ -306,6 +306,7 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
   const { data: plansData, isLoading: plansLoading } = usePlans();
   const { data: subscription, isLoading: subLoading, refetch: refetchSubscription } = useSubscription();
   const subscribeMutation = useSubscribe();
+  const downgradeToFreeMutation = useDowngradeToFree(); 
   const toast = useToast();
 
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier | null>(null);
@@ -323,7 +324,19 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
     setSelectedTier(tier);
 
     try {
-      // Call backend WITH network parameter
+      // Handle downgrade to free separately (no payment needed)
+      if (tier === 'free') {
+        await downgradeToFreeMutation.mutateAsync();
+        toast.success({
+          title: 'Plan Changed',
+          message: 'You are now on the Free plan.',
+        });
+        setSelectedTier(null);
+        refetchSubscription();
+        return;
+      }
+
+      // For paid tiers, create payment request
       const result = await subscribeMutation.mutateAsync({ 
         tier, 
         network: activeNetwork
@@ -333,25 +346,16 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
         status: 'pending',
         amount: result.amount,
         payment_address: result.payment_address,
-        payment_id: result.payment_id,  // Store payment_id for confirm call
+        payment_id: result.payment_id,
         network: activeNetwork,
         memo: result.memo,
         tier: tier,
       });
 
-      if (tier === 'free') {
-        toast.success({
-          title: 'Plan Changed',
-          message: 'You are now on the Free plan.',
-        });
-        setPaymentInfo(null);
-        refetchSubscription();
-      } else {
-        toast.info({
-          title: 'Payment Required',
-          message: `Send ${result.amount} MNEE to complete your subscription.`,
-        });
-      }
+      toast.info({
+        title: 'Payment Required',
+        message: `Send ${result.amount} MNEE to complete your subscription.`,
+      });
     } catch (error) {
       console.error('Subscribe error:', error);
       toast.error({
@@ -449,7 +453,7 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
             plan={plan}
             currentTier={currentTier}
             onSelect={handleSelectPlan}
-            isLoading={subscribeMutation.isPending && selectedTier === plan.id}
+            isLoading={(subscribeMutation.isPending || downgradeToFreeMutation.isPending) && selectedTier === plan.id}
           />
         ))}
       </div>

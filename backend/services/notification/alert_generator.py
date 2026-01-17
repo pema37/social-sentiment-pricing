@@ -44,9 +44,18 @@ class AlertGenerator:
         )
     """
     
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, use_celery: bool = True):
+        """
+        Initialize AlertGenerator.
+        
+        Args:
+            session: Database session
+            use_celery: If True, dispatch via Celery task (async). 
+                       If False, dispatch synchronously.
+        """
         self.session = session
         self.dispatcher = NotificationDispatcher()
+        self.use_celery = use_celery
     
     async def generate_sentiment_alert(
         self,
@@ -161,6 +170,50 @@ class AlertGenerator:
             recommendation_id=recommendation_id,
         )
     
+    async def generate_price_applied_alert(
+        self,
+        user_id: UUID,
+        product_id: UUID,
+        product_name: str,
+        old_price: float,
+        new_price: float,
+        recommendation_id: Optional[UUID] = None,
+        auto_applied: bool = False,
+    ) -> Optional[Alert]:
+        """
+        Generate alert when a price change is applied.
+        """
+        change_pct = ((new_price - old_price) / old_price) * 100
+        direction = "increased" if change_pct > 0 else "decreased"
+        
+        severity = AlertSeverity.MEDIUM if auto_applied else AlertSeverity.LOW
+        
+        applied_by = "automatically" if auto_applied else "manually"
+        title = f"Price {direction.title()} for {product_name}"
+        message = (
+            f"Price was {applied_by} {direction} from ${old_price:.2f} to ${new_price:.2f} "
+            f"({change_pct:+.1f}%)."
+        )
+        
+        alert_data = {
+            "product_name": product_name,
+            "old_price": old_price,
+            "new_price": new_price,
+            "change_percent": change_pct,
+            "auto_applied": auto_applied,
+        }
+        
+        return await self._create_and_dispatch(
+            user_id=user_id,
+            alert_type=AlertType.PRICE_APPLIED,
+            severity=severity,
+            title=title,
+            message=message,
+            alert_data=alert_data,
+            product_id=product_id,
+            recommendation_id=recommendation_id,
+        )
+    
     async def generate_competitor_alert(
         self,
         user_id: UUID,
@@ -210,6 +263,48 @@ class AlertGenerator:
             competitor_id=competitor_id,
         )
     
+    async def generate_volume_surge_alert(
+        self,
+        user_id: UUID,
+        product_id: UUID,
+        product_name: str,
+        current_volume: int,
+        average_volume: int,
+        surge_multiplier: float,
+    ) -> Optional[Alert]:
+        """
+        Generate alert for unusual mention volume.
+        """
+        if surge_multiplier >= 5:
+            severity = AlertSeverity.HIGH
+        elif surge_multiplier >= 3:
+            severity = AlertSeverity.MEDIUM
+        else:
+            severity = AlertSeverity.LOW
+        
+        title = f"Volume Surge for {product_name}"
+        message = (
+            f"Mention volume is {surge_multiplier:.1f}x higher than average. "
+            f"Current: {current_volume} mentions vs average: {average_volume}."
+        )
+        
+        alert_data = {
+            "product_name": product_name,
+            "current_volume": current_volume,
+            "average_volume": average_volume,
+            "surge_multiplier": surge_multiplier,
+        }
+        
+        return await self._create_and_dispatch(
+            user_id=user_id,
+            alert_type=AlertType.VOLUME_SURGE,
+            severity=severity,
+            title=title,
+            message=message,
+            alert_data=alert_data,
+            product_id=product_id,
+        )
+    
     async def generate_trend_alert(
         self,
         user_id: UUID,
@@ -240,7 +335,7 @@ class AlertGenerator:
         
         return await self._create_and_dispatch(
             user_id=user_id,
-            alert_type=AlertType.VIRAL_TREND,
+            alert_type=AlertType.COMPETITOR_PRICE_CHANGE,
             severity=severity,
             title=title,
             message=message,
@@ -358,24 +453,63 @@ class AlertGenerator:
         config: AlertConfiguration,
     ) -> None:
         """Dispatch alert to configured channels."""
+        
+        # Use Celery task for async dispatch (recommended)
+        if self.use_celery:
+            try:
+                from workers.tasks.notification_tasks import dispatch_alert_task
+                dispatch_alert_task.delay(str(alert.id))
+                logger.info(f"Alert {alert.id} queued for async dispatch")
+                
+                # Update config last_triggered_at
+                config.last_triggered_at = datetime.now(timezone.utc)
+                self.session.add(config)
+                self.session.commit()
+                return
+            except Exception as e:
+                logger.warning(f"Failed to queue Celery task, falling back to sync: {e}")
+        
+        # Fallback: synchronous dispatch
+        await self._dispatch_alert_sync(alert, config)
+    
+    async def _dispatch_alert_sync(
+        self,
+        alert: Alert,
+        config: AlertConfiguration,
+    ) -> None:
+        """Synchronously dispatch alert (fallback if Celery unavailable)."""
         # Get user email from database
         from models.user import User
         user = self.session.get(User, alert.user_id)
         
-        channels = [AlertChannel(c) for c in config.channels]
+        channels = []
+        for c in config.channels:
+            if isinstance(c, AlertChannel):
+                channels.append(c)
+            elif isinstance(c, str):
+                try:
+                    channels.append(AlertChannel(c))
+                except ValueError:
+                    pass
         
         # Get channel-specific settings
         settings = config.channel_settings or {}
         slack_webhook = settings.get("slack_webhook_url")
+        webhook_url = settings.get("webhook_url")
+        webhook_secret = settings.get("webhook_secret")
         
         result: DispatchResult = await self.dispatcher.dispatch(
             channels=channels,
             alert_title=alert.title,
             alert_message=alert.message,
             severity=alert.severity.value,
+            alert_type=alert.alert_type.value,
+            alert_id=str(alert.id),
             alert_data=alert.data,
             recipient_email=user.email if user else None,
             slack_webhook_url=slack_webhook,
+            webhook_url=webhook_url,
+            webhook_secret=webhook_secret,
         )
         
         # Update alert with dispatch results
@@ -385,6 +519,8 @@ class AlertGenerator:
         if result.success:
             alert.status = AlertStatus.SENT
             alert.sent_at = datetime.now(timezone.utc)
+        else:
+            alert.status = AlertStatus.FAILED
         
         # Update config last_triggered_at
         config.last_triggered_at = datetime.now(timezone.utc)
@@ -396,3 +532,7 @@ class AlertGenerator:
         logger.info(
             f"Alert {alert.id} dispatched: sent={result.channels_sent}, failed={result.channels_failed}"
         )
+
+
+
+

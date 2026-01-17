@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { productKeys } from '@/lib/api/query-keys';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types (snake_case - matches raw API response, no transformation in client)
@@ -100,7 +101,7 @@ interface ApiError {
  */
 export function useProductSyncStatus(productId: string) {
   return useQuery({
-    queryKey: ['product-sync-status', productId],
+    queryKey: productKeys.syncStatusDetail(productId),
     queryFn: async (): Promise<SyncStatus> => {
       return api.get<SyncStatus>(`/products/${productId}/sync-status`);
     },
@@ -129,12 +130,12 @@ export function useSyncProduct() {
     onSuccess: (_, variables) => {
       // Invalidate sync status
       queryClient.invalidateQueries({ 
-        queryKey: ['product-sync-status', variables.productId] 
+        queryKey: productKeys.syncStatusDetail(variables.productId) 
       });
       
       // Also invalidate product details
       queryClient.invalidateQueries({ 
-        queryKey: ['product', variables.productId] 
+        queryKey: productKeys.detail(variables.productId) 
       });
     },
   });
@@ -213,7 +214,7 @@ export function useLinkProduct() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ 
-        queryKey: ['product-sync-status', variables.productId] 
+        queryKey: productKeys.syncStatusDetail(variables.productId) 
       });
       toast.success('Product linked successfully');
     },
@@ -243,7 +244,7 @@ export function useUnlinkProduct() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ 
-        queryKey: ['product-sync-status', variables.productId] 
+        queryKey: productKeys.syncStatusDetail(variables.productId) 
       });
       toast.success('Product unlinked from store');
     },
@@ -273,8 +274,8 @@ export function useBulkSyncProducts() {
     },
     onSuccess: (data) => {
       // Invalidate all product queries
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      queryClient.invalidateQueries({ queryKey: ['product-sync-status'] });
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+      queryClient.invalidateQueries({ queryKey: productKeys.syncStatus() });
       
       if (data.pushed > 0) {
         toast.success(`Synced ${data.pushed} products`, {
@@ -319,5 +320,6 @@ export function useAutoSyncAfterCreate() {
   
   return { autoSync };
 }
+
 
 

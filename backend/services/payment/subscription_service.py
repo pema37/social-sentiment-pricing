@@ -125,6 +125,88 @@ class SubscriptionService:
         )
     
     # =========================================================================
+    # DOWNGRADE TO FREE
+    # =========================================================================
+    
+    async def downgrade_to_free(self, user: User) -> SubscriptionInfo:
+        """
+        Downgrade a user's subscription to the free tier.
+        
+        This cancels any active paid subscription and moves them to free.
+        
+        Args:
+            user: The user to downgrade
+            
+        Returns:
+            Updated subscription info
+        """
+        # Find existing subscription
+        result = await self.session.execute(
+            select(Subscription).where(Subscription.user_id == user.id)
+        )
+        subscription = result.scalar_one_or_none()
+        
+        if subscription:
+            # Check if already on free
+            if subscription.tier == "free":
+                logger.info(f"User {user.id} already on free tier")
+                return SubscriptionInfo(
+                    tier="free",
+                    status="active",
+                    current_period_start=subscription.current_period_start,
+                    current_period_end=subscription.current_period_end,
+                    product_limit=self.get_product_limit("free"),
+                    products_used=0,
+                )
+            
+            # Downgrade to free
+            old_tier = subscription.tier
+            subscription.tier = "free"
+            subscription.status = "active"
+            subscription.monthly_price = "0.00"
+            subscription.cancel_at_period_end = False
+            subscription.cancelled_at = datetime.utcnow()
+            subscription.updated_at = datetime.utcnow()
+            # Keep period dates for record but they no longer matter for free
+            
+            self.session.add(subscription)
+            await self.session.commit()
+            await self.session.refresh(subscription)
+            
+            logger.info(f"User {user.id} downgraded from {old_tier} to free")
+            
+            return SubscriptionInfo(
+                tier="free",
+                status="active",
+                current_period_start=subscription.current_period_start,
+                current_period_end=subscription.current_period_end,
+                product_limit=self.get_product_limit("free"),
+                products_used=0,
+            )
+        else:
+            # No subscription exists, create a free one
+            subscription = Subscription(
+                user_id=user.id,
+                tier="free",
+                status="active",
+                monthly_price="0.00",
+            )
+            self.session.add(subscription)
+            await self.session.commit()
+            await self.session.refresh(subscription)
+            
+            logger.info(f"Created free subscription for user {user.id}")
+            
+            return SubscriptionInfo(
+                tier="free",
+                status="active",
+                current_period_start=None,
+                current_period_end=None,
+                product_limit=self.get_product_limit("free"),
+                products_used=0,
+            )
+        
+    # =========================================================================
     # PLANS
     # =========================================================================
     

@@ -17,6 +17,9 @@ export const productKeys = {
   priceHistory: (id: string, params?: { days?: number; limit?: number }) =>
     [...productKeys.all, 'price-history', id, params] as const,
   priceSuggestion: (id: string) => [...productKeys.all, 'suggestion', id] as const,
+  // Product sync status keys
+  syncStatus: () => [...productKeys.all, 'sync-status'] as const,
+  syncStatusDetail: (id: string) => [...productKeys.syncStatus(), id] as const,
 };
 
 export const pricingKeys = {
@@ -46,8 +49,17 @@ export const competitorKeys = {
     [...competitorKeys.lists(), params] as const,
   details: () => [...competitorKeys.all, 'detail'] as const,
   detail: (id: string) => [...competitorKeys.details(), id] as const,
-  products: (competitorId: string) => [...competitorKeys.detail(competitorId), 'products'] as const,
+  // Products - works with or without competitorId
+  products: (competitorId?: string) => 
+    competitorId 
+      ? [...competitorKeys.detail(competitorId), 'products'] as const
+      : [...competitorKeys.all, 'products'] as const,
   analysis: (productId: string) => [...competitorKeys.all, 'comparison', productId] as const,
+  // Competitor matching keys
+  matching: () => [...competitorKeys.all, 'matching'] as const,
+  matchingProviders: () => [...competitorKeys.matching(), 'providers'] as const,
+  matchingSearch: (query: string) => [...competitorKeys.matching(), 'search', query] as const,
+  matchingProduct: (productId: string) => [...competitorKeys.matching(), 'product', productId] as const,
 };
 
 export const integrationKeys = {
@@ -67,8 +79,10 @@ export const alertKeys = {
   details: () => [...alertKeys.all, 'detail'] as const,
   detail: (id: string) => [...alertKeys.details(), id] as const,
   configurations: () => [...alertKeys.all, 'configurations'] as const,
+  configurationsList: (params?: Record<string, unknown>) => [...alertKeys.configurations(), 'list', params] as const,
   configurationDetail: (id: string) => [...alertKeys.configurations(), 'detail', id] as const,
   stats: () => [...alertKeys.all, 'stats'] as const,
+  unreadCount: () => [...alertKeys.all, 'unread-count'] as const,
 };
 
 export const sentimentKeys = {
@@ -102,5 +116,14 @@ export const userKeys = {
   settings: () => [...userKeys.all, 'settings'] as const,
   notifications: () => [...userKeys.all, 'notifications'] as const,
 };
+
+export const trendAnalysisKeys = {
+  all: ['trend-analysis'] as const,
+  quickStats: () => [...trendAnalysisKeys.all, 'quick-stats'] as const,
+  analysis: (params?: Record<string, unknown>) => [...trendAnalysisKeys.all, 'analysis', params] as const,
+  opportunity: (productId: string) => [...trendAnalysisKeys.all, 'opportunity', productId] as const,
+  risks: () => [...trendAnalysisKeys.all, 'risks'] as const,
+};
+
 
 
