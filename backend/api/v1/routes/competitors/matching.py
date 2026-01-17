@@ -22,7 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_current_user, get_db
+from core.deps import get_current_user
+from db.session import get_session as get_db  # Fixed: use get_session from db.session
 from models.user import User
 from models.product import Product
 from models.competitor import Competitor
@@ -532,4 +533,3 @@ async def _auto_link_competitors(
 
 
 
-    
