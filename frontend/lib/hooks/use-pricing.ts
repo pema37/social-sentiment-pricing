@@ -154,17 +154,43 @@ export function usePricingRecommendationStats() {
   });
 }
 
-/** Approve recommendation */
+/**
+ * Approve recommendation
+ * 
+ * BUG FIX #2: Added invalidation for product queries since approval
+ * now triggers price push to e-commerce platform in the backend.
+ * This ensures the product detail page shows the updated price.
+ */
 export function useApproveRecommendation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data?: ApproveRecommendationRequest }) =>
       pricingApi.approveRecommendation(id, data),
-    onSuccess: (_, variables) => {
+    onSuccess: (response, variables) => {
+      // Invalidate recommendation queries
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
-      toast.success({ title: 'Recommendation approved', message: 'You can now apply this price change' });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      
+      // BUG FIX #2: Also invalidate product queries since price may have changed
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+      
+      // If we have the product_id from response, invalidate that specific product
+      if (response?.product_id) {
+        queryClient.invalidateQueries({ queryKey: productKeys.detail(response.product_id) });
+        queryClient.invalidateQueries({ queryKey: productKeys.priceHistory(response.product_id) });
+      }
+      
+      // Check if price was actually applied (status = 'applied')
+      const wasApplied = response?.status === 'applied';
+      
+      toast.success({ 
+        title: wasApplied ? 'Price updated!' : 'Recommendation approved', 
+        message: wasApplied 
+          ? 'The new price has been applied to your store' 
+          : 'You can now apply this price change'
+      });
     },
     onError: (error: Error) => {
       toast.error({ title: 'Failed to approve', message: error.message });
@@ -182,6 +208,7 @@ export function useRejectRecommendation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
       toast.success({ title: 'Recommendation rejected', message: 'The recommendation has been rejected' });
     },
     onError: (error: Error) => {
@@ -190,17 +217,31 @@ export function useRejectRecommendation() {
   });
 }
 
-/** Apply approved recommendation to store */
+/**
+ * Apply approved recommendation to store
+ * 
+ * This is a separate step from approval - use when approval doesn't
+ * automatically push to the store.
+ */
 export function useApplyRecommendation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: string) => pricingApi.applyRecommendation(id),
-    onSuccess: (_, id) => {
+    onSuccess: (response, id) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(id) });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
-      // Also invalidate products since prices changed
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
+      
+      // Invalidate all product queries since prices changed
       queryClient.invalidateQueries({ queryKey: productKeys.all });
+      
+      // If we have the product_id from response, invalidate that specific product
+      if (response?.product_id) {
+        queryClient.invalidateQueries({ queryKey: productKeys.detail(response.product_id) });
+        queryClient.invalidateQueries({ queryKey: productKeys.priceHistory(response.product_id) });
+      }
+      
       toast.success({ title: 'Price updated!', message: 'The new price has been applied to your store' });
     },
     onError: (error: Error) => {
@@ -237,5 +278,7 @@ export function useUpdatePricingSettings() {
     },
   });
 }
+
+
 
 

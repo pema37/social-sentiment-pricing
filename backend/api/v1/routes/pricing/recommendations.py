@@ -1,10 +1,15 @@
 # backend/api/v1/routes/pricing/recommendations.py
 """
 Price recommendations and approval workflow endpoints.
+
+FIX (2026-01-17): Updated /approve endpoint to also apply the price 
+automatically after approval. This makes the flow single-click for users
+instead of requiring separate Approve then Apply steps.
 """
 
 from typing import Optional
 from uuid import UUID
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +38,7 @@ from schemas.pricing import (
 from datetime import datetime, timedelta
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -525,10 +531,38 @@ async def approve_recommendation(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Approve a pending recommendation."""
+    """
+    Approve a pending recommendation AND apply the price change.
+    
+    BUG FIX #2: Changed to approve AND apply in one step.
+    Previously this only changed status to APPROVED, requiring a separate
+    /apply call. Now it approves and pushes to e-commerce in one action.
+    
+    If the product is not linked to an e-commerce platform, the approval
+    still succeeds but the price is only updated locally.
+    """
     service = ApprovalService(db)
+    
     try:
-        return await service.approve(recommendation_id, current_user.id)
+        # First approve
+        recommendation = await service.approve(recommendation_id, current_user.id)
+        
+        # Then immediately apply (push to e-commerce)
+        try:
+            recommendation = await service.apply_price(recommendation_id, current_user.id)
+            logger.info(f"Recommendation {recommendation_id} approved and applied successfully")
+        except ValueError as apply_error:
+            # If apply fails (e.g., product not linked), log but don't fail
+            # The recommendation is still approved, just not pushed to store
+            logger.warning(
+                f"Recommendation {recommendation_id} approved but apply failed: {apply_error}. "
+                "Product may not be linked to an e-commerce platform."
+            )
+            # Refresh to get current state
+            await db.refresh(recommendation)
+        
+        return recommendation
+        
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -564,4 +598,7 @@ async def apply_recommendation(
         return await service.apply_price(recommendation_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
 
+
+    

@@ -33,6 +33,46 @@ import { useProduct } from '@/lib/hooks/use-products';
 import type { RecommendationStatus } from '@/types';
 
 // ============================================
+// BUG FIX #1: Helper to format nested objects
+// Prevents [object Object] from displaying
+// ============================================
+function formatFactorValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return 'N/A';
+  }
+  if (typeof value === 'number') {
+    // Format percentages (values between -1 and 1) nicely
+    if (Math.abs(value) <= 1 && value !== 0 && value !== 1 && value !== -1) {
+      return `${(value * 100).toFixed(1)}%`;
+    }
+    return value.toFixed(2);
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 'None';
+    return value.map(v => formatFactorValue(v)).join(', ');
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const entries = Object.entries(obj);
+    if (entries.length === 0) return 'N/A';
+    // Show key-value pairs for small objects
+    if (entries.length <= 3) {
+      return entries
+        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFactorValue(v)}`)
+        .join(' | ');
+    }
+    return `${entries.length} items`;
+  }
+  return String(value);
+}
+
+// ============================================
 // STATUS CONFIG
 // ============================================
 
@@ -350,7 +390,7 @@ export default function RecommendationDetailPage() {
           </p>
         </Card>
 
-        {/* Contributing Factors Card */}
+        {/* Contributing Factors Card - BUG FIX #1 APPLIED HERE */}
         <Card padding="md">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Contributing Factors
@@ -367,9 +407,8 @@ export default function RecommendationDetailPage() {
                     {key.replace(/_/g, ' ')}
                   </span>
                   <span className="text-sm text-gray-900">
-                    {typeof value === 'number'
-                      ? value.toFixed(2)
-                      : String(value)}
+                    {/* BUG FIX: Changed from String(value) to formatFactorValue(value) */}
+                    {formatFactorValue(value)}
                   </span>
                 </div>
               ))}
@@ -478,3 +517,6 @@ export default function RecommendationDetailPage() {
     </div>
   );
 }
+
+
+

@@ -3,11 +3,15 @@ AI Trend Analysis Service - Main Orchestrator
 
 This service coordinates data collection, AI calls, and response parsing
 to generate actionable pricing insights and predictions.
+
+FIX (2026-01-17): Updated to await async data collector methods.
+All self.collector.get_*() calls now use await.
 """
 
 from typing import Optional
+import logging
 
-from sqlmodel import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.logging import get_logger
 
@@ -41,7 +45,7 @@ class AITrendAnalyzer:
     to generate predictions, opportunities, and risk alerts.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.collector = DataCollector(db)
         self.formatter = DataFormatter()
@@ -69,11 +73,33 @@ class AITrendAnalyzer:
         """
         logger.info(f"Starting AI trend analysis for user {user_id}, {days} days")
         
-        # 1. Collect data
-        products = self.collector.get_products(user_id, product_ids)
-        sentiment_data = self.collector.get_sentiment_history(user_id, days, product_ids)
-        mentions_data = self.collector.get_mentions_summary(user_id, days, product_ids)
-        competitor_data = self.collector.get_competitor_data(user_id, product_ids)
+        # 1. Collect data (ASYNC - use await)
+        products = await self.collector.get_products(user_id, product_ids)
+        sentiment_data = await self.collector.get_sentiment_history(user_id, days, product_ids)
+        mentions_data = await self.collector.get_mentions_summary(user_id, days, product_ids)
+        competitor_data = await self.collector.get_competitor_data(user_id, product_ids)
+        
+        # Handle case where no products exist
+        if not products:
+            logger.warning(f"No products found for user {user_id}")
+            # Return empty result instead of failing
+            return self.parser.parse_analysis_response(
+                user_id=user_id,
+                ai_response={
+                    "market_sentiment": "stable",
+                    "market_sentiment_score": 0,
+                    "predictions": [],
+                    "opportunities": [],
+                    "risks": [],
+                    "executive_summary": "No products found. Add products to enable trend analysis.",
+                    "recommended_actions": ["Add products to your catalog"],
+                    "key_insights": ["No data available for analysis"],
+                },
+                products=[],
+                model_used=use_model,
+                days=days,
+                mentions_count=0,
+            )
         
         # 2. Calculate metrics
         avg_sentiment = self.calculator.calculate_avg_sentiment(sentiment_data)
@@ -95,7 +121,22 @@ class AITrendAnalyzer:
         )
         
         # 4. Call AI
-        ai_response, model_used = await ai_clients.call(SYSTEM_PROMPT, prompt, use_model)
+        try:
+            ai_response, model_used = await ai_clients.call(SYSTEM_PROMPT, prompt, use_model)
+        except Exception as e:
+            logger.error(f"AI call failed: {e}")
+            # Return fallback response
+            ai_response = {
+                "market_sentiment": "stable",
+                "market_sentiment_score": 0,
+                "predictions": [],
+                "opportunities": [],
+                "risks": [],
+                "executive_summary": "AI analysis temporarily unavailable. Please try again later.",
+                "recommended_actions": ["Check AI API configuration", "Try again in a few minutes"],
+                "key_insights": ["Analysis could not be completed"],
+            }
+            model_used = "fallback"
         
         # 5. Parse response
         result = self.parser.parse_analysis_response(
@@ -131,21 +172,21 @@ class AITrendAnalyzer:
         Returns:
             PricingOpportunity for the product
         """
-        # Get product
-        products = self.collector.get_products(user_id, [product_id])
+        # Get product (ASYNC)
+        products = await self.collector.get_products(user_id, [product_id])
         if not products:
             raise ValueError(f"Product {product_id} not found")
         product = products[0]
         
-        # Collect product-specific data
-        sentiment_data = self.collector.get_product_sentiment(product_id, days=30)
-        mentions = self.collector.get_product_mentions(product_id, days=7)
-        competitors = self.collector.get_product_competitors(product_id)
+        # Collect product-specific data (ASYNC)
+        sentiment_data = await self.collector.get_product_sentiment(product_id, days=30)
+        mentions = await self.collector.get_product_mentions(product_id, days=7)
+        competitors = await self.collector.get_product_competitors(product_id)
         
         # Build prompt
         prompt = build_opportunity_prompt(
             product_name=product.name,
-            current_price=str(product.base_price),
+            current_price=str(product.base_price) if hasattr(product, 'base_price') else str(product.current_price),
             min_price=str(product.min_price) if product.min_price else "N/A",
             max_price=str(product.max_price) if product.max_price else "N/A",
             cost=str(product.cost) if hasattr(product, 'cost') and product.cost else "N/A",
@@ -181,12 +222,16 @@ class AITrendAnalyzer:
         Returns:
             List of RiskAlert objects
         """
-        # Collect data
-        products = self.collector.get_products(user_id)
-        negative_mentions = self.collector.get_negative_mentions(user_id, days=7)
-        sentiment_drops = self.collector.get_sentiment_drops(user_id, days=7)
-        competitor_activities = self.collector.get_recent_competitor_activities(user_id)
-        current_alerts = self.collector.get_current_alerts(user_id)
+        # Collect data (ASYNC)
+        products = await self.collector.get_products(user_id)
+        negative_mentions = await self.collector.get_negative_mentions(user_id, days=7)
+        sentiment_drops = await self.collector.get_sentiment_drops(user_id, days=7)
+        competitor_activities = await self.collector.get_recent_competitor_activities(user_id)
+        current_alerts = await self.collector.get_current_alerts(user_id)
+        
+        if not products:
+            logger.warning(f"No products found for risk detection, user {user_id}")
+            return []
         
         # Build prompt
         prompt = build_risk_prompt(
@@ -198,7 +243,11 @@ class AITrendAnalyzer:
         )
         
         # Call AI
-        ai_response, _ = await ai_clients.call(SYSTEM_PROMPT, prompt, use_model)
+        try:
+            ai_response, _ = await ai_clients.call(SYSTEM_PROMPT, prompt, use_model)
+        except Exception as e:
+            logger.error(f"AI call failed for risk detection: {e}")
+            return []
         
         # Parse response
         return self.parser.parse_risk_response(ai_response)
@@ -220,10 +269,24 @@ class AITrendAnalyzer:
         Returns:
             AIInsight object with detailed analysis
         """
-        # Collect data
-        products = self.collector.get_products(user_id)
-        sentiment_data = self.collector.get_sentiment_history(user_id, days)
-        mentions_data = self.collector.get_mentions_summary(user_id, days)
+        # Collect data (ASYNC)
+        products = await self.collector.get_products(user_id)
+        sentiment_data = await self.collector.get_sentiment_history(user_id, days)
+        mentions_data = await self.collector.get_mentions_summary(user_id, days)
+        
+        if not products:
+            logger.warning(f"No products found for insight generation, user {user_id}")
+            # Return placeholder insight
+            return self.parser.parse_insight_response(
+                ai_response={
+                    "title": "No Data Available",
+                    "summary": "Add products to enable market insights.",
+                    "detailed_analysis": "",
+                    "key_factors": [],
+                },
+                model_used=use_model,
+                mentions_count=0,
+            )
         
         # Calculate metrics
         avg_sentiment = self.calculator.calculate_avg_sentiment(sentiment_data)
@@ -246,7 +309,20 @@ class AITrendAnalyzer:
         )
         
         # Call AI
-        ai_response, model_used = await ai_clients.call(SYSTEM_PROMPT, prompt, use_model)
+        try:
+            ai_response, model_used = await ai_clients.call(SYSTEM_PROMPT, prompt, use_model)
+        except Exception as e:
+            logger.error(f"AI call failed for insight generation: {e}")
+            return self.parser.parse_insight_response(
+                ai_response={
+                    "title": "Analysis Unavailable",
+                    "summary": "AI service temporarily unavailable. Please try again.",
+                    "detailed_analysis": "",
+                    "key_factors": [],
+                },
+                model_used="fallback",
+                mentions_count=len(mentions_data),
+            )
         
         # Parse response
         return self.parser.parse_insight_response(ai_response, model_used, len(mentions_data))

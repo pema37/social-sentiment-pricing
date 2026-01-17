@@ -1,12 +1,17 @@
 """
 Data collection methods for trend analysis.
 Handles all database queries to gather analysis data.
+
+FIX (2026-01-17): Converted from sync Session to async AsyncSession.
+Changed all self.db.exec() to await self.db.execute() with proper
+scalars() handling.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlmodel import Session, select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from models.product import Product
 from models.sentiment import Sentiment
@@ -17,14 +22,14 @@ from models.competitor_product import CompetitorProduct
 class DataCollector:
     """Collects data from database for trend analysis."""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
     # ==========================================
     # Product Data
     # ==========================================
     
-    def get_products(
+    async def get_products(
         self,
         user_id: str,
         product_ids: Optional[list[str]] = None,
@@ -33,13 +38,15 @@ class DataCollector:
         query = select(Product).where(Product.user_id == user_id)
         if product_ids:
             query = query.where(Product.id.in_(product_ids))
-        return list(self.db.exec(query).all())
+        
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
     
     # ==========================================
     # Sentiment Data
     # ==========================================
     
-    def get_sentiment_history(
+    async def get_sentiment_history(
         self,
         user_id: str,
         days: int,
@@ -59,10 +66,12 @@ class DataCollector:
         if product_ids:
             query = query.where(Sentiment.product_id.in_(product_ids))
         
-        sentiments = self.db.exec(query).all()
+        result = await self.db.execute(query)
+        sentiments = result.scalars().all()
+        
         return [
             {
-                "product_id": s.product_id,
+                "product_id": str(s.product_id),
                 "score": float(s.score) if s.score else 0,
                 "magnitude": float(s.magnitude) if hasattr(s, 'magnitude') and s.magnitude else 0,
                 "created_at": s.created_at,
@@ -70,16 +79,17 @@ class DataCollector:
             for s in sentiments
         ]
     
-    def get_product_sentiment(self, product_id: str, days: int) -> dict:
+    async def get_product_sentiment(self, product_id: str, days: int) -> dict:
         """Get sentiment data for a specific product."""
         start_date = datetime.utcnow() - timedelta(days=days)
         
-        sentiments = self.db.exec(
+        result = await self.db.execute(
             select(Sentiment)
             .where(Sentiment.product_id == product_id)
             .where(Sentiment.created_at >= start_date)
             .order_by(Sentiment.created_at.desc())
-        ).all()
+        )
+        sentiments = list(result.scalars().all())
         
         if not sentiments:
             return {
@@ -111,7 +121,7 @@ class DataCollector:
             "avg_7d": avg_7d,
             "avg_30d": avg_30d,
             "trend": trend,
-            "avg_volume": len(scores) / days,
+            "avg_volume": len(scores) / days if days > 0 else 0,
             "volume_change": 0,
         }
     
@@ -119,7 +129,7 @@ class DataCollector:
     # Mentions Data
     # ==========================================
     
-    def get_mentions_summary(
+    async def get_mentions_summary(
         self,
         user_id: str,
         days: int,
@@ -139,10 +149,12 @@ class DataCollector:
         if product_ids:
             query = query.where(SocialMention.product_id.in_(product_ids))
         
-        mentions = self.db.exec(query).all()
+        result = await self.db.execute(query)
+        mentions = result.scalars().all()
+        
         return [
             {
-                "product_id": m.product_id,
+                "product_id": str(m.product_id),
                 "platform": m.platform,
                 "content": m.content[:200] if m.content else "",
                 "sentiment_score": float(m.sentiment_score) if m.sentiment_score else 0,
@@ -151,22 +163,23 @@ class DataCollector:
             for m in mentions
         ]
     
-    def get_product_mentions(self, product_id: str, days: int) -> list:
+    async def get_product_mentions(self, product_id: str, days: int) -> list:
         """Get mentions for a specific product."""
         start_date = datetime.utcnow() - timedelta(days=days)
         
-        return list(self.db.exec(
+        result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.product_id == product_id)
             .where(SocialMention.created_at >= start_date)
             .order_by(SocialMention.created_at.desc())
-        ).all())
+        )
+        return list(result.scalars().all())
     
-    def get_negative_mentions(self, user_id: str, days: int) -> list:
+    async def get_negative_mentions(self, user_id: str, days: int) -> list:
         """Get negative sentiment mentions."""
         start_date = datetime.utcnow() - timedelta(days=days)
         
-        return list(self.db.exec(
+        result = await self.db.execute(
             select(SocialMention)
             .join(Product)
             .where(Product.user_id == user_id)
@@ -174,13 +187,14 @@ class DataCollector:
             .where(SocialMention.sentiment_score < -0.3)
             .order_by(SocialMention.sentiment_score.asc())
             .limit(50)
-        ).all())
+        )
+        return list(result.scalars().all())
     
     # ==========================================
     # Competitor Data
     # ==========================================
     
-    def get_competitor_data(
+    async def get_competitor_data(
         self,
         user_id: str,
         product_ids: Optional[list[str]] = None,
@@ -195,10 +209,12 @@ class DataCollector:
         if product_ids:
             query = query.where(CompetitorProduct.product_id.in_(product_ids))
         
-        competitors = self.db.exec(query).all()
+        result = await self.db.execute(query)
+        competitors = result.scalars().all()
+        
         return [
             {
-                "product_id": c.product_id,
+                "product_id": str(c.product_id),
                 "competitor_name": c.competitor_name if hasattr(c, 'competitor_name') else "Unknown",
                 "competitor_price": float(c.price) if c.price else 0,
                 "last_updated": c.updated_at,
@@ -206,26 +222,28 @@ class DataCollector:
             for c in competitors
         ]
     
-    def get_product_competitors(self, product_id: str) -> list:
+    async def get_product_competitors(self, product_id: str) -> list:
         """Get competitors for a specific product."""
-        return list(self.db.exec(
+        result = await self.db.execute(
             select(CompetitorProduct)
             .where(CompetitorProduct.product_id == product_id)
-        ).all())
+        )
+        return list(result.scalars().all())
     
     # ==========================================
     # Alerts Data
     # ==========================================
     
-    def get_current_alerts(self, user_id: str) -> list:
+    async def get_current_alerts(self, user_id: str) -> list:
         """Get active alerts for the user."""
         try:
             from models.alert import Alert
-            return list(self.db.exec(
+            result = await self.db.execute(
                 select(Alert)
                 .where(Alert.user_id == user_id)
                 .where(Alert.status == "active")
-            ).all())
+            )
+            return list(result.scalars().all())
         except Exception:
             return []
     
@@ -233,16 +251,16 @@ class DataCollector:
     # Placeholder Methods (for future implementation)
     # ==========================================
     
-    def get_sentiment_drops(self, user_id: str, days: int) -> list[dict]:
+    async def get_sentiment_drops(self, user_id: str, days: int) -> list[dict]:
         """Detect significant sentiment drops."""
         # TODO: Implement sentiment drop detection
         return []
     
-    def get_recent_competitor_activities(self, user_id: str) -> list[dict]:
+    async def get_recent_competitor_activities(self, user_id: str) -> list[dict]:
         """Get recent competitor price changes."""
         # TODO: Implement competitor activity tracking
         return []
+    
 
 
-
-        
+    
