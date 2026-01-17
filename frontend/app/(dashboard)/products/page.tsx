@@ -137,21 +137,25 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header - Responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Products</h1>
           <p className="text-gray-500 mt-1">Manage your products and pricing</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowImportModal(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import CSV
+          <Button 
+            variant="secondary" 
+            onClick={() => setShowImportModal(true)}
+            className="flex-1 sm:flex-none"
+          >
+            <Upload className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Import CSV</span>
           </Button>
-          <Link href="/products/new">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
+          <Link href="/products/new" className="flex-1 sm:flex-none">
+            <Button className="w-full">
+              <Plus className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Product</span>
             </Button>
           </Link>
         </div>

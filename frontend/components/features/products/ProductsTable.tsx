@@ -5,6 +5,7 @@ import { Package, AlertTriangle, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDo
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ProductRow } from './ProductRow';
+import { ProductCard } from './ProductCard';
 import type { Product } from '@/lib/hooks/use-products';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,6 +41,29 @@ function LoadingState() {
   return (
     <div className="flex items-center justify-center py-20">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+    </div>
+  );
+}
+
+// Mobile loading skeleton
+function MobileLoadingState() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <Card key={i} className="p-4 animate-pulse">
+          <div className="flex gap-3">
+            <div className="w-16 h-16 bg-gray-200 rounded-lg" />
+            <div className="flex-1">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+              <div className="h-3 bg-gray-200 rounded w-1/2" />
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="h-8 bg-gray-200 rounded" />
+            <div className="h-8 bg-gray-200 rounded" />
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -102,7 +126,7 @@ const columns: ColumnConfig[] = [
   { key: 'base_price', label: 'Base Price', sortField: 'base_price' },
   { 
     key: 'current_price', 
-    label: 'SSP Price',  // FIXED: Changed from "Current Price" to "SSP Price"
+    label: 'SSP Price',
     sortField: 'current_price',
     tooltip: 'Price set by SSP auto-pricing (may differ from your store until synced)'
   },
@@ -172,6 +196,43 @@ function TableHeader({ sortConfig, onSort }: TableHeaderProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Mobile Sort Dropdown
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MobileSortProps {
+  sortConfig?: SortConfig;
+  onSort?: (field: SortField) => void;
+}
+
+function MobileSort({ sortConfig, onSort }: MobileSortProps) {
+  if (!onSort) return null;
+  
+  const sortableColumns = columns.filter(c => c.sortField);
+  
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <span className="text-sm text-gray-500">Sort by:</span>
+      <select
+        value={sortConfig?.field || ''}
+        onChange={(e) => {
+          if (e.target.value) {
+            onSort(e.target.value as SortField);
+          }
+        }}
+        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">Default</option>
+        {sortableColumns.map((col) => (
+          <option key={col.key} value={col.sortField}>
+            {col.label} {sortConfig?.field === col.sortField ? (sortConfig?.order === 'asc' ? '↑' : '↓') : ''}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -189,9 +250,16 @@ export function ProductsTable({
   // Loading state
   if (isLoading) {
     return (
-      <Card className="overflow-visible">
-        <LoadingState />
-      </Card>
+      <>
+        {/* Desktop loading */}
+        <Card className="overflow-visible hidden md:block">
+          <LoadingState />
+        </Card>
+        {/* Mobile loading */}
+        <div className="md:hidden">
+          <MobileLoadingState />
+        </div>
+      </>
     );
   }
 
@@ -216,25 +284,43 @@ export function ProductsTable({
     );
   }
 
-  // Table with data
+  // Data view - responsive
   return (
-    <Card className="overflow-visible">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <TableHeader sortConfig={sortConfig} onSort={onSort} />
-          <tbody className="divide-y divide-gray-200">
-            {products.map((product) => (
-              <ProductRow
-                key={product.id}
-                product={product}
-                onPriceSuggestion={onPriceSuggestion}
-                onDelete={onDelete}
-              />
-            ))}
-          </tbody>
-        </table>
+    <>
+      {/* Mobile Card View (< md) */}
+      <div className="md:hidden">
+        <MobileSort sortConfig={sortConfig} onSort={onSort} />
+        <div className="space-y-4">
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onPriceSuggestion={onPriceSuggestion}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
       </div>
-    </Card>
+
+      {/* Desktop Table View (≥ md) */}
+      <Card className="overflow-visible hidden md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <TableHeader sortConfig={sortConfig} onSort={onSort} />
+            <tbody className="divide-y divide-gray-200">
+              {products.map((product) => (
+                <ProductRow
+                  key={product.id}
+                  product={product}
+                  onPriceSuggestion={onPriceSuggestion}
+                  onDelete={onDelete}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
   );
 }
 
