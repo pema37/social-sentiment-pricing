@@ -10,7 +10,8 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 
 from workers.celery_app import celery_app
-from db.session import get_sync_session
+# Use run_async helper and async session context from session.py
+from db.session import run_async, get_session_context
 from sqlmodel import select
 
 logger = logging.getLogger(__name__)
@@ -43,16 +44,8 @@ def dispatch_alert_task(
     Returns:
         Dict with channels_sent, channels_failed, errors
     """
-    import asyncio
-    
-    # Run async dispatch in sync context
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(_dispatch_alert_async(alert_id))
-        return result
-    finally:
-        loop.close()
+    # Use run_async helper from session.py
+    return run_async(_dispatch_alert_async(alert_id))
 
 
 async def _dispatch_alert_async(alert_id: str) -> Dict[str, Any]:
@@ -63,10 +56,8 @@ async def _dispatch_alert_async(alert_id: str) -> Dict[str, Any]:
     from services.notification.webhook_service import WebhookService
     from datetime import datetime
     
-    # Use async session
-    from db.session import async_session_maker
-    
-    async with async_session_maker() as session:
+    # Use existing get_session_context from session.py
+    async with get_session_context() as session:
         # Load alert
         result = await session.execute(
             select(Alert).where(Alert.id == alert_id)
@@ -287,7 +278,5 @@ def dispatch_bulk_alerts_task(alert_ids: List[str]) -> Dict[str, Any]:
             results["errors"].append({"alert_id": alert_id, "error": str(e)})
     
     return results
-
-
 
 
