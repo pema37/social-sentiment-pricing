@@ -62,6 +62,12 @@ interface PaymentInfo {
 function PlanCard({ plan, currentTier, onSelect, isLoading }: PlanCardProps) {
   const isCurrentPlan = plan.id === currentTier;
   const isProfessional = plan.id === 'professional';
+  
+  // Determine if this is a lower paid tier (not free, but below current)
+  const tierOrder: SubscriptionTier[] = ['free', 'starter', 'professional', 'enterprise'];
+  const currentIndex = tierOrder.indexOf(currentTier);
+  const planIndex = tierOrder.indexOf(plan.id);
+  const isLowerPaidTier = plan.id !== 'free' && planIndex < currentIndex;
 
   return (
     <Card
@@ -140,13 +146,15 @@ function PlanCard({ plan, currentTier, onSelect, isLoading }: PlanCardProps) {
 
       <Button
         onClick={() => onSelect(plan.id)}
-        disabled={isCurrentPlan || isLoading}
+        disabled={isCurrentPlan || isLoading || isLowerPaidTier}
         variant={isProfessional ? 'primary' : 'secondary'}
         className={`w-full ${isProfessional ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
         isLoading={isLoading}
       >
         {isCurrentPlan
           ? 'Current Plan'
+          : isLowerPaidTier
+          ? 'Lower Tier'
           : plan.id === 'free'
           ? 'Downgrade to Free'
           : `Upgrade to ${plan.name}`}
