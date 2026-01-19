@@ -5,14 +5,14 @@
  * 
  * Displays a single integration with status, sync info, and actions.
  * 
- * FIXED (2025-01-07): 
- * - Uses useState with effect that only runs on syncStatus changes
- * - Avoids "Cannot access refs during render" ESLint error
- * - Avoids "cascading render" warning by not calling setState synchronously
+ * FIXED (2025-01-19): 
+ * - Shows "Delete" button for disconnected integrations (David's feedback)
+ * - Both disconnect and delete use the same API (DELETE endpoint)
  */
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { Trash2 } from 'lucide-react';
 import { Integration, PLATFORM_CONFIGS } from '@/types/integration';
 import { 
   useDisconnectIntegration, 
@@ -27,7 +27,7 @@ interface IntegrationCardProps {
 }
 
 export function IntegrationCard({ integration }: IntegrationCardProps) {
-  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [pollEnabled, setPollEnabled] = useState(false);
   
   const config = PLATFORM_CONFIGS[integration.platform];
@@ -50,8 +50,10 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
   const displayProductsSynced = syncStatus?.products_synced ?? integration.products_synced;
   const displayLastSyncAt = syncStatus?.last_sync_at ?? integration.last_sync_at;
 
-  // FIXED: Reset poll flag when sync completes
-  // Using setTimeout to defer setState and avoid "set-state-in-effect" ESLint warning
+  // Check if this is a disconnected/invalid integration
+  const isDisconnected = integration.status === 'disconnected';
+
+  // Reset poll flag when sync completes
   useEffect(() => {
     if (pollEnabled && syncStatus?.sync_status === 'idle') {
       const timer = setTimeout(() => setPollEnabled(false), 0);
@@ -64,9 +66,10 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     triggerSync.mutate({ integrationId: integration.id, syncType: 'full' });
   };
 
-  const handleDisconnect = () => {
+  // Both disconnect and delete use the same API endpoint
+  const handleRemove = () => {
     disconnect.mutate(integration.id, {
-      onSuccess: () => setShowDisconnectConfirm(false),
+      onSuccess: () => setShowConfirm(false),
     });
   };
 
@@ -141,6 +144,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
 
       {/* Actions */}
       <div className="mt-4 flex gap-2">
+        {/* Sync button - only for active integrations */}
         {integration.status === 'active' && (
           <Button
             variant="secondary"
@@ -152,28 +156,36 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
           </Button>
         )}
         
-        {!showDisconnectConfirm ? (
+        {/* Disconnect/Delete button */}
+        {!showConfirm ? (
           <Button
-            variant="ghost"
+            variant={isDisconnected ? 'danger' : 'ghost'}
             size="sm"
-            onClick={() => setShowDisconnectConfirm(true)}
+            onClick={() => setShowConfirm(true)}
           >
-            Disconnect
+            {isDisconnected ? (
+              <>
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete
+              </>
+            ) : (
+              'Disconnect'
+            )}
           </Button>
         ) : (
           <div className="flex gap-2">
             <Button
               variant="danger"
               size="sm"
-              onClick={handleDisconnect}
+              onClick={handleRemove}
               disabled={disconnect.isPending}
             >
-              {disconnect.isPending ? 'Disconnecting...' : 'Confirm'}
+              {disconnect.isPending ? 'Removing...' : 'Confirm'}
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowDisconnectConfirm(false)}
+              onClick={() => setShowConfirm(false)}
             >
               Cancel
             </Button>
@@ -183,4 +195,5 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     </article>
   );
 }
+
 
