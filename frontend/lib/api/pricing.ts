@@ -38,7 +38,7 @@ async function createRule(data: CreatePricingRuleRequest): Promise<PricingRule> 
 }
 
 async function updateRule(id: string, data: UpdatePricingRuleRequest): Promise<PricingRule> {
-  return api.patch<PricingRule>(`/api/v1/pricing/rules/${id}`, data);  // Changed from put to patch
+  return api.patch<PricingRule>(`/api/v1/pricing/rules/${id}`, data);
 }
 
 async function deleteRule(id: string): Promise<void> {
@@ -67,13 +67,27 @@ async function getRecommendationById(id: string): Promise<PriceRecommendation> {
   return api.get<PriceRecommendation>(`/api/v1/pricing/recommendations/${id}`);
 }
 
+/**
+ * Approve a recommendation
+ * 
+ * BUG FIX #2: Only send body if data is provided
+ * The backend endpoint accepts optional notes but fails validation
+ * when receiving an empty object {}
+ */
 async function approveRecommendation(
   id: string,
   data?: ApproveRecommendationRequest
 ): Promise<PriceRecommendation> {
+  // Only include body if we have actual data to send
+  if (data && Object.keys(data).length > 0) {
+    return api.post<PriceRecommendation>(
+      `/api/v1/pricing/recommendations/${id}/approve`,
+      data
+    );
+  }
+  // No body - just POST to the endpoint
   return api.post<PriceRecommendation>(
-    `/api/v1/pricing/recommendations/${id}/approve`,
-    data ?? {}
+    `/api/v1/pricing/recommendations/${id}/approve`
   );
 }
 
@@ -87,10 +101,15 @@ async function rejectRecommendation(
   );
 }
 
+/**
+ * Apply an approved recommendation to the store
+ * 
+ * Note: In the updated backend, approve() now also calls apply()
+ * automatically. This endpoint is for manual application if needed.
+ */
 async function applyRecommendation(id: string): Promise<PriceRecommendation> {
   return api.post<PriceRecommendation>(
-    `/api/v1/pricing/recommendations/${id}/apply`,
-    {}
+    `/api/v1/pricing/recommendations/${id}/apply`
   );
 }
 
@@ -135,5 +154,7 @@ export const pricingApi = {
   getSettings,
   updateSettings,
 };
+
+
 
 
