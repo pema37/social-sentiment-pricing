@@ -237,3 +237,6 @@ async def connect_woocommerce(
         logger.warning(f"Auto webhook registration failed: {e}")
     
     return IntegrationResponse.model_validate(integration)
+
+
+
