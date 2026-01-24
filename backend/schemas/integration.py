@@ -4,11 +4,13 @@
 Integration Schemas
 
 Request/Response DTOs for e-commerce integration endpoints.
+
+FIX (2026-01-24): Added proper Dict[str, Any] type annotations to fix Pylance warnings.
 """
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 from enum import Enum
 
@@ -112,7 +114,7 @@ class IntegrationUpdate(BaseModel):
     """Update integration settings"""
     store_name: Optional[str] = Field(None, max_length=255)
     status: Optional[IntegrationStatus] = None
-    settings: Optional[dict] = None
+    settings: Optional[Dict[str, Any]] = None
 
 
 class IntegrationResponse(BaseModel):
@@ -127,7 +129,7 @@ class IntegrationResponse(BaseModel):
     last_sync_at: Optional[datetime]
     sync_status: str
     products_synced: int
-    settings: dict
+    settings: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
     
@@ -249,7 +251,7 @@ class WebhookPayload(BaseModel):
     """Generic webhook payload wrapper"""
     topic: str
     shop: str
-    payload: dict
+    payload: Dict[str, Any]
 
 
 # ==================== Health Check ====================
@@ -262,3 +264,6 @@ class IntegrationHealthResponse(BaseModel):
     status: str  # healthy, unhealthy, rate_limited, unauthorized
     checked_at: datetime
 
+
+
+    

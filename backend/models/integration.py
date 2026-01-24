@@ -5,12 +5,15 @@ E-commerce Integration Model
 Stores encrypted credentials for Shopify/WooCommerce connections
 
 Aligned with architecture doc: Section 6.1 Shopify Integration
+
+FIX (2026-01-24): Replaced datetime.utcnow() with datetime.now(timezone.utc)
+to fix deprecation warnings and ensure timezone-aware datetimes.
 """
 
 import uuid as uuid_lib
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 from sqlalchemy import Column as SAColumn, Text, LargeBinary, ForeignKey
@@ -19,6 +22,11 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 if TYPE_CHECKING:
     from models.user import User
     from models.product import Product
+
+
+def _utcnow() -> datetime:
+    """Return current UTC time as naive datetime for database compatibility."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class EcommercePlatform(str, Enum):
@@ -43,6 +51,7 @@ class Integration(SQLModel, table=True):
     Note: Using user_id now, will migrate to organization_id when 
     Organization model is added for full multi-tenancy.
     """
+
     __tablename__ = "integrations"
 
     id: uuid_lib.UUID = Field(
@@ -94,15 +103,11 @@ class Integration(SQLModel, table=True):
     sync_cursor: Optional[str] = Field(default=None, max_length=500)
     
     # ========== Flexible Settings (Architecture Doc) ==========
-    settings: dict = Field(default={}, sa_column=Column(JSON))
+    settings: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     
     # ========== Timestamps ==========
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
     
     # ========== Relationships ==========
     user: Optional["User"] = Relationship(back_populates="integrations")
@@ -128,10 +133,7 @@ class IntegrationSyncLog(SQLModel, table=True):
     
     # Sync details
     sync_type: str = Field(max_length=50)  # "full", "incremental", "webhook"
-    started_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        index=True
-    )
+    started_at: datetime = Field(default_factory=_utcnow, index=True)
     completed_at: Optional[datetime] = Field(default=None)
     duration_seconds: Optional[float] = Field(default=None)
     
@@ -154,6 +156,7 @@ class ProductIntegrationLink(SQLModel, table=True):
     One SSP product can be linked to multiple platforms.
     """
     __tablename__ = "product_integration_links"
+
 
     id: uuid_lib.UUID = Field(
         default_factory=uuid_lib.uuid4,
@@ -180,14 +183,11 @@ class ProductIntegrationLink(SQLModel, table=True):
     sync_enabled: bool = Field(default=True)
     
     # Timestamps
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
     # Relationships
     integration: Optional["Integration"] = Relationship(back_populates="product_links")
     product: Optional["Product"] = Relationship(back_populates="integration_links")
+
 

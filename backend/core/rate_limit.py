@@ -2,7 +2,11 @@
 """
 Rate limiting configuration for API endpoints.
 Uses slowapi with Redis backend for distributed rate limiting.
+
+FIX (2026-01-24): Added explicit type annotations for Limiter to fix Pylance warnings.
 """
+
+from typing import Callable, TypeVar, Any, cast
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -11,6 +15,9 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from core.config import settings
+
+# Type variable for preserving function signatures
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def get_client_ip(request: Request) -> str:
@@ -58,11 +65,28 @@ def _create_limiter() -> Limiter:
     )
 
 
-# Initialize the limiter
-limiter = _create_limiter()
+# Initialize the limiter with explicit type
+limiter: Limiter = _create_limiter()
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+def rate_limit(limit_string: str) -> Callable[[F], F]:
+    """
+    Typed rate limit decorator.
+    
+    Wraps slowapi's limiter.limit() with proper type hints.
+    
+    Usage:
+        @rate_limit(WRITE_RATE_LIMIT)
+        async def my_endpoint(request: Request, ...):
+            ...
+    """
+    def decorator(func: F) -> F:
+        # Apply slowapi's limiter and cast to preserve the function type
+        return cast(F, limiter.limit(limit_string)(func))
+    return decorator
+
+
+def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """Custom handler for rate limit exceeded errors."""
     return JSONResponse(
         status_code=429,
@@ -76,20 +100,21 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 # ───────────────────── Rate Limit Tiers ───────────────────── #
 
 # Auth endpoints - strictest limits (prevent brute force)
-AUTH_RATE_LIMIT = "5/minute"
-REGISTER_RATE_LIMIT = "3/minute"
-PASSWORD_RESET_RATE_LIMIT = "3/minute"
+AUTH_RATE_LIMIT: str = "5/minute"
+REGISTER_RATE_LIMIT: str = "3/minute"
+PASSWORD_RESET_RATE_LIMIT: str = "3/minute"
 
 # Write operations - moderate limits
-WRITE_RATE_LIMIT = "30/minute"      # POST, PUT, PATCH, DELETE
-BULK_RATE_LIMIT = "10/minute"       # Bulk operations, imports, syncs
+WRITE_RATE_LIMIT: str = "30/minute"      # POST, PUT, PATCH, DELETE
+BULK_RATE_LIMIT: str = "10/minute"       # Bulk operations, imports, syncs
 
 # Read operations - lighter limits  
-READ_RATE_LIMIT = "100/minute"      # GET requests (default)
+READ_RATE_LIMIT: str = "100/minute"      # GET requests (default)
 
 # Expensive operations - strict limits
-ANALYSIS_RATE_LIMIT = "20/minute"   # Sentiment analysis, AI calls
-EXPORT_RATE_LIMIT = "5/minute"      # CSV exports, reports
+ANALYSIS_RATE_LIMIT: str = "20/minute"   # Sentiment analysis, AI calls
+EXPORT_RATE_LIMIT: str = "5/minute"      # CSV exports, reports
 
 # Webhooks - allow more (external services)
-WEBHOOK_RATE_LIMIT = "200/minute"
+WEBHOOK_RATE_LIMIT: str = "200/minute"
+

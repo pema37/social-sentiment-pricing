@@ -1,8 +1,21 @@
 # backend/api/v1/routes/integrations/crud.py
-"""Integration CRUD endpoints."""
+"""
+Integration CRUD endpoints.
+
+FIX (2026-01-24): The DELETE endpoint now performs a HARD DELETE when the
+integration is already disconnected. Previously it only did a soft delete
+(changing status to DISCONNECTED), so clicking "Delete" on a disconnected
+integration did nothing visible - the record remained in the database and UI.
+
+Now:
+- Active/Paused integrations → Soft delete (status = DISCONNECTED)
+- Already Disconnected integrations → Hard delete (removed from database)
+"""
+
+from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -10,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
+from core.rate_limit import rate_limit, WRITE_RATE_LIMIT
 from db.session import get_session
 from models.user import User
-from models.integration import Integration, IntegrationStatus
+from models.integration import Integration, IntegrationStatus, ProductIntegrationLink
 from schemas.integration import (
     IntegrationUpdate,
     IntegrationResponse,
@@ -26,23 +39,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _utcnow() -> datetime:
+    """Return current UTC time as naive datetime (for DB compatibility)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 @router.get("/", response_model=IntegrationListResponse)
 async def list_integrations(
     request: Request,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-):
+) -> IntegrationListResponse:
     """List all integrations for current user."""
     stmt = select(Integration).where(
         Integration.user_id == current_user.id
-    ).order_by(Integration.created_at.desc())
+    )
     
     result = await db.execute(stmt)
-    integrations = list(result.scalars().all())
+    integrations_list = list(result.scalars().all())
+    
+    # Sort in Python to avoid SQLAlchemy type issues with .desc()
+    integrations_sorted = sorted(
+        integrations_list,
+        key=lambda x: x.created_at if x.created_at else datetime.min,
+        reverse=True
+    )
     
     return IntegrationListResponse(
-        integrations=[IntegrationResponse.model_validate(i) for i in integrations],
-        total=len(integrations),
+        integrations=[IntegrationResponse.model_validate(i) for i in integrations_sorted],
+        total=len(integrations_sorted),
     )
 
 
@@ -52,7 +77,7 @@ async def get_integration(
     integration_id: UUID,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-):
+) -> IntegrationResponse:
     """Get a specific integration."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -71,14 +96,14 @@ async def get_integration(
 
 
 @router.patch("/{integration_id}", response_model=IntegrationResponse)
-@limiter.limit(WRITE_RATE_LIMIT)
+@rate_limit(WRITE_RATE_LIMIT)
 async def update_integration(
     request: Request,
     integration_id: UUID,
     data: IntegrationUpdate,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-):
+) -> IntegrationResponse:
     """Update integration settings."""
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -96,11 +121,11 @@ async def update_integration(
     if data.store_name is not None:
         integration.store_name = data.store_name
     if data.status is not None:
-        integration.status = data.status
+        integration.status = IntegrationStatus(data.status.value)
     if data.settings is not None:
         integration.settings = data.settings
     
-    integration.updated_at = datetime.utcnow()
+    integration.updated_at = _utcnow()
     db.add(integration)
     await db.commit()
     await db.refresh(integration)
@@ -109,14 +134,28 @@ async def update_integration(
 
 
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit(WRITE_RATE_LIMIT)
+@rate_limit(WRITE_RATE_LIMIT)
 async def disconnect_integration(
     request: Request,
     integration_id: UUID,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-):
-    """Disconnect an integration (soft delete with webhook cleanup)."""
+) -> None:
+    """
+    Disconnect or delete an integration.
+    
+    Behavior:
+    - ACTIVE/PAUSED integrations: Soft delete (status → DISCONNECTED)
+      - Unregisters webhooks from the platform
+      - Keeps the record for potential reconnection
+    
+    - DISCONNECTED integrations: Hard delete (removed from database)
+      - Deletes all associated product links
+      - Permanently removes the integration record
+    
+    FIX: Previously this only did soft delete, so clicking "Delete" on an
+    already-disconnected integration did nothing. Now it actually removes it.
+    """
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id == current_user.id,
@@ -130,6 +169,33 @@ async def disconnect_integration(
             detail="Integration not found"
         )
     
+    # ═══════════════════════════════════════════════════════════════════════════
+    # FIX: If already disconnected, perform HARD DELETE
+    # ═══════════════════════════════════════════════════════════════════════════
+    if integration.status == IntegrationStatus.DISCONNECTED:
+        # Delete associated product links first (foreign key constraint)
+        links_stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration_id
+        )
+        links_result = await db.execute(links_stmt)
+        links = list(links_result.scalars().all())
+        
+        for link in links:
+            await db.delete(link)
+        
+        # Now delete the integration itself
+        await db.delete(integration)
+        await db.commit()
+        
+        logger.info(
+            f"Integration {integration_id} permanently deleted by user {current_user.id} "
+            f"(removed {len(links)} product links)"
+        )
+        return
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ACTIVE/PAUSED: Soft delete - unregister webhooks and mark as disconnected
+    # ═══════════════════════════════════════════════════════════════════════════
     if integration.status == IntegrationStatus.ACTIVE:
         try:
             webhook_service = WebhookRegistrationService(db)
@@ -139,8 +205,11 @@ async def disconnect_integration(
             logger.warning(f"Failed to unregister webhooks: {e}")
     
     integration.status = IntegrationStatus.DISCONNECTED
-    integration.updated_at = datetime.utcnow()
+    integration.updated_at = _utcnow()
     db.add(integration)
     await db.commit()
     
     logger.info(f"Integration {integration_id} disconnected by user {current_user.id}")
+
+
+    
