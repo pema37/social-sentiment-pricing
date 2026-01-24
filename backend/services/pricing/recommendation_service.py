@@ -3,6 +3,8 @@
 Recommendation Service - Generates price recommendations based on rules and signals.
 
 PATCHED: Added competitor-only fallback when no rules match (Issue 1 fix)
+FIX (2026-01-24): Competitor fallback now respects user's auto-approval settings
+instead of always requiring manual approval.
 """
 
 import logging
@@ -175,6 +177,9 @@ class RecommendationService:
         Called when no pricing rules match (e.g., insufficient sentiment data).
         Uses competitor pricing to provide a basic recommendation.
         
+        FIX (2026-01-24): Now respects user's auto-approval settings instead of
+        always requiring manual approval.
+        
         Returns:
             PriceRecommendation with data_source='competitor_only', or None
         """
@@ -280,6 +285,15 @@ class RecommendationService:
             "data_source": "competitor_only",  # Frontend uses this to show badge
         }
         
+        # ═══════════════════════════════════════════════════════════════════════
+        # FIX (2026-01-24): Check user settings instead of hardcoding True
+        # Previously: requires_approval=True (always manual)
+        # Now: Uses same logic as rule-based recommendations
+        # ═══════════════════════════════════════════════════════════════════════
+        requires_approval = self._check_requires_approval(
+            product, change_percent, Decimal("0.65"), settings
+        )
+        
         # Create recommendation with lower confidence (65% for competitor-only)
         recommendation = PriceRecommendation(
             user_id=user_id,
@@ -292,7 +306,7 @@ class RecommendationService:
             reasoning=reasoning,
             factors=factors,
             status=RecommendationStatus.PENDING,
-            requires_approval=True,  # Always require approval for fallback
+            requires_approval=requires_approval,  # Now respects user settings
             valid_until=valid_until,
         )
         
@@ -302,8 +316,23 @@ class RecommendationService:
         
         logger.info(
             f"Generated competitor fallback for product {product.id}: "
-            f"${current_price} → ${new_price} ({change_percent:+.1f}%)"
+            f"${current_price} → ${new_price} ({change_percent:+.1f}%), "
+            f"requires_approval={requires_approval}"
         )
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # FIX (2026-01-24): Auto-apply if settings allow
+        # Previously: Never auto-applied competitor fallbacks
+        # Now: Same auto-apply logic as rule-based recommendations
+        # ═══════════════════════════════════════════════════════════════════════
+        if not requires_approval and settings and settings.auto_approve_enabled:
+            try:
+                from services.pricing.approval_service import ApprovalService
+                approval_service = ApprovalService(self.db)
+                recommendation = await approval_service.auto_approve_and_apply(recommendation.id, user_id)
+                logger.info(f"Auto-applied competitor fallback {recommendation.id} for product {product.id}")
+            except Exception as e:
+                logger.warning(f"Auto-apply failed for competitor fallback {recommendation.id}: {str(e)}")
         
         return recommendation
     # ========== PATCH END ==========
@@ -506,6 +535,6 @@ class RecommendationService:
         await self.db.commit()
         
         return len(expired)
-    
 
-    
+
+        
