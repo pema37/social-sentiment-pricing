@@ -534,37 +534,31 @@ async def approve_recommendation(
     """
     Approve a pending recommendation AND apply the price change.
     
-    BUG FIX #2: Changed to approve AND apply in one step.
-    Previously this only changed status to APPROVED, requiring a separate
-    /apply call. Now it approves and pushes to e-commerce in one action.
-    
-    If the product is not linked to an e-commerce platform, the approval
-    still succeeds but the price is only updated locally.
+    FIX: Now returns error details if e-commerce push fails.
     """
     service = ApprovalService(db)
     
     try:
-        # First approve
-        recommendation = await service.approve(recommendation_id, current_user.id)
-        
-        # Then immediately apply (push to e-commerce)
-        try:
-            recommendation = await service.apply_price(recommendation_id, current_user.id)
-            logger.info(f"Recommendation {recommendation_id} approved and applied successfully")
-        except ValueError as apply_error:
-            # If apply fails (e.g., product not linked), log but don't fail
-            # The recommendation is still approved, just not pushed to store
-            logger.warning(
-                f"Recommendation {recommendation_id} approved but apply failed: {apply_error}. "
-                "Product may not be linked to an e-commerce platform."
-            )
-            # Refresh to get current state
-            await db.refresh(recommendation)
-        
+        # Use atomic auto_approve_and_apply for single-commit behavior
+        # This ensures we don't leave recommendations in APPROVED-but-not-pushed state
+        recommendation = await service.auto_approve_and_apply(recommendation_id, current_user.id)
+        logger.info(f"Recommendation {recommendation_id} approved and applied successfully")
         return recommendation
         
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        error_msg = str(e)
+        
+        # If it's a platform push error, return 400 with details
+        if "push" in error_msg.lower() or "platform" in error_msg.lower() or "linked" in error_msg.lower():
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "message": error_msg,
+                    "error_code": "ECOMMERCE_PUSH_FAILED",
+                    "suggestion": "Check that this product is linked to your store in Integrations → Sync Products"
+                }
+            )
+        raise HTTPException(status_code=400, detail=error_msg)
 
 
 @router.post("/recommendations/{recommendation_id}/reject", response_model=PriceRecommendationResponse)
