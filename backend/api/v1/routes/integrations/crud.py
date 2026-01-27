@@ -7,6 +7,9 @@ integration is already disconnected. Previously it only did a soft delete
 (changing status to DISCONNECTED), so clicking "Delete" on a disconnected
 integration did nothing visible - the record remained in the database and UI.
 
+FIX (2026-01-27): Also delete IntegrationSyncLog records before deleting
+the integration to avoid foreign key constraint violations.
+
 Now:
 - Active/Paused integrations → Soft delete (status = DISCONNECTED)
 - Already Disconnected integrations → Hard delete (removed from database)
@@ -26,7 +29,7 @@ from core.deps import get_current_user
 from core.rate_limit import rate_limit, WRITE_RATE_LIMIT
 from db.session import get_session
 from models.user import User
-from models.integration import Integration, IntegrationStatus, ProductIntegrationLink
+from models.integration import Integration, IntegrationStatus, ProductIntegrationLink, IntegrationSyncLog
 from schemas.integration import (
     IntegrationUpdate,
     IntegrationResponse,
@@ -150,11 +153,15 @@ async def disconnect_integration(
       - Keeps the record for potential reconnection
     
     - DISCONNECTED integrations: Hard delete (removed from database)
+      - Deletes all associated sync logs
       - Deletes all associated product links
       - Permanently removes the integration record
     
-    FIX: Previously this only did soft delete, so clicking "Delete" on an
-    already-disconnected integration did nothing. Now it actually removes it.
+    FIX (2026-01-24): Previously this only did soft delete, so clicking "Delete" 
+    on an already-disconnected integration did nothing. Now it actually removes it.
+    
+    FIX (2026-01-27): Now also deletes IntegrationSyncLog records to avoid
+    foreign key constraint violations.
     """
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -173,7 +180,17 @@ async def disconnect_integration(
     # FIX: If already disconnected, perform HARD DELETE
     # ═══════════════════════════════════════════════════════════════════════════
     if integration.status == IntegrationStatus.DISCONNECTED:
-        # Delete associated product links first (foreign key constraint)
+        # FIX (2026-01-27): Delete sync logs first (foreign key constraint)
+        sync_logs_stmt = select(IntegrationSyncLog).where(
+            IntegrationSyncLog.integration_id == integration_id
+        )
+        sync_logs_result = await db.execute(sync_logs_stmt)
+        sync_logs = list(sync_logs_result.scalars().all())
+        
+        for log in sync_logs:
+            await db.delete(log)
+        
+        # Delete associated product links (foreign key constraint)
         links_stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.integration_id == integration_id
         )
@@ -189,7 +206,7 @@ async def disconnect_integration(
         
         logger.info(
             f"Integration {integration_id} permanently deleted by user {current_user.id} "
-            f"(removed {len(links)} product links)"
+            f"(removed {len(sync_logs)} sync logs, {len(links)} product links)"
         )
         return
     
@@ -210,6 +227,7 @@ async def disconnect_integration(
     await db.commit()
     
     logger.info(f"Integration {integration_id} disconnected by user {current_user.id}")
+
 
 
     
