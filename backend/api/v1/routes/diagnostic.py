@@ -2,7 +2,6 @@
 """
 Diagnostic Endpoint - For debugging multi-platform integration issues.
 
-Add this to your routes to diagnose why prices aren't pushing to all platforms.
 Endpoints:
   - GET /api/v1/diagnostic/integration-health
   - GET /api/v1/diagnostic/product/{product_id}/push-status
@@ -16,19 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-# Adjust these imports based on your project structure
-# Option A: If you have db/session.py with get_db
-try:
-    from db.session import get_db
-except ImportError:
-    from db.session import get_session as get_db
-
-# Option B: If get_current_user is in core/dependencies.py
-try:
-    from core.dependencies import get_current_user
-except ImportError:
-    from core.security import get_current_user
-
+from db.session import get_session
+from core.deps import get_current_user
 from models.user import User
 from models.product import Product
 from models.integration import Integration, ProductIntegrationLink, IntegrationStatus
@@ -40,7 +28,7 @@ router = APIRouter(prefix="/diagnostic", tags=["diagnostic"])
 
 @router.get("/integration-health")
 async def check_integration_health(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -201,7 +189,7 @@ async def check_integration_health(
 @router.get("/product/{product_id}/push-status")
 async def check_product_push_status(
     product_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -336,7 +324,5 @@ def _diagnose_push_status(push_targets, skipped_targets, all_links):
         "platforms": [t["platform"] for t in push_targets],
         "action": None,
     }
-
-
 
 
