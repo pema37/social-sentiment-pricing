@@ -207,3 +207,61 @@ export async function pollSyncStatus(
     poll();
   });
 }
+
+// Add to frontend/lib/api/integrations.ts
+
+// ==================== Sync Progress (NEW) ====================
+
+export interface SyncProgress {
+  integration_id: string;
+  platform: string;
+  store_name: string | null;
+  sync_status: 'idle' | 'syncing' | 'error';
+  is_syncing: boolean;
+  products_processed: number;
+  products_total: number | null;
+  progress_percent: number | null;
+  current_phase: 'idle' | 'fetching' | 'processing' | 'finalizing';
+  started_at: string | null;
+  elapsed_seconds: number | null;
+  last_sync_at: string | null;
+  products_synced: number;
+  products_created: number;
+  products_updated: number;
+  products_deleted: number;
+  error_message: string | null;
+  status_message: string;
+  can_refresh_safely: boolean;
+}
+
+export interface AllSyncStatus {
+  integrations: Array<{
+    integration_id: string;
+    platform: string;
+    store_name: string | null;
+    sync_status: string;
+    is_syncing: boolean;
+    products_synced: number;
+    last_sync_at: string | null;
+    status: string;
+  }>;
+  any_syncing: boolean;
+  total_integrations: number;
+  message: string;
+}
+
+/**
+ * Get detailed sync progress with user-friendly messaging
+ */
+export async function getSyncProgress(integrationId: string): Promise<SyncProgress> {
+  return api.get<SyncProgress>(`${BASE}/${integrationId}/sync/progress`);
+}
+
+/**
+ * Get sync status for all integrations
+ */
+export async function getAllSyncStatus(): Promise<AllSyncStatus> {
+  return api.get<AllSyncStatus>(`${BASE}/sync/status/all`);
+}
+
+
