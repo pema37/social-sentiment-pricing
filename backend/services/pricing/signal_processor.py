@@ -409,3 +409,6 @@ class SignalProcessor:
         strength = min(strength, Decimal("1"))
         
         return direction, strength.quantize(Decimal("0.01"))
+
+
+
