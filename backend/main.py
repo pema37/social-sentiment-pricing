@@ -49,6 +49,7 @@ from api.v1.routes import (
 from api.v1.routes.support import router as support_router 
 from api.v1.routes.market_trends import router as market_trends_router
 from api.v1.routes.trend_analysis import router as trend_analysis_router
+from api.v1.routes.diagnostic import router as diagnostic_router  # ADDED: Multi-platform diagnostic
 
 
 @asynccontextmanager
@@ -127,6 +128,7 @@ app.include_router(support_router, prefix="/api/v1")
 app.include_router(market_trends_router, prefix="/api/v1")
 app.include_router(trend_analysis_router, prefix="/api/v1")  # AI Trend Analysis
 app.include_router(trust_scoring_router, prefix="/api/v1")  # NEW: /api/v1/trust/*
+app.include_router(diagnostic_router, prefix="/api/v1")  # ADDED: Multi-platform diagnostic
 
 
 @app.get("/")
