@@ -250,3 +250,30 @@ export interface PricingRecommendationStats {
   avg_price_change_percent: number | null;
 }
 
+// Add to your types file (e.g., types/pricing.ts or types/api.ts)
+
+/**
+ * Structured error response from pricing approval endpoints
+ */
+export interface ApprovalErrorDetail {
+  message: string;
+  error_code: string;
+  suggestion: string;
+}
+
+/**
+ * Error codes returned by approval endpoints
+ */
+export type ApprovalErrorCode =
+  | 'DAILY_LIMIT_REACHED'
+  | 'NO_ACTIVE_INTEGRATION_LINK'
+  | 'PRODUCT_NOT_LINKED'
+  | 'PLATFORM_PUSH_FAILED'
+  | 'RECOMMENDATION_EXPIRED'
+  | 'INVALID_STATUS'
+  | 'NOT_FOUND'
+  | 'PRODUCT_NOT_FOUND'
+  | 'APPROVAL_ERROR';
+
+
+  

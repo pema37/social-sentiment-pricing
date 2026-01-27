@@ -5,6 +5,8 @@ Approval Service - Core approval workflow and price application.
 FIX (2025-01-07): Made auto_approve_and_apply() atomic - single commit at the end.
 FIX (2025-01-25): Extracted e-commerce push to EcommercePushService.
 FIX (2025-01-25): Now pushes to ALL active platforms, not just the first one.
+FIX (2026-01-27): Fixed _check_daily_limit() bug - was returning False when no settings exist.
+FIX (2026-01-27): Added clearer error messages for common failure scenarios.
 """
 
 from datetime import datetime, timedelta
@@ -21,6 +23,15 @@ from models.price_history import PriceHistory, ChangeReason
 from models.pricing_settings import PricingSettings
 
 logger = logging.getLogger(__name__)
+
+
+class ApprovalError(Exception):
+    """Custom exception for approval failures with error codes."""
+    
+    def __init__(self, message: str, error_code: str = "APPROVAL_ERROR"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
 
 
 class ApprovalService:
@@ -43,13 +54,19 @@ class ApprovalService:
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
         if recommendation.status != RecommendationStatus.PENDING:
-            raise ValueError(f"Cannot approve recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot approve recommendation with status: {recommendation.status}",
+                "INVALID_STATUS"
+            )
         
         if recommendation.valid_until < datetime.utcnow():
             recommendation.status = RecommendationStatus.EXPIRED
             self.db.add(recommendation)
             await self.db.commit()
-            raise ValueError("Recommendation has expired")
+            raise ApprovalError(
+                "This recommendation has expired. Please generate a new one.",
+                "RECOMMENDATION_EXPIRED"
+            )
         
         recommendation.status = (
             RecommendationStatus.AUTO_APPROVED if auto 
@@ -74,7 +91,10 @@ class ApprovalService:
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
         if recommendation.status != RecommendationStatus.PENDING:
-            raise ValueError(f"Cannot reject recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot reject recommendation with status: {recommendation.status}",
+                "INVALID_STATUS"
+            )
         
         recommendation.status = RecommendationStatus.REJECTED
         recommendation.reviewed_by = user_id
@@ -106,11 +126,14 @@ class ApprovalService:
             RecommendationStatus.APPROVED,
             RecommendationStatus.AUTO_APPROVED
         ]:
-            raise ValueError(f"Cannot apply recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot apply recommendation with status: {recommendation.status}",
+                "INVALID_STATUS"
+            )
         
         product = await self.db.get(Product, recommendation.product_id)
         if not product:
-            raise ValueError("Product not found")
+            raise ApprovalError("Product not found", "PRODUCT_NOT_FOUND")
         
         old_price = product.current_price
         
@@ -141,7 +164,8 @@ class ApprovalService:
             await self.db.rollback()
             
             error_msg = platform_result.get("error", "Unknown error pushing to platform")
-            raise ValueError(f"Failed to push price to platform: {error_msg}")
+            error_code = platform_result.get("error_code", "PLATFORM_PUSH_FAILED")
+            raise ApprovalError(error_msg, error_code)
         
         # Update recommendation status
         recommendation.status = RecommendationStatus.APPLIED
@@ -169,23 +193,30 @@ class ApprovalService:
         from services.pricing.ecommerce_push_service import EcommercePushService
         
         # Check daily limit first
-        if not await self._check_daily_limit(user_id):
-            raise ValueError("Daily auto-approval limit reached")
+        limit_ok, limit_msg = await self._check_daily_limit(user_id)
+        if not limit_ok:
+            raise ApprovalError(limit_msg, "DAILY_LIMIT_REACHED")
         
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
         if recommendation.status != RecommendationStatus.PENDING:
-            raise ValueError(f"Cannot auto-approve recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot approve: recommendation status is '{recommendation.status}', expected 'PENDING'",
+                "INVALID_STATUS"
+            )
         
         if recommendation.valid_until < datetime.utcnow():
             recommendation.status = RecommendationStatus.EXPIRED
             self.db.add(recommendation)
             await self.db.commit()
-            raise ValueError("Recommendation has expired")
+            raise ApprovalError(
+                "This recommendation has expired. Please generate a new one.",
+                "RECOMMENDATION_EXPIRED"
+            )
         
         product = await self.db.get(Product, recommendation.product_id)
         if not product:
-            raise ValueError("Product not found")
+            raise ApprovalError("Product not found", "PRODUCT_NOT_FOUND")
         
         old_price = product.current_price
         
@@ -207,12 +238,19 @@ class ApprovalService:
             await self.db.rollback()
             
             error_msg = platform_result.get("error", "Unknown error")
-            error_code = platform_result.get("error_code", "UNKNOWN")
+            error_code = platform_result.get("error_code", "PLATFORM_PUSH_FAILED")
             logger.warning(
                 f"Auto-apply failed for recommendation {recommendation_id}: "
                 f"[{error_code}] {error_msg}"
             )
-            raise ValueError(f"Failed to push price to platform: {error_msg}")
+            
+            # Provide helpful message based on error type
+            if error_code == "NO_ACTIVE_INTEGRATION_LINK":
+                raise ApprovalError(
+                    "This product isn't linked to your store. Go to Integrations → Sync Products to link it.",
+                    error_code
+                )
+            raise ApprovalError(f"Failed to push price to platform: {error_msg}", error_code)
         
         # Step 3: Create price history
         history = PriceHistory(
@@ -255,10 +293,10 @@ class ApprovalService:
         recommendation = await self.db.get(PriceRecommendation, recommendation_id)
         
         if not recommendation:
-            raise ValueError("Recommendation not found")
+            raise ApprovalError("Recommendation not found", "NOT_FOUND")
         
         if recommendation.user_id != user_id:
-            raise ValueError("Recommendation not found")
+            raise ApprovalError("Recommendation not found", "NOT_FOUND")
         
         return recommendation
     
@@ -268,11 +306,26 @@ class ApprovalService:
         result = await self.db.execute(stmt)
         return result.scalars().first()
     
-    async def _check_daily_limit(self, user_id: UUID) -> bool:
-        """Check if user has reached daily auto-change limit."""
+    async def _check_daily_limit(self, user_id: UUID) -> tuple[bool, str]:
+        """
+        Check if user has reached daily auto-change limit.
+        
+        Returns:
+            tuple[bool, str]: (is_within_limit, message)
+            
+        FIX (2026-01-27): Previously returned False when no settings exist,
+        which blocked ALL approvals. Now returns True (no limit) in that case.
+        """
         settings = await self._get_user_settings(user_id)
+        
+        # FIX: No settings means no limit configured - allow unlimited approvals
         if not settings:
-            return False
+            logger.debug(f"No pricing settings for user {user_id}, allowing unlimited approvals")
+            return True, "OK"
+        
+        # If limit is 0 or negative, treat as unlimited
+        if settings.max_auto_changes_per_day <= 0:
+            return True, "OK"
         
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         
@@ -285,7 +338,12 @@ class ApprovalService:
         result = await self.db.execute(stmt)
         count = result.scalar() or 0
         
-        return count < settings.max_auto_changes_per_day
+        limit = settings.max_auto_changes_per_day
+        
+        if count >= limit:
+            return False, f"Daily limit reached ({count}/{limit}). Go to Settings → Pricing to increase your limit."
+        
+        return True, "OK"
     
     async def get_approval_stats(self, user_id: UUID, days: int = 30) -> dict:
         """Get approval statistics for a user."""

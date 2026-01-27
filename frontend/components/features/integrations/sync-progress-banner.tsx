@@ -37,7 +37,7 @@ export function SyncProgressBanner({ syncStatus }: SyncProgressBannerProps) {
   return (
     <div className="rounded-lg border bg-blue-50 border-blue-200 p-4 mb-6">
       <div className="flex items-center gap-3">
-        <Loader2 className="h-5 w-5 text-blue-600 animate-spin flex-shrink-0" />
+        <Loader2 className="h-5 w-5 text-blue-600 animate-spin shrink-0" />
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -57,7 +57,7 @@ export function SyncProgressBanner({ syncStatus }: SyncProgressBannerProps) {
           </p>
         </div>
         
-        <div className="flex items-center gap-1 text-xs text-blue-600 bg-white/60 rounded px-2 py-1 flex-shrink-0">
+        <div className="flex items-center gap-1 text-xs text-blue-600 bg-white/60 rounded px-2 py-1 shrink-0">
           <Info className="h-3 w-3" />
           <span>Background sync</span>
         </div>
