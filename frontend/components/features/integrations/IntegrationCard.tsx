@@ -55,9 +55,8 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
 
   // Reset poll flag when sync completes
   useEffect(() => {
-    if (pollEnabled && syncStatus?.sync_status === 'idle') {
-      const timer = setTimeout(() => setPollEnabled(false), 0);
-      return () => clearTimeout(timer);
+    if (pollEnabled && syncStatus?.sync_status && syncStatus.sync_status !== 'syncing') {
+      queueMicrotask(() => setPollEnabled(false));
     }
   }, [pollEnabled, syncStatus?.sync_status]);
 
