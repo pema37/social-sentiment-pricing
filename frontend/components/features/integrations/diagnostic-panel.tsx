@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertCircle, CheckCircle, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { api } from "@/lib/api/client";
 
 // Types for diagnostic response
 interface IntegrationSummary {
@@ -55,8 +56,6 @@ interface DiagnosticResponse {
   issues: Issue[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
 export function DiagnosticPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,29 +67,19 @@ export function DiagnosticPanel() {
     setError(null);
 
     try {
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        setError("Not authenticated. Please log in.");
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/v1/diagnostic/integration-health`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      // FIX (2026-01-27): Use api client instead of raw fetch
+      // This ensures proper authentication header is included
+      const result = await api.get<DiagnosticResponse>("/api/v1/diagnostic/integration-health");
       setData(result);
       setIsOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run diagnostic");
+      // Handle structured error from api client
+      if (err && typeof err === 'object' && 'detail' in err) {
+        const detail = (err as { detail: string | object }).detail;
+        setError(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to run diagnostic");
+      }
     } finally {
       setIsLoading(false);
     }
