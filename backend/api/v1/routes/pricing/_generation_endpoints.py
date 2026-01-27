@@ -1,6 +1,10 @@
 # backend/api/v1/routes/pricing/_generation_endpoints.py
 """
 Recommendation generation and diagnostic endpoints.
+
+FIX (2026-01-27): generate-all now includes products with competitor links,
+not just products with active rules. This enables WooCommerce products to
+get competitor-based recommendations even without explicit pricing rules.
 """
 
 from typing import Optional
@@ -10,6 +14,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import or_
 from sqlmodel import select
 
 from db.session import get_session
@@ -106,7 +111,8 @@ async def diagnose_product_recommendations(
     
     if not rules:
         diagnosis["issues"].append(
-            "NO_RULES: No pricing rules configured for this product"
+            "NO_RULES: No pricing rules configured for this product. "
+            "Competitor-based recommendations can still be generated if competitor products are linked."
         )
     
     active_rules = [r for r in rules if r.is_active]
@@ -197,11 +203,13 @@ async def diagnose_product_recommendations(
                 "change_percent": str(recommendation.change_percent),
                 "confidence_score": str(recommendation.confidence_score),
                 "status": recommendation.status.value if hasattr(recommendation.status, 'value') else recommendation.status,
+                "data_source": recommendation.factors.get("data_source", "rule_based") if recommendation.factors else "rule_based",
             })
         else:
             diagnosis["issues"].append(
                 "NO_RECOMMENDATION_GENERATED: RecommendationService returned None. "
-                "This means no rule matched or the calculated price equals current price."
+                "This means no rule matched, no competitor fallback was possible, "
+                "or the calculated price equals current price."
             )
     except Exception as e:
         diagnosis["issues"].append(f"GENERATION_ERROR: {str(e)}")
@@ -244,20 +252,54 @@ async def generate_all_recommendations(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Generate recommendations for all products with active rules.
+    Generate recommendations for all eligible products.
     
-    Useful for:
-    - Initial setup/testing
-    - Manual trigger instead of waiting for scheduled task
-    - Demo purposes
+    Eligible products:
+    - Products with active pricing rules, OR
+    - Products with linked competitor products (for competitor fallback)
+    
+    This enables:
+    - Rule-based recommendations for products with explicit pricing rules
+    - Competitor-based fallback recommendations for products with only competitor data
+    
+    FIX (2026-01-27): Now includes products with competitor links, not just
+    products with active rules. This enables WooCommerce products (and any
+    products without explicit rules) to get competitor-based recommendations.
+    
+    Previous behavior: Only products with active pricing rules were processed,
+    which excluded WooCommerce products that had competitors linked but no rules.
     """
-    # Get all products with active rules for this user
+    # ═══════════════════════════════════════════════════════════════════════
+    # FIX (2026-01-27): Include products with EITHER active rules OR competitor products
+    # Previously: Only products with active rules (inner join excluded products without rules)
+    # Now: Products with rules OR products with competitor products are included
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Subquery: products with active pricing rules
+    has_active_rules = (
+        select(PricingRule.product_id)
+        .where(PricingRule.is_active == True)
+        .where(PricingRule.user_id == current_user.id)
+    )
+    
+    # Subquery: products with active competitor products that have prices
+    has_competitor_products = (
+        select(CompetitorProduct.product_id)
+        .where(CompetitorProduct.is_active == True)
+        .where(CompetitorProduct.current_price.isnot(None))
+    )
+    
+    # Get products that match EITHER condition
     stmt = (
         select(Product)
-        .join(PricingRule, PricingRule.product_id == Product.id)
         .where(Product.user_id == current_user.id)
-        .where(PricingRule.is_active == True)
-        .distinct()
+        .where(Product.is_active == True)
+        .where(
+            or_(
+                Product.id.in_(has_active_rules),
+                Product.id.in_(has_competitor_products)
+            )
+        )
     )
     
     result = await db.execute(stmt)
@@ -265,14 +307,20 @@ async def generate_all_recommendations(
     
     if not products:
         return {
-            "message": "No products with active pricing rules found",
+            "message": "No eligible products found. Products need either active pricing rules or linked competitor products with prices.",
             "products_checked": 0,
             "recommendations_created": 0,
+            "recommendations_by_source": {
+                "rule_based": 0,
+                "competitor_only": 0
+            },
             "results": []
         }
     
     results = []
     recommendations_created = 0
+    rule_based_count = 0
+    competitor_only_count = 0
     
     service = RecommendationService(db)
     
@@ -282,6 +330,16 @@ async def generate_all_recommendations(
             
             if recommendation:
                 recommendations_created += 1
+                
+                # Determine data source from factors
+                factors = recommendation.factors or {}
+                data_source = factors.get("data_source", "rule_based")
+                
+                if data_source == "competitor_only":
+                    competitor_only_count += 1
+                else:
+                    rule_based_count += 1
+                
                 results.append({
                     "product_id": str(product.id),
                     "product_name": product.name,
@@ -290,6 +348,9 @@ async def generate_all_recommendations(
                     "current_price": str(product.current_price),
                     "recommended_price": str(recommendation.recommended_price),
                     "change_percent": str(recommendation.change_percent),
+                    "confidence_score": str(recommendation.confidence_score),
+                    "data_source": data_source,
+                    "requires_approval": recommendation.requires_approval,
                 })
             else:
                 results.append({
@@ -297,9 +358,10 @@ async def generate_all_recommendations(
                     "product_name": product.name,
                     "success": True,
                     "recommendation_id": None,
-                    "message": "No rule matched or no price change needed"
+                    "message": "No rule matched and no competitor fallback applicable, or price unchanged"
                 })
         except Exception as e:
+            logger.error(f"Error generating recommendation for product {product.id}: {e}")
             results.append({
                 "product_id": str(product.id),
                 "product_name": product.name,
@@ -311,9 +373,11 @@ async def generate_all_recommendations(
         "message": f"Processed {len(products)} products, created {recommendations_created} recommendations",
         "products_checked": len(products),
         "recommendations_created": recommendations_created,
+        "recommendations_by_source": {
+            "rule_based": rule_based_count,
+            "competitor_only": competitor_only_count
+        },
         "results": results
     }
 
 
-
-    
