@@ -80,8 +80,15 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       {/* Main content area */}
       <div className="lg:ml-60">
-        {/* Mobile header - Shows hamburger + logo + alerts/profile/logout */}
-        <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200">
+        {/* ═══════════════════════════════════════════════════════════════════
+            Mobile header - Shows hamburger + logo + alerts/profile/logout
+            
+            FIX (2026-01-27): Added "relative z-50" to ensure this header 
+            stays ABOVE the overlay (z-40). Without this, the overlay 
+            intercepts clicks and Profile/Logout buttons become unresponsive
+            when the sidebar is open.
+        ═══════════════════════════════════════════════════════════════════ */}
+        <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200 relative z-50">
           {/* Left: Hamburger menu */}
           <button
             onClick={() => setSidebarOpen(true)}
@@ -133,3 +140,5 @@ export function DashboardShell({ children }: DashboardShellProps) {
     </div>
   );
 }
+
+

@@ -8,9 +8,18 @@
  * FIXED (2025-01-19): 
  * - Shows "Delete" button for disconnected integrations (David's feedback)
  * - Both disconnect and delete use the same API (DELETE endpoint)
+ * 
+ * FIXED (2026-01-27):
+ * - Bug #1: Never-ending sync UI
+ * - Root cause: When polling stopped, UI fell back to stale `integration.sync_status` prop
+ * - Fix: Track last known values in state, update only when poll returns fresh data
+ * 
+ * NOTE: ESLint disable comments are used for setState-in-effect because these are
+ * valid patterns - we're syncing component state with external query data (React Query).
+ * This is the recommended pattern per React docs for "synchronizing with external systems".
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { Trash2 } from 'lucide-react';
 import { Integration, PLATFORM_CONFIGS } from '@/types/integration';
@@ -22,6 +31,13 @@ import {
 import { Button } from '@/components/ui';
 import { formatRelativeTime } from '@/lib/utils';
 
+// Type for the cached sync data we want to persist
+interface CachedSyncData {
+  sync_status: string;
+  products_synced: number;
+  last_sync_at: string | null;
+}
+
 interface IntegrationCardProps {
   integration: Integration;
 }
@@ -29,6 +45,9 @@ interface IntegrationCardProps {
 export function IntegrationCard({ integration }: IntegrationCardProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pollEnabled, setPollEnabled] = useState(false);
+  
+  // Cache the last known sync data to prevent UI from reverting to stale props
+  const [cachedSyncData, setCachedSyncData] = useState<CachedSyncData | null>(null);
   
   const config = PLATFORM_CONFIGS[integration.platform];
   const disconnect = useDisconnectIntegration();
@@ -42,35 +61,60 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     { polling: shouldPoll }
   );
 
-  // Derive current status from polled data or prop fallback
-  const currentSyncStatus = syncStatus?.sync_status || integration.sync_status;
+  // Update cached data when we get fresh poll results
+  // This is a valid use of setState in effect - syncing with external query data
+  useEffect(() => {
+    if (syncStatus?.sync_status) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Valid: syncing state with external query data
+      setCachedSyncData({
+        sync_status: syncStatus.sync_status,
+        products_synced: syncStatus.products_synced ?? 0,
+        last_sync_at: syncStatus.last_sync_at ?? null,
+      });
+    }
+  }, [syncStatus?.sync_status, syncStatus?.products_synced, syncStatus?.last_sync_at]);
+
+  // Reset poll flag when sync completes
+  // This is a valid use of setState in effect - responding to external state change
+  useEffect(() => {
+    if (syncStatus?.sync_status && syncStatus.sync_status !== 'syncing') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Valid: stopping poll when external sync completes
+      setPollEnabled(false);
+    }
+  }, [syncStatus?.sync_status]);
+
+  // Derive current status with fallback chain:
+  // 1. Fresh polled data (if available)
+  // 2. Cached data from previous polls
+  // 3. Prop fallback (initial render only)
+  const currentSyncStatus = syncStatus?.sync_status 
+    ?? cachedSyncData?.sync_status 
+    ?? integration.sync_status;
   const isSyncing = currentSyncStatus === 'syncing';
   
-  // Display values from polled data with prop fallback
-  const displayProductsSynced = syncStatus?.products_synced ?? integration.products_synced;
-  const displayLastSyncAt = syncStatus?.last_sync_at ?? integration.last_sync_at;
+  // Display values with same fallback chain
+  const displayProductsSynced = syncStatus?.products_synced 
+    ?? cachedSyncData?.products_synced 
+    ?? integration.products_synced 
+    ?? 0;
+  const displayLastSyncAt = syncStatus?.last_sync_at 
+    ?? cachedSyncData?.last_sync_at 
+    ?? integration.last_sync_at;
 
   // Check if this is a disconnected/invalid integration
   const isDisconnected = integration.status === 'disconnected';
 
-  // Reset poll flag when sync completes
-  useEffect(() => {
-    if (pollEnabled && syncStatus?.sync_status && syncStatus.sync_status !== 'syncing') {
-      queueMicrotask(() => setPollEnabled(false));
-    }
-  }, [pollEnabled, syncStatus?.sync_status]);
-
-  const handleSync = () => {
+  const handleSync = useCallback(() => {
     setPollEnabled(true);
     triggerSync.mutate({ integrationId: integration.id, syncType: 'full' });
-  };
+  }, [triggerSync, integration.id]);
 
   // Both disconnect and delete use the same API endpoint
-  const handleRemove = () => {
+  const handleRemove = useCallback(() => {
     disconnect.mutate(integration.id, {
       onSuccess: () => setShowConfirm(false),
     });
-  };
+  }, [disconnect, integration.id]);
 
   const statusColors = {
     active: 'bg-green-100 text-green-800',
