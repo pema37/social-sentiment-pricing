@@ -5,6 +5,9 @@ WooCommerce Integration Service.
 
 PATCHED (2025-01-07): Added price verification after push to detect
 when WooCommerce silently rejects or modifies price updates.
+
+PATCHED (2026-01-28): Bug #4 fix - fetch_products now includes all product
+statuses by default (publish, draft, private, pending) to ensure complete sync.
 """
 
 import hmac
@@ -94,18 +97,49 @@ class WooCommerceService(EcommerceService):
         store_url: str,
         access_token: str,
         cursor: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        include_all_statuses: bool = True,  # FIX Bug #4: Include draft/private products by default
     ) -> ProductSyncResult:
+        """
+        Fetch products from WooCommerce.
+        
+        Args:
+            store_url: WooCommerce store URL
+            access_token: API credentials (consumer_key:consumer_secret)
+            cursor: Pagination cursor (page number as string)
+            limit: Max products per page (capped at 100)
+            include_all_statuses: If True (default), fetches ALL products regardless of status
+                                  (publish, draft, private, pending). If False, only published.
+        
+        Returns:
+            ProductSyncResult with fetched products
+        
+        Note (2026-01-28): Changed default behavior to include all statuses. Previously
+        only 'publish' status was fetched, causing draft/private products to be missing
+        from sync. See Bug #4 in SSP_AUDIT_REPORT.md.
+        """
         try:
             base_url = self.normalize_store_url(store_url)
             key, secret = self._parse_credentials(access_token)
             page = int(cursor) if cursor else 1
             
+            # Build params - only filter by status if explicitly requested
+            params = {
+                "per_page": min(limit, 100),
+                "page": page,
+            }
+            
+            # FIX Bug #4: By default, don't filter by status so we get ALL products
+            # This ensures draft, private, and pending products are also synced
+            # WooCommerce API returns all statuses when 'status' param is omitted
+            if not include_all_statuses:
+                params["status"] = "publish"
+            
             async with RetryableClient(store_url, "woocommerce", self.retry_config, 30.0) as client:
                 response = await client.get(
                     f"{base_url}/wp-json/{self.API_VERSION}/products",
                     auth=(key, secret),
-                    params={"per_page": min(limit, 100), "page": page, "status": "publish"},
+                    params=params,
                 )
                 products_data = response.json()
                 total_pages = int(response.headers.get("X-WP-TotalPages", 1))
@@ -456,5 +490,7 @@ class WooCommerceService(EcommerceService):
             return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             return None
+        
 
-            
+
+        

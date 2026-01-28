@@ -11,6 +11,9 @@ These tasks detect when prices become out of sync due to:
 
 IMPORTANT: Each task creates its own database session to avoid event loop
 conflicts when running in Celery's forked worker processes.
+
+PATCHED (2026-01-28): Bug #6 fix - Added recover_stuck_syncs task to handle
+integrations stuck in 'syncing' status. See SSP_AUDIT_REPORT.md.
 """
 
 import asyncio
@@ -29,7 +32,7 @@ from workers.celery_app import celery_app
 from core.config import settings
 from core.logging import get_logger
 from models.product import Product
-from models.integration import Integration, IntegrationStatus, ProductIntegrationLink
+from models.integration import Integration, IntegrationStatus, ProductIntegrationLink, IntegrationSyncLog
 from services.integration.woocommerce_service import WooCommerceService
 from services.integration.shopify_service import ShopifyService
 from core.encryption import decrypt_token
@@ -49,6 +52,11 @@ MAX_PRODUCTS_PER_RUN = 100
 
 # How old a sync can be before we force a re-check (hours)
 STALE_SYNC_HOURS = 24
+
+# ========== NEW: Stuck sync recovery config (Bug #6) ==========
+# If a sync has been running longer than this, consider it stuck
+STUCK_SYNC_TIMEOUT_MINUTES = 15
+# ========== END NEW ==========
 
 
 # ==============================================================================
@@ -434,6 +442,135 @@ async def _get_sync_status_report() -> Dict:
         }
 
 
+# ========== NEW: Stuck sync recovery implementation (Bug #6) ==========
+async def _recover_stuck_syncs() -> Dict:
+    """
+    Recover integrations stuck in 'syncing' status.
+    
+    This handles cases where:
+    - Celery worker crashed mid-sync
+    - Database commit failed after sync completed
+    - Process was killed unexpectedly
+    - Network timeout wasn't properly caught
+    
+    Returns:
+        Dict with recovery results
+    
+    Note (2026-01-28): Added to fix Bug #6 where syncs would get stuck
+    in 'syncing' status forever if the worker crashed.
+    """
+    session_maker = get_task_session_maker()
+    
+    results = {
+        "checked": 0,
+        "recovered": 0,
+        "still_running": 0,
+        "details": [],
+    }
+    
+    cutoff = datetime.utcnow() - timedelta(minutes=STUCK_SYNC_TIMEOUT_MINUTES)
+    
+    async with session_maker() as db:
+        # Find all integrations with sync_status = 'syncing'
+        stmt = select(Integration).where(Integration.sync_status == "syncing")
+        result = await db.execute(stmt)
+        integrations = result.scalars().all()
+        
+        results["checked"] = len(integrations)
+        
+        for integration in integrations:
+            # Check if there's a sync log that's been "in progress" too long
+            log_stmt = (
+                select(IntegrationSyncLog)
+                .where(IntegrationSyncLog.integration_id == integration.id)
+                .where(IntegrationSyncLog.completed_at.is_(None))  # Not completed
+                .order_by(IntegrationSyncLog.started_at.desc())
+                .limit(1)
+            )
+            log_result = await db.execute(log_stmt)
+            stuck_log = log_result.scalars().first()
+            
+            if stuck_log and stuck_log.started_at < cutoff:
+                # This sync has been running too long - mark as failed
+                now = datetime.utcnow()
+                stuck_duration_minutes = (now - stuck_log.started_at).total_seconds() / 60
+                
+                stuck_log.success = False
+                stuck_log.error_details = (
+                    f"Sync timed out after {stuck_duration_minutes:.1f} minutes "
+                    f"(recovered by cleanup task at {now.isoformat()})"
+                )
+                stuck_log.completed_at = now
+                stuck_log.duration_seconds = (now - stuck_log.started_at).total_seconds()
+                db.add(stuck_log)
+                
+                # Reset integration status so user can retry
+                integration.sync_status = "error"
+                integration.error_message = "Sync was interrupted. Please try again."
+                db.add(integration)
+                
+                results["recovered"] += 1
+                results["details"].append({
+                    "integration_id": str(integration.id),
+                    "store_url": integration.store_url,
+                    "stuck_for_minutes": stuck_duration_minutes,
+                    "action": "recovered",
+                })
+                
+                logger.warning(
+                    f"Recovered stuck sync for integration {integration.id} "
+                    f"({integration.store_url}) - was syncing for "
+                    f"{stuck_duration_minutes:.1f} minutes"
+                )
+            
+            elif stuck_log:
+                # Still within timeout window, might be legitimately running
+                results["still_running"] += 1
+                
+            else:
+                # No in-progress log but status is 'syncing' - inconsistent state
+                # Check if the most recent log is already completed
+                recent_log_stmt = (
+                    select(IntegrationSyncLog)
+                    .where(IntegrationSyncLog.integration_id == integration.id)
+                    .order_by(IntegrationSyncLog.started_at.desc())
+                    .limit(1)
+                )
+                recent_result = await db.execute(recent_log_stmt)
+                recent_log = recent_result.scalars().first()
+                
+                if not recent_log or (recent_log.completed_at is not None):
+                    # Inconsistent: status is 'syncing' but no active log
+                    integration.sync_status = "error"
+                    integration.error_message = "Sync status was inconsistent. Please try again."
+                    db.add(integration)
+                    
+                    results["recovered"] += 1
+                    results["details"].append({
+                        "integration_id": str(integration.id),
+                        "store_url": integration.store_url,
+                        "stuck_for_minutes": None,
+                        "action": "fixed_inconsistent_state",
+                    })
+                    
+                    logger.warning(
+                        f"Fixed inconsistent sync status for integration {integration.id} "
+                        f"({integration.store_url})"
+                    )
+        
+        if results["recovered"] > 0:
+            await db.commit()
+    
+    logger.info(
+        f"Stuck sync recovery complete: "
+        f"{results['checked']} checked, {results['recovered']} recovered, "
+        f"{results['still_running']} still running"
+    )
+    
+    return results
+# ========== END NEW ==========
+
+
 # ==============================================================================
 # CELERY TASKS
 # ==============================================================================
@@ -466,5 +603,24 @@ def get_sync_status():
     Use: Manual trigger or dashboard polling
     """
     return run_async(_get_sync_status_report())
+
+
+# ========== NEW: Stuck sync recovery task (Bug #6) ==========
+@celery_app.task(name="workers.tasks.sync_verification_tasks.recover_stuck_syncs")
+def recover_stuck_syncs():
+    """
+    Recover integrations stuck in 'syncing' status.
+    
+    Scheduled: Runs every 5 minutes via Celery Beat
+    
+    This handles cases where Celery workers crash mid-sync, leaving
+    integrations stuck in 'syncing' status forever.
+    
+    Note (2026-01-28): Added to fix Bug #6 - never-ending sync spinner.
+    See SSP_AUDIT_REPORT.md for details.
+    """
+    return run_async(_recover_stuck_syncs())
+# ========== END NEW ==========
+
 
 

@@ -5,15 +5,20 @@ Product Sync Service - PULL operations
 
 Orchestrates syncing products FROM e-commerce platforms TO SSP.
 Handles full syncs, incremental syncs, and webhook-triggered updates.
+
+PATCHED (2026-01-28): Bug #6 fix - Added recover_stuck_syncs() method to
+handle integrations stuck in 'syncing' status due to worker crashes or
+unexpected failures. See SSP_AUDIT_REPORT.md.
 """
 
 import asyncio
 import logging
-from datetime import datetime
-from typing import Optional, Tuple
+from datetime import datetime, timedelta
+from typing import Optional, Tuple, List
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select
 
 from models.integration import (
@@ -65,6 +70,10 @@ class SyncService:
     _services: dict[EcommercePlatform, EcommerceService] = {}
     SYNC_TIMEOUT_SECONDS = 300
     
+    # ========== NEW: Stuck sync recovery constants ==========
+    STUCK_SYNC_TIMEOUT_MINUTES = 15  # If syncing for longer than this, it's stuck
+    # ========== END NEW ==========
+    
     def __init__(self, db: AsyncSession):
         self.db = db
     
@@ -79,6 +88,151 @@ class SyncService:
             else:
                 raise ValueError(f"Unsupported platform: {platform}")
         return cls._services[platform]
+    
+    # ========== NEW: Stuck sync recovery method (Bug #6 fix) ==========
+    async def recover_stuck_syncs(self, user_id: Optional[UUID] = None) -> int:
+        """
+        Recover integrations stuck in 'syncing' status.
+        
+        This handles cases where:
+        - Celery worker crashed mid-sync
+        - Database commit failed after sync completed
+        - Process was killed unexpectedly
+        - Network timeout wasn't properly caught
+        
+        Args:
+            user_id: Optional - only recover syncs for specific user
+        
+        Returns:
+            Number of integrations recovered
+        
+        Note (2026-01-28): Added to fix Bug #6 where syncs would get stuck
+        in 'syncing' status forever if the worker crashed. This method should
+        be called periodically by a Celery beat task (every 5 minutes).
+        """
+        cutoff = utc_now() - timedelta(minutes=self.STUCK_SYNC_TIMEOUT_MINUTES)
+        
+        # Find integrations stuck in 'syncing' status
+        stmt = select(Integration).where(
+            Integration.sync_status == "syncing",
+        )
+        if user_id:
+            stmt = stmt.where(Integration.user_id == user_id)
+        
+        result = await self.db.execute(stmt)
+        integrations = result.scalars().all()
+        
+        recovered = 0
+        for integration in integrations:
+            # Check if there's a sync log that's been "in progress" too long
+            log_stmt = (
+                select(IntegrationSyncLog)
+                .where(IntegrationSyncLog.integration_id == integration.id)
+                .where(IntegrationSyncLog.completed_at.is_(None))  # Not completed
+                .where(IntegrationSyncLog.started_at < cutoff)     # Started too long ago
+                .order_by(IntegrationSyncLog.started_at.desc())
+                .limit(1)
+            )
+            log_result = await self.db.execute(log_stmt)
+            stuck_log = log_result.scalars().first()
+            
+            if stuck_log:
+                # This sync has been running too long - mark as failed
+                now = utc_now()
+                
+                stuck_log.success = False
+                stuck_log.error_details = (
+                    f"Sync timed out after {self.STUCK_SYNC_TIMEOUT_MINUTES} minutes "
+                    f"(recovered by cleanup task at {now.isoformat()})"
+                )
+                stuck_log.completed_at = now
+                stuck_log.duration_seconds = (now - stuck_log.started_at).total_seconds()
+                self.db.add(stuck_log)
+                
+                # Reset integration status so user can retry
+                integration.sync_status = "error"
+                integration.error_message = "Sync was interrupted. Please try again."
+                self.db.add(integration)
+                
+                recovered += 1
+                logger.warning(
+                    f"Recovered stuck sync for integration {integration.id} "
+                    f"({integration.store_url}) - was syncing for "
+                    f"{(now - stuck_log.started_at).total_seconds():.0f} seconds"
+                )
+            else:
+                # No stuck log found, but integration is still 'syncing'
+                # This could be a race condition or a log that was never created
+                # Check if the integration has been 'syncing' without any recent log
+                recent_log_stmt = (
+                    select(IntegrationSyncLog)
+                    .where(IntegrationSyncLog.integration_id == integration.id)
+                    .order_by(IntegrationSyncLog.started_at.desc())
+                    .limit(1)
+                )
+                recent_result = await self.db.execute(recent_log_stmt)
+                recent_log = recent_result.scalars().first()
+                
+                # If no recent log, or the most recent log is completed but status is still 'syncing'
+                if not recent_log or (recent_log.completed_at is not None):
+                    integration.sync_status = "error"
+                    integration.error_message = "Sync status was inconsistent. Please try again."
+                    self.db.add(integration)
+                    recovered += 1
+                    logger.warning(
+                        f"Recovered inconsistent sync status for integration {integration.id} "
+                        f"({integration.store_url})"
+                    )
+        
+        if recovered > 0:
+            await self.db.commit()
+            logger.info(f"Recovered {recovered} stuck sync(s)")
+        
+        return recovered
+    
+    async def get_stuck_syncs(self, user_id: Optional[UUID] = None) -> List[dict]:
+        """
+        Get list of integrations currently stuck in 'syncing' status.
+        
+        Useful for diagnostics and admin dashboards.
+        
+        Returns:
+            List of dicts with integration info and how long they've been stuck
+        """
+        cutoff = utc_now() - timedelta(minutes=self.STUCK_SYNC_TIMEOUT_MINUTES)
+        
+        stmt = select(Integration).where(Integration.sync_status == "syncing")
+        if user_id:
+            stmt = stmt.where(Integration.user_id == user_id)
+        
+        result = await self.db.execute(stmt)
+        integrations = result.scalars().all()
+        
+        stuck = []
+        for integration in integrations:
+            # Get the in-progress sync log
+            log_stmt = (
+                select(IntegrationSyncLog)
+                .where(IntegrationSyncLog.integration_id == integration.id)
+                .where(IntegrationSyncLog.completed_at.is_(None))
+                .order_by(IntegrationSyncLog.started_at.desc())
+                .limit(1)
+            )
+            log_result = await self.db.execute(log_stmt)
+            sync_log = log_result.scalars().first()
+            
+            if sync_log and sync_log.started_at < cutoff:
+                stuck.append({
+                    "integration_id": str(integration.id),
+                    "store_url": integration.store_url,
+                    "platform": integration.platform.value if hasattr(integration.platform, 'value') else str(integration.platform),
+                    "started_at": sync_log.started_at.isoformat(),
+                    "stuck_for_minutes": (utc_now() - sync_log.started_at).total_seconds() / 60,
+                    "sync_log_id": str(sync_log.id),
+                })
+        
+        return stuck
+    # ========== END NEW ==========
     
     async def run_sync(
         self,
@@ -366,5 +520,21 @@ async def run_product_sync(db: AsyncSession, integration_id: UUID, sync_type: st
     """Background task function for running product sync."""
     sync_service = SyncService(db)
     return await sync_service.run_sync(integration_id=integration_id, sync_type=sync_type)
+
+
+# ========== NEW: Background task function for stuck sync recovery ==========
+async def recover_stuck_syncs_async(db: AsyncSession) -> int:
+    """
+    Background task function for recovering stuck syncs.
+    
+    Should be called by Celery beat every 5 minutes.
+    
+    Returns:
+        Number of syncs recovered
+    """
+    sync_service = SyncService(db)
+    return await sync_service.recover_stuck_syncs()
+# ========== END NEW ==========
+
 
 
