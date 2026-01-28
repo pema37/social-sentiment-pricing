@@ -1,64 +1,105 @@
 // frontend/lib/hooks/use-payments.ts
-
-/**
- * Payment React Query Hooks
- * 
- * Provides data fetching and mutations for payment features.
- */
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getWallet,
   updateWallet,
-  removeWallet,
   checkBalance,
   getPlans,
   getSubscription,
-  downgradeToFree,  
   subscribe,
   getPayment,
   getPaymentHistory,
+  downgradeToFree,
 } from '@/lib/api/payments';
 import type {
+  Subscription,
+  WalletInfo,
+  BalanceInfo,
+  Payment,
+  PaymentRequest,
+  SubscribeRequest,
   WalletUpdateRequest,
-  SubscriptionTier,
+  PlansResponse,
 } from '@/types/payment';
 
-// =============================================================================
-// Query Keys
-// =============================================================================
-
+// Query keys for React Query
 export const paymentKeys = {
   all: ['payments'] as const,
   wallet: () => [...paymentKeys.all, 'wallet'] as const,
   balance: (address: string) => [...paymentKeys.all, 'balance', address] as const,
-  plans: () => [...paymentKeys.all, 'plans'] as const,
   subscription: () => [...paymentKeys.all, 'subscription'] as const,
+  plans: () => [...paymentKeys.all, 'plans'] as const,
+  history: (params?: { limit?: number; offset?: number }) => 
+    [...paymentKeys.all, 'history', params] as const,
   payment: (id: string) => [...paymentKeys.all, 'payment', id] as const,
-  history: (limit?: number, offset?: number) => 
-    [...paymentKeys.all, 'history', { limit, offset }] as const,
 };
 
-// =============================================================================
-// Wallet Hooks
-// =============================================================================
+// ============================================
+// SUBSCRIPTION HOOKS
+// ============================================
 
 /**
- * Get current user's wallet info
+ * Fetch current user subscription
+ * Uses aggressive cache invalidation to ensure fresh data
  */
-export function useWallet() {
-  return useQuery({
-    queryKey: paymentKeys.wallet(),
-    queryFn: getWallet,
+export function useSubscription() {
+  return useQuery<Subscription>({
+    queryKey: paymentKeys.subscription(),
+    queryFn: () => getSubscription(),
+    // Subscription data should be fresh - admin upgrades need to reflect immediately
+    staleTime: 1000 * 30, // 30 seconds
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    refetchOnReconnect: true, // Refetch when network reconnects
   });
 }
 
 /**
- * Update wallet address
+ * Fetch available subscription plans
+ * Plans rarely change, so longer cache is fine
+ */
+export function usePlans() {
+  return useQuery<PlansResponse>({
+    queryKey: paymentKeys.plans(),
+    queryFn: () => getPlans(),
+    staleTime: 1000 * 60 * 10, // 10 minutes - plans don't change often
+  });
+}
+
+// ============================================
+// WALLET HOOKS
+// ============================================
+
+/**
+ * Fetch user wallet info
+ */
+export function useWallet() {
+  return useQuery<WalletInfo>({
+    queryKey: paymentKeys.wallet(),
+    queryFn: () => getWallet(),
+    staleTime: 1000 * 60, // 1 minute
+  });
+}
+
+/**
+ * Fetch balance for a specific address
+ */
+export function useBalance(address: string | null | undefined) {
+  return useQuery<BalanceInfo>({
+    queryKey: paymentKeys.balance(address || ''),
+    queryFn: () => checkBalance(address!),
+    enabled: !!address,
+    staleTime: 1000 * 30, // 30 seconds - balances can change
+    refetchInterval: 1000 * 60, // Auto-refresh every minute
+  });
+}
+
+/**
+ * Update wallet address mutation
  */
 export function useUpdateWallet() {
   const queryClient = useQueryClient();
-
+  
   return useMutation({
     mutationFn: (data: WalletUpdateRequest) => updateWallet(data),
     onSuccess: () => {
@@ -67,81 +108,43 @@ export function useUpdateWallet() {
   });
 }
 
-/**
- * Remove wallet address
- */
-export function useRemoveWallet() {
-  const queryClient = useQueryClient();
+// ============================================
+// PAYMENT HOOKS
+// ============================================
 
-  return useMutation({
-    mutationFn: removeWallet,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: paymentKeys.wallet() });
-    },
+/**
+ * Fetch payment history
+ */
+export function usePaymentHistory(params?: { limit?: number; offset?: number }) {
+  return useQuery<{ payments: Payment[]; total: number }>({
+    queryKey: paymentKeys.history(params),
+    queryFn: () => getPaymentHistory(params?.limit, params?.offset),
+    staleTime: 1000 * 60, // 1 minute
   });
 }
 
 /**
- * Check balance for any address
+ * Fetch single payment by ID
  */
-export function useCheckBalance(address: string, enabled: boolean = true) {
-  return useQuery({
-    queryKey: paymentKeys.balance(address),
-    queryFn: () => checkBalance(address),
-    enabled: enabled && !!address,
-  });
-}
-
-// =============================================================================
-// Subscription Hooks
-// =============================================================================
-
-/**
- * Get all available plans
- */
-export function usePlans() {
-  return useQuery({
-    queryKey: paymentKeys.plans(),
-    queryFn: getPlans,
-    staleTime: 1000 * 60 * 60, // Plans don't change often (1 hour)
+export function usePayment(paymentId: string | null | undefined) {
+  return useQuery<Payment>({
+    queryKey: paymentKeys.payment(paymentId || ''),
+    queryFn: () => getPayment(paymentId!),
+    enabled: !!paymentId,
+    staleTime: 1000 * 30, // 30 seconds
   });
 }
 
 /**
- * Get current subscription
+ * Subscribe to a plan (initiates payment)
  */
-export function useSubscription() {
-  return useQuery({
-    queryKey: paymentKeys.subscription(),
-    queryFn: getSubscription,
-  });
-}
-
-/**
- * Subscribe to a plan
- * Updated to accept network parameter for Ethereum/BSV selection
- */
-interface SubscribeParams {
-  tier: SubscriptionTier;
-  network?: 'ethereum' | 'bsv';
-}
-
 export function useSubscribe() {
   const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (params: SubscriptionTier | SubscribeParams) => {
-      // Handle both old (tier only) and new (tier + network) formats
-      if (typeof params === 'string') {
-        return subscribe({ tier: params, network: 'bsv' });
-      }
-      return subscribe({ 
-        tier: params.tier, 
-        network: params.network || 'bsv' 
-      });
-    },
+  
+  return useMutation<PaymentRequest, Error, SubscribeRequest>({
+    mutationFn: (data) => subscribe(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
+      // Invalidate history since a new pending payment was created
       queryClient.invalidateQueries({ queryKey: paymentKeys.history() });
     },
   });
@@ -149,13 +152,12 @@ export function useSubscribe() {
 
 /**
  * Downgrade to free tier
- * Cancels any active subscription and moves user to free plan
  */
 export function useDowngradeToFree() {
   const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: downgradeToFree,
+  
+  return useMutation<Subscription, Error, void>({
+    mutationFn: () => downgradeToFree(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
       queryClient.invalidateQueries({ queryKey: paymentKeys.history() });
@@ -163,37 +165,33 @@ export function useDowngradeToFree() {
   });
 }
 
-// =============================================================================
-// Payment Hooks
-// =============================================================================
+// ============================================
+// UTILITY HOOKS
+// ============================================
 
 /**
- * Get payment by ID
+ * Hook to manually invalidate subscription cache
+ * Useful when you know the subscription has been updated externally
  */
-export function usePayment(paymentId: string, enabled: boolean = true) {
-  return useQuery({
-    queryKey: paymentKeys.payment(paymentId),
-    queryFn: () => getPayment(paymentId),
-    enabled: enabled && !!paymentId,
-    refetchInterval: (query) => {
-      // Poll every 5 seconds if payment is pending
-      const payment = query.state.data;
-      if (payment?.status === 'pending' || payment?.status === 'processing') {
-        return 5000;
-      }
-      return false;
-    },
-  });
+export function useInvalidateSubscription() {
+  const queryClient = useQueryClient();
+  
+  return () => {
+    queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
+    queryClient.refetchQueries({ queryKey: paymentKeys.subscription() });
+  };
 }
 
 /**
- * Get payment history
+ * Hook to invalidate all payment-related caches
  */
-export function usePaymentHistory(limit: number = 20, offset: number = 0) {
-  return useQuery({
-    queryKey: paymentKeys.history(limit, offset),
-    queryFn: () => getPaymentHistory(limit, offset),
-  });
+export function useInvalidateAllPayments() {
+  const queryClient = useQueryClient();
+  
+  return () => {
+    queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+  };
 }
+
 
 
