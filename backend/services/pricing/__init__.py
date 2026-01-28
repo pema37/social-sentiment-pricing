@@ -10,6 +10,12 @@ Services:
     - ApprovalService: Core approval/rejection workflow
     - AutoApprovalService: Batch auto-approval processing
     - EcommercePushService: Push prices to connected platforms (Shopify, WooCommerce)
+    
+New (Refactored):
+    - PriceSyncService: Sync live prices from e-commerce stores
+    - SettingsService: Manage user pricing settings with defaults
+    - CompetitorFallbackService: Generate competitor-based recommendations
+    - PriceCalculator, BoundaryEnforcer, ReasoningGenerator: Calculation helpers
 """
 
 from .rule_evaluator import RuleEvaluator
@@ -19,6 +25,16 @@ from .recommendation_service import RecommendationService
 from .approval_service import ApprovalService
 from .auto_approval_service import AutoApprovalService
 from .ecommerce_push_service import EcommercePushService
+
+# New refactored modules
+from .price_sync_service import PriceSyncService
+from .settings_service import SettingsService
+from .competitor_fallback import CompetitorFallbackService
+from .recommendation_helpers import (
+    PriceCalculator,
+    BoundaryEnforcer,
+    ReasoningGenerator,
+)
 
 __all__ = [
     # Rule & Signal Processing
@@ -35,6 +51,17 @@ __all__ = [
     
     # E-commerce Integration
     "EcommercePushService",
+    
+    # New - Supporting Services
+    "PriceSyncService",
+    "SettingsService",
+    "CompetitorFallbackService",
+    
+    # New - Helpers
+    "PriceCalculator",
+    "BoundaryEnforcer",
+    "ReasoningGenerator",
 ]
+
 
 

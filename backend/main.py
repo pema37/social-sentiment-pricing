@@ -1,20 +1,23 @@
 # backend/main.py
 """
 Social Sentiment Pricing API - Main Application Entry Point
+
+PATCHED (2025-01-28): Fixed Bug #3 - Rate limit now returns HTTP 429
+- Moved RateLimitExceeded handler BEFORE generic Exception handler
+- Using custom handler that explicitly returns 429 with Retry-After header
 """
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler # pyright: ignore[reportMissingImports]
-from slowapi.errors import RateLimitExceeded # pyright: ignore[reportMissingImports]
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
 
 from core.config import settings
 from core.logging import configure_logging, get_logger
 from core.sentry import configure_sentry
-from core.rate_limit import limiter
+from core.rate_limit import limiter, rate_limit_exceeded_handler  # Use custom handler
 from core.middleware import RequestLoggingMiddleware
 from core.exception_handlers import (
     http_exception_handler,
@@ -73,14 +76,23 @@ app = FastAPI(
     redirect_slashes=False,  
 )
 
-# Exception handlers
+# ───────────────────── Exception Handlers ───────────────────── #
+# ORDER MATTERS: More specific handlers must come BEFORE generic ones
+# Otherwise the generic Exception handler catches everything first
+
+# 1. Rate limiting - MUST be before generic Exception handler
+#    Otherwise RateLimitExceeded gets caught by Exception handler → returns 400/500
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # Returns 429
+
+# 2. Specific exception types
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(SQLAlchemyError, database_exception_handler)
+
+# 3. Generic fallback - MUST be last
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
-# Rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# ───────────────────── Middleware ───────────────────── #
 
 # Request logging middleware
 app.add_middleware(RequestLoggingMiddleware)
@@ -107,6 +119,8 @@ else:
         allow_headers=["*"],
         expose_headers=["X-Correlation-ID"],
     )
+
+# ───────────────────── Routes ───────────────────── #
 
 # Health check routes (no prefix)
 app.include_router(health_router)
@@ -142,3 +156,6 @@ async def root():
     }
 
 
+
+
+    

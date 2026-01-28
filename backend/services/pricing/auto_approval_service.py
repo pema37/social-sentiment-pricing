@@ -3,6 +3,10 @@
 Auto-Approval Service - Handles automatic approval processing.
 
 Processes pending recommendations that meet auto-approval criteria.
+
+FIX (2026-01-28) Bug #2: Use SettingsService.get_or_create() instead of 
+direct SELECT to ensure default settings exist for new users. Previously,
+new users without a PricingSettings row would never get auto-approvals.
 """
 
 from datetime import datetime
@@ -34,10 +38,21 @@ class AutoApprovalService:
         recommendations stuck in intermediate states.
         """
         from services.pricing.approval_service import ApprovalService
+        from services.pricing.settings_service import SettingsService
         
-        settings = await self._get_settings(user_id)
-        if not settings or not settings.auto_approve_enabled:
-            logger.info(f"Auto-approve disabled for user {user_id}")
+        # =====================================================================
+        # BUGFIX (2026-01-28): Use get_or_create() to ensure settings exist
+        # =====================================================================
+        # Previously used self._get_settings() which returned None for new users,
+        # causing auto-approval to silently skip all recommendations.
+        # Now uses SettingsService.get_or_create() which creates default settings
+        # (auto_approve_enabled=True) for new users.
+        # =====================================================================
+        settings_service = SettingsService(self.db)
+        settings = await settings_service.get_or_create(user_id)
+        
+        if not settings.auto_approve_enabled:
+            logger.info(f"Auto-approve explicitly disabled for user {user_id}")
             return []
         
         # Extract settings values upfront (avoid lazy loading issues)
@@ -62,6 +77,9 @@ class AutoApprovalService:
         pending = list(result.scalars().all())
         
         logger.info(f"Found {len(pending)} pending recommendations for user {user_id}")
+        
+        if not pending:
+            return []
         
         # Extract recommendation data upfront to avoid greenlet issues
         recommendations_data = [
@@ -91,7 +109,8 @@ class AutoApprovalService:
             ):
                 logger.debug(
                     f"Recommendation {rec_id} not eligible: "
-                    f"change={rec_data['change_percent']}%, conf={rec_data['confidence_score']}"
+                    f"change={rec_data['change_percent']:.1f}%, "
+                    f"conf={rec_data['confidence_score']:.2f}"
                 )
                 continue
             
@@ -105,6 +124,7 @@ class AutoApprovalService:
                 logger.warning(f"Failed to auto-apply recommendation {rec_id}: {e}")
                 continue
         
+        logger.info(f"Auto-applied {len(applied)} of {len(pending)} recommendations for user {user_id}")
         return applied
     
     def _is_eligible(
@@ -143,12 +163,6 @@ class AutoApprovalService:
         
         return True
     
-    async def _get_settings(self, user_id: UUID) -> Optional[PricingSettings]:
-        """Get user's pricing settings."""
-        stmt = select(PricingSettings).where(PricingSettings.user_id == user_id)
-        result = await self.db.execute(stmt)
-        return result.scalars().first()
-    
     async def _check_daily_limit(self, user_id: UUID, settings: PricingSettings) -> bool:
         """Check if user has reached daily auto-change limit."""
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -162,7 +176,13 @@ class AutoApprovalService:
         result = await self.db.execute(stmt)
         count = result.scalar() or 0
         
-        return count < settings.max_auto_changes_per_day
+        limit = settings.max_auto_changes_per_day
+        within_limit = count < limit
+        
+        if not within_limit:
+            logger.debug(f"User {user_id} at daily limit: {count}/{limit}")
+        
+        return within_limit
     
     def _in_blackout_period(self, settings: PricingSettings) -> bool:
         """Check if current time is in blackout period."""

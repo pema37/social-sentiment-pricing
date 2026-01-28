@@ -1,7 +1,20 @@
-// Auth hooks
+// frontend/lib/hooks/use-auth.ts
+
+/**
+ * Auth hooks for login, register, logout, and user queries.
+ * 
+ * PATCHED (2025-01-28): Fixed Bug #5 - Now stores refresh token on login
+ * to enable silent session renewal and prevent "Not authenticated" errors.
+ */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/lib/api';
-import { setToken, removeToken, getToken } from '@/lib/auth/token';
+import { 
+  setToken, 
+  setRefreshToken,
+  removeAllTokens, 
+  getToken 
+} from '@/lib/auth/token';
 import { useRouter } from 'next/navigation';
 
 // Query keys
@@ -30,9 +43,28 @@ export function useLogin() {
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       authApi.login(email, password),
     onSuccess: (data) => {
+      // Store access token
       setToken(data.access_token);
+      
+      // BUGFIX: Store refresh token for silent session renewal
+      // Without this, users get "Not authenticated" after 30 min
+      if (data.refresh_token) {
+        setRefreshToken(data.refresh_token);
+      }
+      
       queryClient.invalidateQueries({ queryKey: authKeys.user() });
-      router.push('/dashboard');
+      
+      // Check for redirect path (set when session expired)
+      const redirectPath = typeof window !== 'undefined' 
+        ? sessionStorage.getItem('redirectAfterLogin') 
+        : null;
+      
+      if (redirectPath) {
+        sessionStorage.removeItem('redirectAfterLogin');
+        router.push(redirectPath);
+      } else {
+        router.push('/dashboard');
+      }
     },
   });
 }
@@ -64,7 +96,8 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
-      removeToken();
+      // Clear both access and refresh tokens
+      removeAllTokens();
       return Promise.resolve();
     },
     onSuccess: () => {
@@ -73,4 +106,5 @@ export function useLogout() {
     },
   });
 }
+
 
