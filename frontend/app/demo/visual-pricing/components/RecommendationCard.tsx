@@ -20,7 +20,7 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
   const riskStyle = riskStyles[recommendation.risk_level] || riskStyles.medium;
 
   return (
-    <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent p-6">
+    <div className="rounded-xl border border-emerald-500/30 bg-linear-to-br from-emerald-500/10 to-transparent p-6">
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-white">Pricing Recommendation</h3>
@@ -60,7 +60,7 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
         </div>
         <div className="h-2 rounded-full bg-gray-700 overflow-hidden">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
+            className="h-full rounded-full bg-linear-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
             style={{ width: `${recommendation.confidence * 100}%` }}
           />
         </div>
