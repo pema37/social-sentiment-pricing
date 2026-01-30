@@ -17,7 +17,7 @@ import type { TrendAgent, StreamEvent, SimulateTrend, Forecast, MarketData, Thou
 interface AgentOutput {
   agent: TrendAgent;
   content: string;
-  thoughtType?: string;
+  thoughtType?: ThoughtType;
 }
 
 export default function MarketTrendsDemo() {
