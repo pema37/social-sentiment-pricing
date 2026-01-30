@@ -8,6 +8,7 @@ PATCHED (2025-01-28): Fixed Bug #3 - Rate limit now returns HTTP 429
 
 NEW (2025-01-29): Added Visual Pricing Intelligence demo for Gemini 3 Hackathon
 NEW (2025-01-30): Added Crisis Detection, Launch Detection, Market Trends Visual demos
+FIXED (2025-01-30): Added products_import router - CSV import was returning 404
 """
 
 from contextlib import asynccontextmanager
@@ -56,6 +57,7 @@ from api.v1.routes.support import router as support_router
 from api.v1.routes.market_trends import router as market_trends_router
 from api.v1.routes.trend_analysis import router as trend_analysis_router
 from api.v1.routes.diagnostic import router as diagnostic_router  # Multi-platform diagnostic
+from api.v1.routes.products_import import router as products_import_router  # CSV Import - FIXED
 
 # Gemini 3 Hackathon Demo Routes
 from api.v1.routes.visual_pricing import router as visual_pricing_router
@@ -138,6 +140,7 @@ app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
+app.include_router(products_import_router, prefix="/api/v1")  # CSV Import - FIXED
 app.include_router(pricing_router, prefix="/api/v1")
 app.include_router(sentiment_router, prefix="/api/v1")
 app.include_router(competitors_router, prefix="/api/v1")
@@ -169,6 +172,5 @@ async def root():
         "status": "running",
         "docs": "/docs",
     }
-
 
 
