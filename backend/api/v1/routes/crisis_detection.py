@@ -8,14 +8,14 @@ from fastapi.responses import StreamingResponse
 
 from core.logging import get_logger
 from services.ai_trend_analysis.crisis_detector import (
-    crisis_detector, SentimentPoint
+    crisis_detector, SentimentDataPoint
 )
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/crisis", tags=["Crisis Detection"])
 
 
-def generate_mock_data(product: str, crisis: bool = False) -> list[SentimentPoint]:
+def generate_mock_data(product: str, crisis: bool = False) -> list[SentimentDataPoint]:
     """Generate mock sentiment data for demo."""
     import random
     now = datetime.now()
@@ -25,7 +25,7 @@ def generate_mock_data(product: str, crisis: bool = False) -> list[SentimentPoin
         hours_ago = 24 - i
         base_score = 0.3 if not crisis else (0.3 if i < 12 else -0.4)
         
-        data.append(SentimentPoint(
+        data.append(SentimentDataPoint(
             timestamp=now - timedelta(hours=hours_ago),
             score=base_score + random.uniform(-0.2, 0.2),
             volume=random.randint(10, 50) if not crisis else random.randint(10, 150),
