@@ -42,7 +42,7 @@ const STATUS_CONFIG: Record<PaymentStatus, { icon: React.ReactNode; color: strin
 };
 
 export function PaymentHistory() {
-  const { data, isLoading } = usePaymentHistory(10);
+  const { data, isLoading } = usePaymentHistory({ limit: 10 });
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
