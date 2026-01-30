@@ -7,6 +7,7 @@ PATCHED (2025-01-28): Fixed Bug #3 - Rate limit now returns HTTP 429
 - Using custom handler that explicitly returns 429 with Retry-After header
 
 NEW (2025-01-29): Added Visual Pricing Intelligence demo for Gemini 3 Hackathon
+NEW (2025-01-30): Added Crisis Detection, Launch Detection, Market Trends Visual demos
 """
 
 from contextlib import asynccontextmanager
@@ -55,7 +56,12 @@ from api.v1.routes.support import router as support_router
 from api.v1.routes.market_trends import router as market_trends_router
 from api.v1.routes.trend_analysis import router as trend_analysis_router
 from api.v1.routes.diagnostic import router as diagnostic_router  # Multi-platform diagnostic
-from api.v1.routes.visual_pricing import router as visual_pricing_router  # NEW: Gemini 3 Hackathon Demo
+
+# Gemini 3 Hackathon Demo Routes
+from api.v1.routes.visual_pricing import router as visual_pricing_router
+from api.v1.routes.crisis_detection import router as crisis_detection_router
+from api.v1.routes.launch_detection import router as launch_detection_router
+from api.v1.routes.market_trends_visual import router as market_trends_visual_router
 
 
 @asynccontextmanager
@@ -146,7 +152,12 @@ app.include_router(market_trends_router, prefix="/api/v1")
 app.include_router(trend_analysis_router, prefix="/api/v1")  # AI Trend Analysis
 app.include_router(trust_scoring_router, prefix="/api/v1")  # /api/v1/trust/*
 app.include_router(diagnostic_router, prefix="/api/v1")  # Multi-platform diagnostic
-app.include_router(visual_pricing_router, prefix="/api/v1")  # NEW: Visual Pricing Demo (/api/v1/visual-pricing/*)
+
+# ───────────────────── Gemini 3 Hackathon Demo Routes ───────────────────── #
+app.include_router(visual_pricing_router, prefix="/api/v1")        # /api/v1/visual-pricing/*
+app.include_router(crisis_detection_router, prefix="/api/v1")      # /api/v1/crisis/*
+app.include_router(launch_detection_router, prefix="/api/v1")      # /api/v1/launch/*
+app.include_router(market_trends_visual_router, prefix="/api/v1")  # /api/v1/trends-visual/*
 
 
 @app.get("/")
