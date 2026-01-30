@@ -108,6 +108,20 @@ export function useUpdateWallet() {
   });
 }
 
+/**
+ * Remove wallet address mutation
+ */
+export function useRemoveWallet() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: () => updateWallet({ bsv_wallet_address: null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: paymentKeys.wallet() });
+    },
+  });
+}
+
 // ============================================
 // PAYMENT HOOKS
 // ============================================

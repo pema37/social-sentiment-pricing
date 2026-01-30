@@ -52,7 +52,8 @@ export interface WalletInfo {
  * Matches: components["schemas"]["WalletUpdateRequest"]
  */
 export interface WalletUpdateRequest {
-  bsv_wallet_address: string;
+  // bsv_wallet_address: string;
+  bsv_wallet_address: string | null;
 }
 
 /**
