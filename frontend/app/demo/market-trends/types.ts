@@ -1,19 +1,18 @@
+/**
+ * Market Trends Demo - Shared Types
+ * 
+ * IMPORTANT: ThoughtType must match backend enum exactly
+ */
+
 export type TrendAgent = "observer" | "analyst" | "forecaster";
 
+
 export type ThoughtType = 
-  | "status"
   | "observation"
-  | "pattern"
-  | "signal"
-  | "insight"
-  | "driver"
-  | "risk"
-  | "opportunity"
-  | "forecast"
-  | "outlook"
-  | "action"
-  | "timing"
-  | "conclusion";
+  | "analysis"
+  | "hypothesis"
+  | "decision"
+  | "recommendation";
 
 export type TrendDirection = "strong_up" | "up" | "stable" | "down" | "strong_down";
 
@@ -39,6 +38,17 @@ export interface MarketData {
   market_position: string;
 }
 
+export interface TrendMessage {
+  agent: TrendAgent;
+  thought_type: ThoughtType | null;
+  content: string;
+  is_final: boolean;
+  metadata?: {
+    forecast?: Forecast;
+    market_data?: MarketData;
+  };
+}
+
 export interface StreamEvent {
   agent?: TrendAgent;
   thought_type?: ThoughtType;  
@@ -46,10 +56,10 @@ export interface StreamEvent {
   is_final?: boolean;
   metadata?: {
     forecast?: Forecast;
+    market_data?: MarketData;
   };
   done?: boolean;
   error?: string;
-  market_data?: MarketData;
 }
 
 

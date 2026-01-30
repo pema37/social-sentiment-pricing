@@ -1,4 +1,4 @@
-import type { TrendAgent, SimulateTrend } from "./types";
+import type { TrendAgent, SimulateTrend, ThoughtType } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -9,7 +9,7 @@ export const TREND_AGENTS: Record<TrendAgent, { name: string; description: strin
     color: "cyan"
   },
   analyst: {
-    name: "Trend Analyst",
+    name: "Trend Analyst", 
     description: "Interprets drivers and correlations",
     color: "violet"
   },
@@ -20,20 +20,13 @@ export const TREND_AGENTS: Record<TrendAgent, { name: string; description: strin
   }
 };
 
-export const THOUGHT_LABELS: Record<string, { label: string; color: string }> = {
-  status: { label: "Status", color: "gray" },
+
+export const THOUGHT_LABELS: Record<ThoughtType, { label: string; color: string }> = {
   observation: { label: "Observation", color: "cyan" },
-  pattern: { label: "Pattern", color: "blue" },
-  signal: { label: "Signal", color: "teal" },
-  insight: { label: "Insight", color: "violet" },
-  driver: { label: "Driver", color: "purple" },
-  risk: { label: "Risk", color: "red" },
-  opportunity: { label: "Opportunity", color: "green" },
-  forecast: { label: "Forecast", color: "amber" },
-  outlook: { label: "Outlook", color: "yellow" },
-  action: { label: "Action", color: "orange" },
-  timing: { label: "Timing", color: "pink" },
-  conclusion: { label: "Conclusion", color: "emerald" }
+  analysis: { label: "Analysis", color: "violet" },
+  hypothesis: { label: "Hypothesis", color: "blue" },
+  decision: { label: "Decision", color: "amber" },
+  recommendation: { label: "Recommendation", color: "green" }
 };
 
 export const DIRECTION_COLORS: Record<string, string> = {
@@ -60,4 +53,6 @@ export const CATEGORY_OPTIONS = [
   "automotive",
   "grocery"
 ];
+
+
 

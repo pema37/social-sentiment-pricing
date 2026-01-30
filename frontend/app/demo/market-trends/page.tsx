@@ -10,7 +10,9 @@ import {
   SIMULATE_OPTIONS,
   CATEGORY_OPTIONS
 } from "./constants";
-import type { TrendAgent, StreamEvent, SimulateTrend, Forecast, MarketData } from "./types";
+
+import type { TrendAgent, StreamEvent, SimulateTrend, Forecast, MarketData, ThoughtType } from "./types";
+
 
 interface AgentOutput {
   agent: TrendAgent;
@@ -97,7 +99,7 @@ export default function MarketTrendsDemo() {
           const event: StreamEvent = JSON.parse(line.slice(6));
           
           if (event.done) {
-            if (event.market_data) setMarketData(event.market_data);
+            if (event.metadata?.market_data) setMarketData(event.metadata.market_data);
             break;
           }
           if (event.error) throw new Error(event.error);
@@ -314,7 +316,7 @@ export default function MarketTrendsDemo() {
             <div className="space-y-2 font-mono text-sm max-h-125 overflow-y-auto">
               {outputs.map((o, i) => {
                 const agentInfo = TREND_AGENTS[o.agent];
-                const thought = o.thoughtType ? THOUGHT_LABELS[o.thoughtType] : null;
+                const thought = o.thoughtType ? THOUGHT_LABELS[o.thoughtType as ThoughtType] : null;
                 return (
                   <div key={i} className="flex gap-2">
                     <span className={`text-${agentInfo?.color || 'gray'}-400 font-semibold shrink-0`}>
