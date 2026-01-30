@@ -59,7 +59,8 @@ async def stream_analysis(
     
     market_data = generate_mock_market_data(product, category, simulate_trend)
     
-    yield f"data: {json.dumps({'agent': 'system', 'content': f'Analyzing market trends for {product}...'})}\n\n"
+    init_event = json.dumps({'agent': 'system', 'content': f'Analyzing market trends for {product}...'})
+    yield f"data: {init_event}\n\n"
     
     try:
         async for msg in market_trends_analyzer.analyze_stream(
@@ -68,18 +69,21 @@ async def stream_analysis(
             market_data=market_data,
             image_bytes=image_bytes
         ):
-            yield f"data: {json.dumps({
+            event = {
                 'agent': msg.agent,
                 'thought_type': msg.thought_type,
                 'content': msg.content,
                 'is_final': msg.is_final,
                 'metadata': msg.metadata or {}
-            })}\n\n"
+            }
+            yield f"data: {json.dumps(event)}\n\n"
         
-        yield f"data: {json.dumps({'done': True, 'market_data': market_data})}\n\n"
+        done_event = json.dumps({'done': True, 'market_data': market_data})
+        yield f"data: {done_event}\n\n"
         
     except Exception as e:
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        error_event = json.dumps({'error': str(e)})
+        yield f"data: {error_event}\n\n"
 
 
 @router.get("/analyze/stream")
@@ -123,6 +127,8 @@ async def analyze_trends_stream_with_image(
             "X-Accel-Buffering": "no"
         }
     )
+
+
 
 
 
