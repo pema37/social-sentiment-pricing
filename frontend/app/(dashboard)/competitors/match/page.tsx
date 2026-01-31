@@ -2,152 +2,148 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Zap, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Sparkles, HelpCircle, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { 
-  CompetitorMatchSearch,
-  AutoLinkModal,
-} from '@/components/features/competitors';
-import { 
-  useCreateCompetitor,
-  useCreateCompetitorProduct,
-} from '@/lib/hooks/use-competitors';
-import { useCompetitorSearch } from '@/lib/hooks/use-competitor-matching';
+import { CompetitorMatchSearch } from '@/components/features/competitors';
+import { useCreateCompetitor, useCreateCompetitorProduct } from '@/lib/hooks/use-competitors';
+import { useProduct } from '@/lib/hooks/use-products';
 import { useToast } from '@/lib/hooks/use-toast';
-import type { MatchedProduct, CreateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface LinkingState {
-  productId?: string;
-  productName?: string;
-  ourPrice?: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
+import type { MatchedProduct } from '@/types';
 
 export default function CompetitorMatchPage() {
+  const searchParams = useSearchParams();
+  const productId = searchParams.get('productId');
+  
   const toast = useToast();
-  
-  // Track linked URLs to show check marks
-  const [linkedUrls, setLinkedUrls] = useState<string[]>([]);
-  
-  // Create mutations
   const createCompetitor = useCreateCompetitor();
   const createCompetitorProduct = useCreateCompetitorProduct();
+  
+  // Fetch the product if productId is provided
+  const { data: product } = useProduct(productId || '');
+  
+  // Track linked URLs to show checkmarks
+  const [linkedUrls, setLinkedUrls] = useState<string[]>([]);
 
   // Handle linking a single matched product
-  const handleLinkProduct = useCallback(async (product: MatchedProduct) => {
-    try {
-      // First, find or create the competitor based on merchant domain
-      let competitorId: string;
-
-      // Create competitor for this merchant
-      const competitorData: CreateCompetitorRequest = {
-        name: product.merchant,
-        website: `https://${product.merchant_domain}`,
-        description: `Auto-created from competitor matching`,
-        is_active: true,
-      };
-
-      try {
-        const competitor = await createCompetitor.mutateAsync(competitorData);
-        competitorId = competitor.id;
-      } catch (error: any) {
-        // If competitor already exists, try to extract ID from error or search
-        // For now, we'll show an error - in production, you'd search existing competitors
-        toast.error({
-          title: 'Competitor exists',
-          message: `${product.merchant} already exists. Please link manually from the competitor page.`,
-        });
-        return;
-      }
-
-      // Create the competitor product link
-      // Note: This requires a product_id from YOUR catalog
-      // For standalone matching, we'll just create the competitor
-      toast.success({
-        title: 'Competitor Created',
-        message: `${product.merchant} has been added. Link it to your products from the competitor page.`,
-      });
-
-      // Mark as linked
-      setLinkedUrls((prev) => [...prev, product.url]);
-
-    } catch (error: any) {
-      toast.error({
-        title: 'Link Failed',
-        message: error.message || 'Failed to link competitor product',
-      });
+  const handleLinkProduct = async (matchedProduct: MatchedProduct) => {
+    if (!productId) {
+      toast.error('No product selected. Please go back and try again.');
+      return;
     }
-  }, [createCompetitor, createCompetitorProduct, toast]);
+
+    try {
+      // Step 1: Create or find the competitor (merchant)
+      const competitor = await createCompetitor.mutateAsync({
+        name: matchedProduct.merchant,
+        website: matchedProduct.url ? new URL(matchedProduct.url).origin : undefined,
+        description: 'Auto-created from competitor matching',
+      });
+
+      // Step 2: Create the competitor product link
+      await createCompetitorProduct.mutateAsync({
+        competitor_id: competitor.id,
+        product_id: productId,
+        competitor_product_name: matchedProduct.title,
+        competitor_product_url: matchedProduct.url,
+        current_price: matchedProduct.price?.toString(),
+        currency: matchedProduct.currency || 'USD',
+      });
+
+      // Track as linked
+      setLinkedUrls((prev) => [...prev, matchedProduct.url]);
+
+      toast.success(`Now tracking ${matchedProduct.title} from ${matchedProduct.merchant}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to link competitor');
+      throw error;
+    }
+  };
+
+  // Show warning if no product selected
+  if (!productId) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link href="/products">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Products
+            </Button>
+          </Link>
+        </div>
+        
+        <Card className="p-6 bg-yellow-50 border-yellow-200">
+          <div className="flex gap-3">
+            <AlertTriangle className="w-6 h-6 text-yellow-600 shrink-0" />
+            <div>
+              <h2 className="font-semibold text-yellow-800">No Product Selected</h2>
+              <p className="text-yellow-700 mt-1">
+                To find competitors, please go to a product page and click the Find Competitors button.
+              </p>
+              <Link href="/products">
+                <Button className="mt-4">
+                  Go to Products
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <Link
-          href="/competitors"
-          className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Competitors
-        </Link>
-
-        <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href={`/products/${productId}`}>
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Product
+            </Button>
+          </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <Sparkles className="w-6 h-6 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">
-                Find Competitor Products
-              </h1>
-            </div>
-            <p className="text-gray-600 mt-1">
-              Automatically discover competitor listings across major retailers
-            </p>
+              Find Competitor Products
+            </h1>
+            {product && (
+              <p className="text-gray-500 mt-1">
+                Finding competitors for: <span className="font-medium text-gray-700">{product.name}</span>
+              </p>
+            )}
           </div>
         </div>
       </div>
 
-      {/* How it works */}
-      <Card className="p-4 mb-6 bg-linear-to-r from-blue-50 to-indigo-50 border-blue-200">
-        <div className="flex items-start gap-3">
-          <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-medium text-blue-900">How it works</h3>
-            <ul className="mt-1 text-sm text-blue-800 space-y-1">
-              <li>1. Enter a product name (e.g., "iPhone 15 Pro 256GB")</li>
-              <li>2. Optionally add keywords to improve accuracy</li>
-              <li>3. We search Google Shopping, Google, and DuckDuckGo</li>
-              <li>4. Results show confidence scores and price comparisons</li>
-              <li>5. Link high-confidence matches to track their prices</li>
-            </ul>
-          </div>
-        </div>
-      </Card>
-
-      {/* Search Component */}
+      {/* Main Search Component - pre-filled with product info */}
       <CompetitorMatchSearch
+        initialProductName={product?.name || ''}
+        initialPrice={product?.current_price || product?.base_price}
+        initialKeywords={product?.keywords || []}
         onProductLink={handleLinkProduct}
         linkedUrls={linkedUrls}
       />
 
-      {/* Tips */}
-      <Card className="mt-6 p-4 bg-gray-50">
-        <h3 className="font-medium text-gray-900 mb-2">💡 Tips for better results</h3>
-        <ul className="text-sm text-gray-600 space-y-1">
-          <li>• Include brand name and model number for exact matches</li>
-          <li>• Add specific attributes like color, size, or storage capacity</li>
-          <li>• Use your product's price to see how competitors compare</li>
-          <li>• High-confidence matches (80%+) are most likely to be the same product</li>
-        </ul>
+      {/* Help Card */}
+      <Card className="p-4 bg-blue-50 border-blue-200">
+        <div className="flex gap-3">
+          <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1">How it works:</p>
+            <ol className="list-decimal list-inside space-y-1 text-blue-700">
+              <li>We pre-filled the search with your product name</li>
+              <li>Click Find Competitors to search major retailers</li>
+              <li>Click Link on matching products to track their prices</li>
+              <li>Linked prices appear on your product dashboard</li>
+            </ol>
+          </div>
+        </div>
       </Card>
     </div>
   );

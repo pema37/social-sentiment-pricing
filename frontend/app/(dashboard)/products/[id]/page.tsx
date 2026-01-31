@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useProduct } from '@/lib/hooks/use-products';
 import { productsApi } from '@/lib/api';
@@ -102,6 +102,13 @@ function PageHeader({ productId, productName, onDelete, onGenerateDescription }:
       </div>
       
       <div className="flex gap-2">
+        {/* NEW: Find Competitors Button */}
+        <Link href={`/competitors/match?productId=${productId}`}>
+          <Button variant="secondary">
+            <Search className="h-4 w-4 mr-2" />
+            Find Competitors
+          </Button>
+        </Link>
         <Button variant="secondary" onClick={onGenerateDescription}>
           <Sparkles className="h-4 w-4 mr-2" />
           AI Description
@@ -244,4 +251,6 @@ export default function ProductDetailPage() {
     </div>
   );
 }
+
+
 

@@ -16,11 +16,8 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { competitorKeys } from '@/lib/api/query-keys';
 import type {
   CompetitorSearchRequest,
-  CompetitorSearchResponse,
   ProductMatchRequest,
   BulkMatchRequest,
-  BulkMatchResponse,
-  ProvidersListResponse,
   MatchedProduct,
 } from '@/types';
 
@@ -65,7 +62,6 @@ export function useSearchProviders() {
  */
 export function useCompetitorSearch() {
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: CompetitorSearchRequest) => 
@@ -279,6 +275,5 @@ export function useFilteredMatches(
   // Sort by confidence (highest first)
   return filtered.sort((a, b) => b.confidence_score - a.confidence_score);
 }
-
 
 

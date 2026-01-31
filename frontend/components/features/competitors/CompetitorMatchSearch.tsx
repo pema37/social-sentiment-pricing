@@ -6,7 +6,6 @@ import { useState, useCallback } from 'react';
 import {
   Search,
   Sparkles,
-  Tag,
   DollarSign,
   Store,
   X,

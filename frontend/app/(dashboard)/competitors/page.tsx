@@ -109,7 +109,7 @@ export default function CompetitorsPage() {
               </h3>
               <p className="text-sm text-gray-600 mt-1">
                 Use our AI-powered search to find competitor products across Amazon, Walmart, 
-                Best Buy, and more. Just enter a product name and we'll find matching listings.
+                Best Buy, and more. Just enter a product name and we&apos;ll find matching listings.
               </p>
               <Link
                 href="/competitors/match"
@@ -144,4 +144,6 @@ export default function CompetitorsPage() {
     </div>
   );
 }
+
+
 
