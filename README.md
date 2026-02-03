@@ -2,6 +2,9 @@
 
 **AI-Powered Dynamic Pricing Based on Social Sentiment Analysis**
 
+*Built with Google Gemini 2.0 Flash for the Gemini API Developer Competition 2025*
+
+---
 
 ## 🎯 What is ActualPrice?
 
@@ -13,10 +16,46 @@ ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pr
 
 ---
 
+## 🤖 Powered by Google Gemini
+
+ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all features:
+
+| Feature | Gemini Capability | Description |
+|---------|-------------------|-------------|
+| **Visual Pricing Intelligence** | Vision + Streaming | Multi-agent system analyzes competitor product images in real-time |
+| **Crisis Detection** | Language + Streaming | Detects PR crises from sentiment data with severity assessment |
+| **Launch Detection** | Vision + Multimodal | Identifies competitor product launches from screenshots |
+| **Sentiment Analysis** | Language | Hybrid analysis with Gemini primary, VADER baseline |
+| **AI Market Analysis** | Language | Generates insights about market trends and pricing opportunities |
+| **AI Support Chat** | Language | Contextual merchant assistance |
+
+### Multi-Agent Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Gemini 2.0 Flash                         │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Vision    │  │  Language   │  │  Streaming  │         │
+│  │  Analysis   │  │  Analysis   │  │  Responses  │         │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
+│         └────────────────┼────────────────┘                 │
+│                          ▼                                  │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Multi-Agent Orchestration                 │   │
+│  │  • Scout → Analyst → Strategist (Visual Pricing)     │   │
+│  │  • Monitor → Investigator → Response (Crisis)        │   │
+│  │  • Scanner → Validator → Assessor (Launch Detection) │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## ✨ Key Features
 
 ### 🧠 AI-Powered Sentiment Analysis
-- **Hybrid Analysis Engine** — Combines VADER (fast), OpenAI GPT-4 (accurate), and Google Gemini (fallback) for robust sentiment scoring
+- **Hybrid Analysis Engine** — Gemini 2.0 Flash (primary) + VADER (fast baseline) for robust sentiment scoring
 - **Real-time Monitoring** — Tracks mentions across Reddit, Twitter, and news sources
 - **Sarcasm Detection** — AI identifies sarcastic posts that would fool basic sentiment tools
 
@@ -34,7 +73,7 @@ ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pr
 - **Sentiment Dashboard** — Visualize sentiment trends over time
 - **Price History** — Track how price changes affected sales
 - **Competitor Monitoring** — Track competitor prices and market position
-- **AI Market Analysis** — Get AI-generated insights about market trends
+- **AI Market Analysis** — Get Gemini-generated insights about market trends
 
 ### 🚨 Smart Alerts
 - **Crisis Detection** — Get notified when sentiment drops suddenly
@@ -51,14 +90,14 @@ ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pr
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, React Query |
-| **Backend** | FastAPI, Python 3.11, SQLModel, Pydantic |
-| **Database** | PostgreSQL (Neon), Redis |
-| **AI/ML** | OpenAI GPT-4o-mini, Google Gemini, VADER Sentiment |
-| **Background Jobs** | Celery, Redis |
-| **Integrations** | Shopify API, WooCommerce REST API |
-| **Payments** | MNEE, MetaMask (ETH) |
-| **Deployment** | Railway (backend), Vercel (frontend) |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS, React Query |
+| Backend | FastAPI, Python 3.11, SQLModel, Pydantic |
+| Database | PostgreSQL (Neon), Redis |
+| **AI/ML** | **Google Gemini 2.0 Flash (primary)**, VADER Sentiment |
+| Background Jobs | Celery, Redis |
+| Integrations | Shopify API, WooCommerce REST API |
+| Payments | MNEE, MetaMask (ETH) |
+| Deployment | Railway (backend), Vercel (frontend) |
 
 ---
 
@@ -69,6 +108,7 @@ ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pr
 - Node.js 18+
 - PostgreSQL
 - Redis
+- **Google Gemini API Key**
 
 ### Backend Setup
 
@@ -84,7 +124,7 @@ pip install -r requirements.txt
 
 # Set up environment variables
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your credentials (especially GEMINI_API_KEY)
 
 # Run database migrations
 alembic upgrade head
@@ -119,8 +159,11 @@ npm run dev
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
 REDIS_URL=redis://localhost:6379
 SECRET_KEY=your-secret-key
-OPENAI_API_KEY=sk-...
-GEMINI_API_KEY=AI...
+
+# AI Provider (Primary)
+GEMINI_API_KEY=your-gemini-api-key
+
+# Integrations
 SHOPIFY_API_KEY=...
 SHOPIFY_API_SECRET=...
 ```
@@ -138,7 +181,7 @@ Once the backend is running:
 - **Swagger UI:** http://localhost:8000/docs
 - **ReDoc:** http://localhost:8000/redoc
 
-See [ACTUALPRICE_CONTRACTS.md](./ACTUALPRICE_CONTRACTS.md) for detailed API contracts and type definitions.
+See `ACTUALPRICE_CONTRACTS.md` for detailed API contracts and type definitions.
 
 ---
 
@@ -160,8 +203,8 @@ See [ACTUALPRICE_CONTRACTS.md](./ACTUALPRICE_CONTRACTS.md) for detailed API cont
                          ┌───────────────────┼───────────────────┐
                          ▼                   ▼                   ▼
                    ┌──────────┐        ┌──────────┐        ┌──────────┐
-                   │  Reddit  │        │  OpenAI  │        │ Shopify/ │
-                   │   API    │        │  Gemini  │        │   WC     │
+                   │  Reddit  │        │  Gemini  │        │ Shopify/ │
+                   │   API    │        │   2.0    │        │   WC     │
                    └──────────┘        └──────────┘        └──────────┘
 ```
 
@@ -170,7 +213,7 @@ See [ACTUALPRICE_CONTRACTS.md](./ACTUALPRICE_CONTRACTS.md) for detailed API cont
 | Task | Schedule | Description |
 |------|----------|-------------|
 | `fetch_all_mentions` | Every 30 min | Fetches social mentions for products |
-| `process_pending_mentions` | Every 5 min | Analyzes sentiment (VADER + OpenAI + Gemini) |
+| `process_pending_mentions` | Every 5 min | Analyzes sentiment (VADER + Gemini) |
 | `generate_recommendations` | Every hour | Creates pricing recommendations |
 | `fetch_competitor_prices` | Every 30 min | Updates competitor price data |
 
@@ -187,11 +230,13 @@ social-sentiment-pricing/
 │   ├── services/           # Business logic
 │   │   ├── pricing/        # Pricing engine
 │   │   ├── integration/    # Shopify/WooCommerce
+│   │   ├── ai_trend_analysis/  # Gemini multi-agent systems
 │   │   └── analysis/       # Sentiment analysis
 │   ├── workers/            # Celery tasks
 │   └── main.py
 ├── frontend/
 │   ├── app/                # Next.js pages
+│   │   └── demo/           # Gemini demo features
 │   ├── components/         # React components
 │   ├── lib/                # API clients, hooks
 │   └── types/              # TypeScript types
@@ -204,14 +249,20 @@ social-sentiment-pricing/
 
 ## 🎬 Demo
 
-**Live Demo:** [https://ssp-staging.vercel.app](https://ssp-staging.vercel.app)
+**Live Demo:** [ssp-staging.vercel.app](https://ssp-staging.vercel.app)
 
-**Staging URLs:**
-- Frontend: https://ssp-staging.vercel.app
-- Backend API: https://social-sentiment-pricing-staging-2ecd.up.railway.app
-- API Docs: https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs
+### Gemini-Powered Demo Features
 
-**Demo Video:** [Watch on YouTube](#) *(coming soon)*
+| Demo | URL | Description |
+|------|-----|-------------|
+| **Visual Pricing** | `/demo/visual-pricing` | Upload competitor image → Watch 3 AI agents collaborate in real-time |
+| **Crisis Detection** | `/demo/crisis-detector` | Paste social content → Get severity analysis and recommended actions |
+| **Launch Detection** | `/demo/launch-detector` | Upload competitor announcement → See threat assessment |
+
+### Staging URLs
+- **Frontend:** https://ssp-staging.vercel.app
+- **Backend API:** https://social-sentiment-pricing-staging-2ecd.up.railway.app
+- **API Docs:** https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs
 
 ---
 
@@ -222,7 +273,9 @@ social-sentiment-pricing/
 - [x] Product management
 - [x] Shopify/WooCommerce integration
 - [x] Social sentiment analysis (Reddit)
-- [x] AI-powered pricing rules
+- [x] **Gemini-powered pricing rules**
+- [x] **Multi-agent visual analysis**
+- [x] **Crisis detection system**
 - [x] Auto-apply pricing
 - [x] MNEE crypto payments
 
@@ -236,6 +289,22 @@ social-sentiment-pricing/
 
 ---
 
-*Built with ❤️ for the MNEE Hackathon 2026*
+## 📄 License
 
+This project is open source under the **MIT License**.
 
+---
+
+## 👥 Contributors
+
+| Contributor | Role |
+|-------------|------|
+| @pema37 | Lead Developer |
+| @Celestin-Pet | Frontend |
+| @IbnNur | Backend |
+
+---
+
+Built with **Google Gemini 2.0 Flash** for the **Gemini API Developer Competition 2025** 🚀
+
+🔗 [Live Demo](https://ssp-staging.vercel.app) | 📖 [API Docs](https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs)
