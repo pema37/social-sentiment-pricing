@@ -14,7 +14,7 @@ And then: what if the price could adjust automatically, with payments settling i
 
 ---
 
-## Powered by Google Gemini
+## 🤖 Powered by Google Gemini
 
 ActualPrice uses **Gemini 2.0 Flash** for all AI-powered features:
 
@@ -23,6 +23,7 @@ ActualPrice uses **Gemini 2.0 Flash** for all AI-powered features:
 | **Visual Pricing Intelligence** | Gemini Vision + Streaming | Multi-agent system (Scout → Analyst → Strategist) analyzes competitor product images and recommends optimal pricing in real-time |
 | **Crisis Detection** | Gemini Language + Streaming | Monitor → Investigator → Response agents detect PR crises from sentiment data with severity assessment |
 | **Launch Detection** | Gemini Vision + Multimodal | Scanner → Validator → Assessor agents identify competitor product launches from screenshots and social signals |
+| **Market Trends** | Gemini Language + Streaming | AI monitors trending topics, seasonal patterns, and demand shifts to inform pricing strategy |
 | **Sentiment Analysis** | Gemini Language | Real-time analysis of social media mentions with emotion detection, sarcasm detection, and topic extraction |
 | **AI Support Chat** | Gemini Language | Contextual merchant assistance with conversation history |
 
@@ -30,26 +31,26 @@ All features use **streaming responses** for real-time thinking visualization.
 
 ---
 
-## Features
+## ✨ Features
 
-### Sentiment Engine
+### 🎯 Sentiment Engine
 Continuously monitors Twitter and Reddit for product mentions, brand sentiment, and viral moments. When buzz spikes, you know immediately.
 
-### Competitor Tracking
+### 📊 Competitor Tracking
 Track competitor prices automatically. When they move, you see it in your dashboard alongside the context—are they responding to the same trend you're seeing?
 
-### AI Pricing Recommendations
+### 🤖 AI Pricing Recommendations
 Our Gemini-powered engine synthesizes sentiment data, competitor movements, and your pricing rules to recommend optimal prices. Each recommendation includes a confidence score and plain-English reasoning.
 
-### Auto-Reprice
+### ⚡ Auto-Reprice
 Connect your Shopify or WooCommerce store and let ActualPrice push price updates directly. Set guardrails (min/max price, maximum daily changes) and choose between auto-apply or approval-based workflows.
 
-### MNEE Payments
+### 💰 MNEE Payments
 Accept MNEE stablecoin at checkout. Payments settle instantly with automatic revenue splits—80% merchant, 15% affiliate, 5% platform—executed by smart contract.
 
 ---
 
-## Tech Stack
+## 🛠 Tech Stack
 
 ### Backend
 - **Framework:** FastAPI (Python)
@@ -74,18 +75,22 @@ Accept MNEE stablecoin at checkout. Payments settle instantly with automatic rev
 
 ---
 
-## Demo
+## 🎬 Demo
 
-🔗 **Live Demo:** [ssp-staging.vercel.app](https://ssp-staging.vercel.app)
+🔗 **Live Demo:** [ssp-staging.vercel.app/demo](https://ssp-staging.vercel.app/demo)
 
 ### Demo Features
-- `/demo/visual-pricing` - Upload a competitor product image → Watch 3 AI agents collaborate in real-time
-- `/demo/crisis-detector` - Paste social media content → Get severity analysis and recommended actions
-- `/demo/launch-detector` - Upload competitor announcement → See threat assessment and strategic response
+
+| Feature | URL | Description |
+|---------|-----|-------------|
+| **Visual Pricing** | [`/demo/visual-pricing`](https://ssp-staging.vercel.app/demo/visual-pricing) | Upload a competitor product image → Watch 3 AI agents collaborate in real-time |
+| **Crisis Detector** | [`/demo/crisis-detector`](https://ssp-staging.vercel.app/demo/crisis-detector) | Paste social media content → Get severity analysis and recommended actions |
+| **Launch Detector** | [`/demo/launch-detector`](https://ssp-staging.vercel.app/demo/launch-detector) | Upload competitor announcement → See threat assessment and strategic response |
+| **Market Trends** | [`/demo/market-trends`](https://ssp-staging.vercel.app/demo/market-trends) | Analyze market signals → Get trend insights and pricing opportunities |
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 - Node.js 18+
@@ -135,7 +140,7 @@ npm run dev
 
 ---
 
-## Environment Variables
+## ⚙️ Environment Variables
 
 ### Backend (.env)
 
@@ -175,7 +180,7 @@ docker-compose up -d
 
 ---
 
-## Architecture
+## 🏗 Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -211,19 +216,19 @@ docker-compose up -d
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
 │         │                │                │                 │
 │         ▼                ▼                ▼                 │
-│  ┌─────────────────────────────────────────────┐           │
-│  │           Multi-Agent Orchestration          │           │
-│  │  Scout → Analyst → Strategist (Pricing)      │           │
-│  │  Monitor → Investigator → Response (Crisis)  │           │
-│  │  Scanner → Validator → Assessor (Launch)     │           │
-│  └─────────────────────────────────────────────┘           │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │           Multi-Agent Orchestration                  │   │
+│  │  Scout → Analyst → Strategist (Visual Pricing)       │   │
+│  │  Monitor → Investigator → Response (Crisis)          │   │
+│  │  Scanner → Validator → Assessor (Launch Detection)   │   │
+│  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Business Impact
+## 📈 Business Impact
 
 | Metric | Impact |
 |--------|--------|
@@ -234,7 +239,7 @@ docker-compose up -d
 
 ---
 
-## Why MNEE?
+## 💳 Why MNEE?
 
 Traditional payment processors charge 2.5-3% and hold funds for days. For a merchant doing $100K/month, that's $3K in fees and constant cash flow pressure.
 
@@ -242,7 +247,7 @@ MNEE changes the economics: near-zero fees, instant settlement, and programmable
 
 ---
 
-## Third-Party APIs & SDKs
+## 🔌 Third-Party APIs & SDKs
 
 | Service | Purpose |
 |---------|---------|
@@ -257,14 +262,14 @@ MNEE changes the economics: near-zero fees, instant settlement, and programmable
 
 ---
 
-## License
+## 📄 License
 
 This project is open source under the **MIT License**.
 
 ---
 
-## Team
+## 👥 Team
 
-Built with **Google Gemini 2.0 Flash** for the **Gemini API Developer Competition 2025**.
+Built with **Google Gemini 2.0 Flash** for the **Gemini 3 Hackathon 2026** 🚀
 
-🔗 [Live Demo](https://ssp-staging.vercel.app) | 📧 team@getactualprice.com
+🔗 [Live Demo](https://ssp-staging.vercel.app/demo) | 📖 [GitHub](https://github.com/pema37/social-sentiment-pricing)
