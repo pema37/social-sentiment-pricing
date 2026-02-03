@@ -2,7 +2,7 @@
 
 **AI-Powered Dynamic Pricing Based on Social Sentiment Analysis**
 
-*Built with Google Gemini 2.0 Flash for the Gemini API Developer Competition 2025*
+*Built with Google Gemini 2.0 Flash for the Gemini 3 Hackathon 2026*
 
 ---
 
@@ -25,6 +25,7 @@ ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all featur
 | **Visual Pricing Intelligence** | Vision + Streaming | Multi-agent system analyzes competitor product images in real-time |
 | **Crisis Detection** | Language + Streaming | Detects PR crises from sentiment data with severity assessment |
 | **Launch Detection** | Vision + Multimodal | Identifies competitor product launches from screenshots |
+| **Market Trends** | Language + Streaming | AI monitors trending topics, seasonal patterns, and demand shifts |
 | **Sentiment Analysis** | Language | Hybrid analysis with Gemini primary, VADER baseline |
 | **AI Market Analysis** | Language | Generates insights about market trends and pricing opportunities |
 | **AI Support Chat** | Language | Contextual merchant assistance |
@@ -249,17 +250,19 @@ social-sentiment-pricing/
 
 ## 🎬 Demo
 
-**Live Demo:** [ssp-staging.vercel.app](https://ssp-staging.vercel.app)
+**Live Demo:** [ssp-staging.vercel.app/demo](https://ssp-staging.vercel.app/demo)
 
 ### Gemini-Powered Demo Features
 
 | Demo | URL | Description |
 |------|-----|-------------|
-| **Visual Pricing** | `/demo/visual-pricing` | Upload competitor image → Watch 3 AI agents collaborate in real-time |
-| **Crisis Detection** | `/demo/crisis-detector` | Paste social content → Get severity analysis and recommended actions |
-| **Launch Detection** | `/demo/launch-detector` | Upload competitor announcement → See threat assessment |
+| **Visual Pricing** | [`/demo/visual-pricing`](https://ssp-staging.vercel.app/demo/visual-pricing) | Upload competitor image → Watch 3 AI agents collaborate in real-time |
+| **Crisis Detection** | [`/demo/crisis-detector`](https://ssp-staging.vercel.app/demo/crisis-detector) | Paste social content → Get severity analysis and recommended actions |
+| **Launch Detection** | [`/demo/launch-detector`](https://ssp-staging.vercel.app/demo/launch-detector) | Upload competitor announcement → See threat assessment |
+| **Market Trends** | [`/demo/market-trends`](https://ssp-staging.vercel.app/demo/market-trends) | Analyze market signals → Get trend insights and pricing opportunities |
 
 ### Staging URLs
+- **Demo Hub:** https://ssp-staging.vercel.app/demo
 - **Frontend:** https://ssp-staging.vercel.app
 - **Backend API:** https://social-sentiment-pricing-staging-2ecd.up.railway.app
 - **API Docs:** https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs
@@ -276,6 +279,8 @@ social-sentiment-pricing/
 - [x] **Gemini-powered pricing rules**
 - [x] **Multi-agent visual analysis**
 - [x] **Crisis detection system**
+- [x] **Launch detection system**
+- [x] **Market trends analysis**
 - [x] Auto-apply pricing
 - [x] MNEE crypto payments
 
@@ -305,6 +310,6 @@ This project is open source under the **MIT License**.
 
 ---
 
-Built with **Google Gemini 2.0 Flash** for the **Gemini API Developer Competition 2025** 🚀
+Built with **Google Gemini 2.0 Flash** for the **Gemini 3 Hackathon 2026** 🚀
 
-🔗 [Live Demo](https://ssp-staging.vercel.app) | 📖 [API Docs](https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs)
+🔗 [Live Demo](https://ssp-staging.vercel.app/demo) | 📖 [API Docs](https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs)
