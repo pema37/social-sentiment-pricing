@@ -2,28 +2,52 @@
 
 **AI-driven Social Sentiment Pricing for E-commerce**
 
-> A Stanley cup goes viral on TikTok. Within hours, resellers have tripled their prices while most merchants are still selling at cost. By the time sellers realize what's happening, the trend has peaked and they've left thousands in revenue on the table.
+*Powered by Google Gemini 2.0 Flash*
 
-ActualPrice answers one question: **What should this product cost _right now_, based on what the market actually looks like?**
+---
+
+A Stanley cup goes viral on TikTok. Within hours, resellers have tripled their prices while most merchants are still selling at cost. By the time sellers realize what's happening, the trend has peaked and they've left thousands in revenue on the table.
+
+**ActualPrice** answers one question: *What should this product cost right now, based on what the market actually looks like?*
 
 And then: what if the price could adjust automatically, with payments settling instantly through MNEE instead of waiting 2-3 days for traditional processors?
 
+---
+
+## Powered by Google Gemini
+
+ActualPrice uses **Gemini 2.0 Flash** for all AI-powered features:
+
+| Feature | Gemini Capability | Description |
+|---------|-------------------|-------------|
+| **Visual Pricing Intelligence** | Gemini Vision + Streaming | Multi-agent system (Scout → Analyst → Strategist) analyzes competitor product images and recommends optimal pricing in real-time |
+| **Crisis Detection** | Gemini Language + Streaming | Monitor → Investigator → Response agents detect PR crises from sentiment data with severity assessment |
+| **Launch Detection** | Gemini Vision + Multimodal | Scanner → Validator → Assessor agents identify competitor product launches from screenshots and social signals |
+| **Sentiment Analysis** | Gemini Language | Real-time analysis of social media mentions with emotion detection, sarcasm detection, and topic extraction |
+| **AI Support Chat** | Gemini Language | Contextual merchant assistance with conversation history |
+
+All features use **streaming responses** for real-time thinking visualization.
+
+---
+
 ## Features
 
-### 🎯 Sentiment Engine
+### Sentiment Engine
 Continuously monitors Twitter and Reddit for product mentions, brand sentiment, and viral moments. When buzz spikes, you know immediately.
 
-### 📊 Competitor Tracking
+### Competitor Tracking
 Track competitor prices automatically. When they move, you see it in your dashboard alongside the context—are they responding to the same trend you're seeing?
 
-### 🤖 AI Pricing Recommendations
-Our engine synthesizes sentiment data, competitor movements, and your pricing rules to recommend optimal prices. Each recommendation includes a confidence score and plain-English reasoning.
+### AI Pricing Recommendations
+Our Gemini-powered engine synthesizes sentiment data, competitor movements, and your pricing rules to recommend optimal prices. Each recommendation includes a confidence score and plain-English reasoning.
 
-### ⚡ Auto-Reprice
+### Auto-Reprice
 Connect your Shopify or WooCommerce store and let ActualPrice push price updates directly. Set guardrails (min/max price, maximum daily changes) and choose between auto-apply or approval-based workflows.
 
-### 💰 MNEE Payments
+### MNEE Payments
 Accept MNEE stablecoin at checkout. Payments settle instantly with automatic revenue splits—80% merchant, 15% affiliate, 5% platform—executed by smart contract.
+
+---
 
 ## Tech Stack
 
@@ -31,7 +55,7 @@ Accept MNEE stablecoin at checkout. Payments settle instantly with automatic rev
 - **Framework:** FastAPI (Python)
 - **Task Queue:** Celery with Redis
 - **Database:** PostgreSQL (Neon)
-- **AI/ML:** VADER + OpenAI GPT-4o-mini + Google Gemini
+- **AI/ML:** Google Gemini 2.0 Flash (primary) + VADER (baseline)
 
 ### Frontend
 - **Framework:** Next.js 14 with TypeScript
@@ -48,6 +72,19 @@ Accept MNEE stablecoin at checkout. Payments settle instantly with automatic rev
 - Ethers.js + WalletConnect
 - Solidity smart contracts for automated payment splits
 
+---
+
+## Demo
+
+🔗 **Live Demo:** [ssp-staging.vercel.app](https://ssp-staging.vercel.app)
+
+### Demo Features
+- `/demo/visual-pricing` - Upload a competitor product image → Watch 3 AI agents collaborate in real-time
+- `/demo/crisis-detector` - Paste social media content → Get severity analysis and recommended actions
+- `/demo/launch-detector` - Upload competitor announcement → See threat assessment and strategic response
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -55,6 +92,7 @@ Accept MNEE stablecoin at checkout. Payments settle instantly with automatic rev
 - Python 3.11+
 - PostgreSQL (or Neon account)
 - Redis
+- Google Gemini API Key
 
 ### Backend Setup
 
@@ -95,17 +133,19 @@ cp .env.example .env.local
 npm run dev
 ```
 
-### Environment Variables
+---
 
-#### Backend (.env)
-```
+## Environment Variables
+
+### Backend (.env)
+
+```env
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
 REDIS_URL=redis://localhost:6379
 SECRET_KEY=your-secret-key
 
-# AI Providers
-OPENAI_API_KEY=sk-...
-GOOGLE_API_KEY=...
+# AI Provider (Primary)
+GEMINI_API_KEY=your-gemini-api-key
 
 # Social APIs
 REDDIT_CLIENT_ID=...
@@ -120,8 +160,9 @@ WOOCOMMERCE_KEY=...
 WOOCOMMERCE_SECRET=...
 ```
 
-#### Frontend (.env.local)
-```
+### Frontend (.env.local)
+
+```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
 ```
@@ -131,6 +172,8 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
 ```bash
 docker-compose up -d
 ```
+
+---
 
 ## Architecture
 
@@ -155,6 +198,31 @@ docker-compose up -d
        └───────────┘    └───────────┘    └───────────┘
 ```
 
+### Gemini Integration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Gemini 2.0 Flash                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Vision    │  │  Language   │  │  Streaming  │         │
+│  │  Analysis   │  │  Analysis   │  │  Responses  │         │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
+│         │                │                │                 │
+│         ▼                ▼                ▼                 │
+│  ┌─────────────────────────────────────────────┐           │
+│  │           Multi-Agent Orchestration          │           │
+│  │  Scout → Analyst → Strategist (Pricing)      │           │
+│  │  Monitor → Investigator → Response (Crisis)  │           │
+│  │  Scanner → Validator → Assessor (Launch)     │           │
+│  └─────────────────────────────────────────────┘           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Business Impact
 
 | Metric | Impact |
@@ -164,32 +232,39 @@ docker-compose up -d
 | Settlement Time | Instant vs 2-3 day delays |
 | Affiliate Payouts | Automated via smart contract |
 
+---
+
 ## Why MNEE?
 
 Traditional payment processors charge 2.5-3% and hold funds for days. For a merchant doing $100K/month, that's $3K in fees and constant cash flow pressure.
 
 MNEE changes the economics: near-zero fees, instant settlement, and programmable money that can automatically split revenue the moment a transaction confirms.
 
-## Demo
-
-🔗 **Live Demo:** [ssp-staging.vercel.app](https://ssp-staging.vercel.app)
+---
 
 ## Third-Party APIs & SDKs
 
-- [OpenAI API](https://openai.com/) - GPT-4o-mini for sentiment analysis
-- [Google Gemini](https://ai.google.dev/) - Fallback AI provider
-- [VADER Sentiment](https://github.com/cjhutto/vaderSentiment) - Fast sentiment scoring
-- [Reddit API (PRAW)](https://praw.readthedocs.io/) - Social monitoring
-- [Twitter API v2](https://developer.twitter.com/) - Social monitoring
-- [Shopify Admin API](https://shopify.dev/api/admin) - Store integration
-- [WooCommerce REST API](https://woocommerce.github.io/woocommerce-rest-api-docs/) - Store integration
-- [Ethers.js](https://ethers.org/) - Blockchain interaction
-- [WalletConnect](https://walletconnect.com/) - Wallet connectivity
+| Service | Purpose |
+|---------|---------|
+| **Google Gemini 2.0 Flash** | Primary AI for all features (vision, sentiment, multi-agent systems) |
+| **VADER Sentiment** | Fast baseline sentiment scoring |
+| **Reddit API (PRAW)** | Social monitoring |
+| **Twitter API v2** | Social monitoring |
+| **Shopify Admin API** | Store integration |
+| **WooCommerce REST API** | Store integration |
+| **Ethers.js** | Blockchain interaction |
+| **WalletConnect** | Wallet connectivity |
+
+---
 
 ## License
 
-This project is open source under the [MIT License](LICENSE).
+This project is open source under the **MIT License**.
+
+---
 
 ## Team
 
-Built for the MNEE Hackathon 2026.
+Built with **Google Gemini 2.0 Flash** for the **Gemini API Developer Competition 2025**.
+
+🔗 [Live Demo](https://ssp-staging.vercel.app) | 📧 team@getactualprice.com
