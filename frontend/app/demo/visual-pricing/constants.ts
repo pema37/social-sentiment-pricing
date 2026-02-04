@@ -1,8 +1,4 @@
-/**
- * Visual Pricing Demo - Constants
- */
-
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://ssp-api-production.up.railway.app";
+export const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/v1";
 
 export interface AgentConfig {
   name: string;

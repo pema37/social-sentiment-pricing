@@ -1,6 +1,6 @@
 import type { TrendAgent, SimulateTrend, ThoughtType } from "./types";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+export const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/v1";
 
 export const TREND_AGENTS: Record<TrendAgent, { name: string; description: string; color: string }> = {
   observer: {
@@ -19,7 +19,6 @@ export const TREND_AGENTS: Record<TrendAgent, { name: string; description: strin
     color: "amber"
   }
 };
-
 
 export const THOUGHT_LABELS: Record<ThoughtType, { label: string; color: string }> = {
   observation: { label: "Observation", color: "cyan" },
@@ -53,6 +52,5 @@ export const CATEGORY_OPTIONS = [
   "automotive",
   "grocery"
 ];
-
 
 
