@@ -31,25 +31,41 @@ export default function CrisisDetectorDemo() {
 
       if (!reader) throw new Error("No reader");
 
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const lines = decoder.decode(value).split("\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
-          
-          const event: StreamEvent = JSON.parse(line.slice(6));
-          if (event.done) break;
-          if (event.error) throw new Error(event.error);
-          
-          if (event.agent && event.content) {
-            setActiveAgent(event.agent);
-            setOutputs(prev => [...prev, {
-              agent: event.agent!,
-              content: event.content!,
-              thoughtType: event.thought_type || undefined
-            }]);
+
+          try {
+            const event: StreamEvent = JSON.parse(line.slice(6));
+            if (event.done) break;
+            if (event.error) throw new Error(event.error);
+
+            if (event.agent && event.content) {
+              setActiveAgent(event.agent);
+              setOutputs((prev) => [
+                ...prev,
+                {
+                  agent: event.agent!,
+                  content: event.content!,
+                  thoughtType: event.thought_type || undefined,
+                },
+              ]);
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) {
+              console.error("SSE parse error:", e);
+            } else {
+              throw e;
+            }
           }
         }
       }
@@ -71,7 +87,15 @@ export default function CrisisDetectorDemo() {
   return (
     <div className="min-h-screen bg-gray-950 text-white p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">Crisis Detector</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold">Crisis Detector</h1>
+          <a
+            href="/demo"
+            className="text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            ← Back to Demo Hub
+          </a>
+        </div>
         <p className="text-gray-400 mb-8">AI-powered sentiment crisis monitoring</p>
 
         {/* Controls */}
@@ -83,7 +107,7 @@ export default function CrisisDetectorDemo() {
                 type="text"
                 value={product}
                 onChange={(e) => setProduct(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
                 disabled={isRunning}
               />
             </div>
@@ -100,8 +124,8 @@ export default function CrisisDetectorDemo() {
             <button
               onClick={isRunning ? stopAnalysis : runAnalysis}
               className={`px-6 py-2 rounded font-medium ${
-                isRunning 
-                  ? "bg-red-600 hover:bg-red-700" 
+                isRunning
+                  ? "bg-red-600 hover:bg-red-700"
                   : "bg-blue-600 hover:bg-blue-700"
               }`}
             >
@@ -119,12 +143,20 @@ export default function CrisisDetectorDemo() {
               <div
                 key={key}
                 className={`p-4 rounded-lg border-2 transition-all ${
-                  isActive 
-                    ? `border-${agent.color}-500 bg-${agent.color}-500/10` 
+                  isActive
+                    ? `${agent.borderActive} ${agent.bgActive}`
                     : "border-gray-800 bg-gray-900"
                 }`}
               >
-                <div className="font-medium">{agent.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-white">{agent.name}</span>
+                  {isActive && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-gray-500">{agent.description}</div>
               </div>
             );
@@ -143,11 +175,11 @@ export default function CrisisDetectorDemo() {
                 const thought = o.thoughtType ? THOUGHT_LABELS[o.thoughtType] : null;
                 return (
                   <div key={i} className="flex gap-2">
-                    <span className={`text-${agentInfo.color}-400 font-semibold`}>
+                    <span className={`${agentInfo.labelColor} font-semibold shrink-0`}>
                       [{agentInfo.name.split(" ")[0]}]
                     </span>
                     {thought && (
-                      <span className={`text-${thought.color}-400`}>[{thought.label}]</span>
+                      <span className={`${thought.color} shrink-0`}>[{thought.label}]</span>
                     )}
                     <span className="text-gray-300">{o.content}</span>
                   </div>
@@ -155,6 +187,11 @@ export default function CrisisDetectorDemo() {
               })}
             </div>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-12 text-center text-sm text-gray-500">
+          <p>GetActualPrice.com | Google Gemini API Developer Competition • February 2026</p>
         </div>
       </div>
     </div>

@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'SSP Demo - AI-Powered Dynamic Pricing | Gemini 3 Hackathon',
-  description: 'Experience Social Sentiment Pricing: AI that watches social media, tracks competitors, and optimizes your e-commerce prices in real-time. Built with Google Gemini 3.',
-  keywords: ['AI pricing', 'dynamic pricing', 'e-commerce', 'sentiment analysis', 'Gemini 3', 'hackathon'],
+  title: 'ActualPrice Demo - AI-Powered Dynamic Pricing | Gemini API Developer Competition',
+  description: 'Experience ActualPrice: AI that watches social sentiment, tracks competitors, and optimizes your e-commerce prices in real-time. Built with Google Gemini.',
+  keywords: ['AI pricing', 'dynamic pricing', 'e-commerce', 'sentiment analysis', 'Google Gemini', 'ActualPrice'],
   openGraph: {
-    title: 'Social Sentiment Pricing - Gemini 3 Hackathon',
+    title: 'ActualPrice - AI-Powered Dynamic Pricing',
     description: 'AI-powered dynamic pricing that watches social sentiment and automatically adjusts prices.',
     type: 'website',
   },
@@ -23,5 +23,4 @@ export default function DemoLayout({
     </div>
   );
 }
-
 

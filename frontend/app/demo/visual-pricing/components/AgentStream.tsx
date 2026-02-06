@@ -6,16 +6,16 @@ import { AGENT_CONFIG, THOUGHT_LABELS } from "../constants";
 
 interface AgentStreamProps {
   messages: AgentMessage[];
-  activeAgent: string | null;
+  activeAgent: AgentKey | null;
 }
 
 export function AgentStream({ messages, activeAgent }: AgentStreamProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Smooth scroll to bottom on new messages
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   if (messages.length === 0 && !activeAgent) {
@@ -37,7 +37,13 @@ export function AgentStream({ messages, activeAgent }: AgentStreamProps) {
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-white">Agent Analysis</h3>
           {activeAgent && (
-            <span className="text-sm text-gray-400">Processing...</span>
+            <span className="flex items-center gap-2 text-sm text-gray-400">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+              </span>
+              Processing...
+            </span>
           )}
         </div>
       </div>
@@ -58,14 +64,26 @@ export function AgentStream({ messages, activeAgent }: AgentStreamProps) {
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${config.bgColor} ${config.color} border ${config.borderColor}`}>
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded ${config.bgColor} ${config.color} border ${config.borderColor}`}
+                  >
                     {config.label}
                   </span>
-                  <span className={`font-medium ${config.color}`}>{config.name}</span>
+                  <span className={`font-medium ${config.color}`}>
+                    {config.name}
+                  </span>
                 </div>
                 <span className="text-xs text-gray-500">
-                  {isActive && "Processing..."}
-                  {isComplete && "Complete"}
+                  {isActive && !isComplete && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+                      </span>
+                      Processing...
+                    </span>
+                  )}
+                  {isComplete && "✓ Complete"}
                 </span>
               </div>
 
@@ -77,21 +95,31 @@ export function AgentStream({ messages, activeAgent }: AgentStreamProps) {
                         [{THOUGHT_LABELS[msg.thought_type] || msg.thought_type}]
                       </span>
                     )}
-                    <span className={msg.is_final ? "text-white" : "text-gray-300"}>
+                    <span
+                      className={msg.is_final ? "text-white" : "text-gray-300"}
+                    >
                       {msg.content}
                     </span>
                   </div>
                 ))}
                 {isActive && agentMessages.length === 0 && (
-                  <p className="text-sm text-gray-400 italic">{config.description}</p>
+                  <div className="flex items-center gap-2 text-sm text-gray-400 italic">
+                    <span className="flex gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </span>
+                    {config.description}
+                  </div>
                 )}
               </div>
             </div>
           );
         })}
+        {/* Scroll anchor */}
+        <div ref={bottomRef} />
       </div>
     </div>
   );
 }
-
 

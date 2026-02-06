@@ -18,9 +18,10 @@ from decimal import Decimal
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import (
-    ai_clients, 
-    StreamChunk, 
-    ThoughtType
+    ai_clients,
+    DEFAULT_MODEL,
+    StreamChunk,
+    ThoughtType,
 )
 
 logger = get_logger(__name__)
@@ -92,7 +93,7 @@ class CrisisDetector:
     """
     
     def __init__(self):
-        self.model = "gemini-2.0-flash"
+        self.model = DEFAULT_MODEL
         
         # Crisis detection thresholds
         self.sentiment_drop_threshold = -0.3  # 30% drop triggers investigation
@@ -295,7 +296,7 @@ Recommend a crisis response:
 Provide specific, actionable recommendations.
 
 End with a JSON block:
-````json
+```json
 {{
   "crisis_title": "Brief title for this crisis",
   "immediate_actions": ["action1", "action2", "action3"],
@@ -509,7 +510,7 @@ End with a JSON block:
             if msg.is_final and msg.metadata.get("monitoring_result"):
                 monitoring_result = msg.metadata["monitoring_result"]
         
-        # If no anomaly detected, stop here
+        # If no anomaly detected, stop here (early exit)
         if not monitoring_result.get("anomaly_detected", False):
             yield CrisisAgentMessage(
                 agent=CrisisAgentRole.MONITOR,

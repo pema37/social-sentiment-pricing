@@ -2,13 +2,13 @@
 
 /**
  * Visual Pricing Intelligence Demo
- * 
- * Gemini 3 Hackathon Entry - Public Demo Page
+ *
+ * Gemini API Developer Competition Entry - Public Demo Page
  * URL: /demo/visual-pricing
  */
 
 import React, { useState } from "react";
-import { AgentMessage, PricingRecommendation, AnalysisStatus } from "./types";
+import { AgentMessage, AgentKey, PricingRecommendation, AnalysisStatus } from "./types";
 import { API_BASE } from "./constants";
 import { ScreenshotUploader } from "./components/ScreenshotUploader";
 import { AgentStream } from "./components/AgentStream";
@@ -25,7 +25,7 @@ export default function VisualPricingDemo() {
   // Analysis state
   const [status, setStatus] = useState<AnalysisStatus>("idle");
   const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+  const [activeAgent, setActiveAgent] = useState<AgentKey | null>(null);
   const [recommendation, setRecommendation] = useState<PricingRecommendation | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +49,8 @@ export default function VisualPricingDemo() {
       formData.append("product_currency", productCurrency);
       formData.append("product_features", productFeatures);
 
-      const response = await fetch(`${API_BASE}/api/v1/visual-pricing/analyze`, {
+      // FIX: API_BASE already includes /api/v1
+      const response = await fetch(`${API_BASE}/visual-pricing/analyze`, {
         method: "POST",
         body: formData,
       });
@@ -88,16 +89,27 @@ export default function VisualPricingDemo() {
               }
 
               if (data.agent) {
-                setActiveAgent(data.agent);
+                setActiveAgent(data.agent as AgentKey);
                 setMessages((prev) => [...prev, data as AgentMessage]);
 
                 // Extract recommendation from strategist's final message
                 if (data.agent === "strategist" && data.is_final && data.metadata?.recommendation) {
-                  setRecommendation(data.metadata.recommendation as PricingRecommendation);
+                  const rec = data.metadata.recommendation;
+                  setRecommendation({
+                    ...rec,
+                    // Ensure numeric types for frontend rendering
+                    recommended_price: Number(rec.recommended_price),
+                    confidence: Number(rec.confidence),
+                    price_change_percent: Number(rec.price_change_percent),
+                  } as PricingRecommendation);
                 }
               }
             } catch (e) {
-              console.error("Parse error:", e);
+              if (e instanceof SyntaxError) {
+                console.error("SSE parse error:", e);
+              } else {
+                throw e;
+              }
             }
           }
         }
@@ -135,15 +147,13 @@ export default function VisualPricingDemo() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="font-bold text-xl">Visual Pricing Intelligence</h1>
-              <p className="text-sm text-gray-400">Powered by Gemini 3 Multi-Agent System</p>
+              <p className="text-sm text-gray-400">Powered by Google Gemini Multi-Agent System</p>
             </div>
             <a
-              href="https://actualprice.io"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/demo"
               className="text-sm text-gray-400 hover:text-white transition-colors"
             >
-              by ActualPrice
+              ← Back to Demo Hub
             </a>
           </div>
         </div>
@@ -281,19 +291,12 @@ export default function VisualPricingDemo() {
         {/* Footer */}
         <div className="mt-12 text-center text-sm text-gray-500">
           <p>
-            Built for the Gemini 3 AI Hackathon |{" "}
-            <a
-              href="https://github.com/pema37/social-sentiment-pricing"
-              className="text-blue-400 hover:underline"
-            >
-              View Source
-            </a>
+            GetActualPrice.com | Google Gemini API Developer Competition • February 2026
           </p>
         </div>
       </main>
     </div>
   );
 }
-
 
 

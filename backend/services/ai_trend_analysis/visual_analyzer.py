@@ -6,10 +6,11 @@ Agents:
 2. Analyst Agent - Compares products and market positioning  
 3. Strategist Agent - Recommends optimal pricing strategy
 
-Uses Gemini 3 streaming for real-time "thinking" display.
+Uses Gemini streaming for real-time "thinking" display.
 """
 
 import json
+import re
 from typing import Optional, AsyncGenerator
 from dataclasses import dataclass, field
 from enum import Enum
@@ -17,7 +18,8 @@ from decimal import Decimal
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import (
-    ai_clients, 
+    ai_clients,
+    DEFAULT_MODEL,
     StreamChunk, 
     ThoughtType,
     ImageAnalysisResult
@@ -81,7 +83,7 @@ class VisualPricingAnalyzer:
     """
     
     def __init__(self):
-        self.model = "gemini-2.0-flash"
+        self.model = DEFAULT_MODEL
     
     # =========================================================================
     # SCOUT AGENT - Extract competitor data from screenshot
@@ -271,7 +273,7 @@ Provide your strategic recommendation:
 4. RECOMMENDATION: What specific price do you recommend and why?
 
 End with a JSON block containing your final recommendation:
-````json
+```json
 {{
   "recommended_price": <number>,
   "confidence": <0.0-1.0>,
@@ -294,6 +296,7 @@ End with a JSON block containing your final recommendation:
         # Parse the JSON recommendation from response
         recommendation = self._parse_recommendation(full_response, your_product)
         
+        # FIX: Convert Decimal to float for JSON serialization
         yield AgentMessage(
             agent=AgentRole.STRATEGIST,
             thought_type=ThoughtType.RECOMMENDATION,
@@ -301,7 +304,7 @@ End with a JSON block containing your final recommendation:
             is_final=True,
             metadata={
                 "recommendation": {
-                    "recommended_price": str(recommendation.recommended_price),
+                    "recommended_price": float(recommendation.recommended_price),
                     "confidence": recommendation.confidence,
                     "strategy": recommendation.strategy,
                     "risk_level": recommendation.risk_level,
@@ -326,7 +329,6 @@ End with a JSON block containing your final recommendation:
                 json_str = response.split("```")[1].split("```")[0]
             else:
                 # Try to find raw JSON
-                import re
                 match = re.search(r'\{[^{}]*"recommended_price"[^{}]*\}', response)
                 if match:
                     json_str = match.group()

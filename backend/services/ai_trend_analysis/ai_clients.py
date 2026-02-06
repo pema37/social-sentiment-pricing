@@ -4,7 +4,7 @@ AI Client wrappers for OpenAI and Gemini.
 Supports:
 - OpenAI GPT-4o-mini (existing)
 - Gemini 1.5 Flash (existing, deprecated SDK)
-- Gemini 3 Flash (NEW - multimodal, streaming, thought signatures)
+- Gemini 3 Flash/Pro (NEW - multimodal, streaming, thought signatures, thinking levels)
 """
 
 import json
@@ -17,6 +17,13 @@ from core.config import settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Gemini 3 model constants
+# ---------------------------------------------------------------------------
+GEMINI3_FLASH = "gemini-3-flash-preview"
+GEMINI3_PRO = "gemini-3-pro-preview"
+DEFAULT_MODEL = GEMINI3_FLASH  # Fast streaming for demos
 
 
 class ThoughtType(str, Enum):
@@ -34,6 +41,7 @@ class StreamChunk:
     text: str
     thought_type: Optional[ThoughtType] = None
     is_final: bool = False
+    is_thought: bool = False  # True if this came from Gemini 3 thinking
 
 
 @dataclass
@@ -47,7 +55,7 @@ class ImageAnalysisResult:
     promo_signals: list[str] = None
     confidence: float = 0.0
     raw_text: str = ""
-    
+
     def __post_init__(self):
         if self.features is None:
             self.features = []
@@ -57,12 +65,16 @@ class ImageAnalysisResult:
 
 class AIClients:
     """Manages AI client connections for OpenAI and Gemini."""
-    
+
     def __init__(self):
         self._openai_client = None
-        self._gemini_client = None  # Old SDK (deprecated)
-        self._gemini3_client = None  # New SDK
-    
+        self._gemini_client = None    # Old SDK (deprecated)
+        self._gemini3_client = None   # New SDK
+
+    # ------------------------------------------------------------------
+    # Client properties (lazy-loaded)
+    # ------------------------------------------------------------------
+
     @property
     def openai_client(self):
         """Lazy-load OpenAI client."""
@@ -74,7 +86,7 @@ class AIClients:
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI client: {e}")
         return self._openai_client
-    
+
     @property
     def gemini_client(self):
         """Lazy-load Gemini client (old SDK - for backward compatibility)."""
@@ -87,7 +99,7 @@ class AIClients:
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
         return self._gemini_client
-    
+
     @property
     def gemini3_client(self):
         """Lazy-load Gemini 3 client (new SDK with streaming + multimodal)."""
@@ -99,11 +111,38 @@ class AIClients:
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini 3 client: {e}")
         return self._gemini3_client
-    
-    # =========================================================================
+
+    # ------------------------------------------------------------------
+    # Thinking-level config builder (Gemini 3 feature)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_thinking_config(
+        thinking_level: str = "low",
+    ) -> dict:
+        """
+        Build Gemini 3 GenerateContentConfig with thinking level.
+
+        Levels:
+          - "minimal" : fastest, almost no internal reasoning
+          - "low"     : light reasoning, ideal for streaming demos
+          - "high"    : deep reasoning (default for Pro), best quality
+        """
+        try:
+            from google.genai import types
+            return types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=thinking_level,
+                ),
+            )
+        except ImportError:
+            logger.warning("google.genai.types not available; skipping thinking config")
+            return {}
+
+    # ------------------------------------------------------------------
     # EXISTING METHODS (unchanged for backward compatibility)
-    # =========================================================================
-    
+    # ------------------------------------------------------------------
+
     async def call_openai(self, system_prompt: str, user_prompt: str) -> dict:
         """Call OpenAI API and return parsed JSON response."""
         try:
@@ -117,40 +156,39 @@ class AIClients:
                 temperature=0.3,
                 max_tokens=4000,
             )
-            
+
             content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
             logger.error(f"OpenAI API call failed: {e}")
             return self._get_fallback_response()
-    
+
     async def call_gemini(self, system_prompt: str, user_prompt: str) -> dict:
         """Call Gemini API and return parsed JSON response (legacy method)."""
         try:
             full_prompt = f"{system_prompt}\n\n{user_prompt}"
             response = self.gemini_client.generate_content(full_prompt)
-            
+
             text = response.text
-            # Handle markdown code blocks
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0]
             elif "```" in text:
                 text = text.split("```")[1].split("```")[0]
-            
+
             return json.loads(text.strip())
         except Exception as e:
             logger.error(f"Gemini API call failed: {e}")
             return self._get_fallback_response()
-    
+
     async def call(
-        self, 
-        system_prompt: str, 
-        user_prompt: str, 
-        use_model: str = "openai"
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        use_model: str = "openai",
     ) -> tuple[dict, str]:
         """
         Call the specified AI model.
-        
+
         Returns:
             Tuple of (response_dict, model_used)
         """
@@ -158,7 +196,7 @@ class AIClients:
             return await self.call_gemini(system_prompt, user_prompt), "gemini"
         else:
             return await self.call_openai(system_prompt, user_prompt), "openai"
-    
+
     def _get_fallback_response(self) -> dict:
         """Return a safe fallback response when AI fails."""
         return {
@@ -171,94 +209,132 @@ class AIClients:
             "recommended_actions": ["Review your data manually", "Ensure sentiment collection is running"],
             "key_insights": ["AI analysis temporarily unavailable"],
         }
-    
-    # =========================================================================
-    # NEW GEMINI 3 METHODS (streaming, multimodal, thought signatures)
-    # =========================================================================
-    
-    def _detect_thought_type(self, text: str) -> Optional[ThoughtType]:
-        """Detect thought signature from text content."""
+
+    # ------------------------------------------------------------------
+    # THOUGHT SIGNATURE DETECTION
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_thought_from_chunk(chunk) -> Optional[bool]:
+        """
+        Try to extract native Gemini 3 thought indicator from a chunk.
+
+        Gemini 3 responses can include thought parts where
+        ``part.thought == True``. Returns True/False/None.
+        """
+        try:
+            for candidate in getattr(chunk, "candidates", []):
+                for part in getattr(candidate.content, "parts", []):
+                    if getattr(part, "thought", False):
+                        return True
+            return False
+        except Exception:
+            return None
+
+    @staticmethod
+    def _detect_thought_type(text: str) -> Optional[ThoughtType]:
+        """
+        Keyword-based fallback for thought type detection.
+
+        Used when native thought signatures aren't available or to
+        classify the *kind* of thought (observation vs. analysis, etc.)
+        which Gemini 3's boolean ``thought`` flag doesn't distinguish.
+        """
         text_lower = text.lower()
-        
-        if any(word in text_lower for word in ["i see", "looking at", "observing", "notice"]):
+
+        if any(w in text_lower for w in ["i see", "looking at", "observing", "notice", "scanning"]):
             return ThoughtType.OBSERVATION
-        elif any(word in text_lower for word in ["analyzing", "comparing", "examining", "this means"]):
+        elif any(w in text_lower for w in ["analyzing", "comparing", "examining", "this means", "evaluating"]):
             return ThoughtType.ANALYSIS
-        elif any(word in text_lower for word in ["could be", "might", "possibly", "hypothesis"]):
+        elif any(w in text_lower for w in ["could be", "might", "possibly", "hypothesis", "if we"]):
             return ThoughtType.HYPOTHESIS
-        elif any(word in text_lower for word in ["therefore", "conclude", "decision", "determined"]):
+        elif any(w in text_lower for w in ["therefore", "conclude", "decision", "determined", "verdict"]):
             return ThoughtType.DECISION
-        elif any(word in text_lower for word in ["recommend", "suggest", "should", "optimal"]):
+        elif any(w in text_lower for w in ["recommend", "suggest", "should", "optimal", "strategy"]):
             return ThoughtType.RECOMMENDATION
-        
+
         return None
-    
+
+    # ------------------------------------------------------------------
+    # GEMINI 3 STREAMING
+    # ------------------------------------------------------------------
+
     async def stream_gemini3(
-        self, 
+        self,
         prompt: str,
-        model: str = "gemini-2.0-flash"
+        model: str = DEFAULT_MODEL,
+        thinking_level: str = "low",
     ) -> AsyncGenerator[StreamChunk, None]:
         """
         Stream response from Gemini 3 with thought signatures.
-        
+
         Args:
             prompt: The prompt to send
-            model: Model to use (gemini-2.0-flash or gemini-3-flash-preview when available)
-            
+            model: Gemini 3 model string
+            thinking_level: "minimal" | "low" | "high"
+
         Yields:
             StreamChunk objects with text and optional thought type
         """
         try:
             if not self.gemini3_client:
-                yield StreamChunk(
-                    text="Gemini 3 client not available",
-                    is_final=True
-                )
+                yield StreamChunk(text="Gemini 3 client not available", is_final=True)
                 return
-            
+
+            config = self._build_thinking_config(thinking_level)
+
             response = self.gemini3_client.models.generate_content_stream(
                 model=model,
-                contents=prompt
+                contents=prompt,
+                config=config,
             )
-            
+
             buffer = ""
             for chunk in response:
                 if chunk.text:
                     buffer += chunk.text
+
+                    # Check for native Gemini 3 thought signature
+                    is_thought = self._extract_thought_from_chunk(chunk)
+
+                    # Classify the thought type (keyword-based)
                     thought_type = self._detect_thought_type(buffer)
-                    
+
                     yield StreamChunk(
                         text=chunk.text,
                         thought_type=thought_type,
-                        is_final=False
+                        is_final=False,
+                        is_thought=bool(is_thought),
                     )
-            
-            # Final chunk
+
             yield StreamChunk(text="", is_final=True)
-            
+
         except Exception as e:
             logger.error(f"Gemini 3 streaming failed: {e}")
-            yield StreamChunk(
-                text=f"Error: {str(e)}",
-                is_final=True
-            )
-    
+            yield StreamChunk(text=f"Error: {str(e)}", is_final=True)
+
+    # ------------------------------------------------------------------
+    # GEMINI 3 IMAGE ANALYSIS (streaming)
+    # ------------------------------------------------------------------
+
     async def analyze_image_stream(
         self,
         image_data: bytes,
         image_type: Literal["png", "jpeg", "webp", "gif"] = "png",
         analysis_prompt: Optional[str] = None,
-        model: str = "gemini-2.0-flash"
+        model: str = DEFAULT_MODEL,
+        thinking_level: str = "low",
     ) -> AsyncGenerator[StreamChunk, None]:
         """
         Analyze a product screenshot with streaming response.
-        
+
         Args:
             image_data: Raw image bytes
             image_type: Image MIME type
             analysis_prompt: Custom prompt (uses default if not provided)
-            model: Gemini model to use
-            
+            model: Gemini 3 model to use
+            thinking_level: Controls reasoning depth
+
         Yields:
             StreamChunk objects with analysis text and thought signatures
         """
@@ -266,8 +342,7 @@ class AIClients:
             if not self.gemini3_client:
                 yield StreamChunk(text="Gemini 3 client not available", is_final=True)
                 return
-            
-            # Default prompt for competitor product analysis
+
             if analysis_prompt is None:
                 analysis_prompt = """Analyze this product screenshot and extract:
 
@@ -283,10 +358,8 @@ class AIClients:
 
 Be specific and structured in your analysis. Start each section with the thought type."""
 
-            # Encode image for API
             image_base64 = base64.b64encode(image_data).decode("utf-8")
-            
-            # Build multimodal content
+
             contents = [
                 {
                     "parts": [
@@ -294,66 +367,77 @@ Be specific and structured in your analysis. Start each section with the thought
                         {
                             "inline_data": {
                                 "mime_type": f"image/{image_type}",
-                                "data": image_base64
+                                "data": image_base64,
                             }
-                        }
+                        },
                     ]
                 }
             ]
-            
+
+            config = self._build_thinking_config(thinking_level)
+
             response = self.gemini3_client.models.generate_content_stream(
                 model=model,
-                contents=contents
+                contents=contents,
+                config=config,
             )
-            
+
             buffer = ""
             for chunk in response:
                 if chunk.text:
                     buffer += chunk.text
+                    is_thought = self._extract_thought_from_chunk(chunk)
                     thought_type = self._detect_thought_type(chunk.text)
-                    
+
                     yield StreamChunk(
                         text=chunk.text,
                         thought_type=thought_type,
-                        is_final=False
+                        is_final=False,
+                        is_thought=bool(is_thought),
                     )
-            
+
             yield StreamChunk(text="", is_final=True)
-            
+
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
             yield StreamChunk(text=f"Error analyzing image: {str(e)}", is_final=True)
-    
+
+    # ------------------------------------------------------------------
+    # GEMINI 3 IMAGE ANALYSIS (structured, non-streaming)
+    # ------------------------------------------------------------------
+
     async def analyze_image(
         self,
         image_data: bytes,
         image_type: Literal["png", "jpeg", "webp", "gif"] = "png",
-        model: str = "gemini-2.0-flash"
+        model: str = DEFAULT_MODEL,
+        thinking_level: str = "low",
     ) -> ImageAnalysisResult:
         """
-        Analyze a product screenshot and return structured result (non-streaming).
-        
+        Analyze a product screenshot and return structured result.
+
         Args:
             image_data: Raw image bytes
             image_type: Image MIME type
-            model: Gemini model to use
-            
+            model: Gemini 3 model to use
+            thinking_level: Controls reasoning depth
+
         Returns:
             ImageAnalysisResult with extracted product information
         """
         try:
             if not self.gemini3_client:
                 return ImageAnalysisResult(raw_text="Gemini 3 client not available")
-            
+
             image_base64 = base64.b64encode(image_data).decode("utf-8")
-            
+
             extraction_prompt = """Analyze this product screenshot and respond with ONLY a JSON object:
 
 {
   "product_name": "exact product name visible",
   "price": "price as shown (e.g., '$29.99' or '29.99')",
   "currency": "USD/EUR/GBP/etc",
-  "features": ["feature 1", "feature 2", ...],
+  "features": ["feature 1", "feature 2"],
   "reviews_summary": "brief summary of reviews if visible, null otherwise",
   "promo_signals": ["any discount badges", "limited time offers", "sale indicators"],
   "confidence": 0.0 to 1.0 based on image clarity
@@ -368,28 +452,31 @@ Respond with ONLY the JSON, no other text."""
                         {
                             "inline_data": {
                                 "mime_type": f"image/{image_type}",
-                                "data": image_base64
+                                "data": image_base64,
                             }
-                        }
+                        },
                     ]
                 }
             ]
-            
+
+            config = self._build_thinking_config(thinking_level)
+
             response = self.gemini3_client.models.generate_content(
                 model=model,
-                contents=contents
+                contents=contents,
+                config=config,
             )
-            
+
             text = response.text
-            
+
             # Parse JSON from response
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0]
             elif "```" in text:
                 text = text.split("```")[1].split("```")[0]
-            
+
             data = json.loads(text.strip())
-            
+
             return ImageAnalysisResult(
                 product_name=data.get("product_name"),
                 price=data.get("price"),
@@ -398,14 +485,14 @@ Respond with ONLY the JSON, no other text."""
                 reviews_summary=data.get("reviews_summary"),
                 promo_signals=data.get("promo_signals", []),
                 confidence=data.get("confidence", 0.5),
-                raw_text=response.text
+                raw_text=response.text,
             )
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse image analysis JSON: {e}")
             return ImageAnalysisResult(
-                raw_text=response.text if 'response' in locals() else str(e),
-                confidence=0.0
+                raw_text=response.text if "response" in dir() else str(e),
+                confidence=0.0,
             )
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")

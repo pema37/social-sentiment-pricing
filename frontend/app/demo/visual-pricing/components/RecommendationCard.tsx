@@ -35,7 +35,10 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
         <div className="rounded-lg bg-white/5 p-4 text-center">
           <p className="text-sm text-gray-400 mb-1">Recommended Price</p>
           <p className="text-3xl font-bold text-white">
-            ${recommendation.recommended_price.toFixed(2)}
+            ${Number(recommendation.recommended_price).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </p>
         </div>
         <div className="rounded-lg bg-white/5 p-4 text-center">
@@ -46,7 +49,7 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
             }`}
           >
             {isIncrease ? "+" : ""}
-            {recommendation.price_change_percent.toFixed(1)}%
+            {Number(recommendation.price_change_percent).toFixed(1)}%
           </p>
         </div>
       </div>
@@ -55,13 +58,13 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-gray-400">Confidence</span>
           <span className="text-sm font-medium text-white">
-            {Math.round(recommendation.confidence * 100)}%
+            {Math.round(Number(recommendation.confidence) * 100)}%
           </span>
         </div>
         <div className="h-2 rounded-full bg-gray-700 overflow-hidden">
           <div
             className="h-full rounded-full bg-linear-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
-            style={{ width: `${recommendation.confidence * 100}%` }}
+            style={{ width: `${Number(recommendation.confidence) * 100}%` }}
           />
         </div>
       </div>
@@ -75,9 +78,9 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
         <div>
           <p className="text-sm text-gray-400 mb-2">Key Factors</p>
           <div className="flex flex-wrap gap-2">
-            {recommendation.key_factors.map((factor, idx) => (
+            {recommendation.key_factors.map((factor) => (
               <span
-                key={idx}
+                key={factor}
                 className="rounded-full bg-white/5 border border-gray-700 px-3 py-1 text-xs text-gray-300"
               >
                 {factor}

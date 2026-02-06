@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import Image from "next/image";
-import { API_BASE, LAUNCH_AGENTS, THOUGHT_LABELS, THREAT_COLORS } from "./constants";
+import { API_BASE, LAUNCH_AGENTS, THOUGHT_LABELS, THREAT_STYLES } from "./constants";
 import type { LaunchAgent, StreamEvent, ThreatLevel } from "./types";
 
 interface AgentOutput {
@@ -59,7 +59,7 @@ export default function LaunchDetectorDemo() {
         response = await fetch(`${API_BASE}/launch/analyze/stream`, {
           method: "POST",
           body: formData,
-          signal: abortRef.current.signal
+          signal: abortRef.current.signal,
         });
       } else {
         const url = `${API_BASE}/launch/analyze/stream?competitor=${encodeURIComponent(competitor)}&your_product=${encodeURIComponent(yourProduct)}&simulate_launch=${simulateLaunch}`;
@@ -71,31 +71,47 @@ export default function LaunchDetectorDemo() {
 
       if (!reader) throw new Error("No reader");
 
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const lines = decoder.decode(value).split("\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
 
-          const event: StreamEvent = JSON.parse(line.slice(6));
-          if (event.done) break;
-          if (event.error) throw new Error(event.error);
+          try {
+            const event: StreamEvent = JSON.parse(line.slice(6));
+            if (event.done) break;
+            if (event.error) throw new Error(event.error);
 
-          if (event.agent && event.content) {
-            setActiveAgent(event.agent);
-            setOutputs(prev => [...prev, {
-              agent: event.agent!,
-              content: event.content!,
-              thoughtType: event.thought_type || undefined
-            }]);
-          }
+            if (event.agent && event.content) {
+              setActiveAgent(event.agent);
+              setOutputs((prev) => [
+                ...prev,
+                {
+                  agent: event.agent!,
+                  content: event.content!,
+                  thoughtType: event.thought_type || undefined,
+                },
+              ]);
+            }
 
-          if (event.metadata?.assessment) {
-            const assessment = event.metadata.assessment as { threat_level?: ThreatLevel };
-            if (assessment.threat_level) {
-              setThreatLevel(assessment.threat_level);
+            if (event.metadata?.assessment) {
+              const assessment = event.metadata.assessment as { threat_level?: ThreatLevel };
+              if (assessment.threat_level) {
+                setThreatLevel(assessment.threat_level);
+              }
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) {
+              console.error("SSE parse error:", e);
+            } else {
+              throw e;
             }
           }
         }
@@ -115,10 +131,20 @@ export default function LaunchDetectorDemo() {
     setIsRunning(false);
   };
 
+  const threatStyle = threatLevel ? THREAT_STYLES[threatLevel] || THREAT_STYLES.medium : null;
+
   return (
     <div className="min-h-screen bg-gray-950 text-white p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">Launch Detector</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold">Launch Detector</h1>
+          <a
+            href="/demo"
+            className="text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            ← Back to Demo Hub
+          </a>
+        </div>
         <p className="text-gray-400 mb-8">AI-powered competitor product launch detection</p>
 
         {/* Controls */}
@@ -130,7 +156,7 @@ export default function LaunchDetectorDemo() {
                 type="text"
                 value={competitor}
                 onChange={(e) => setCompetitor(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
                 disabled={isRunning}
               />
             </div>
@@ -140,7 +166,7 @@ export default function LaunchDetectorDemo() {
                 type="text"
                 value={yourProduct}
                 onChange={(e) => setYourProduct(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
                 disabled={isRunning}
               />
             </div>
@@ -154,26 +180,27 @@ export default function LaunchDetectorDemo() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
                   onChange={handleImageChange}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-sm"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-sm text-white"
                   disabled={isRunning}
                 />
               </div>
               {imagePreview && (
-                <div className="relative h-20 w-20">
+                <div className="relative h-20 w-20 shrink-0">
                   <Image
                     src={imagePreview}
                     alt="Preview"
                     fill
                     className="object-cover rounded border border-gray-700"
+                    unoptimized
                   />
                   <button
                     onClick={clearImage}
-                    className="absolute -top-2 -right-2 bg-red-600 rounded-full w-5 h-5 text-xs z-10"
+                    className="absolute -top-2 -right-2 bg-red-600 hover:bg-red-700 rounded-full w-5 h-5 text-xs z-10 transition-colors"
                     disabled={isRunning}
                   >
-                    X
+                    ✕
                   </button>
                 </div>
               )}
@@ -215,11 +242,19 @@ export default function LaunchDetectorDemo() {
                 key={key}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   isActive
-                    ? `border-${agent.color}-500 bg-${agent.color}-500/10`
+                    ? `${agent.borderActive} ${agent.bgActive}`
                     : "border-gray-800 bg-gray-900"
                 }`}
               >
-                <div className="font-medium">{agent.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-white">{agent.name}</span>
+                  {isActive && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-gray-500">{agent.description}</div>
               </div>
             );
@@ -227,10 +262,10 @@ export default function LaunchDetectorDemo() {
         </div>
 
         {/* Threat Level Badge */}
-        {threatLevel && (
-          <div className={`mb-4 p-4 rounded-lg border bg-${THREAT_COLORS[threatLevel]}-500/10 border-${THREAT_COLORS[threatLevel]}-500`}>
+        {threatLevel && threatStyle && (
+          <div className={`mb-4 p-4 rounded-lg border ${threatStyle.bg} ${threatStyle.border}`}>
             <span className="text-sm text-gray-400">Threat Level: </span>
-            <span className={`font-bold text-${THREAT_COLORS[threatLevel]}-400 uppercase`}>
+            <span className={`font-bold ${threatStyle.text} uppercase`}>
               {threatLevel}
             </span>
           </div>
@@ -248,11 +283,11 @@ export default function LaunchDetectorDemo() {
                 const thought = o.thoughtType ? THOUGHT_LABELS[o.thoughtType] : null;
                 return (
                   <div key={i} className="flex gap-2">
-                    <span className={`text-${agentInfo.color}-400 font-semibold`}>
+                    <span className={`${agentInfo.labelColor} font-semibold shrink-0`}>
                       [{agentInfo.name.split(" ")[0]}]
                     </span>
                     {thought && (
-                      <span className={`text-${thought.color}-400`}>[{thought.label}]</span>
+                      <span className={`${thought.color} shrink-0`}>[{thought.label}]</span>
                     )}
                     <span className="text-gray-300">{o.content}</span>
                   </div>
@@ -261,9 +296,15 @@ export default function LaunchDetectorDemo() {
             </div>
           )}
         </div>
+
+        {/* Footer */}
+        <div className="mt-12 text-center text-sm text-gray-500">
+          <p>GetActualPrice.com | Google Gemini API Developer Competition • February 2026</p>
+        </div>
       </div>
     </div>
   );
 }
+
 
 

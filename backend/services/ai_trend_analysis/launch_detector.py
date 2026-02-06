@@ -16,7 +16,12 @@ from enum import Enum
 from datetime import datetime
 
 from core.logging import get_logger
-from services.ai_trend_analysis.ai_clients import ai_clients, ThoughtType
+from services.ai_trend_analysis.ai_clients import (
+    ai_clients,
+    DEFAULT_MODEL,
+    StreamChunk,
+    ThoughtType,
+)
 
 logger = get_logger(__name__)
 
@@ -102,7 +107,7 @@ class LaunchDetector:
     """
     
     def __init__(self):
-        self.model = "gemini-2.0-flash"
+        self.model = DEFAULT_MODEL
         
         # Detection thresholds
         self.min_confidence = 0.3  # Minimum confidence to proceed to validation
@@ -615,7 +620,6 @@ End with a structured JSON block:
                 return default
             
             parsed = json.loads(json_str.strip())
-            # Merge with defaults to ensure all fields exist
             return {**default, **parsed}
             
         except Exception as e:
@@ -692,7 +696,7 @@ End with a structured JSON block:
             if msg.is_final and msg.metadata.get("scan_result"):
                 scan_result = msg.metadata["scan_result"]
         
-        # If no launch detected, stop here
+        # If no launch detected, stop here (early exit)
         if not scan_result.get("launch_detected", False):
             yield LaunchMessage(
                 agent=LaunchAgent.SCANNER,
@@ -726,7 +730,6 @@ End with a structured JSON block:
 
 # Singleton instance
 launch_detector = LaunchDetector()
-
 
 
 
