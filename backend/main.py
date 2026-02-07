@@ -64,6 +64,7 @@ from api.v1.routes.visual_pricing import router as visual_pricing_router
 from api.v1.routes.crisis_detection import router as crisis_detection_router
 from api.v1.routes.launch_detection import router as launch_detection_router
 from api.v1.routes.market_trends_visual import router as market_trends_visual_router
+from api.v1.routes.market_intelligence import router as market_intelligence_router
 
 
 @asynccontextmanager
@@ -161,6 +162,7 @@ app.include_router(visual_pricing_router, prefix="/api/v1")        # /api/v1/vis
 app.include_router(crisis_detection_router, prefix="/api/v1")      # /api/v1/crisis/*
 app.include_router(launch_detection_router, prefix="/api/v1")      # /api/v1/launch/*
 app.include_router(market_trends_visual_router, prefix="/api/v1")  # /api/v1/trends-visual/*
+app.include_router(market_intelligence_router, prefix="/api/v1")  # /api/v1/market-intelligence/*
 
 
 @app.get("/")
