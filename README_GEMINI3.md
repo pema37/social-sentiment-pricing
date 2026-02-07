@@ -2,51 +2,60 @@
 
 **AI-Powered Dynamic Pricing Based on Social Sentiment Analysis**
 
-*Built with Google Gemini 2.0 Flash for the Gemini 3 Hackathon 2026*
+*Built with Google Gemini 3 Flash for the Gemini 3 Hackathon 2026*
 
 ---
 
 ## 🎯 What is ActualPrice?
 
-ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pricing in real-time using AI-powered social sentiment analysis. Instead of guessing what price customers will pay, ActualPrice monitors what people are saying about your products across social media and automatically adjusts prices based on demand signals.
+ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pricing in real-time using AI-powered social sentiment analysis. Instead of guessing what price customers will pay, ActualPrice monitors what people are saying about your products across social media and recommends the right price at the right time — so merchants sell more products.
 
-**The Problem:** E-commerce merchants lose revenue by not adjusting prices to match real-time market sentiment. A product going viral on Reddit? Price should go up. Negative reviews trending? Time to discount.
+**The Problem:** Merchants set prices based on gut feeling or outdated spreadsheets. They have no idea what the market temperature is right now — what competitors are charging, what customers are saying, or what's trending. They leave money on the table every day.
 
-**Our Solution:** ActualPrice connects to your store (Shopify/WooCommerce), monitors social media sentiment, and either recommends or automatically applies optimal price changes.
+**Our Solution:** ActualPrice connects to your store (Shopify/WooCommerce), reads the market in real time using Gemini 3 multi-agent AI, and either recommends or automatically applies optimal price changes.
 
 ---
 
-## 🤖 Powered by Google Gemini
+## 🤖 Powered by Google Gemini 3
 
-ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all features:
+ActualPrice uses **Gemini 3 Flash** (`gemini-3-flash-preview`) as the primary AI engine across all features:
 
-| Feature | Gemini Capability | Description |
-|---------|-------------------|-------------|
-| **Visual Pricing Intelligence** | Vision + Streaming | Multi-agent system analyzes competitor product images in real-time |
-| **Crisis Detection** | Language + Streaming | Detects PR crises from sentiment data with severity assessment |
-| **Launch Detection** | Vision + Multimodal | Identifies competitor product launches from screenshots |
-| **Market Trends** | Language + Streaming | AI monitors trending topics, seasonal patterns, and demand shifts |
-| **Sentiment Analysis** | Language | Hybrid analysis with Gemini primary, VADER baseline |
+| Feature | Gemini 3 Capability | Description |
+|---------|---------------------|-------------|
+| **Visual Pricing Intelligence** | Vision + Streaming + Thinking Levels | Multi-agent system analyzes competitor product images in real-time |
+| **Crisis Detection** | Language + Streaming + Thought Signatures | Detects PR crises from sentiment data with severity assessment |
+| **Launch Detection** | Vision + Multimodal + Thinking Levels | Identifies competitor product launches from screenshots |
+| **Market Trends** | Language + Streaming + Thought Signatures | AI monitors trending topics, seasonal patterns, and demand shifts |
+| **Sentiment Analysis** | Language | Hybrid analysis with Gemini 3 primary, VADER baseline |
 | **AI Market Analysis** | Language | Generates insights about market trends and pricing opportunities |
 | **AI Support Chat** | Language | Contextual merchant assistance |
+
+### Gemini 3 Features Used
+
+- **Native Thinking Levels** — Configurable reasoning depth (`minimal` / `low` / `high`) via `ThinkingConfig`, letting agents trade speed for deeper analysis
+- **Thought Signatures** — Extracts native `part.thought` flags from Gemini 3 responses, displayed as real-time "agent thinking" in the UI
+- **Multimodal Vision** — Visual Pricing and Launch Detector accept product screenshots for Gemini image analysis
+- **1M Token Context** — Crisis Detector feeds comprehensive sentiment history for full-context analysis
 
 ### Multi-Agent Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Gemini 2.0 Flash                         │
+│                    Gemini 3 Flash                           │
+│               (gemini-3-flash-preview)                      │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
 │  │   Vision    │  │  Language   │  │  Streaming  │         │
-│  │  Analysis   │  │  Analysis   │  │  Responses  │         │
+│  │  Analysis   │  │  Analysis   │  │  + Thinking │         │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
 │         └────────────────┼────────────────┘                 │
 │                          ▼                                  │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │            Multi-Agent Orchestration                 │   │
 │  │  • Scout → Analyst → Strategist (Visual Pricing)     │   │
-│  │  • Monitor → Investigator → Response (Crisis)        │   │
+│  │  • Monitor → Analyzer → Response (Crisis)            │   │
 │  │  • Scanner → Validator → Assessor (Launch Detection) │   │
+│  │  • Collector → Analyzer → Forecaster (Market Trends) │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -56,7 +65,7 @@ ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all featur
 ## ✨ Key Features
 
 ### 🧠 AI-Powered Sentiment Analysis
-- **Hybrid Analysis Engine** — Gemini 2.0 Flash (primary) + VADER (fast baseline) for robust sentiment scoring
+- **Hybrid Analysis Engine** — Gemini 3 Flash (primary) + VADER (fast baseline) for robust sentiment scoring
 - **Real-time Monitoring** — Tracks mentions across Reddit, Twitter, and news sources
 - **Sarcasm Detection** — AI identifies sarcastic posts that would fool basic sentiment tools
 
@@ -74,7 +83,7 @@ ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all featur
 - **Sentiment Dashboard** — Visualize sentiment trends over time
 - **Price History** — Track how price changes affected sales
 - **Competitor Monitoring** — Track competitor prices and market position
-- **AI Market Analysis** — Get Gemini-generated insights about market trends
+- **AI Market Analysis** — Get Gemini 3-generated insights about market trends
 
 ### 🚨 Smart Alerts
 - **Crisis Detection** — Get notified when sentiment drops suddenly
@@ -94,7 +103,7 @@ ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all featur
 | Frontend | Next.js 14, TypeScript, Tailwind CSS, React Query |
 | Backend | FastAPI, Python 3.11, SQLModel, Pydantic |
 | Database | PostgreSQL (Neon), Redis |
-| **AI/ML** | **Google Gemini 2.0 Flash (primary)**, VADER Sentiment |
+| **AI/ML** | **Google Gemini 3 Flash (primary)**, VADER Sentiment |
 | Background Jobs | Celery, Redis |
 | Integrations | Shopify API, WooCommerce REST API |
 | Payments | MNEE, MetaMask (ETH) |
@@ -204,8 +213,8 @@ See `ACTUALPRICE_CONTRACTS.md` for detailed API contracts and type definitions.
                          ┌───────────────────┼───────────────────┐
                          ▼                   ▼                   ▼
                    ┌──────────┐        ┌──────────┐        ┌──────────┐
-                   │  Reddit  │        │  Gemini  │        │ Shopify/ │
-                   │   API    │        │   2.0    │        │   WC     │
+                   │  Reddit  │        │ Gemini 3 │        │ Shopify/ │
+                   │   API    │        │  Flash   │        │   WC     │
                    └──────────┘        └──────────┘        └──────────┘
 ```
 
@@ -214,7 +223,7 @@ See `ACTUALPRICE_CONTRACTS.md` for detailed API contracts and type definitions.
 | Task | Schedule | Description |
 |------|----------|-------------|
 | `fetch_all_mentions` | Every 30 min | Fetches social mentions for products |
-| `process_pending_mentions` | Every 5 min | Analyzes sentiment (VADER + Gemini) |
+| `process_pending_mentions` | Every 5 min | Analyzes sentiment (VADER + Gemini 3) |
 | `generate_recommendations` | Every hour | Creates pricing recommendations |
 | `fetch_competitor_prices` | Every 30 min | Updates competitor price data |
 
@@ -231,13 +240,13 @@ social-sentiment-pricing/
 │   ├── services/           # Business logic
 │   │   ├── pricing/        # Pricing engine
 │   │   ├── integration/    # Shopify/WooCommerce
-│   │   ├── ai_trend_analysis/  # Gemini multi-agent systems
+│   │   ├── ai_trend_analysis/  # Gemini 3 multi-agent systems
 │   │   └── analysis/       # Sentiment analysis
 │   ├── workers/            # Celery tasks
 │   └── main.py
 ├── frontend/
 │   ├── app/                # Next.js pages
-│   │   └── demo/           # Gemini demo features
+│   │   └── demo/           # Gemini 3 demo features
 │   ├── components/         # React components
 │   ├── lib/                # API clients, hooks
 │   └── types/              # TypeScript types
@@ -252,7 +261,7 @@ social-sentiment-pricing/
 
 **Live Demo:** [ssp-staging.vercel.app/demo](https://ssp-staging.vercel.app/demo)
 
-### Gemini-Powered Demo Features
+### Gemini 3-Powered Demo Features
 
 | Demo | URL | Description |
 |------|-----|-------------|
@@ -276,11 +285,11 @@ social-sentiment-pricing/
 - [x] Product management
 - [x] Shopify/WooCommerce integration
 - [x] Social sentiment analysis (Reddit)
-- [x] **Gemini-powered pricing rules**
-- [x] **Multi-agent visual analysis**
-- [x] **Crisis detection system**
-- [x] **Launch detection system**
-- [x] **Market trends analysis**
+- [x] **Gemini 3-powered pricing rules**
+- [x] **Multi-agent visual analysis with thinking levels**
+- [x] **Crisis detection with thought signatures**
+- [x] **Launch detection with multimodal vision**
+- [x] **Market trends with streaming analysis**
 - [x] Auto-apply pricing
 - [x] MNEE crypto payments
 
@@ -310,6 +319,7 @@ This project is open source under the **MIT License**.
 
 ---
 
-Built with **Google Gemini 2.0 Flash** for the **Gemini 3 Hackathon 2026** 🚀
+Built with **Google Gemini 3 Flash** for the **Gemini 3 Hackathon 2026** 🚀
 
 🔗 [Live Demo](https://ssp-staging.vercel.app/demo) | 📖 [API Docs](https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs)
+
