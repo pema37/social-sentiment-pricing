@@ -1,315 +1,213 @@
-# ActualPrice (SSP)
+# ActualPrice — Autonomous Pricing Pipeline
 
-**AI-Powered Dynamic Pricing Based on Social Sentiment Analysis**
+**VETROX AGENTIC 3.0 Hackathon Submission | Track 3: The Hand (Tool Use & Web3)**
 
-*Built with Google Gemini 2.0 Flash for the Gemini 3 Hackathon 2026*
-
----
-
-## 🎯 What is ActualPrice?
-
-ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pricing in real-time using AI-powered social sentiment analysis. Instead of guessing what price customers will pay, ActualPrice monitors what people are saying about your products across social media and automatically adjusts prices based on demand signals.
-
-**The Problem:** E-commerce merchants lose revenue by not adjusting prices to match real-time market sentiment. A product going viral on Reddit? Price should go up. Negative reviews trending? Time to discount.
-
-**Our Solution:** ActualPrice connects to your store (Shopify/WooCommerce), monitors social media sentiment, and either recommends or automatically applies optimal price changes.
-
----
-
-## 🤖 Powered by Google Gemini
-
-ActualPrice uses **Gemini 2.0 Flash** as the primary AI engine across all features:
-
-| Feature | Gemini Capability | Description |
-|---------|-------------------|-------------|
-| **Visual Pricing Intelligence** | Vision + Streaming | Multi-agent system analyzes competitor product images in real-time |
-| **Crisis Detection** | Language + Streaming | Detects PR crises from sentiment data with severity assessment |
-| **Launch Detection** | Vision + Multimodal | Identifies competitor product launches from screenshots |
-| **Market Trends** | Language + Streaming | AI monitors trending topics, seasonal patterns, and demand shifts |
-| **Sentiment Analysis** | Language | Hybrid analysis with Gemini primary, VADER baseline |
-| **AI Market Analysis** | Language | Generates insights about market trends and pricing opportunities |
-| **AI Support Chat** | Language | Contextual merchant assistance |
-
-### Multi-Agent Architecture
+An autonomous multi-agent system that monitors competitor prices, analyzes market sentiment, calculates optimal pricing, and executes price updates on-chain — without human intervention.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Gemini 2.0 Flash                         │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   Vision    │  │  Language   │  │  Streaming  │         │
-│  │  Analysis   │  │  Analysis   │  │  Responses  │         │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
-│         └────────────────┼────────────────┘                 │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │            Multi-Agent Orchestration                 │   │
-│  │  • Scout → Analyst → Strategist (Visual Pricing)     │   │
-│  │  • Monitor → Investigator → Response (Crisis)        │   │
-│  │  • Scanner → Validator → Assessor (Launch Detection) │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+Market Signal → Scout → Analyst → Strategist → BNB Chain
+                 ↓         ↓           ↓
+              observe    reason       execute
 ```
 
----
+## Live Demo
 
-## ✨ Key Features
+- **Frontend:** [ssp-staging.vercel.app/demo/autonomous-pipeline](https://ssp-staging.vercel.app/demo/autonomous-pipeline)
+- **Backend API:** `POST /api/v1/autonomous/trigger`
+- **SSE Stream:** `GET /api/v1/autonomous/stream/{product_id}`
+- **Health Check:** `GET /api/v1/autonomous/health`
 
-### 🧠 AI-Powered Sentiment Analysis
-- **Hybrid Analysis Engine** — Gemini 2.0 Flash (primary) + VADER (fast baseline) for robust sentiment scoring
-- **Real-time Monitoring** — Tracks mentions across Reddit, Twitter, and news sources
-- **Sarcasm Detection** — AI identifies sarcastic posts that would fool basic sentiment tools
+## What It Does
 
-### 💰 Dynamic Pricing Engine
-- **Smart Pricing Rules** — Create rules based on sentiment thresholds, competitor prices, time-based triggers, or volume surges
-- **Auto-Apply Mode** — Let AI automatically apply price changes within your defined guardrails
-- **Margin Protection** — Set floor prices and margin minimums to ensure profitability
+A merchant connects their store. From that point forward, ActualPrice runs autonomously:
 
-### 🔗 E-commerce Integration
-- **Shopify** — One-click OAuth connection
-- **WooCommerce** — Secure API credential connection
-- **Two-way Sync** — Pull products from your store, push price updates back
+1. **Scout Agent** detects a competitor price drop via Gemini 3 function calling — fetching live competitor data, analyzing price changes, and scoring sentiment across social platforms.
+2. **Analyst Agent** receives the Scout's signal, calculates demand elasticity, assesses risk factors, and determines whether to raise, lower, or hold pricing.
+3. **Strategist Agent** computes the exact optimal price, respects the merchant's margin floor, and if the confidence threshold is met — writes the new price to a BNB Chain smart contract for transparent, auditable execution.
 
-### 📊 Analytics & Insights
-- **Sentiment Dashboard** — Visualize sentiment trends over time
-- **Price History** — Track how price changes affected sales
-- **Competitor Monitoring** — Track competitor prices and market position
-- **AI Market Analysis** — Get Gemini-generated insights about market trends
+The entire pipeline streams in real-time via SSE so the merchant can watch the agents think.
 
-### 🚨 Smart Alerts
-- **Crisis Detection** — Get notified when sentiment drops suddenly
-- **Viral Detection** — Know when a product is trending
-- **Price Recommendations** — Never miss an optimization opportunity
+## Philosophy of Design
 
-### 💳 Crypto Payments
-- **MNEE Integration** — Accept cryptocurrency payments for subscriptions
-- **BSV & ETH Support** — Multiple blockchain payment options
+### Why three agents instead of one prompt?
 
----
+A single monolithic prompt would be simpler. We rejected it for the same reason you wouldn't ask one person to be a field reporter, financial analyst, and portfolio manager simultaneously — the quality of each task degrades when you force a single context to hold competing objectives.
 
-## 🛠️ Tech Stack
+By decomposing the pipeline into Scout → Analyst → Strategist, each agent operates with a focused system prompt, dedicated tools, and a narrow output schema. The Scout doesn't need to know about margin floors. The Strategist doesn't need to parse Reddit threads. This separation means each agent can be tested, replaced, or upgraded independently.
+
+This mirrors how autonomous systems work in practice: perception is separated from reasoning, which is separated from actuation.
+
+### Why Gemini function calling instead of prompt-and-parse?
+
+Early prototypes used Gemini to generate JSON directly. It worked 90% of the time. The other 10% produced malformed output that silently corrupted downstream decisions.
+
+We switched to Gemini 3's native function calling — `fetch_competitor_price`, `analyze_sentiment`, `calculate_elasticity`, `assess_risk`, `calculate_optimal_price`, `write_price_to_chain`, `detect_price_change` — because the model selects and invokes tools with structured arguments. The tool handlers return typed data. No parsing. No regex. No "please format your response as JSON."
+
+This isn't a stylistic choice. It's the difference between an agent that works in a demo and an agent that works at 3 AM when no one is watching.
+
+### Why on-chain execution?
+
+Pricing decisions are high-stakes. A merchant who trusts an AI to change their prices needs to verify what happened and when. Writing the final price decision to BNB Chain creates an immutable audit trail: the recommended price, the confidence score, and the timestamp are all recorded in a smart contract that neither the AI nor the platform operator can retroactively alter.
+
+This isn't blockchain for its own sake. It's the minimum credible commitment an autonomous system can make to earn trust.
+
+### What assumptions did we question?
+
+**"AI pricing tools need a human approval step."** We questioned this. Our system includes a margin floor — a hard constraint the merchant sets once — below which the agent will never price. With that guardrail in place, requiring a human to click "approve" on every recommendation defeats the purpose of autonomy. The agent acts. The merchant audits after.
+
+**"Multi-agent systems need complex orchestration frameworks."** We questioned this too. Our orchestrator is a single Python file (~500 lines) that runs three agents in sequence, handles fallbacks, and streams events. No LangChain. No CrewAI. No framework overhead. The complexity is in the Gemini tool definitions and the Pydantic schemas — where it belongs.
+
+**"Tests slow you down during a hackathon."** We wrote 119 tests across four layers (schemas → tool handlers → orchestrator → API) and they caught a real bug: the on-chain transaction hash was being generated at 62 characters instead of the 66 required by Ethereum standards. That bug would have failed silently in production. The tests run in 5 seconds.
+
+### Where is the elegance?
+
+In what the merchant doesn't see. They see a price change. They don't see the Scout parsing a competitor signal, the Analyst running elasticity calculations, the Strategist respecting their margin floor, or the smart contract recording the decision. The architecture is invisible. That's the point.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Next.js Frontend                   │
+│              SSE event stream rendering               │
+└──────────────────────┬──────────────────────────────┘
+                       │ HTTP / SSE
+┌──────────────────────▼──────────────────────────────┐
+│                   FastAPI Backend                     │
+│                                                      │
+│  autonomous_pipeline.py  ←  API routes (trigger,     │
+│                              stream, monitor, health) │
+│                                                      │
+│  autonomous_orchestrator.py  ←  Pipeline engine      │
+│    ├── Scout Agent    (Gemini 3 + 3 tools)           │
+│    ├── Analyst Agent  (Gemini 3 + 3 tools)           │
+│    └── Strategist Agent (Gemini 3 + 1 tool)          │
+│                                                      │
+│  7 Gemini Function Tools:                            │
+│    fetch_competitor_price, detect_price_change,       │
+│    analyze_sentiment, calculate_elasticity,           │
+│    assess_risk, calculate_optimal_price,              │
+│    write_price_to_chain                              │
+└──────────────────────┬──────────────────────────────┘
+                       │ Web3 / JSON-RPC
+┌──────────────────────▼──────────────────────────────┐
+│              BNB Chain (Smart Contract)               │
+│         Immutable pricing decision audit trail        │
+│   Contract: 0x... (deployed on BNB Chain mainnet)    │
+└─────────────────────────────────────────────────────┘
+```
+
+## Tech Stack
 
 | Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS, React Query |
-| Backend | FastAPI, Python 3.11, SQLModel, Pydantic |
-| Database | PostgreSQL (Neon), Redis |
-| **AI/ML** | **Google Gemini 2.0 Flash (primary)**, VADER Sentiment |
-| Background Jobs | Celery, Redis |
-| Integrations | Shopify API, WooCommerce REST API |
-| Payments | MNEE, MetaMask (ETH) |
-| Deployment | Railway (backend), Vercel (frontend) |
+|-------|-----------|
+| AI Engine | Google Gemini 3 Flash (function calling + structured output) |
+| Backend | FastAPI, Python 3.13, Pydantic v2 |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS |
+| Database | PostgreSQL (Neon) |
+| Blockchain | BNB Chain, Solidity smart contracts |
+| Streaming | Server-Sent Events (SSE) |
+| Deploy | Railway (backend) + Vercel (frontend) |
+| Testing | pytest + pytest-asyncio (119 tests, 5s runtime) |
 
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- PostgreSQL
-- Redis
-- **Google Gemini API Key**
-
-### Backend Setup
+## Running the Tests
 
 ```bash
+# Install dependencies
+pip install pytest pytest-asyncio httpx google-genai pydantic
+
+# Run the autonomous pipeline test suite (no API key needed)
+python3 -m pytest backend/tests/test_autonomous_schemas.py \
+                   backend/tests/test_autonomous_tool_handlers.py \
+                   backend/tests/test_autonomous_orchestrator.py \
+                   backend/tests/test_autonomous_api.py -v
+
+# Expected: 119 passed in ~5s
+```
+
+### Test Coverage
+
+| Layer | Tests | What's Covered |
+|-------|-------|---------------|
+| Schemas | 25 | Pydantic validation, bounds checking, serialization |
+| Tool Handlers | 35 | All 7 Gemini function tools, edge cases, return structures |
+| Orchestrator | 23 | Scout→Analyst→Strategist pipeline, SSE streaming, fallbacks |
+| API Endpoints | 36 | HTTP status codes, request validation, response headers, SSE format |
+
+## Running Locally
+
+```bash
+# Backend
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
+export GEMINI_API_KEY=your-key
+export GEMINI_MODEL=gemini-3-flash-preview
+export DATABASE_URL=postgresql+asyncpg://...
+uvicorn main:app --reload --port 8000
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your credentials (especially GEMINI_API_KEY)
-
-# Run database migrations
-alembic upgrade head
-
-# Start the server
-uvicorn main:app --reload
+# Frontend
+cd frontend
+yarn install
+yarn dev
 ```
 
-### Frontend Setup
+## API Endpoints
+
+```
+POST /api/v1/autonomous/trigger          One-shot pipeline execution
+GET  /api/v1/autonomous/stream/{id}      SSE streaming pipeline
+POST /api/v1/autonomous/monitor/start    Start continuous monitoring
+POST /api/v1/autonomous/monitor/stop     Stop monitoring
+GET  /api/v1/autonomous/health           Gemini connectivity check
+```
+
+### Example: Trigger Pipeline
 
 ```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your API URL
-
-# Generate TypeScript types from backend (run when backend schemas change)
-npm run generate-api-types
-
-# Start development server
-npm run dev
+curl -X POST https://your-api/api/v1/autonomous/trigger \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "SKU-001",
+    "current_price": 99.99,
+    "product_category": "electronics",
+    "cost_basis": 45.00,
+    "margin_floor_pct": 20.0
+  }'
 ```
 
-### Environment Variables
+### Response
 
-**Backend (.env)**
-```env
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
-REDIS_URL=redis://localhost:6379
-SECRET_KEY=your-secret-key
-
-# AI Provider (Primary)
-GEMINI_API_KEY=your-gemini-api-key
-
-# Integrations
-SHOPIFY_API_KEY=...
-SHOPIFY_API_SECRET=...
+```json
+{
+  "success": true,
+  "decision": {
+    "action": "execute",
+    "current_price": 99.99,
+    "recommended_price": 87.49,
+    "change_pct": -12.5,
+    "confidence_score": 0.82,
+    "reasoning": "Competitor dropped 15%. Sentiment bearish. Elasticity supports matching.",
+    "tx_hash": "0xa1b2c3..."
+  },
+  "agents_executed": ["Scout", "Analyst", "Strategist"],
+  "pipeline_duration_ms": 3400
+}
 ```
 
-**Frontend (.env.local)**
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+## Smart Contract
 
----
+Deployed on BNB Chain mainnet. Records every autonomous pricing decision with:
+- Product ID
+- Previous price → New price
+- Confidence score
+- Timestamp
 
-## 📖 API Documentation
+Contract details in [ACTUALPRICE_CONTRACTS.md](./ACTUALPRICE_CONTRACTS.md).
 
-Once the backend is running:
-- **Swagger UI:** http://localhost:8000/docs
-- **ReDoc:** http://localhost:8000/redoc
+## Team
 
-See `ACTUALPRICE_CONTRACTS.md` for detailed API contracts and type definitions.
+**Massa Sakou** — Founder & Lead Engineer ([ActualPrice](https://ssp-staging.vercel.app))
 
----
+## License
 
-## 🏗️ Architecture
+MIT
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    Frontend     │────▶│     Backend     │────▶│    Database     │
-│   (Next.js)     │     │    (FastAPI)    │     │  (PostgreSQL)   │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-                                 │
-                    ┌────────────┼────────────┐
-                    ▼            ▼            ▼
-              ┌──────────┐ ┌──────────┐ ┌──────────┐
-              │  Celery  │ │  Redis   │ │ External │
-              │ Workers  │ │  Cache   │ │   APIs   │
-              └──────────┘ └──────────┘ └──────────┘
-                                             │
-                         ┌───────────────────┼───────────────────┐
-                         ▼                   ▼                   ▼
-                   ┌──────────┐        ┌──────────┐        ┌──────────┐
-                   │  Reddit  │        │  Gemini  │        │ Shopify/ │
-                   │   API    │        │   2.0    │        │   WC     │
-                   └──────────┘        └──────────┘        └──────────┘
-```
-
-### Background Tasks (Celery)
-
-| Task | Schedule | Description |
-|------|----------|-------------|
-| `fetch_all_mentions` | Every 30 min | Fetches social mentions for products |
-| `process_pending_mentions` | Every 5 min | Analyzes sentiment (VADER + Gemini) |
-| `generate_recommendations` | Every hour | Creates pricing recommendations |
-| `fetch_competitor_prices` | Every 30 min | Updates competitor price data |
-
----
-
-## 📁 Project Structure
-
-```
-social-sentiment-pricing/
-├── backend/
-│   ├── api/v1/routes/      # API endpoints
-│   ├── models/             # Database models
-│   ├── schemas/            # Pydantic schemas
-│   ├── services/           # Business logic
-│   │   ├── pricing/        # Pricing engine
-│   │   ├── integration/    # Shopify/WooCommerce
-│   │   ├── ai_trend_analysis/  # Gemini multi-agent systems
-│   │   └── analysis/       # Sentiment analysis
-│   ├── workers/            # Celery tasks
-│   └── main.py
-├── frontend/
-│   ├── app/                # Next.js pages
-│   │   └── demo/           # Gemini demo features
-│   ├── components/         # React components
-│   ├── lib/                # API clients, hooks
-│   └── types/              # TypeScript types
-├── ACTUALPRICE_CONTRACTS.md
-├── PRIVACY.md
-└── README.md
-```
-
----
-
-## 🎬 Demo
-
-**Live Demo:** [ssp-staging.vercel.app/demo](https://ssp-staging.vercel.app/demo)
-
-### Gemini-Powered Demo Features
-
-| Demo | URL | Description |
-|------|-----|-------------|
-| **Visual Pricing** | [`/demo/visual-pricing`](https://ssp-staging.vercel.app/demo/visual-pricing) | Upload competitor image → Watch 3 AI agents collaborate in real-time |
-| **Crisis Detection** | [`/demo/crisis-detector`](https://ssp-staging.vercel.app/demo/crisis-detector) | Paste social content → Get severity analysis and recommended actions |
-| **Launch Detection** | [`/demo/launch-detector`](https://ssp-staging.vercel.app/demo/launch-detector) | Upload competitor announcement → See threat assessment |
-| **Market Trends** | [`/demo/market-trends`](https://ssp-staging.vercel.app/demo/market-trends) | Analyze market signals → Get trend insights and pricing opportunities |
-
-### Staging URLs
-- **Demo Hub:** https://ssp-staging.vercel.app/demo
-- **Frontend:** https://ssp-staging.vercel.app
-- **Backend API:** https://social-sentiment-pricing-staging-2ecd.up.railway.app
-- **API Docs:** https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs
-
----
-
-## 🗺️ Roadmap
-
-### MVP (Current - Hackathon)
-- [x] User authentication
-- [x] Product management
-- [x] Shopify/WooCommerce integration
-- [x] Social sentiment analysis (Reddit)
-- [x] **Gemini-powered pricing rules**
-- [x] **Multi-agent visual analysis**
-- [x] **Crisis detection system**
-- [x] **Launch detection system**
-- [x] **Market trends analysis**
-- [x] Auto-apply pricing
-- [x] MNEE crypto payments
-
-### Post-Hackathon
-- [ ] Twitter/X integration
-- [ ] Amazon integration
-- [ ] Advanced competitor intelligence
-- [ ] Mobile app
-- [ ] Multi-currency support
-- [ ] Team collaboration features
-
----
-
-## 📄 License
-
-This project is open source under the **MIT License**.
-
----
-
-## 👥 Contributors
-
-| Contributor | Role |
-|-------------|------|
-| @pema37 | Lead Developer |
-| @Celestin-Pet | Frontend |
-| @IbnNur | Backend |
-
----
-
-Built with **Google Gemini 2.0 Flash** for the **Gemini 3 Hackathon 2026** 🚀
-
-🔗 [Live Demo](https://ssp-staging.vercel.app/demo) | 📖 [API Docs](https://social-sentiment-pricing-staging-2ecd.up.railway.app/docs)
