@@ -3,7 +3,7 @@
 Pydantic schemas for AI Support Chat feature.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
@@ -26,7 +26,8 @@ class SupportChatResponse(BaseModel):
     message: str
     topic_detected: Optional[str] = None
     suggested_actions: List[str] = Field(default_factory=list)
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
 
 
 class TopicSuggestion(BaseModel):

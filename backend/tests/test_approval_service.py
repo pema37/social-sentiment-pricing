@@ -19,6 +19,7 @@ if "db.session" not in sys.modules:
     sys.modules["db.session"] = MagicMock()
 
 from services.pricing.approval_service import ApprovalService, ApprovalError
+from models.price_recommendation import RecommendationStatus
 
 
 # =====================================================================
@@ -27,7 +28,7 @@ from services.pricing.approval_service import ApprovalService, ApprovalError
 
 def make_recommendation(
     user_id=None,
-    status="PENDING",
+    status=None,
     valid_minutes=60,
     product_id=None,
     recommended_price=29.99,
@@ -39,7 +40,7 @@ def make_recommendation(
     rec.id = uuid4()
     rec.user_id = user_id or uuid4()
     rec.product_id = product_id or uuid4()
-    rec.status = status
+    rec.status = status if status is not None else RecommendationStatus.PENDING
     rec.valid_until = datetime.utcnow() + timedelta(minutes=valid_minutes)
     rec.recommended_price = recommended_price
     rec.change_percent = change_percent
@@ -111,7 +112,7 @@ class TestApprove:
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id, status="PENDING")
         # Mock status comparison - make it work with string comparison
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         db.get = AsyncMock(return_value=rec)
@@ -129,7 +130,7 @@ class TestApprove:
     async def test_approve_non_pending_raises(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "APPROVED"
+        rec.status = RecommendationStatus.APPROVED
         
         db = make_db()
         service = ApprovalService(db)
@@ -143,7 +144,7 @@ class TestApprove:
     async def test_approve_expired_recommendation(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id, valid_minutes=-10)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         service = ApprovalService(db)
@@ -157,7 +158,7 @@ class TestApprove:
     async def test_approve_with_auto_flag(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         service = ApprovalService(db)
@@ -179,7 +180,7 @@ class TestReject:
     async def test_reject_pending_recommendation(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         service = ApprovalService(db)
@@ -194,7 +195,7 @@ class TestReject:
     async def test_reject_without_reason(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         service = ApprovalService(db)
@@ -208,7 +209,7 @@ class TestReject:
     async def test_reject_non_pending_raises(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "APPLIED"
+        rec.status = RecommendationStatus.APPLIED
         
         db = make_db()
         service = ApprovalService(db)
@@ -226,12 +227,12 @@ class TestReject:
 class TestApplyPrice:
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_apply_approved_recommendation(self, MockPushService):
         user_id = uuid4()
         product_id = uuid4()
         rec = make_recommendation(user_id=user_id, product_id=product_id)
-        rec.status = "APPROVED"
+        rec.status = RecommendationStatus.APPROVED
         product = make_product(product_id=product_id, current_price=25.00)
         
         # Mock push service
@@ -254,7 +255,7 @@ class TestApplyPrice:
     async def test_apply_pending_raises(self):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         service = ApprovalService(db)
@@ -265,11 +266,11 @@ class TestApplyPrice:
         assert exc_info.value.error_code == "INVALID_STATUS"
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_apply_product_not_found(self, MockPushService):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "APPROVED"
+        rec.status = RecommendationStatus.APPROVED
         
         db = make_db()
         db.get = AsyncMock(return_value=None)
@@ -282,12 +283,12 @@ class TestApplyPrice:
         assert exc_info.value.error_code == "PRODUCT_NOT_FOUND"
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_apply_platform_push_fails_rolls_back(self, MockPushService):
         user_id = uuid4()
         product_id = uuid4()
         rec = make_recommendation(user_id=user_id, product_id=product_id)
-        rec.status = "APPROVED"
+        rec.status = RecommendationStatus.APPROVED
         product = make_product(product_id=product_id, current_price=25.00)
         original_price = product.current_price
         
@@ -319,12 +320,12 @@ class TestApplyPrice:
 class TestAutoApproveAndApply:
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_atomic_success(self, MockPushService):
         user_id = uuid4()
         product_id = uuid4()
         rec = make_recommendation(user_id=user_id, product_id=product_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         product = make_product(product_id=product_id, current_price=25.00)
         
         mock_push = AsyncMock()
@@ -366,12 +367,12 @@ class TestAutoApproveAndApply:
         assert exc_info.value.error_code == "DAILY_LIMIT_REACHED"
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_platform_failure_rolls_back(self, MockPushService):
         user_id = uuid4()
         product_id = uuid4()
         rec = make_recommendation(user_id=user_id, product_id=product_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         product = make_product(product_id=product_id, current_price=25.00)
         original_price = product.current_price
         
@@ -397,11 +398,11 @@ class TestAutoApproveAndApply:
         assert product.current_price == original_price
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_expired_recommendation_raises(self, MockPushService):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id, valid_minutes=-10)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         service = ApprovalService(db)
@@ -413,11 +414,11 @@ class TestAutoApproveAndApply:
         assert exc_info.value.error_code == "RECOMMENDATION_EXPIRED"
 
     @pytest.mark.asyncio
-    @patch("services.pricing.approval_service.EcommercePushService")
+    @patch("services.pricing.ecommerce_push_service.EcommercePushService")
     async def test_product_not_found_raises(self, MockPushService):
         user_id = uuid4()
         rec = make_recommendation(user_id=user_id)
-        rec.status = "PENDING"
+        rec.status = RecommendationStatus.PENDING
         
         db = make_db()
         db.get = AsyncMock(return_value=None)
@@ -596,5 +597,6 @@ class TestGetApprovalStats:
         stats = await service.get_approval_stats(user_id)
         
         assert stats["auto_approval_ratio"] == 0.0
+
 
         
