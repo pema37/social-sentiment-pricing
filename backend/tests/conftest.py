@@ -3,6 +3,30 @@ Shared test fixtures for ActualPrice backend test suite.
 Covers both core services and the Autonomous Pipeline.
 """
 
+import sys
+from unittest.mock import AsyncMock, MagicMock
+
+# ──────────────────────────────────────────────
+# Module-level mocks — MUST run before any app imports
+# ──────────────────────────────────────────────
+# These prevent import-time side effects from database connections,
+# logging setup, and external client initialization.
+
+_MODULES_TO_MOCK = [
+    "db.session",
+    "core.logging",
+]
+
+for _mod in _MODULES_TO_MOCK:
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()
+
+sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
+
+# ──────────────────────────────────────────────
+# Now safe to import everything else
+# ──────────────────────────────────────────────
+
 import asyncio
 import json
 import os
@@ -10,7 +34,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import AsyncGenerator, Generator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,6 +52,20 @@ os.environ.setdefault("BNB_CONTRACT_ADDRESS", "0xTEST_CONTRACT")
 
 
 # ===========================================================================
+# TEST MARKERS
+# ===========================================================================
+
+def pytest_configure(config):
+    """Register custom markers to avoid warnings."""
+    config.addinivalue_line("markers", "critical: Core pricing/auth tests")
+    config.addinivalue_line("markers", "high: Important service tests")
+    config.addinivalue_line("markers", "medium: Supporting service tests")
+    config.addinivalue_line("markers", "low: Nice-to-have coverage")
+    config.addinivalue_line("markers", "slow: Tests taking >5s")
+    config.addinivalue_line("markers", "integration: Requires external services")
+
+
+# ===========================================================================
 # CORE SERVICE FIXTURES
 # ===========================================================================
 
@@ -40,6 +78,44 @@ def mock_db():
     db.refresh = AsyncMock()
     db.rollback = AsyncMock()
     return db
+
+
+@pytest.fixture
+def mock_db_session():
+    """Extended mock AsyncSession with context manager support.
+
+    Usage in tests:
+        async def test_something(mock_db_session):
+            mock_db_session.execute.return_value = ...
+    """
+    session = AsyncMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    session.refresh = AsyncMock()
+    session.close = AsyncMock()
+    session.add = MagicMock()
+    session.delete = MagicMock()
+
+    # Support `async with session:` context manager
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+
+    return session
+
+
+@pytest.fixture
+def mock_redis():
+    """Provides a mock Redis client."""
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=True)
+    redis.delete = AsyncMock(return_value=1)
+    redis.exists = AsyncMock(return_value=0)
+    redis.expire = AsyncMock(return_value=True)
+    redis.ttl = AsyncMock(return_value=-1)
+    redis.incr = AsyncMock(return_value=1)
+    return redis
 
 
 @pytest.fixture
@@ -96,6 +172,52 @@ def mock_sentiment_negative():
     return {
         "score": -0.65, "label": "negative", "confidence": 0.88,
         "source": "reddit", "mentions_count": 23,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dict-based fixtures (for tests that expect plain dicts)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_product():
+    """A standard product dict for pricing tests."""
+    return {
+        "id": "prod_test_001",
+        "name": "Test Widget",
+        "sku": "TW-001",
+        "base_price": 49.99,
+        "current_price": 49.99,
+        "min_price": 29.99,
+        "max_price": 79.99,
+        "category": "electronics",
+        "currency": "USD",
+    }
+
+
+@pytest.fixture
+def sample_user():
+    """A standard user dict for auth/permission tests."""
+    return {
+        "id": "user_test_001",
+        "email": "test@actualprice.com",
+        "role": "merchant",
+        "is_active": True,
+        "store_id": "store_test_001",
+    }
+
+
+@pytest.fixture
+def sample_competitor():
+    """A standard competitor dict for tracking tests."""
+    return {
+        "id": "comp_test_001",
+        "name": "Competitor Store",
+        "domain": "competitor.com",
+        "product_url": "https://competitor.com/widget",
+        "current_price": 44.99,
+        "currency": "USD",
+        "last_checked": "2026-02-08T12:00:00Z",
     }
 
 
@@ -342,6 +464,5 @@ def env_vars():
             os.environ.pop(key, None)
         else:
             os.environ[key] = value
-
 
             

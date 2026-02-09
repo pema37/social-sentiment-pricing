@@ -1,473 +1,673 @@
 """
-Tests for Launch Detector — Confidence Scoring, JSON Parsing & Signal Processing
+Tests for services/ai_trend_analysis/launch_detector.py
 
-Tests all pure helper methods in the launch detection pipeline.
-No Gemini API dependency.
+Covers:
+- Enums: LaunchAgent, ThreatLevel, LaunchType
+- Dataclasses: LaunchMessage, LaunchSignal, LaunchAlert
+- LaunchDetector helper methods:
+  - _prepare_signal_summary
+  - _get_detailed_signals
+  - _get_signal_sources
+  - _analyze_scanner_response
+  - _parse_validator_json
+  - _parse_assessor_json
+- LaunchDetector.analyze orchestration (insufficient data, no launch, full pipeline)
 """
 
-import pytest
+import sys
 import json
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
-from typing import Optional, List
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+# ── Import isolation ──────────────────────────────────────────────
+for mod in ["db.session", "core.logging", "google.genai"]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
+
+from services.ai_trend_analysis.launch_detector import (
+    LaunchAgent,
+    ThreatLevel,
+    LaunchType,
+    LaunchMessage,
+    LaunchSignal,
+    LaunchAlert,
+    LaunchDetector,
+)
 
 
-# ── Local replica of data classes ──
+# ── Helpers ───────────────────────────────────────────────────────
 
-@dataclass
-class LaunchSignal:
-    source: str
-    content: str
-    url: Optional[str] = None
-    timestamp: Optional[datetime] = None
-    engagement: int = 0
-    author: Optional[str] = None
-    image_data: Optional[bytes] = None
-    image_type: str = "png"
-
-
-# ── Helper methods extracted from LaunchDetector ──
-
-LAUNCH_KEYWORDS = [
-    "new product", "launching", "announcing", "introducing",
-    "released", "unveiled", "debuting", "available now",
-    "coming soon", "pre-order", "just dropped", "brand new"
-]
-MIN_CONFIDENCE = 0.3
-
-
-def _analyze_scanner_response(response, signals):
-    response_lower = response.lower()
-
-    keyword_matches = sum(1 for kw in LAUNCH_KEYWORDS if kw in response_lower)
-    signal_matches = sum(
-        1 for sig in signals
-        if any(kw in sig.content.lower() for kw in LAUNCH_KEYWORDS)
+def _make_signal(
+    source="twitter",
+    content="Check out our new product!",
+    url=None,
+    timestamp=None,
+    engagement=0,
+    author=None,
+    image_data=None,
+):
+    return LaunchSignal(
+        source=source,
+        content=content,
+        url=url,
+        timestamp=timestamp or datetime(2026, 2, 8, 12, 0, tzinfo=timezone.utc),
+        engagement=engagement,
+        author=author,
+        image_data=image_data,
     )
 
-    base_confidence = 0.0
 
-    if keyword_matches >= 3:
-        base_confidence += 0.4
-    elif keyword_matches >= 1:
-        base_confidence += 0.2
+# ==================================================================
+# Enums
+# ==================================================================
 
-    if signal_matches >= 2:
-        base_confidence += 0.4
-    elif signal_matches >= 1:
-        base_confidence += 0.2
+class TestLaunchAgent:
+    def test_scanner(self):
+        assert LaunchAgent.SCANNER == "scanner"
 
-    strong_indicators = ["announcing", "introducing", "launching today", "now available"]
-    if any(ind in response_lower for ind in strong_indicators):
-        base_confidence += 0.2
+    def test_validator(self):
+        assert LaunchAgent.VALIDATOR == "validator"
 
-    confidence = min(base_confidence, 1.0)
-    launch_detected = confidence >= MIN_CONFIDENCE
+    def test_assessor(self):
+        assert LaunchAgent.ASSESSOR == "assessor"
 
-    return launch_detected, confidence
+    def test_is_str_enum(self):
+        assert isinstance(LaunchAgent.SCANNER, str)
 
 
-def _parse_validator_json(response):
-    default = {
-        "is_confirmed_launch": False,
-        "launch_type": "unknown",
-        "confidence": 0,
-        "product_name": "Unknown",
-        "key_features": [],
-        "target_market": "Unknown",
-        "estimated_price": None,
-        "launch_date": "TBD"
-    }
-    try:
-        if "```json" in response:
-            json_str = response.split("```json")[1].split("```")[0]
-        elif "```" in response:
-            json_str = response.split("```")[1].split("```")[0]
-        else:
-            return default
-        parsed = json.loads(json_str.strip())
-        return {**default, **parsed}
-    except Exception:
-        return default
+class TestThreatLevel:
+    def test_none(self):
+        assert ThreatLevel.NONE == "none"
+
+    def test_low(self):
+        assert ThreatLevel.LOW == "low"
+
+    def test_medium(self):
+        assert ThreatLevel.MEDIUM == "medium"
+
+    def test_high(self):
+        assert ThreatLevel.HIGH == "high"
+
+    def test_critical(self):
+        assert ThreatLevel.CRITICAL == "critical"
+
+    def test_is_str_enum(self):
+        assert isinstance(ThreatLevel.CRITICAL, str)
 
 
-def _parse_assessor_json(response):
-    default = {
-        "threat_level": "medium",
-        "threat_score": 50,
-        "urgency": "monitor",
-        "impact_areas": [],
-        "at_risk_segments": [],
-        "immediate_actions": [],
-        "strategic_actions": [],
-        "monitoring_priorities": []
-    }
-    try:
-        if "```json" in response:
-            json_str = response.split("```json")[1].split("```")[0]
-        elif "```" in response:
-            json_str = response.split("```")[1].split("```")[0]
-        else:
-            return default
-        parsed = json.loads(json_str.strip())
-        return {**default, **parsed}
-    except Exception:
-        return default
+class TestLaunchType:
+    def test_new_product(self):
+        assert LaunchType.NEW_PRODUCT == "new_product"
+
+    def test_major_update(self):
+        assert LaunchType.MAJOR_UPDATE == "major_update"
+
+    def test_rebrand(self):
+        assert LaunchType.REBRAND == "rebrand"
+
+    def test_expansion(self):
+        assert LaunchType.EXPANSION == "expansion"
+
+    def test_pricing_change(self):
+        assert LaunchType.PRICING_CHANGE == "pricing_change"
+
+    def test_unknown(self):
+        assert LaunchType.UNKNOWN == "unknown"
+
+    def test_is_str_enum(self):
+        assert isinstance(LaunchType.NEW_PRODUCT, str)
 
 
-def _prepare_signal_summary(signals):
-    if not signals:
-        return "No signals available"
-    lines = []
-    for i, sig in enumerate(signals[:20], 1):
-        timestamp = sig.timestamp.strftime("%Y-%m-%d %H:%M") if sig.timestamp else "Unknown time"
-        engagement = f" | Engagement: {sig.engagement}" if sig.engagement > 0 else ""
-        author = f" | @{sig.author}" if sig.author else ""
-        lines.append(f"[Signal {i}] [{sig.source.upper()}] {timestamp}{author}{engagement}")
-        lines.append(f"Content: {sig.content[:300]}{'...' if len(sig.content) > 300 else ''}")
-        if sig.url:
-            lines.append(f"URL: {sig.url}")
-        lines.append("")
-    return "\n".join(lines)
+# ==================================================================
+# Dataclasses
+# ==================================================================
 
-
-def _get_signal_sources(signals):
-    return list(set(sig.source for sig in signals))
-
-
-def _get_detailed_signals(signals, limit=5):
-    sorted_signals = sorted(signals, key=lambda x: x.engagement, reverse=True)
-    lines = []
-    for sig in sorted_signals[:limit]:
-        lines.append(f"=== [{sig.source.upper()}] ===")
-        lines.append(sig.content)
-        lines.append("")
-    return "\n".join(lines) if lines else "No detailed signals available"
-
-
-# ═════════════════════════════════════════════════════════════════════════
-# FIXTURES
-# ═════════════════════════════════════════════════════════════════════════
-
-@pytest.fixture
-def launch_signals():
-    """Signals clearly indicating a product launch."""
-    base = datetime(2026, 2, 1, 10, 0)
-    return [
-        LaunchSignal(
-            source="twitter", content="Apple is announcing a brand new iPhone model today!",
-            timestamp=base, engagement=5000, author="techcrunch"
-        ),
-        LaunchSignal(
-            source="reddit", content="Just dropped: Apple's new product is now available for pre-order",
-            timestamp=base + timedelta(hours=1), engagement=3000, author="apple_insider"
-        ),
-        LaunchSignal(
-            source="news", content="Apple introducing revolutionary pricing for new iPhone",
-            timestamp=base + timedelta(hours=2), engagement=8000, author="verge"
-        ),
-    ]
-
-
-@pytest.fixture
-def boring_signals():
-    """Signals with no launch indicators."""
-    base = datetime(2026, 2, 1, 10, 0)
-    return [
-        LaunchSignal(
-            source="twitter", content="I like using my current phone",
-            timestamp=base, engagement=10, author="user1"
-        ),
-        LaunchSignal(
-            source="reddit", content="What's your favorite app this week?",
-            timestamp=base + timedelta(hours=1), engagement=5, author="user2"
-        ),
-    ]
-
-
-@pytest.fixture
-def single_signal():
-    return [
-        LaunchSignal(
-            source="twitter", content="They are launching something new",
-            timestamp=datetime(2026, 2, 1), engagement=100
+class TestLaunchMessage:
+    def test_basic_creation(self):
+        msg = LaunchMessage(
+            agent=LaunchAgent.SCANNER,
+            thought_type=None,
+            content="Scanning...",
         )
-    ]
+        assert msg.agent == LaunchAgent.SCANNER
+        assert msg.content == "Scanning..."
+        assert msg.is_final is False
+        assert msg.metadata == {}
+
+    def test_with_all_fields(self):
+        msg = LaunchMessage(
+            agent=LaunchAgent.ASSESSOR,
+            thought_type=MagicMock(),
+            content="Done",
+            is_final=True,
+            metadata={"threat": "high"},
+        )
+        assert msg.is_final is True
+        assert msg.metadata["threat"] == "high"
+
+    def test_default_metadata_separate_instances(self):
+        m1 = LaunchMessage(agent=LaunchAgent.SCANNER, thought_type=None, content="A")
+        m2 = LaunchMessage(agent=LaunchAgent.SCANNER, thought_type=None, content="B")
+        assert m1.metadata is not m2.metadata
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# SCANNER RESPONSE ANALYSIS TESTS
-# ═════════════════════════════════════════════════════════════════════════
+class TestLaunchSignal:
+    def test_basic_creation(self):
+        sig = _make_signal()
+        assert sig.source == "twitter"
+        assert sig.content == "Check out our new product!"
 
+    def test_defaults(self):
+        sig = LaunchSignal(source="reddit", content="text")
+        assert sig.url is None
+        assert sig.timestamp is None
+        assert sig.engagement == 0
+        assert sig.author is None
+        assert sig.image_data is None
+        assert sig.image_type == "png"
+
+    def test_with_all_fields(self):
+        sig = LaunchSignal(
+            source="news",
+            content="Big launch",
+            url="https://example.com",
+            timestamp=datetime(2026, 2, 8, tzinfo=timezone.utc),
+            engagement=500,
+            author="journalist",
+            image_data=b"fake_image",
+            image_type="jpeg",
+        )
+        assert sig.url == "https://example.com"
+        assert sig.engagement == 500
+        assert sig.image_data == b"fake_image"
+        assert sig.image_type == "jpeg"
+
+
+class TestLaunchAlert:
+    def test_basic_creation(self):
+        alert = LaunchAlert(
+            is_launch=True,
+            launch_type=LaunchType.NEW_PRODUCT,
+            threat_level=ThreatLevel.HIGH,
+            confidence=0.85,
+            product_name="CompetitorX Pro",
+            competitor_name="CompetitorX",
+            summary="New product launched",
+        )
+        assert alert.is_launch is True
+        assert alert.launch_type == LaunchType.NEW_PRODUCT
+        assert alert.threat_level == ThreatLevel.HIGH
+
+    def test_defaults(self):
+        alert = LaunchAlert(
+            is_launch=False,
+            launch_type=LaunchType.UNKNOWN,
+            threat_level=ThreatLevel.NONE,
+            confidence=0.0,
+            product_name="",
+            competitor_name="",
+            summary="",
+        )
+        assert alert.key_features == []
+        assert alert.target_market == "unknown"
+        assert alert.estimated_price is None
+        assert alert.launch_date is None
+        assert alert.recommended_actions == []
+        assert alert.urgency == "monitor"
+        assert alert.sources == []
+
+    def test_separate_default_lists(self):
+        a1 = LaunchAlert(is_launch=False, launch_type=LaunchType.UNKNOWN, threat_level=ThreatLevel.NONE, confidence=0, product_name="", competitor_name="", summary="")
+        a2 = LaunchAlert(is_launch=False, launch_type=LaunchType.UNKNOWN, threat_level=ThreatLevel.NONE, confidence=0, product_name="", competitor_name="", summary="")
+        assert a1.key_features is not a2.key_features
+        assert a1.recommended_actions is not a2.recommended_actions
+        assert a1.sources is not a2.sources
+
+
+# ==================================================================
+# LaunchDetector.__init__
+# ==================================================================
+
+class TestLaunchDetectorInit:
+    def test_default_thresholds(self):
+        d = LaunchDetector()
+        assert d.min_confidence == 0.3
+        assert d.min_signals == 1
+
+    def test_launch_keywords_populated(self):
+        d = LaunchDetector()
+        assert len(d.launch_keywords) > 0
+        assert "launching" in d.launch_keywords
+        assert "introducing" in d.launch_keywords
+
+
+# ==================================================================
+# _prepare_signal_summary
+# ==================================================================
+
+class TestPrepareSignalSummary:
+    def test_empty_signals(self):
+        d = LaunchDetector()
+        assert d._prepare_signal_summary([]) == "No signals available"
+
+    def test_single_signal_basic(self):
+        d = LaunchDetector()
+        sig = _make_signal(source="twitter", content="New product!")
+        result = d._prepare_signal_summary([sig])
+        assert "TWITTER" in result
+        assert "New product!" in result
+        assert "Signal 1" in result
+
+    def test_timestamp_formatted(self):
+        d = LaunchDetector()
+        sig = _make_signal(timestamp=datetime(2026, 2, 8, 14, 30, tzinfo=timezone.utc))
+        result = d._prepare_signal_summary([sig])
+        assert "2026-02-08 14:30" in result
+
+    def test_no_timestamp_shows_unknown(self):
+        d = LaunchDetector()
+        sig = LaunchSignal(source="reddit", content="text", timestamp=None)
+        result = d._prepare_signal_summary([sig])
+        assert "Unknown time" in result
+
+    def test_engagement_shown_when_positive(self):
+        d = LaunchDetector()
+        sig = _make_signal(engagement=150)
+        result = d._prepare_signal_summary([sig])
+        assert "Engagement: 150" in result
+
+    def test_engagement_hidden_when_zero(self):
+        d = LaunchDetector()
+        sig = _make_signal(engagement=0)
+        result = d._prepare_signal_summary([sig])
+        assert "Engagement" not in result
+
+    def test_author_shown(self):
+        d = LaunchDetector()
+        sig = _make_signal(author="techreporter")
+        result = d._prepare_signal_summary([sig])
+        assert "@techreporter" in result
+
+    def test_author_hidden_when_none(self):
+        d = LaunchDetector()
+        sig = _make_signal(author=None)
+        result = d._prepare_signal_summary([sig])
+        assert "@" not in result
+
+    def test_url_shown(self):
+        d = LaunchDetector()
+        sig = _make_signal(url="https://example.com/launch")
+        result = d._prepare_signal_summary([sig])
+        assert "URL: https://example.com/launch" in result
+
+    def test_content_truncated_at_300(self):
+        d = LaunchDetector()
+        sig = _make_signal(content="A" * 500)
+        result = d._prepare_signal_summary([sig])
+        assert "A" * 300 + "..." in result
+
+    def test_content_not_truncated_at_300(self):
+        d = LaunchDetector()
+        sig = _make_signal(content="A" * 300)
+        result = d._prepare_signal_summary([sig])
+        assert "..." not in result.split("Content: ")[1].split("\n")[0]
+
+    def test_limits_to_20_signals(self):
+        d = LaunchDetector()
+        signals = [_make_signal(content=f"Signal {i}") for i in range(30)]
+        result = d._prepare_signal_summary(signals)
+        assert "Signal 20" in result
+        assert "Signal 21" not in result
+
+
+# ==================================================================
+# _get_detailed_signals
+# ==================================================================
+
+class TestGetDetailedSignals:
+    def test_empty_signals(self):
+        d = LaunchDetector()
+        result = d._get_detailed_signals([])
+        assert result == "No detailed signals available"
+
+    def test_returns_signal_content(self):
+        d = LaunchDetector()
+        sig = _make_signal(source="news", content="Major product launch announced")
+        result = d._get_detailed_signals([sig])
+        assert "NEWS" in result
+        assert "Major product launch announced" in result
+
+    def test_sorted_by_engagement_descending(self):
+        d = LaunchDetector()
+        signals = [
+            _make_signal(content="Low engagement", engagement=5),
+            _make_signal(content="High engagement", engagement=500),
+        ]
+        result = d._get_detailed_signals(signals)
+        # High engagement should appear first
+        high_pos = result.index("High engagement")
+        low_pos = result.index("Low engagement")
+        assert high_pos < low_pos
+
+    def test_limits_to_specified_count(self):
+        d = LaunchDetector()
+        signals = [_make_signal(content=f"Sig {i}", engagement=i) for i in range(10)]
+        result = d._get_detailed_signals(signals, limit=3)
+        assert "Sig 9" in result  # Highest engagement
+        assert "Sig 0" not in result  # Lowest engagement, beyond limit
+
+    def test_default_limit_is_5(self):
+        d = LaunchDetector()
+        signals = [_make_signal(content=f"Sig {i}", engagement=i) for i in range(10)]
+        result = d._get_detailed_signals(signals)
+        # Should have exactly 5 source headers
+        assert result.count("===") == 10  # 5 signals * 2 "===" per line
+
+
+# ==================================================================
+# _get_signal_sources
+# ==================================================================
+
+class TestGetSignalSources:
+    def test_empty_signals(self):
+        d = LaunchDetector()
+        result = d._get_signal_sources([])
+        assert result == []
+
+    def test_unique_sources(self):
+        d = LaunchDetector()
+        signals = [
+            _make_signal(source="twitter"),
+            _make_signal(source="twitter"),
+            _make_signal(source="reddit"),
+        ]
+        result = d._get_signal_sources(signals)
+        assert set(result) == {"twitter", "reddit"}
+
+    def test_single_source(self):
+        d = LaunchDetector()
+        signals = [_make_signal(source="news")]
+        result = d._get_signal_sources(signals)
+        assert result == ["news"]
+
+
+# ==================================================================
+# _analyze_scanner_response
+# ==================================================================
 
 class TestAnalyzeScannerResponse:
-
-    def test_strong_launch_high_confidence(self, launch_signals):
-        response = "The signals clearly show Apple is announcing and introducing a new product. It is now available for pre-order."
-        detected, confidence = _analyze_scanner_response(response, launch_signals)
-        assert detected is True
-        assert confidence >= 0.6
-
-    def test_no_launch_keywords_low_confidence(self, boring_signals):
-        response = "Nothing interesting happening in the market today."
-        detected, confidence = _analyze_scanner_response(response, boring_signals)
-        assert detected is False
-        assert confidence < MIN_CONFIDENCE
-
-    def test_response_keywords_only(self, boring_signals):
-        """Keywords in response but not in signals — needs strong indicator to cross threshold."""
-        response = "They are announcing a brand new product launching today."
-        detected, confidence = _analyze_scanner_response(response, boring_signals)
-        assert detected is True  # Multiple keywords + strong indicator
-        assert confidence >= MIN_CONFIDENCE
-
-    def test_signal_keywords_only(self, launch_signals):
-        """Keywords in signals but not in response."""
-        response = "Based on the data I reviewed above."
-        detected, confidence = _analyze_scanner_response(response, launch_signals)
-        assert detected is True  # Signal matches contribute to confidence
-        assert confidence >= 0.4
-
-    def test_strong_indicators_boost(self):
-        """Strong indicators like 'announcing' add 0.2 boost."""
-        signals = [LaunchSignal(source="twitter", content="regular content")]
-        response = "They are officially announcing a new product line."
-        detected, confidence = _analyze_scanner_response(response, signals)
-        # "announcing" is both a keyword (+0.2) and strong indicator (+0.2)
-        assert confidence >= 0.4
-
-    def test_confidence_capped_at_1(self, launch_signals):
-        """Confidence should never exceed 1.0."""
-        response = "announcing introducing launching new product released unveiled brand new available now"
-        _, confidence = _analyze_scanner_response(response, launch_signals)
-        assert confidence <= 1.0
-
-    def test_empty_response_empty_signals(self):
-        detected, confidence = _analyze_scanner_response("", [])
+    def test_no_keywords_no_signals(self):
+        d = LaunchDetector()
+        detected, confidence = d._analyze_scanner_response(
+            "Nothing interesting here", []
+        )
         assert detected is False
         assert confidence == 0.0
 
-    def test_case_insensitive(self, boring_signals):
-        response = "They are ANNOUNCING a NEW PRODUCT"
-        detected, _ = _analyze_scanner_response(response, boring_signals)
+    def test_one_keyword_in_response(self):
+        d = LaunchDetector()
+        detected, confidence = d._analyze_scanner_response(
+            "They are launching something", []
+        )
+        assert confidence >= 0.2
+
+    def test_three_plus_keywords_in_response(self):
+        d = LaunchDetector()
+        detected, confidence = d._analyze_scanner_response(
+            "They are launching and introducing a new product that is available now", []
+        )
+        assert confidence >= 0.4
+
+    def test_signal_content_keyword_matches(self):
+        d = LaunchDetector()
+        signals = [
+            _make_signal(content="We are launching our new product"),
+            _make_signal(content="Introducing the next generation"),
+        ]
+        detected, confidence = d._analyze_scanner_response("Nothing", signals)
+        assert confidence >= 0.4
+
+    def test_single_signal_match(self):
+        d = LaunchDetector()
+        signals = [_make_signal(content="We are launching today")]
+        detected, confidence = d._analyze_scanner_response("Nothing", signals)
+        assert confidence >= 0.2
+
+    def test_strong_indicator_boost(self):
+        d = LaunchDetector()
+        detected, confidence = d._analyze_scanner_response(
+            "They are announcing and introducing something now available", []
+        )
+        # "introducing" is a strong indicator
+        assert confidence >= 0.3
+
+    def test_confidence_capped_at_1(self):
+        d = LaunchDetector()
+        signals = [
+            _make_signal(content="launching new product introducing"),
+            _make_signal(content="announcing available now brand new"),
+            _make_signal(content="just dropped pre-order coming soon"),
+        ]
+        detected, confidence = d._analyze_scanner_response(
+            "launching introducing announcing available now brand new just dropped",
+            signals,
+        )
+        assert confidence <= 1.0
+
+    def test_launch_detected_when_above_min_confidence(self):
+        d = LaunchDetector()
+        detected, confidence = d._analyze_scanner_response(
+            "They are launching and introducing a new product", []
+        )
         assert detected is True
+        assert confidence >= d.min_confidence
 
-    def test_minimum_confidence_boundary(self):
-        """Confidence exactly at threshold should detect launch."""
-        signals = [LaunchSignal(source="twitter", content="nothing special")]
-        # One keyword match = 0.2, one strong indicator = 0.2 = 0.4 >= 0.3
-        response = "They are announcing something"
-        detected, confidence = _analyze_scanner_response(response, signals)
-        assert detected is True
-        assert confidence >= MIN_CONFIDENCE
+    def test_no_launch_when_below_min_confidence(self):
+        d = LaunchDetector()
+        detected, confidence = d._analyze_scanner_response("No keywords", [])
+        assert detected is False
+        assert confidence < d.min_confidence
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# VALIDATOR JSON PARSING TESTS
-# ═════════════════════════════════════════════════════════════════════════
-
+# ==================================================================
+# _parse_validator_json
+# ==================================================================
 
 class TestParseValidatorJson:
-
-    def test_valid_complete_json(self):
-        response = '''After thorough analysis:
-
-```json
-{
-  "is_confirmed_launch": true,
-  "launch_type": "new_product",
-  "confidence": 85,
-  "product_name": "iPhone 17 Pro",
-  "key_features": ["AI camera", "Titanium body", "USB-C"],
-  "target_market": "Premium smartphone users",
-  "estimated_price": "$1199",
-  "launch_date": "March 2026"
-}
-```
-
-This is a high-confidence detection.'''
-        result = _parse_validator_json(response)
+    def test_valid_json_block(self):
+        d = LaunchDetector()
+        data = {
+            "is_confirmed_launch": True,
+            "launch_type": "new_product",
+            "confidence": 85,
+            "product_name": "SuperWidget",
+        }
+        response = f'Text\n```json\n{json.dumps(data)}\n```\nEnd'
+        result = d._parse_validator_json(response)
         assert result["is_confirmed_launch"] is True
-        assert result["product_name"] == "iPhone 17 Pro"
+        assert result["product_name"] == "SuperWidget"
         assert result["confidence"] == 85
-        assert len(result["key_features"]) == 3
-        assert result["launch_date"] == "March 2026"
 
-    def test_partial_json_uses_defaults(self):
-        response = '''```json
-{
-  "is_confirmed_launch": true,
-  "product_name": "New Widget"
-}
-```'''
-        result = _parse_validator_json(response)
-        assert result["is_confirmed_launch"] is True
-        assert result["product_name"] == "New Widget"
-        # Defaults filled in
+    def test_generic_code_block(self):
+        d = LaunchDetector()
+        data = {"product_name": "Gadget"}
+        response = f'Text\n```\n{json.dumps(data)}\n```'
+        result = d._parse_validator_json(response)
+        assert result["product_name"] == "Gadget"
+
+    def test_no_json_returns_default(self):
+        d = LaunchDetector()
+        result = d._parse_validator_json("Plain text no JSON")
+        assert result["is_confirmed_launch"] is False
+        assert result["product_name"] == "Unknown"
         assert result["launch_type"] == "unknown"
+        assert result["confidence"] == 0
+
+    def test_invalid_json_returns_default(self):
+        d = LaunchDetector()
+        result = d._parse_validator_json('```json\n{broken}\n```')
+        assert result["is_confirmed_launch"] is False
+
+    def test_partial_json_merged_with_defaults(self):
+        d = LaunchDetector()
+        data = {"product_name": "Widget", "confidence": 70}
+        response = f'```json\n{json.dumps(data)}\n```'
+        result = d._parse_validator_json(response)
+        assert result["product_name"] == "Widget"
+        assert result["confidence"] == 70
+        # Defaults filled in
+        assert result["is_confirmed_launch"] is False
         assert result["key_features"] == []
         assert result["launch_date"] == "TBD"
 
-    def test_no_json_returns_defaults(self):
-        response = "I analyzed the signals but found no JSON to extract."
-        result = _parse_validator_json(response)
-        assert result["is_confirmed_launch"] is False
-        assert result["product_name"] == "Unknown"
-
-    def test_malformed_json_returns_defaults(self):
-        response = '```json\n{invalid}\n```'
-        result = _parse_validator_json(response)
-        assert result["is_confirmed_launch"] is False
-        assert result["confidence"] == 0
-
-    def test_json_without_language_tag(self):
-        response = '''```
-{"is_confirmed_launch": true, "product_name": "Test Product"}
-```'''
-        result = _parse_validator_json(response)
-        assert result["is_confirmed_launch"] is True
-
-    def test_empty_response(self):
-        result = _parse_validator_json("")
+    def test_empty_string_returns_default(self):
+        d = LaunchDetector()
+        result = d._parse_validator_json("")
         assert result["product_name"] == "Unknown"
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# ASSESSOR JSON PARSING TESTS
-# ═════════════════════════════════════════════════════════════════════════
-
+# ==================================================================
+# _parse_assessor_json
+# ==================================================================
 
 class TestParseAssessorJson:
-
-    def test_valid_assessment(self):
-        response = '''```json
-{
-  "threat_level": "high",
-  "threat_score": 78,
-  "urgency": "immediate",
-  "impact_areas": ["pricing", "market share"],
-  "immediate_actions": ["Adjust pricing", "Brief sales team"],
-  "strategic_actions": ["Accelerate roadmap"]
-}
-```'''
-        result = _parse_assessor_json(response)
+    def test_valid_json_block(self):
+        d = LaunchDetector()
+        data = {
+            "threat_level": "high",
+            "threat_score": 80,
+            "urgency": "immediate",
+            "immediate_actions": ["Brief sales team"],
+        }
+        response = f'Analysis\n```json\n{json.dumps(data)}\n```'
+        result = d._parse_assessor_json(response)
         assert result["threat_level"] == "high"
-        assert result["threat_score"] == 78
+        assert result["threat_score"] == 80
         assert result["urgency"] == "immediate"
-        assert len(result["immediate_actions"]) == 2
 
-    def test_defaults_for_missing_fields(self):
-        response = '```json\n{"threat_level": "low"}\n```'
-        result = _parse_assessor_json(response)
-        assert result["threat_level"] == "low"
-        assert result["threat_score"] == 50  # default
-        assert result["urgency"] == "monitor"  # default
-        assert result["impact_areas"] == []  # default
-
-    def test_no_json_returns_defaults(self):
-        result = _parse_assessor_json("No structured data here.")
+    def test_no_json_returns_default(self):
+        d = LaunchDetector()
+        result = d._parse_assessor_json("No JSON here")
         assert result["threat_level"] == "medium"
         assert result["threat_score"] == 50
+        assert result["urgency"] == "monitor"
+        assert result["immediate_actions"] == []
 
-    def test_malformed_returns_defaults(self):
-        result = _parse_assessor_json('```json\n{broken\n```')
+    def test_invalid_json_returns_default(self):
+        d = LaunchDetector()
+        result = d._parse_assessor_json('```json\n{bad}\n```')
+        assert result["threat_level"] == "medium"
+
+    def test_partial_json_merged_with_defaults(self):
+        d = LaunchDetector()
+        data = {"threat_level": "critical", "urgency": "immediate"}
+        response = f'```json\n{json.dumps(data)}\n```'
+        result = d._parse_assessor_json(response)
+        assert result["threat_level"] == "critical"
+        assert result["urgency"] == "immediate"
+        # Defaults
+        assert result["threat_score"] == 50
+        assert result["monitoring_priorities"] == []
+
+    def test_empty_string_returns_default(self):
+        d = LaunchDetector()
+        result = d._parse_assessor_json("")
         assert result["threat_level"] == "medium"
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# SIGNAL PROCESSING TESTS
-# ═════════════════════════════════════════════════════════════════════════
+# ==================================================================
+# analyze — orchestration
+# ==================================================================
 
+class TestAnalyze:
+    @pytest.mark.asyncio
+    async def test_insufficient_signals_no_image(self):
+        d = LaunchDetector()
+        messages = []
+        async for msg in d.analyze([], "Competitor", "MyProduct"):
+            messages.append(msg)
+        assert len(messages) == 1
+        assert "Insufficient data" in messages[0].content
+        assert messages[0].is_final is True
+        assert messages[0].metadata.get("error") == "insufficient_data"
 
-class TestPrepareSignalSummary:
+    @pytest.mark.asyncio
+    async def test_image_bypasses_signal_check(self):
+        """With image_data, even 0 signals should proceed."""
+        d = LaunchDetector()
 
-    def test_empty_signals(self):
-        assert _prepare_signal_summary([]) == "No signals available"
+        async def mock_stream(*args, **kwargs):
+            chunk = MagicMock()
+            chunk.text = "No launch in image"
+            chunk.is_final = False
+            chunk.thought_type = None
+            yield chunk
 
-    def test_formats_signal_correctly(self):
-        signals = [LaunchSignal(
-            source="twitter",
-            content="Big announcement coming",
-            timestamp=datetime(2026, 2, 1, 14, 30),
-            engagement=500,
-            author="techguru"
-        )]
-        result = _prepare_signal_summary(signals)
-        assert "[TWITTER]" in result
-        assert "2026-02-01 14:30" in result
-        assert "@techguru" in result
-        assert "Engagement: 500" in result
-        assert "Big announcement coming" in result
+        async def mock_image_stream(*args, **kwargs):
+            chunk = MagicMock()
+            chunk.text = "Just a regular product page"
+            chunk.is_final = False
+            chunk.thought_type = None
+            yield chunk
 
-    def test_no_engagement_omits_field(self):
-        signals = [LaunchSignal(source="reddit", content="Test", timestamp=datetime(2026, 2, 1))]
-        result = _prepare_signal_summary(signals)
-        assert "Engagement:" not in result
+        with patch("services.ai_trend_analysis.launch_detector.ai_clients") as mock_ai:
+            mock_ai.stream_gemini3 = mock_stream
+            mock_ai.analyze_image_stream = mock_image_stream
+            messages = []
+            async for msg in d.analyze(
+                [], "Competitor", "MyProduct",
+                image_data=b"fake_image", image_type="png"
+            ):
+                messages.append(msg)
 
-    def test_no_author_omits_field(self):
-        signals = [LaunchSignal(source="reddit", content="Test", timestamp=datetime(2026, 2, 1))]
-        result = _prepare_signal_summary(signals)
-        assert "@" not in result
+        # Should NOT have insufficient data error
+        assert not any("Insufficient data" in m.content for m in messages)
 
-    def test_no_timestamp_shows_unknown(self):
-        signals = [LaunchSignal(source="news", content="Breaking news")]
-        result = _prepare_signal_summary(signals)
-        assert "Unknown time" in result
+    @pytest.mark.asyncio
+    async def test_no_launch_detected_stops_after_scanner(self):
+        d = LaunchDetector()
+        signals = [_make_signal(content="Nothing special happening")]
 
-    def test_truncates_long_content(self):
-        signals = [LaunchSignal(source="reddit", content="A" * 500, timestamp=datetime(2026, 2, 1))]
-        result = _prepare_signal_summary(signals)
-        assert "..." in result
+        async def mock_stream(*args, **kwargs):
+            chunk = MagicMock()
+            chunk.text = "Everything looks normal, no launches"
+            chunk.is_final = False
+            chunk.thought_type = None
+            yield chunk
 
-    def test_limits_to_20_signals(self):
-        signals = [
-            LaunchSignal(source="twitter", content=f"Signal {i}", timestamp=datetime(2026, 2, 1))
-            for i in range(30)
-        ]
-        result = _prepare_signal_summary(signals)
-        assert "[Signal 20]" in result
-        assert "[Signal 21]" not in result
+        with patch("services.ai_trend_analysis.launch_detector.ai_clients") as mock_ai:
+            mock_ai.stream_gemini3 = mock_stream
+            messages = []
+            async for msg in d.analyze(signals, "Competitor", "MyProduct"):
+                messages.append(msg)
 
-    def test_includes_url(self):
-        signals = [LaunchSignal(
-            source="news", content="Article", url="https://example.com/article",
-            timestamp=datetime(2026, 2, 1)
-        )]
-        result = _prepare_signal_summary(signals)
-        assert "https://example.com/article" in result
+        agents_seen = {m.agent for m in messages}
+        assert LaunchAgent.SCANNER in agents_seen
+        assert LaunchAgent.VALIDATOR not in agents_seen
+        assert LaunchAgent.ASSESSOR not in agents_seen
 
+    @pytest.mark.asyncio
+    async def test_exactly_min_signals_proceeds(self):
+        """Exactly 1 signal should not trigger insufficient data."""
+        d = LaunchDetector()
+        signals = [_make_signal(content="Regular update")]
 
-class TestGetSignalSources:
+        async def mock_stream(*args, **kwargs):
+            chunk = MagicMock()
+            chunk.text = "Analyzing the signal"
+            chunk.is_final = False
+            chunk.thought_type = None
+            yield chunk
 
-    def test_unique_sources(self, launch_signals):
-        sources = _get_signal_sources(launch_signals)
-        assert set(sources) == {"twitter", "reddit", "news"}
+        with patch("services.ai_trend_analysis.launch_detector.ai_clients") as mock_ai:
+            mock_ai.stream_gemini3 = mock_stream
+            messages = []
+            async for msg in d.analyze(signals, "Competitor", "MyProduct"):
+                messages.append(msg)
 
-    def test_empty_signals(self):
-        assert _get_signal_sources([]) == []
+        assert not any("Insufficient data" in m.content for m in messages)
 
-    def test_duplicate_sources(self):
-        signals = [
-            LaunchSignal(source="twitter", content="a"),
-            LaunchSignal(source="twitter", content="b"),
-        ]
-        sources = _get_signal_sources(signals)
-        assert sources == ["twitter"]
-
-
-class TestGetDetailedSignals:
-
-    def test_sorts_by_engagement(self, launch_signals):
-        result = _get_detailed_signals(launch_signals)
-        # Highest engagement (8000) should come first
-        lines = result.split("\n")
-        first_source_line = [l for l in lines if l.startswith("===")][0]
-        assert "[NEWS]" in first_source_line
-
-    def test_limits_results(self, launch_signals):
-        result = _get_detailed_signals(launch_signals, limit=1)
-        source_lines = [l for l in result.split("\n") if l.startswith("===")]
-        assert len(source_lines) == 1
-
-    def test_empty_signals(self):
-        assert _get_detailed_signals([]) == "No detailed signals available"
+        

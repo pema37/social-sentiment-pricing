@@ -1,0 +1,60 @@
+# pytest configuration for ActualPrice backend
+# Place this in backend/pyproject.toml or backend/pytest.ini
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+timeout = 60
+
+# Markers for selective test runs
+markers = [
+    "critical: Core pricing/auth tests that must never fail",
+    "high: Important service tests",
+    "medium: Supporting service tests",
+    "low: Nice-to-have coverage",
+    "slow: Tests that take >5s",
+    "integration: Tests requiring external services",
+]
+
+# Default pytest options
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "-x",               # Stop on first failure
+    "--timeout=60",
+]
+
+# Ignore directories
+norecursedirs = [
+    ".git",
+    "node_modules",
+    "alembic",
+    "__pycache__",
+    "*.egg-info",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "alembic/*",
+    "*/migrations/*",
+    "conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+    "pass",
+    "except ImportError",
+]
+fail_under = 40    # Raise as coverage grows — target 70%+ by Phase 5
+show_missing = true
+

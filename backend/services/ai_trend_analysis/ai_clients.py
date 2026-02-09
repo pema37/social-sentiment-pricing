@@ -135,7 +135,7 @@ class AIClients:
                     thinking_level=thinking_level,
                 ),
             )
-        except ImportError:
+        except (ImportError, AttributeError):
             logger.warning("google.genai.types not available; skipping thinking config")
             return {}
 
