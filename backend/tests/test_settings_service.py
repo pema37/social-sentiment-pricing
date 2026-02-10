@@ -34,7 +34,10 @@ for mod in [
 from models.pricing_settings import PricingSettings
 for _col in ['user_id']:
     _c = getattr(PricingSettings, _col)
-    _c.__eq__ = MagicMock(return_value=MagicMock())
+    try:
+        _c.__eq__ = MagicMock(return_value=MagicMock())
+    except (AttributeError, TypeError):
+        pass  # Real SQLAlchemy model — operators already work
 
 import pytest
 

@@ -35,11 +35,14 @@ class _FakeOutcome:
     outcome_label = MagicMock()
     # created_at needs comparison operators for >= cutoff queries
     created_at = MagicMock()
-    created_at.__ge__ = MagicMock(return_value=MagicMock())
-    created_at.__le__ = MagicMock(return_value=MagicMock())
-    created_at.__gt__ = MagicMock(return_value=MagicMock())
-    created_at.__lt__ = MagicMock(return_value=MagicMock())
-    created_at.desc = MagicMock(return_value=MagicMock())
+    try:
+        created_at.__ge__ = MagicMock(return_value=MagicMock())
+        created_at.__le__ = MagicMock(return_value=MagicMock())
+        created_at.__gt__ = MagicMock(return_value=MagicMock())
+        created_at.__lt__ = MagicMock(return_value=MagicMock())
+        created_at.desc = MagicMock(return_value=MagicMock())
+    except (AttributeError, TypeError):
+        pass  # Real SQLAlchemy model — operators already work
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():

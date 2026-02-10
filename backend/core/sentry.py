@@ -23,34 +23,38 @@ def configure_sentry() -> None:
         logger.info("Sentry DSN not configured, skipping initialization")
         return
     
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        environment=settings.ENVIRONMENT,
-        release=f"{settings.APP_NAME}@{settings.APP_VERSION}",
-        
-        # Performance monitoring
-        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-        profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
-        
-        # Integrations
-        integrations=[
-            FastApiIntegration(transaction_style="endpoint"),
-            SqlalchemyIntegration(),
-            RedisIntegration(),
-            CeleryIntegration(),
-            LoggingIntegration(
-                level=None,  # Capture all levels
-                event_level=40,  # Only send ERROR and above to Sentry
-            ),
-        ],
-        
-        # Data scrubbing
-        send_default_pii=False,
-        
-        # Filter out health checks and static files
-        before_send=_before_send,
-        before_send_transaction=_before_send_transaction,
-    )
+    try:
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            environment=settings.ENVIRONMENT,
+            release=f"{settings.APP_NAME}@{settings.APP_VERSION}",
+            
+            # Performance monitoring
+            traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+            profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
+            
+            # Integrations
+            integrations=[
+                FastApiIntegration(transaction_style="endpoint"),
+                SqlalchemyIntegration(),
+                RedisIntegration(),
+                CeleryIntegration(),
+                LoggingIntegration(
+                    level=None,  # Capture all levels
+                    event_level=40,  # Only send ERROR and above to Sentry
+                ),
+            ],
+            
+            # Data scrubbing
+            send_default_pii=False,
+            
+            # Filter out health checks and static files
+            before_send=_before_send,
+            before_send_transaction=_before_send_transaction,
+        )
+    except Exception as e:
+        logger.warning(f"Sentry initialization failed: {e}")
+        return
     
     logger.info(
         "Sentry initialized",
@@ -106,3 +110,5 @@ def set_user(user_id: str, email: str = None, username: str = None) -> None:
         "email": email,
         "username": username,
     })
+
+    

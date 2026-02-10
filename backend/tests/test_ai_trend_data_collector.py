@@ -43,12 +43,12 @@ def _make_mock_db():
     return db, mock_result, mock_scalars
 
 
-def _make_sentiment(score=0.5, magnitude=0.3, product_id="prod-1", created_at=None):
+def _make_sentiment(score=0.5, magnitude=0.3, product_id="prod-1", analyzed_at=None):
     s = MagicMock()
     s.product_id = product_id
     s.score = score
     s.magnitude = magnitude
-    s.created_at = created_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
+    s.analyzed_at = analyzed_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
     return s
 
 
@@ -57,14 +57,14 @@ def _make_mention(
     platform="reddit",
     content="Test mention",
     sentiment_score=0.5,
-    created_at=None,
+    collected_at=None,
 ):
     m = MagicMock()
     m.product_id = product_id
     m.platform = platform
     m.content = content
     m.sentiment_score = sentiment_score
-    m.created_at = created_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
+    m.collected_at = collected_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
     return m
 
 
@@ -617,5 +617,6 @@ class TestPlaceholderMethods:
         collector = DataCollector(db)
         result = await collector.get_recent_competitor_activities(user_id="user-1")
         assert result == []
+
 
         

@@ -37,7 +37,7 @@ from decimal import Decimal
 from typing import Optional, List, Dict, Any, Set
 from dataclasses import dataclass
 
-from .models import (
+from .schemas import (
     SearchProvider,
     MatchStatus,
     MatchedProduct,

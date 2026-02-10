@@ -26,7 +26,7 @@ from models.integration import (
 from models.product import Product
 from core.encryption import decrypt_token
 
-from .models import PriceUpdateRequest, PriceUpdateResult
+from .schemas import PriceUpdateRequest, PriceUpdateResult
 from .sync_service import SyncService  # Reuse get_service()
 
 logger = logging.getLogger(__name__)

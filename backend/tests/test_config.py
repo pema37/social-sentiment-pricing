@@ -8,12 +8,11 @@ Run: pytest backend/tests/test_config.py -v
 """
 
 import os
-from unittest.mock import patch
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
-
-from core.config import Settings, BACKEND_DIR, ENV_FILE
 
 
 # Required env vars that have no defaults
@@ -24,8 +23,17 @@ REQUIRED_ENV = {
 }
 
 
-def make_settings(**overrides) -> Settings:
+def _get_settings_class():
+    """Get the real Settings class, cleaning up MagicMock pollution if needed."""
+    if isinstance(sys.modules.get("core.config"), MagicMock):
+        del sys.modules["core.config"]
+    from core.config import Settings
+    return Settings
+
+
+def make_settings(**overrides):
     """Create Settings with required env vars + overrides, ignoring .env file."""
+    Settings = _get_settings_class()
     env = {**REQUIRED_ENV, **overrides}
     return Settings(**env, _env_file=None)
 
@@ -37,77 +45,42 @@ def make_settings(**overrides) -> Settings:
 class TestPathConstants:
 
     def test_backend_dir_exists(self):
+        if isinstance(sys.modules.get("core.config"), MagicMock):
+            del sys.modules["core.config"]
+        from core.config import BACKEND_DIR
         assert BACKEND_DIR.is_dir()
 
     def test_env_file_path(self):
+        if isinstance(sys.modules.get("core.config"), MagicMock):
+            del sys.modules["core.config"]
+        from core.config import BACKEND_DIR, ENV_FILE
         assert ENV_FILE == BACKEND_DIR / ".env"
 
 
 # =====================================================================
-# Required Fields — fully isolated from real env + .env file
+# Required Fields
 # =====================================================================
 
 class TestRequiredFields:
-    """
-    pydantic-settings reads from: constructor args > env vars > .env file.
-    We must block ALL sources to test 'missing required field' properly.
-    """
+    """Verify DATABASE_URL, JWT_SECRET_KEY, ENCRYPTION_KEY are required (no defaults)."""
 
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch, tmp_path):
-        """Clear env vars AND point .env to an empty file."""
-        # Remove all potentially-set env vars
-        for key in list(os.environ.keys()):
-            if key in (
-                "DATABASE_URL", "JWT_SECRET_KEY", "ENCRYPTION_KEY",
-                "ALGORITHM", "CORS_ORIGINS", "REDIS_URL", "CELERY_BROKER_URL",
-                "MNEE_API_KEY", "MNEE_ENVIRONMENT", "MNEE_WEBHOOK_SECRET",
-                "SSP_MNEE_WALLET_ADDRESS", "BACKEND_URL", "FRONTEND_URL",
-                "OPENAI_API_KEY", "GEMINI_API_KEY", "DEBUG", "ENVIRONMENT",
-                "APP_NAME", "APP_VERSION", "SENTRY_DSN", "LOG_LEVEL",
-                "LOG_FORMAT", "REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET",
-                "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET",
-                "WOOCOMMERCE_CONSUMER_KEY", "WOOCOMMERCE_CONSUMER_SECRET",
-                "SENDGRID_API_KEY", "SLACK_WEBHOOK_URL",
-            ):
-                monkeypatch.delenv(key, raising=False)
+    def test_database_url_is_required(self):
+        Settings = _get_settings_class()
+        field = Settings.model_fields["DATABASE_URL"]
+        assert field.is_required(), "DATABASE_URL should have no default"
 
-        # Point the class env_file to an empty temp file so the real .env isn't read
-        empty_env = tmp_path / ".env"
-        empty_env.write_text("")
-        monkeypatch.setattr("core.config.ENV_FILE", empty_env)
+    def test_jwt_secret_is_required(self):
+        Settings = _get_settings_class()
+        field = Settings.model_fields["JWT_SECRET_KEY"]
+        assert field.is_required(), "JWT_SECRET_KEY should have no default"
 
-    def test_missing_database_url_raises(self):
-        with pytest.raises(ValidationError):
-            Settings(
-                JWT_SECRET_KEY="secret",
-                ENCRYPTION_KEY="enc-key",
-                _env_file=None,
-            )
-
-    def test_missing_jwt_secret_raises(self):
-        with pytest.raises(ValidationError):
-            Settings(
-                DATABASE_URL="postgresql+asyncpg://localhost/db",
-                ENCRYPTION_KEY="enc-key",
-                _env_file=None,
-            )
-
-    def test_missing_encryption_key_raises(self):
-        with pytest.raises(ValidationError):
-            Settings(
-                DATABASE_URL="postgresql+asyncpg://localhost/db",
-                JWT_SECRET_KEY="secret",
-                _env_file=None,
-            )
+    def test_encryption_key_is_required(self):
+        Settings = _get_settings_class()
+        field = Settings.model_fields["ENCRYPTION_KEY"]
+        assert field.is_required(), "ENCRYPTION_KEY should have no default"
 
     def test_all_required_provided(self):
-        s = Settings(
-            DATABASE_URL=REQUIRED_ENV["DATABASE_URL"],
-            JWT_SECRET_KEY=REQUIRED_ENV["JWT_SECRET_KEY"],
-            ENCRYPTION_KEY=REQUIRED_ENV["ENCRYPTION_KEY"],
-            _env_file=None,
-        )
+        s = make_settings()
         assert s.DATABASE_URL == REQUIRED_ENV["DATABASE_URL"]
         assert s.JWT_SECRET_KEY == REQUIRED_ENV["JWT_SECRET_KEY"]
         assert s.ENCRYPTION_KEY == REQUIRED_ENV["ENCRYPTION_KEY"]
@@ -258,7 +231,6 @@ class TestExternalAPIDefaults:
     """
 
     def test_optional_keys_accept_none(self):
-        """Verify all Optional API key fields accept None when env is clean."""
         s = make_settings(
             OPENAI_API_KEY=None,
             GEMINI_API_KEY=None,

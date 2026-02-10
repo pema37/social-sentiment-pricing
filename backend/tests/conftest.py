@@ -9,9 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 # ──────────────────────────────────────────────
 # Module-level mocks — MUST run before any app imports
 # ──────────────────────────────────────────────
-# These prevent import-time side effects from database connections,
-# logging setup, and external client initialization.
-
 _MODULES_TO_MOCK = [
     "db.session",
     "core.logging",
@@ -52,6 +49,35 @@ os.environ.setdefault("BNB_CONTRACT_ADDRESS", "0xTEST_CONTRACT")
 
 
 # ===========================================================================
+# MOCK POLLUTION SAFETY NET
+# ===========================================================================
+
+# Only modules that test_ai_clients.py ADDS beyond what conftest intentionally
+# mocks. Do NOT include db.session or core.logging — those are intentionally
+# mocked above and must stay mocked for any test that imports the app.
+_MOCK_POLLUTED_MODULES = [
+    "core.config",
+    "core.security",
+    "google.genai",
+    "google.genai.types",
+]
+
+
+@pytest.fixture(autouse=True)
+def _clean_mock_pollution():
+    """Remove any MagicMock entries from sys.modules before each test.
+
+    test_ai_clients.py injects MagicMock into sys.modules for import
+    isolation at module level. This fixture ensures no downstream test
+    ever sees stale mocks, even if teardown_module is skipped.
+    """
+    for mod in _MOCK_POLLUTED_MODULES:
+        if isinstance(sys.modules.get(mod), MagicMock):
+            del sys.modules[mod]
+    yield
+
+
+# ===========================================================================
 # TEST MARKERS
 # ===========================================================================
 
@@ -82,12 +108,7 @@ def mock_db():
 
 @pytest.fixture
 def mock_db_session():
-    """Extended mock AsyncSession with context manager support.
-
-    Usage in tests:
-        async def test_something(mock_db_session):
-            mock_db_session.execute.return_value = ...
-    """
+    """Extended mock AsyncSession with context manager support."""
     session = AsyncMock()
     session.execute = AsyncMock()
     session.commit = AsyncMock()
@@ -96,11 +117,8 @@ def mock_db_session():
     session.close = AsyncMock()
     session.add = MagicMock()
     session.delete = MagicMock()
-
-    # Support `async with session:` context manager
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
-
     return session
 
 
@@ -181,7 +199,6 @@ def mock_sentiment_negative():
 
 @pytest.fixture
 def sample_product():
-    """A standard product dict for pricing tests."""
     return {
         "id": "prod_test_001",
         "name": "Test Widget",
@@ -197,7 +214,6 @@ def sample_product():
 
 @pytest.fixture
 def sample_user():
-    """A standard user dict for auth/permission tests."""
     return {
         "id": "user_test_001",
         "email": "test@actualprice.com",
@@ -209,7 +225,6 @@ def sample_user():
 
 @pytest.fixture
 def sample_competitor():
-    """A standard competitor dict for tracking tests."""
     return {
         "id": "comp_test_001",
         "name": "Competitor Store",
@@ -224,10 +239,6 @@ def sample_competitor():
 # ===========================================================================
 # AUTONOMOUS PIPELINE FIXTURES
 # ===========================================================================
-
-# ---------------------------------------------------------------------------
-# Sample Data Factories
-# ---------------------------------------------------------------------------
 
 class SampleData:
     """Factory for consistent test data across the test suite."""
@@ -304,7 +315,6 @@ class SampleData:
 
 @pytest.fixture
 def sample_data() -> SampleData:
-    """Provide the SampleData factory to tests."""
     return SampleData()
 
 
@@ -313,8 +323,6 @@ def sample_data() -> SampleData:
 # ---------------------------------------------------------------------------
 
 class MockGeminiResponse:
-    """Mock for genai.models.generate_content response."""
-
     def __init__(self, text: str, function_calls: list | None = None):
         self._text = text
         self._function_calls = function_calls or []
@@ -330,22 +338,18 @@ class MockGeminiResponse:
         text_part.function_call = None
         text_part.text = self._text
         parts.append(text_part)
-
         for fc in self._function_calls:
             fc_part = MagicMock()
             fc_part.function_call = MagicMock()
             fc_part.function_call.name = fc["name"]
             fc_part.function_call.args = fc.get("args", {})
             parts.append(fc_part)
-
         candidate = MagicMock()
         candidate.content.parts = parts
         return [candidate]
 
 
 class MockGeminiAsyncModels:
-    """Mock for client.aio.models with configurable responses."""
-
     def __init__(self):
         self._responses: dict[str, str] = {}
 
@@ -363,15 +367,11 @@ class MockGeminiAsyncModels:
 
 
 class MockGeminiAio:
-    """Mock for client.aio namespace."""
-
     def __init__(self):
         self.models = MockGeminiAsyncModels()
 
 
 class MockGeminiClient:
-    """Complete mock for genai.Client."""
-
     def __init__(self, api_key: str = "test"):
         self.aio = MockGeminiAio()
         self.models = MagicMock()
@@ -388,7 +388,6 @@ class MockGeminiClient:
 
 @pytest.fixture
 def mock_gemini_client(sample_data: SampleData) -> MockGeminiClient:
-    """Fully configured mock Gemini client with realistic agent responses."""
     client = MockGeminiClient()
     client.configure_scout_response(sample_data.market_signal())
     client.configure_analyst_response(sample_data.market_assessment())
@@ -398,7 +397,6 @@ def mock_gemini_client(sample_data: SampleData) -> MockGeminiClient:
 
 @pytest.fixture
 def patched_gemini_client(mock_gemini_client: MockGeminiClient):
-    """Patch the global Gemini client in the orchestrator module."""
     with patch(
         "backend.services.ai_trend_analysis.autonomous_orchestrator.client",
         mock_gemini_client,
@@ -412,10 +410,8 @@ def patched_gemini_client(mock_gemini_client: MockGeminiClient):
 
 @pytest.fixture
 def test_app():
-    """Isolated FastAPI app with autonomous pipeline router."""
     from fastapi import FastAPI
     from backend.api.v1.routes.autonomous_pipeline import router
-
     app = FastAPI(title="Test App")
     app.include_router(router, prefix="/api/v1")
     return app
@@ -423,13 +419,11 @@ def test_app():
 
 @pytest.fixture
 def client(test_app, patched_gemini_client) -> TestClient:
-    """Synchronous test client with mocked Gemini."""
     return TestClient(test_app)
 
 
 @pytest.fixture
 async def async_client(test_app, patched_gemini_client) -> AsyncGenerator:
-    """Async test client for testing SSE streaming endpoints."""
     async with AsyncClient(
         transport=ASGITransport(app=test_app),
         base_url="http://test",
@@ -443,7 +437,6 @@ async def async_client(test_app, patched_gemini_client) -> AsyncGenerator:
 
 @pytest.fixture
 def frozen_time():
-    """Consistent timestamp for deterministic tests."""
     return datetime(2026, 2, 7, 0, 0, 0, tzinfo=timezone.utc)
 
 
@@ -464,5 +457,6 @@ def env_vars():
             os.environ.pop(key, None)
         else:
             os.environ[key] = value
+
 
             

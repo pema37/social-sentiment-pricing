@@ -45,27 +45,36 @@ for mod in [
 from models.sentiment import Sentiment
 for _col in ['analyzed_at', 'compound_score', 'product_id']:
     _c = getattr(Sentiment, _col)
-    _c.__ge__ = MagicMock(return_value=MagicMock())
-    _c.__le__ = MagicMock(return_value=MagicMock())
-    _c.__lt__ = MagicMock(return_value=MagicMock())
-    _c.__gt__ = MagicMock(return_value=MagicMock())
-    _c.__eq__ = MagicMock(return_value=MagicMock())
+    try:
+        _c.__ge__ = MagicMock(return_value=MagicMock())
+        _c.__le__ = MagicMock(return_value=MagicMock())
+        _c.__lt__ = MagicMock(return_value=MagicMock())
+        _c.__gt__ = MagicMock(return_value=MagicMock())
+        _c.__eq__ = MagicMock(return_value=MagicMock())
+    except (AttributeError, TypeError):
+        pass  # Real SQLAlchemy model — operators already work
 
 from models.social_mention import SocialMention
 for _col in ['published_at', 'product_id', 'id', 'engagement_count']:
     _c = getattr(SocialMention, _col)
-    _c.__ge__ = MagicMock(return_value=MagicMock())
-    _c.__le__ = MagicMock(return_value=MagicMock())
-    _c.__lt__ = MagicMock(return_value=MagicMock())
-    _c.__gt__ = MagicMock(return_value=MagicMock())
-    _c.__eq__ = MagicMock(return_value=MagicMock())
-    _c.desc = MagicMock(return_value=MagicMock())
+    try:
+        _c.__ge__ = MagicMock(return_value=MagicMock())
+        _c.__le__ = MagicMock(return_value=MagicMock())
+        _c.__lt__ = MagicMock(return_value=MagicMock())
+        _c.__gt__ = MagicMock(return_value=MagicMock())
+        _c.__eq__ = MagicMock(return_value=MagicMock())
+        _c.desc = MagicMock(return_value=MagicMock())
+    except (AttributeError, TypeError):
+        pass  # Real SQLAlchemy model — operators already work
 
 from models.competitor_product import CompetitorProduct
 for _col in ['product_id', 'is_active', 'competitor_id', 'current_price']:
     _c = getattr(CompetitorProduct, _col)
-    _c.__ge__ = MagicMock(return_value=MagicMock())
-    _c.__eq__ = MagicMock(return_value=MagicMock())
+    try:
+        _c.__ge__ = MagicMock(return_value=MagicMock())
+        _c.__eq__ = MagicMock(return_value=MagicMock())
+    except (AttributeError, TypeError):
+        pass  # Real SQLAlchemy model — operators already work
 
 import pytest
 

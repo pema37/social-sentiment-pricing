@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
-from .models import (
+from .schemas import (
     AuthorProfile,
     AuthorTrustScore,
     TrustLevel,

@@ -19,6 +19,11 @@ Covers:
   - analyze_image (success, JSON parse error, no client, error)
 """
 
+"""
+Tests for services/ai_trend_analysis/ai_clients.py
+...
+"""
+
 import sys
 import json
 import base64
@@ -27,8 +32,12 @@ from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
-for mod in ["db.session", "core.logging", "core.config", "google.genai", "google.genai.types"]:
-    if mod not in sys.modules:
+# Save originals so we can restore after this module's tests finish.
+_MOCKED_MODULES = ["db.session", "core.logging", "core.config", "google.genai", "google.genai.types"]
+_originals = {mod: sys.modules.get(mod) for mod in _MOCKED_MODULES}
+
+for mod in _MOCKED_MODULES:
+    if _originals[mod] is None:
         sys.modules[mod] = MagicMock()
 sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
@@ -47,6 +56,14 @@ from services.ai_trend_analysis.ai_clients import (
     ImageAnalysisResult,
     AIClients,
 )
+
+# ── IMMEDIATE cleanup — must happen before pytest collects later modules ──
+for _mod in _MOCKED_MODULES:
+    if _originals[_mod] is None:
+        sys.modules.pop(_mod, None)
+    else:
+        sys.modules[_mod] = _originals[_mod]
+del _mod  # clean up loop variable
 
 
 # ==================================================================
@@ -450,10 +467,10 @@ class TestCall:
     async def test_falls_back_to_openai_when_gemini_unavailable(self):
         client = AIClients()
         client.call_openai = AsyncMock(return_value={"result": "openai"})
-        client._gemini_client = None
 
-        result, model = await client.call("system", "user", use_model="gemini")
-        assert model == "openai"
+        with patch.object(type(client), 'gemini_client', new_callable=PropertyMock, return_value=None):
+            result, model = await client.call("system", "user", use_model="gemini")
+            assert model == "openai"
 
 
 # ==================================================================
@@ -707,6 +724,6 @@ class TestAnalyzeImage:
         assert result.promo_signals == []
         assert result.confidence == 0.5
 
-        
+
 
         

@@ -18,7 +18,7 @@ from models.integration import Integration, IntegrationStatus, EcommercePlatform
 from core.config import settings
 from core.encryption import decrypt_token
 
-from .models import WebhookRegistration
+from .schemas import WebhookRegistration
 from .shopify_service import ShopifyService
 from .woocommerce_service import WooCommerceService
 

@@ -21,7 +21,7 @@ from decimal import Decimal
 import httpx
 
 from .base import EcommerceService
-from .models import (
+from .schemas import (
     OAuthResult,
     ExternalProduct,
     ExternalProductVariant,

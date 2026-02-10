@@ -32,6 +32,24 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
+
+# Fake model classes with class-level attrs for SQLAlchemy .join()/.where()
+class _FakeIntegration:
+    id = MagicMock()
+    user_id = MagicMock()
+    status = MagicMock()
+
+
+class _FakeProductLink:
+    integration_id = MagicMock()
+    product_id = MagicMock()
+    sync_enabled = MagicMock()
+
+
+# Force-set UNCONDITIONALLY — even if another test already loaded the module
+sys.modules["models.integration"].Integration = _FakeIntegration
+sys.modules["models.product_link"].ProductLink = _FakeProductLink
+
 import pytest
 
 from services.pricing.price_sync_service import PriceSyncService
@@ -250,39 +268,58 @@ class TestGetActiveLink:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_link_and_integration(self, mock_select):
-        mock_chain = MagicMock()
-        mock_chain.join.return_value = mock_chain
-        mock_chain.where.return_value = mock_chain
-        mock_select.return_value = mock_chain
+        import types
+        _im = types.ModuleType("models.integration")
+        _im.Integration = _FakeIntegration
+        _plm = types.ModuleType("models.product_link")
+        _plm.ProductLink = _FakeProductLink
 
-        db = make_mock_db()
-        link = make_link()
-        integ = make_integration()
-        mock_result = MagicMock()
-        mock_result.first.return_value = (link, integ)
-        db.execute.return_value = mock_result
+        with patch.dict(sys.modules, {
+            "models.integration": _im,
+            "models.product_link": _plm,
+        }):
+            mock_chain = MagicMock()
+            mock_chain.join.return_value = mock_chain
+            mock_chain.where.return_value = mock_chain
+            mock_select.return_value = mock_chain
 
-        svc = PriceSyncService(db)
-        result = await svc._get_active_link(PRODUCT_ID, USER_ID)
-        assert result == (link, integ)
+            db = make_mock_db()
+            link = make_link()
+            integ = make_integration()
+            mock_result = MagicMock()
+            mock_result.first.return_value = (link, integ)
+            db.execute.return_value = mock_result
+
+            svc = PriceSyncService(db)
+            result = await svc._get_active_link(PRODUCT_ID, USER_ID)
+            assert result == (link, integ)
 
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_none_none_when_not_found(self, mock_select):
-        mock_chain = MagicMock()
-        mock_chain.join.return_value = mock_chain
-        mock_chain.where.return_value = mock_chain
-        mock_select.return_value = mock_chain
+        import types
+        _im = types.ModuleType("models.integration")
+        _im.Integration = _FakeIntegration
+        _plm = types.ModuleType("models.product_link")
+        _plm.ProductLink = _FakeProductLink
 
-        db = make_mock_db()
-        mock_result = MagicMock()
-        mock_result.first.return_value = None
-        db.execute.return_value = mock_result
+        with patch.dict(sys.modules, {
+            "models.integration": _im,
+            "models.product_link": _plm,
+        }):
+            mock_chain = MagicMock()
+            mock_chain.join.return_value = mock_chain
+            mock_chain.where.return_value = mock_chain
+            mock_select.return_value = mock_chain
 
-        svc = PriceSyncService(db)
-        result = await svc._get_active_link(PRODUCT_ID, USER_ID)
-        assert result == (None, None)
+            db = make_mock_db()
+            mock_result = MagicMock()
+            mock_result.first.return_value = None
+            db.execute.return_value = mock_result
 
+            svc = PriceSyncService(db)
+            result = await svc._get_active_link(PRODUCT_ID, USER_ID)
+            assert result == (None, None)
 
 # ============================================================
 # 5. _fetch_from_platform
@@ -492,5 +529,3 @@ class TestFetchWooCommercePrice:
         await svc._fetch_woocommerce_price(link, integ)
         mock_service.get_product_price.assert_awaited_once_with("woo-999")
 
-
-        

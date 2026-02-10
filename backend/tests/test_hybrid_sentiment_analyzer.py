@@ -25,8 +25,8 @@ import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 
-# === Import isolation ===
-for mod in [
+# ── Import isolation ──────────────────────────────────────────────
+_MOCKED_MODULES = [
     "core.config",
     "vaderSentiment",
     "vaderSentiment.vaderSentiment",
@@ -34,8 +34,11 @@ for mod in [
     "google.generativeai",
     "openai",
     "services.trust_scoring",
-]:
-    if mod not in sys.modules:
+]
+_originals = {mod: sys.modules.get(mod) for mod in _MOCKED_MODULES}
+
+for mod in _MOCKED_MODULES:
+    if _originals[mod] is None:
         sys.modules[mod] = MagicMock()
 
 # Mock settings before import
@@ -51,6 +54,14 @@ from services.hybrid_sentiment_analyzer import (
     HybridSentimentResult,
     HybridSentimentAnalyzer,
 )
+
+# ── IMMEDIATE cleanup — restore before pytest collects later modules ──
+for _mod in _MOCKED_MODULES:
+    if _originals[_mod] is None:
+        sys.modules.pop(_mod, None)
+    else:
+        sys.modules[_mod] = _originals[_mod]
+del _mod
 
 SERVICE_PATH = "services.hybrid_sentiment_analyzer"
 
@@ -650,6 +661,5 @@ class TestAnalyzeBatch:
         svc.analyze = AsyncMock()
         results = await svc.analyze_batch([])
         assert results == []
-
 
         

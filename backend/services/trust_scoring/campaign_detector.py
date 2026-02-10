@@ -16,7 +16,7 @@ from typing import Optional, Dict, List, Set, Tuple, Any
 from collections import defaultdict
 from dataclasses import dataclass
 
-from .models import (
+from .schemas import (
     CampaignSignal,
     CampaignDetectionResult,
     RiskFlag,

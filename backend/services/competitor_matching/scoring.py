@@ -20,7 +20,7 @@ from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 
-from .models import MatchedProduct
+from .schemas import MatchedProduct
 from .utils import (
     calculate_text_similarity,
     calculate_keyword_match,

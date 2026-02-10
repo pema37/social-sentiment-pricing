@@ -59,8 +59,8 @@ class DataCollector:
             select(Sentiment)
             .join(Product)
             .where(Product.user_id == user_id)
-            .where(Sentiment.created_at >= start_date)
-            .order_by(Sentiment.created_at.desc())
+            .where(Sentiment.analyzed_at >= start_date)
+            .order_by(Sentiment.analyzed_at.desc())
         )
         
         if product_ids:
@@ -74,7 +74,7 @@ class DataCollector:
                 "product_id": str(s.product_id),
                 "score": float(s.score) if s.score else 0,
                 "magnitude": float(s.magnitude) if hasattr(s, 'magnitude') and s.magnitude else 0,
-                "created_at": s.created_at,
+                "created_at": s.analyzed_at,
             }
             for s in sentiments
         ]
@@ -86,8 +86,8 @@ class DataCollector:
         result = await self.db.execute(
             select(Sentiment)
             .where(Sentiment.product_id == product_id)
-            .where(Sentiment.created_at >= start_date)
-            .order_by(Sentiment.created_at.desc())
+            .where(Sentiment.analyzed_at >= start_date)
+            .order_by(Sentiment.analyzed_at.desc())
         )
         sentiments = list(result.scalars().all())
         
@@ -142,8 +142,8 @@ class DataCollector:
             select(SocialMention)
             .join(Product)
             .where(Product.user_id == user_id)
-            .where(SocialMention.created_at >= start_date)
-            .order_by(SocialMention.created_at.desc())
+            .where(SocialMention.collected_at >= start_date)
+            .order_by(SocialMention.collected_at.desc())
         )
         
         if product_ids:
@@ -158,7 +158,7 @@ class DataCollector:
                 "platform": m.platform,
                 "content": m.content[:200] if m.content else "",
                 "sentiment_score": float(m.sentiment_score) if m.sentiment_score else 0,
-                "created_at": m.created_at,
+                "created_at": m.collected_at,
             }
             for m in mentions
         ]
@@ -170,8 +170,8 @@ class DataCollector:
         result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.product_id == product_id)
-            .where(SocialMention.created_at >= start_date)
-            .order_by(SocialMention.created_at.desc())
+            .where(SocialMention.collected_at >= start_date)
+            .order_by(SocialMention.collected_at.desc())
         )
         return list(result.scalars().all())
     
@@ -183,9 +183,10 @@ class DataCollector:
             select(SocialMention)
             .join(Product)
             .where(Product.user_id == user_id)
-            .where(SocialMention.created_at >= start_date)
-            .where(SocialMention.sentiment_score < -0.3)
-            .order_by(SocialMention.sentiment_score.asc())
+            .where(SocialMention.collected_at >= start_date)
+            .join(Sentiment, Sentiment.product_id == SocialMention.product_id)
+            .where(Sentiment.compound_score < -0.3)
+            .order_by(Sentiment.compound_score.asc())
             .limit(50)
         )
         return list(result.scalars().all())
@@ -261,6 +262,5 @@ class DataCollector:
         # TODO: Implement competitor activity tracking
         return []
     
-
 
     

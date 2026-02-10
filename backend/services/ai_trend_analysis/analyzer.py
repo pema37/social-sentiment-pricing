@@ -27,7 +27,7 @@ from .prompts import (
     build_risk_prompt,
     build_insight_prompt,
 )
-from .models import (
+from .schemas import (
     TrendAnalysisResult,
     PricingOpportunity,
     RiskAlert,

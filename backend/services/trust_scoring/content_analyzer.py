@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Set, Tuple
 
-from .models import (
+from .schemas import (
     ContentAnalysis,
     RiskFlag,
     TrustScoringConfig,

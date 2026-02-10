@@ -21,7 +21,7 @@ import httpx
 
 from core.config import settings
 from .base import EcommerceService
-from .models import (
+from .schemas import (
     OAuthResult,
     ExternalProduct,
     ExternalProductVariant,

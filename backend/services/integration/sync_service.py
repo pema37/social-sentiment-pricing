@@ -32,7 +32,7 @@ from models.product import Product
 from core.encryption import decrypt_token
 
 from .base import EcommerceService
-from .models import ExternalProduct
+from .schemas import ExternalProduct
 from .circuit_breaker import CircuitOpenError, circuit_breaker_registry
 from .shopify_service import ShopifyService
 from .woocommerce_service import WooCommerceService

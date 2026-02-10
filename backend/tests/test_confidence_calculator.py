@@ -41,14 +41,20 @@ for mod in [
 # causing TypeError when compared with datetime.
 # Configure model column mocks to support SQLAlchemy-style comparisons.
 _ph = sys.modules["models.price_history"]
-_ph.PriceHistory.created_at.__ge__ = MagicMock(return_value=MagicMock())
-_ph.PriceHistory.created_at.__le__ = MagicMock(return_value=MagicMock())
-_ph.PriceHistory.product_id.__eq__ = MagicMock(return_value=MagicMock())
+try:
+    _ph.PriceHistory.created_at.__ge__ = MagicMock(return_value=MagicMock())
+    _ph.PriceHistory.created_at.__le__ = MagicMock(return_value=MagicMock())
+    _ph.PriceHistory.product_id.__eq__ = MagicMock(return_value=MagicMock())
+except (AttributeError, TypeError):
+    pass  # Real SQLAlchemy model — operators already work
 
 _sent = sys.modules["models.sentiment"]
-_sent.Sentiment.analyzed_at.__ge__ = MagicMock(return_value=MagicMock())
-_sent.Sentiment.analyzed_at.__le__ = MagicMock(return_value=MagicMock())
-_sent.Sentiment.product_id.__eq__ = MagicMock(return_value=MagicMock())
+try:
+    _sent.Sentiment.analyzed_at.__ge__ = MagicMock(return_value=MagicMock())
+    _sent.Sentiment.analyzed_at.__le__ = MagicMock(return_value=MagicMock())
+    _sent.Sentiment.product_id.__eq__ = MagicMock(return_value=MagicMock())
+except (AttributeError, TypeError):
+    pass  # Real SQLAlchemy model — operators already work
 
 import pytest
 

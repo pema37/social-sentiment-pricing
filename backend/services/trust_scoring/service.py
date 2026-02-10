@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List, Any, Tuple
 from decimal import Decimal
 
-from .models import (
+from .schemas import (
     AuthorProfile,
     AuthorTrustScore,
     ContentAnalysis,

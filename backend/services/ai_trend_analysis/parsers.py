@@ -10,7 +10,7 @@ from decimal import Decimal
 from core.logging import get_logger
 from models.product import Product
 
-from .models import (
+from .schemas import (
     TrendAnalysisResult,
     TrendPrediction,
     PricingOpportunity,
