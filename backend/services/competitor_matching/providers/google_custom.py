@@ -25,7 +25,7 @@ from typing import Optional, List, Dict, Any
 import httpx
 
 from .base import BaseSearchProvider
-from ..models import (
+from ..schemas import (
     SearchProvider,
     MatchedProduct,
     ProviderResult,

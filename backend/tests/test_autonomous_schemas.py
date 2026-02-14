@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+import os
+os.environ.setdefault("GEMINI_API_KEY", "test-dummy-key")
+
 from backend.services.ai_trend_analysis.autonomous_orchestrator import (
     AgentPhase,
     AgentStreamEvent,
@@ -27,6 +30,61 @@ from backend.services.ai_trend_analysis.autonomous_orchestrator import (
 # ---------------------------------------------------------------------------
 # MarketSignal (Scout Agent Output)
 # ---------------------------------------------------------------------------
+
+
+class SampleDataFactory:
+    """Factory for generating sample schema data."""
+    def market_signal(self, overrides=None):
+        data = {
+            "competitor_name": "TestCompetitor",
+            "competitor_price": 84.99,
+            "price_change_pct": -15.1,
+            "signal_type": "price_drop",
+            "product_category": "electronics",
+            "source": "google_search",
+            "confidence": 0.85,
+            "raw_data": {"url": "https://example.com"},
+        }
+        if overrides:
+            data.update(overrides)
+        return data
+
+    def market_assessment(self, overrides=None):
+        data = {
+            "sentiment_score": -0.42,
+            "sentiment_label": "bearish",
+            "demand_elasticity": 1.2,
+            "risk_level": "medium",
+            "risk_factors": ["competitor undercut"],
+            "opportunity_score": 0.6,
+            "market_context": "Stable market with competitor pressure",
+            "recommended_direction": "decrease",
+            "max_safe_change_pct": 10.0,
+        }
+        if overrides:
+            data.update(overrides)
+        return data
+
+    def pricing_decision(self, overrides=None):
+        data = {
+            "recommended_price": 87.99,
+            "current_price": 99.99,
+            "change_pct": -12.0,
+            "confidence_score": 0.82,
+            "reasoning": "Competitor dropped price; match to retain share",
+            "action": "execute",
+            "risk_acknowledgment": "Margin compression risk",
+            "expected_revenue_impact": "+5% volume, -3% margin",
+            "tx_hash": "0xabc123",
+        }
+        if overrides:
+            data.update(overrides)
+        return data
+
+
+@pytest.fixture
+def sample_data():
+    return SampleDataFactory()
 
 class TestMarketSignal:
     """Scout Agent output schema — must be rock-solid for downstream agents."""

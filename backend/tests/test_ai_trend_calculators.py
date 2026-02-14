@@ -8,7 +8,7 @@ Total: ~35 tests
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import MagicMock
 
 # === Import isolation ===
@@ -27,7 +27,7 @@ from services.ai_trend_analysis.calculators import TrendCalculators
 # ============================================================
 
 def make_sentiment(score, created_at=None, product_id=None):
-    d = {"score": score, "created_at": created_at or datetime.utcnow()}
+    d = {"score": score, "created_at": created_at or datetime.now(UTC)}
     if product_id is not None:
         d["product_id"] = product_id
     return d
@@ -113,7 +113,7 @@ class TestCalculateSentimentVolatility:
 class TestCalculateVolumeChange:
 
     def test_volume_increase(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         mid = now - timedelta(days=15)
         data = (
             [{"created_at": now - timedelta(days=i)} for i in range(10)] +  # 10 recent
@@ -123,13 +123,13 @@ class TestCalculateVolumeChange:
         assert result > 0
 
     def test_no_older_data(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{"created_at": now - timedelta(days=i)} for i in range(5)]
         result = TrendCalculators.calculate_volume_change(data, 30)
         assert result == 0.0
 
     def test_too_few_days(self):
-        assert TrendCalculators.calculate_volume_change([{"created_at": datetime.utcnow()}], 7) == 0.0
+        assert TrendCalculators.calculate_volume_change([{"created_at": datetime.now(UTC)}], 7) == 0.0
 
     def test_empty_data(self):
         assert TrendCalculators.calculate_volume_change([], 30) == 0.0

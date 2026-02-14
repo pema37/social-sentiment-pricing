@@ -5,7 +5,7 @@ E-commerce Push Service - Handles pushing prices to connected platforms.
 Supports multi-platform: pushes to ALL active integrations for a product.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from decimal import Decimal
 from uuid import UUID
 import logging
@@ -172,9 +172,9 @@ class EcommercePushService:
             
             # Update link metadata on success
             if response.result == PriceUpdateResult.SUCCESS:
-                link.last_price_push_at = datetime.utcnow()
+                link.last_price_push_at = datetime.now(UTC)
                 link.external_price = Decimal(str(product.current_price))
-                link.updated_at = datetime.utcnow()
+                link.updated_at = datetime.now(UTC)
                 self.db.add(link)
                 
                 return {

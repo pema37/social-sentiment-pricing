@@ -11,7 +11,7 @@ This ensures every product has a proper link for price updates.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from uuid import UUID
@@ -350,7 +350,7 @@ class ProductSyncService:
             external_variant_id=external_variant_id,
             external_price=Decimal(str(external_price)) if external_price else None,
             sync_enabled=True,
-            last_synced_at=datetime.utcnow(),
+            last_synced_at=datetime.now(UTC),
         )
         self.db.add(link)
         await self.db.commit()
@@ -433,7 +433,7 @@ class ProductSyncService:
             existing.external_product_id = external_product_id
             existing.external_variant_id = external_variant_id
             existing.sync_enabled = True
-            existing.last_synced_at = datetime.utcnow()
+            existing.last_synced_at = datetime.now(UTC)
             self.db.add(existing)
             await self.db.commit()
             return {

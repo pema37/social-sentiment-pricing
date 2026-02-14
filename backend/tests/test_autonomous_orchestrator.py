@@ -19,6 +19,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
+# Stub google.genai to avoid API key requirement at import
+import types as _types
+_google = _types.ModuleType("google")
+_genai = _types.ModuleType("google.genai")
+_genai.Client = MagicMock()
+_genai_types = _types.ModuleType("google.genai.types")
+_genai_types.Tool = MagicMock()
+_genai_types.GoogleSearch = MagicMock()
+_genai_types.GenerateContentConfig = MagicMock()
+_genai_types.ThinkingConfig = MagicMock()
+_google.genai = _genai
+sys.modules["google"] = _google
+sys.modules["google.genai"] = _genai
+sys.modules["google.genai.types"] = _genai_types
+
 for mod in ["db.session", "core.logging"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()

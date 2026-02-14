@@ -8,7 +8,7 @@ Run: pytest backend/tests/test_approval_service.py -v
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -41,7 +41,7 @@ def make_recommendation(
     rec.user_id = user_id or uuid4()
     rec.product_id = product_id or uuid4()
     rec.status = status if status is not None else RecommendationStatus.PENDING
-    rec.valid_until = datetime.utcnow() + timedelta(minutes=valid_minutes)
+    rec.valid_until = datetime.now(UTC) + timedelta(minutes=valid_minutes)
     rec.recommended_price = recommended_price
     rec.change_percent = change_percent
     rec.confidence_score = confidence_score
@@ -50,7 +50,7 @@ def make_recommendation(
     rec.rejection_reason = None
     rec.applied_at = None
     rec.applied_to_platform = None
-    rec.created_at = datetime.utcnow()
+    rec.created_at = datetime.now(UTC)
     return rec
 
 

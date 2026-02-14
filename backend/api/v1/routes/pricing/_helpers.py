@@ -17,7 +17,7 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from datetime import datetime
+from datetime import datetime, UTC
 
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
 from models.product import Product
@@ -293,7 +293,7 @@ async def get_recommendation_or_error(
         raise RecommendationExpiredError(recommendation_id)
     
     # Check if valid_until has passed (even if status not updated yet)
-    if recommendation.valid_until and recommendation.valid_until < datetime.utcnow():
+    if recommendation.valid_until and recommendation.valid_until < datetime.now(UTC):
         raise RecommendationExpiredError(recommendation_id)
     
     return recommendation

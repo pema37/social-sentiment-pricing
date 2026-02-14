@@ -5,12 +5,12 @@ Enums and dataclasses for e-commerce integrations.
 Pure data models — no async, no DB.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from dataclasses import fields
 
 import pytest
 
-from services.integration.models import (
+from services.integration.schemas import (
     PriceUpdateResult,
     ConnectionStatus,
     OAuthResult,
@@ -112,7 +112,7 @@ class TestOAuthResult:
         assert r.error is None
 
     def test_full_construction(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         r = OAuthResult(
             success=True,
             access_token="tok-123",
@@ -196,7 +196,7 @@ class TestExternalProduct:
         assert p.updated_at is None
 
     def test_full_construction(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         variant = ExternalProductVariant(id="v-1", title="Default")
         p = ExternalProduct(
             id="p-1",

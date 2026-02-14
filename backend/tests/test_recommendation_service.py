@@ -19,7 +19,7 @@ Total: ~65 tests
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 from uuid import uuid4
@@ -93,7 +93,7 @@ def make_mock_recommendation(
     rec.id = id or REC_ID
     rec.status = status
     rec.requires_approval = requires_approval
-    rec.valid_until = valid_until or (datetime.utcnow() + timedelta(hours=24))
+    rec.valid_until = valid_until or (datetime.now(UTC) + timedelta(hours=24))
     return rec
 
 
@@ -106,6 +106,31 @@ def make_mock_settings(
     settings.recommendation_valid_hours = recommendation_valid_hours
     return settings
 
+
+
+# ── Column mock for comparison operators ──
+class _ColumnMock:
+    def __lt__(self, other): return MagicMock()
+    def __le__(self, other): return MagicMock()
+    def __gt__(self, other): return MagicMock()
+    def __ge__(self, other): return MagicMock()
+    def __eq__(self, other): return MagicMock()
+    def __ne__(self, other): return MagicMock()
+    def __hash__(self): return id(self)
+    def desc(self): return MagicMock()
+    def asc(self): return MagicMock()
+
+class _FakePriceRecommendation:
+    id = _ColumnMock()
+    product_id = _ColumnMock()
+    user_id = _ColumnMock()
+    status = _ColumnMock()
+    valid_until = _ColumnMock()
+    created_at = _ColumnMock()
+    updated_at = _ColumnMock()
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
 
 # We need to patch at the module level where the imports happen
 SERVICE_PATH = "services.pricing.recommendation_service"
@@ -333,6 +358,7 @@ class TestGenerateRecommendation:
 # 3. _has_pending_recommendation
 # ============================================================
 
+@patch(f"{SERVICE_PATH}.PriceRecommendation", _FakePriceRecommendation)
 class TestHasPendingRecommendation:
     """Tests for the pending recommendation check."""
 
@@ -769,6 +795,7 @@ class TestAutoApply:
 # 6. Query Methods
 # ============================================================
 
+@patch(f"{SERVICE_PATH}.PriceRecommendation", _FakePriceRecommendation)
 class TestGetPendingRecommendations:
     """Tests for get_pending_recommendations."""
 
@@ -865,6 +892,7 @@ class TestGetPendingRecommendations:
 # 7. expire_old_recommendations
 # ============================================================
 
+@patch(f"{SERVICE_PATH}.PriceRecommendation", _FakePriceRecommendation)
 class TestExpireOldRecommendations:
     """Tests for the batch expiration of old recommendations."""
 

@@ -3,7 +3,7 @@
 AI Support Chat API routes.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, HTTPException
 
 from schemas.ai_support import (
@@ -37,7 +37,7 @@ async def chat_with_support(request: SupportChatRequest) -> SupportChatResponse:
             message=result["message"],
             topic_detected=result.get("topic_detected"),
             suggested_actions=result.get("suggested_actions", []),
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(UTC).isoformat()
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

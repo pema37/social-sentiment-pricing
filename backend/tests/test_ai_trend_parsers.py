@@ -16,7 +16,7 @@ Total: ~35 tests
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -34,7 +34,7 @@ sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 import pytest
 
-from services.ai_trend_analysis.models import (
+from services.ai_trend_analysis.schemas import (
     TrendDirection,
     TrendCategory,
     OpportunityType,
@@ -118,7 +118,7 @@ class TestParseOpportunities:
 
     def test_valid_opportunity_with_product(self):
         product = make_product(name="Widget", price=Decimal("50.00"))
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{
             "product_id": str(product.id),
             "opportunity_type": "price_increase",
@@ -137,7 +137,7 @@ class TestParseOpportunities:
         assert result[0].product_name == "Widget"
 
     def test_unknown_product_id(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{
             "product_id": "nonexistent-id",
             "product_name": "Fallback Name",
@@ -149,19 +149,19 @@ class TestParseOpportunities:
         assert result[0].product_name == "Fallback Name"
 
     def test_invalid_opportunity_type_defaults_to_hold(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{"opportunity_type": "invalid_type", "current_price": 10, "suggested_price": 10}]
         result = ResponseParser._parse_opportunities(data, [], now)
         assert result[0].opportunity_type == OpportunityType.HOLD
 
     def test_valid_until_set_7_days(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{"current_price": 10, "suggested_price": 10}]
         result = ResponseParser._parse_opportunities(data, [], now)
         assert result[0].valid_until > now
 
     def test_empty_list(self):
-        result = ResponseParser._parse_opportunities([], [], datetime.utcnow())
+        result = ResponseParser._parse_opportunities([], [], datetime.now(UTC))
         assert result == []
 
 
@@ -172,7 +172,7 @@ class TestParseOpportunities:
 class TestParseRisks:
 
     def test_valid_risk(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{
             "risk_level": "high",
             "risk_type": "competitor_price_war",
@@ -189,7 +189,7 @@ class TestParseRisks:
         assert result[0].expires_at == now + timedelta(hours=12)
 
     def test_defaults_for_missing_fields(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{}]
         result = ResponseParser._parse_risks(data, now)
         assert result[0].risk_level == RiskLevel.LOW
@@ -197,19 +197,19 @@ class TestParseRisks:
         assert result[0].title == "Unknown Risk"
 
     def test_invalid_risk_level_defaults(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{"risk_level": "extreme"}]
         result = ResponseParser._parse_risks(data, now)
         assert result[0].risk_level == RiskLevel.LOW
 
     def test_default_urgency_24_hours(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         data = [{}]
         result = ResponseParser._parse_risks(data, now)
         assert result[0].expires_at == now + timedelta(hours=24)
 
     def test_empty_list(self):
-        result = ResponseParser._parse_risks([], datetime.utcnow())
+        result = ResponseParser._parse_risks([], datetime.now(UTC))
         assert result == []
 
 

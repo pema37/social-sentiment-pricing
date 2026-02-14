@@ -20,7 +20,7 @@ from decimal import Decimal
 import httpx
 
 from .base import BaseSearchProvider
-from ..models import (
+from ..schemas import (
     SearchProvider,
     MatchedProduct,
     ProviderResult,

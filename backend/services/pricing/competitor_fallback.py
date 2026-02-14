@@ -9,7 +9,7 @@ FIX (2026-01-24): Now respects user's auto-approval settings.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from uuid import UUID
@@ -188,7 +188,7 @@ class CompetitorFallbackService:
         settings: PricingSettings
     ) -> PriceRecommendation:
         """Create and persist the recommendation."""
-        valid_until = datetime.utcnow() + timedelta(
+        valid_until = datetime.now(UTC) + timedelta(
             hours=settings.recommendation_valid_hours
         )
         

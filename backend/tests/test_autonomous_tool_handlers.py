@@ -17,7 +17,27 @@ Run: pytest backend/tests/test_autonomous_tool_handlers.py -v
 
 import pytest
 
-from backend.services.ai_trend_analysis.autonomous_orchestrator import (
+import sys
+from unittest.mock import MagicMock
+import types as _types
+_google = _types.ModuleType("google")
+_genai = _types.ModuleType("google.genai")
+_genai.Client = MagicMock()
+_genai_types = _types.ModuleType("google.genai.types")
+_genai_types.Tool = MagicMock()
+_genai_types.GoogleSearch = MagicMock()
+_genai_types.GenerateContentConfig = MagicMock()
+_genai_types.ThinkingConfig = MagicMock()
+_google.genai = _genai
+sys.modules["google"] = _google
+sys.modules["google.genai"] = _genai
+sys.modules["google.genai.types"] = _genai_types
+for mod in ["db.session", "core.logging"]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
+
+from services.ai_trend_analysis.autonomous_orchestrator import (
     handle_tool_call,
     _handle_fetch_competitor_price,
     _handle_detect_price_change,

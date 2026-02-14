@@ -1,7 +1,7 @@
 # backend/api/v1/routes/alerts/management.py
 """Alert management endpoints (list, acknowledge, resolve)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from uuid import UUID
 
@@ -117,7 +117,7 @@ async def get_alert_stats(
         except Exception:
             continue
     
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
     recent_result = await session.execute(
         select(func.count(Alert.id)).where(
             Alert.user_id == current_user.id,
@@ -173,7 +173,7 @@ async def acknowledge_all_alerts(
     
     result = await session.execute(query)
     alerts = list(result.scalars().all())
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     
     for alert in alerts:
         alert.status = AlertStatus.ACKNOWLEDGED
@@ -238,7 +238,7 @@ async def acknowledge_alert(
         )
     
     alert.status = AlertStatus.ACKNOWLEDGED
-    alert.acknowledged_at = datetime.utcnow()
+    alert.acknowledged_at = datetime.now(UTC)
     alert.acknowledged_by = current_user.id
     
     session.add(alert)
@@ -271,10 +271,10 @@ async def resolve_alert(
         raise HTTPException(status_code=400, detail="Alert is already resolved")
     
     alert.status = AlertStatus.RESOLVED
-    alert.resolved_at = datetime.utcnow()
+    alert.resolved_at = datetime.now(UTC)
     
     if not alert.acknowledged_at:
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = datetime.now(UTC)
         alert.acknowledged_by = current_user.id
     
     session.add(alert)

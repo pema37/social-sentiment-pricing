@@ -13,7 +13,7 @@ Key features:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Tuple
 from uuid import UUID
 
@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.integration import Integration, EcommercePlatform
 from core.encryption import decrypt_token
 
-from ..models import ExternalProduct
+from ..schemas import ExternalProduct
 from ..base import EcommerceService
 from ..shopify_service import ShopifyService
 from ..woocommerce_service import WooCommerceService
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 def utc_now() -> datetime:
     """Return current UTC time as naive datetime."""
-    return datetime.utcnow()
+    return datetime.now(UTC)
 
 
 class SyncError(Exception):

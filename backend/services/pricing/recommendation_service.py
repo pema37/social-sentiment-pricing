@@ -15,7 +15,7 @@ recommendations to ensure current_price reflects actual database state.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -129,7 +129,7 @@ class RecommendationService:
             .where(PriceRecommendation.product_id == product_id)
             .where(PriceRecommendation.user_id == user_id)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.valid_until > datetime.utcnow())
+            .where(PriceRecommendation.valid_until > datetime.now(UTC))
         )
         result = await self.db.execute(stmt)
         return result.scalars().first() is not None
@@ -181,7 +181,7 @@ class RecommendationService:
         
         # Get settings (Priority 2 fix ensures defaults exist)
         settings = await self.settings_service.get_or_create(user_id)
-        valid_until = datetime.utcnow() + timedelta(hours=settings.recommendation_valid_hours)
+        valid_until = datetime.now(UTC) + timedelta(hours=settings.recommendation_valid_hours)
         
         # Check approval requirement
         requires_approval = self.settings_service.check_requires_approval(
@@ -212,7 +212,7 @@ class RecommendationService:
         )
         
         # Update rule's last_triggered_at
-        rule.last_triggered_at = datetime.utcnow()
+        rule.last_triggered_at = datetime.now(UTC)
         self.db.add(rule)
         
         self.db.add(recommendation)
@@ -255,7 +255,7 @@ class RecommendationService:
             select(PriceRecommendation)
             .where(PriceRecommendation.user_id == user_id)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.valid_until > datetime.utcnow())
+            .where(PriceRecommendation.valid_until > datetime.now(UTC))
         )
         
         if product_id:
@@ -272,7 +272,7 @@ class RecommendationService:
         stmt = (
             select(PriceRecommendation)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.valid_until <= datetime.utcnow())
+            .where(PriceRecommendation.valid_until <= datetime.now(UTC))
         )
         
         result = await self.db.execute(stmt)

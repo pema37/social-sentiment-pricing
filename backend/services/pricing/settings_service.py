@@ -9,7 +9,7 @@ NOTE: DEFAULT_SETTINGS aligns with PricingSettings model Field defaults.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -122,7 +122,7 @@ class SettingsService:
             else:
                 logger.warning(f"Unknown setting field: {key}")
         
-        settings.updated_at = datetime.utcnow()
+        settings.updated_at = datetime.now(UTC)
         self.db.add(settings)
         await self.db.commit()
         await self.db.refresh(settings)
@@ -203,7 +203,7 @@ class SettingsService:
         if settings.blackout_hours_start is None or settings.blackout_hours_end is None:
             return False
         
-        current_hour = datetime.utcnow().hour
+        current_hour = datetime.now(UTC).hour
         start = settings.blackout_hours_start
         end = settings.blackout_hours_end
         

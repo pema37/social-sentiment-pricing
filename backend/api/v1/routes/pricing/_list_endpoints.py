@@ -6,7 +6,7 @@ Read-only operations.
 
 from typing import Optional
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,7 +33,7 @@ async def get_recommendation_stats(
     current_user: User = Depends(get_current_user),
 ):
     """Get recommendation statistics."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     
     # Count by status
     stats = {}

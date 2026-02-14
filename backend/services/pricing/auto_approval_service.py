@@ -9,7 +9,7 @@ direct SELECT to ensure default settings exist for new users. Previously,
 new users without a PricingSettings row would never get auto-approvals.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 from uuid import UUID
 import logging
@@ -71,7 +71,7 @@ class AutoApprovalService:
             select(PriceRecommendation)
             .where(PriceRecommendation.user_id == user_id)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.valid_until > datetime.utcnow())
+            .where(PriceRecommendation.valid_until > datetime.now(UTC))
         )
         result = await self.db.execute(stmt)
         pending = list(result.scalars().all())
@@ -165,7 +165,7 @@ class AutoApprovalService:
     
     async def _check_daily_limit(self, user_id: UUID, settings: PricingSettings) -> bool:
         """Check if user has reached daily auto-change limit."""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         
         stmt = (
             select(func.count(PriceRecommendation.id))
@@ -189,7 +189,7 @@ class AutoApprovalService:
         if settings.blackout_hours_start is None or settings.blackout_hours_end is None:
             return False
         
-        current_hour = datetime.utcnow().hour
+        current_hour = datetime.now(UTC).hour
         start = settings.blackout_hours_start
         end = settings.blackout_hours_end
         

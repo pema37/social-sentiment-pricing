@@ -32,7 +32,7 @@ for mod in [
 
 import pytest
 
-from services.competitor_matching.models import MatchedProduct, SearchProvider
+from services.competitor_matching.schemas import MatchedProduct, SearchProvider
 from services.competitor_matching.scoring import (
     ScoringWeights,
     ScoreBreakdown,

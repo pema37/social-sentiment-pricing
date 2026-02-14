@@ -5,7 +5,7 @@ Tests for services.integration.sync_service
 import sys
 import types
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from uuid import uuid4
 
@@ -118,7 +118,7 @@ class _FakeSyncLog:
         self.id = kw.get("id", uuid4())
         self.integration_id = kw.get("integration_id", uuid4())
         self.sync_type = kw.get("sync_type", "full")
-        self.started_at = kw.get("started_at", datetime.utcnow())
+        self.started_at = kw.get("started_at", datetime.now(UTC))
         self.completed_at = kw.get("completed_at", None)
         self.success = kw.get("success", None)
         self.products_created = 0
@@ -333,7 +333,7 @@ class TestFinalizeSuccess:
     async def test_updates_log_and_integration(self):
         svc, db = _make_service()
         integ = _FakeIntegration()
-        log = _FakeSyncLog(started_at=datetime.utcnow())
+        log = _FakeSyncLog(started_at=datetime.now(UTC))
 
         # Mock _count_linked_products
         svc._count_linked_products = AsyncMock(return_value=5)
@@ -354,7 +354,7 @@ class TestFinalizeFailure:
     async def test_updates_log_and_integration(self):
         svc, db = _make_service()
         integ = _FakeIntegration()
-        log = _FakeSyncLog(started_at=datetime.utcnow())
+        log = _FakeSyncLog(started_at=datetime.now(UTC))
 
         await svc._finalize_failure(integ, log, "Something broke")
         assert log.success is False
@@ -476,7 +476,7 @@ class TestRecoverStuckSyncs:
         integ = _FakeIntegration(sync_status="syncing")
         stuck_log = _FakeSyncLog(
             integration_id=integ.id,
-            started_at=datetime.utcnow() - timedelta(minutes=30),
+            started_at=datetime.now(UTC) - timedelta(minutes=30),
             completed_at=None,
         )
 

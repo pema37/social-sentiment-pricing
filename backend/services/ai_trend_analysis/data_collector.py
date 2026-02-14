@@ -7,7 +7,7 @@ Changed all self.db.exec() to await self.db.execute() with proper
 scalars() handling.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +53,7 @@ class DataCollector:
         product_ids: Optional[list[str]] = None,
     ) -> list[dict]:
         """Get sentiment history for the specified period."""
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(UTC) - timedelta(days=days)
         
         query = (
             select(Sentiment)
@@ -81,7 +81,7 @@ class DataCollector:
     
     async def get_product_sentiment(self, product_id: str, days: int) -> dict:
         """Get sentiment data for a specific product."""
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(UTC) - timedelta(days=days)
         
         result = await self.db.execute(
             select(Sentiment)
@@ -136,7 +136,7 @@ class DataCollector:
         product_ids: Optional[list[str]] = None,
     ) -> list[dict]:
         """Get social mentions for the specified period."""
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(UTC) - timedelta(days=days)
         
         query = (
             select(SocialMention)
@@ -165,7 +165,7 @@ class DataCollector:
     
     async def get_product_mentions(self, product_id: str, days: int) -> list:
         """Get mentions for a specific product."""
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(UTC) - timedelta(days=days)
         
         result = await self.db.execute(
             select(SocialMention)
@@ -177,7 +177,7 @@ class DataCollector:
     
     async def get_negative_mentions(self, user_id: str, days: int) -> list:
         """Get negative sentiment mentions."""
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(UTC) - timedelta(days=days)
         
         result = await self.db.execute(
             select(SocialMention)

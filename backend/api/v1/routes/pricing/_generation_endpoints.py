@@ -9,7 +9,7 @@ get competitor-based recommendations even without explicit pricing rules.
 
 from typing import Optional
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -137,7 +137,7 @@ async def diagnose_product_recommendations(
         # Check if rule is in cooldown
         if rule.last_triggered_at:
             cooldown_until = rule.last_triggered_at + timedelta(hours=rule.cooldown_hours)
-            if datetime.utcnow() < cooldown_until:
+            if datetime.now(UTC) < cooldown_until:
                 rule_info["in_cooldown"] = True
                 rule_info["cooldown_until"] = cooldown_until.isoformat()
                 diagnosis["issues"].append(

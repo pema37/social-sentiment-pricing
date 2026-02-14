@@ -3,7 +3,7 @@
 
 import logging
 import secrets
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
@@ -144,7 +144,7 @@ async def oauth_callback(
     integration.status = IntegrationStatus.ACTIVE
     integration.oauth_state = None
     integration.error_message = None
-    integration.updated_at = datetime.utcnow()
+    integration.updated_at = datetime.now(UTC)
     
     db.add(integration)
     await db.commit()
@@ -208,7 +208,7 @@ async def connect_woocommerce(
         existing.status = IntegrationStatus.ACTIVE
         existing.error_message = None
         existing.store_name = data.store_name
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now(UTC)
         db.add(existing)
         integration = existing
     else:

@@ -8,7 +8,7 @@ Handles payment confirmations from MNEE.
 
 import hmac
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,7 +78,7 @@ async def process_payment_confirmation(
     # Update payment status
     payment.status = PaymentStatus.CONFIRMED
     payment.transaction_hash = payload.transaction_id
-    payment.confirmed_at = datetime.utcnow()
+    payment.confirmed_at = datetime.now(UTC)
     session.add(payment)
     
     # If this is a subscription payment, create/update subscription
@@ -87,7 +87,7 @@ async def process_payment_confirmation(
         billing_cycle = payment.metadata.get("billing_cycle", "monthly")
         
         # Calculate period
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         if billing_cycle == "yearly":
             period_end = now + timedelta(days=365)
         else:
@@ -199,5 +199,5 @@ async def test_webhook():
     return {
         "status": "ok",
         "message": "MNEE webhook endpoint is active",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }

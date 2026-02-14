@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import pytest
 
-from services.competitor_matching.models import (
+from services.competitor_matching.schemas import (
     SearchProvider,
     MatchStatus,
     MatchedProduct,

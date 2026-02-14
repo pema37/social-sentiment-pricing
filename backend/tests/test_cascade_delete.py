@@ -6,17 +6,26 @@ get_deletion_preview — convenience wrapper.
 """
 
 import sys
+import types
 from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 from uuid import uuid4
 
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
+import os as _os
+_backend_dir = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 _MOCKED = [
     "sqlalchemy",
+    "sqlalchemy.dialects",
+    "sqlalchemy.dialects.postgresql",
     "sqlalchemy.ext",
     "sqlalchemy.ext.asyncio",
     "sqlmodel",
+    "models",
+    "models.user",
+    "models.product",
     "models.recommendation_outcome",
     "models.price_recommendation",
     "models.pricing_rule",
@@ -26,16 +35,44 @@ _MOCKED = [
     "models.social_mention",
     "models.competitor_product",
     "models.integration",
+    "schemas",
+    "schemas.alert",
+    "services.products",
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
+# Packages need __path__ for submodule resolution
+_PACKAGES = {
+    "sqlalchemy": [],
+    "sqlalchemy.dialects": [],
+    "sqlalchemy.ext": [],
+    "models": [],
+    "schemas": [],
+    "services.products": [_os.path.join(_backend_dir, "services", "products")],
+}
+
 for _m in _MOCKED:
     if _m not in sys.modules:
-        sys.modules[_m] = MagicMock()
+        stub = types.ModuleType(_m)
+        if _m in _PACKAGES:
+            stub.__path__ = _PACKAGES[_m]
+        sys.modules[_m] = stub
+
+# Provide sqlalchemy.ext.asyncio.AsyncSession
+sys.modules["sqlalchemy.ext.asyncio"].AsyncSession = MagicMock()
 
 # Ensure sqlalchemy.delete is a callable mock
 _sa = sys.modules["sqlalchemy"]
 _sa.delete = MagicMock()
+_sa.func = MagicMock()
+_sa.select = MagicMock()
+
+# Provide sqlalchemy.dialects.postgresql.UUID
+sys.modules["sqlalchemy.dialects.postgresql"].UUID = MagicMock()
+
+# Provide sqlmodel basics
+sys.modules["sqlmodel"].SQLModel = MagicMock()
+sys.modules["sqlmodel"].Field = MagicMock()
 
 # Wire up models with __tablename__
 _model_names = {
@@ -55,6 +92,36 @@ for mod_name, (cls_name, table_name) in _model_names.items():
     mock_model.__tablename__ = table_name
     mock_model.product_id = MagicMock()
     setattr(sys.modules[mod_name], cls_name, mock_model)
+
+# Provide real enums on models.alert so Pydantic doesn't choke
+from enum import Enum
+
+class _AlertType(str, Enum):
+    PRICE_CHANGE = "price_change"
+    SENTIMENT_SHIFT = "sentiment_shift"
+
+class _AlertSeverity(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+class _AlertChannel(str, Enum):
+    EMAIL = "email"
+    SLACK = "slack"
+
+class _AlertStatus(str, Enum):
+    ACTIVE = "active"
+    RESOLVED = "resolved"
+
+_alert_mod = sys.modules["models.alert"]
+_alert_mod.AlertType = _AlertType
+_alert_mod.AlertSeverity = _AlertSeverity
+_alert_mod.AlertChannel = _AlertChannel
+_alert_mod.AlertStatus = _AlertStatus
+
+# Stub models.user and models.product to prevent __init__.py imports
+sys.modules["models.user"].User = MagicMock()
+sys.modules["models.product"].Product = MagicMock()
 
 from services.products.cascade_delete import (
     cascade_delete_product,
@@ -244,7 +311,6 @@ class TestGetDeletionPreview:
 
             mock_fn.assert_called_once_with(session, pid, dry_run=True)
             assert result["total_records"] == 5
-
 
 
             

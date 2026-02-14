@@ -14,7 +14,7 @@ import pytest
 
 def _make_profile(**overrides):
     """Create an AuthorProfile using only fields the dataclass actually has."""
-    from services.trust_scoring.models import AuthorProfile
+    from services.trust_scoring.schemas import AuthorProfile
     valid_fields = {f.name for f in dataclasses.fields(AuthorProfile)}
 
     # Map common test names to possible real field names

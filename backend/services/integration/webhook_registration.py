@@ -234,3 +234,5 @@ async def unregister_webhooks_for_integration(
     """
     service = WebhookRegistrationService(db)
     return await service.unregister_webhooks(integration_id)
+
+

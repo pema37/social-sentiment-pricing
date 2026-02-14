@@ -7,7 +7,7 @@ Total: ~25 tests
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -18,7 +18,7 @@ sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 import pytest
 
-from services.ai_trend_analysis.models import (
+from services.ai_trend_analysis.schemas import (
     TrendDirection,
     TrendCategory,
     OpportunityType,
@@ -83,7 +83,7 @@ class TestConfidenceLevel:
 
 class TestTrendSignal:
     def test_creation(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         s = TrendSignal(
             signal_type="volume_spike",
             value=2.5,
@@ -123,7 +123,7 @@ class TestPricingOpportunity:
             confidence=ConfidenceLevel.HIGH,
             confidence_score=75,
             reasoning="demand",
-            valid_until=datetime.utcnow(),
+            valid_until=datetime.now(UTC),
         )
         assert o.triggers == []
         assert o.product_name == "Widget"
@@ -131,7 +131,7 @@ class TestPricingOpportunity:
 
 class TestRiskAlert:
     def test_creation(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         r = RiskAlert(
             risk_level=RiskLevel.HIGH,
             risk_type="price_war",
@@ -153,7 +153,7 @@ class TestAIInsight:
             detailed_analysis="detail",
             key_factors=["f1"],
             data_points_analyzed=100,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC),
             model_used="gemini-2.0",
         )
         assert i.model_used == "gemini-2.0"
@@ -167,7 +167,7 @@ class TestTrendAnalysisResult:
 
     @pytest.fixture
     def sample_result(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         signal = TrendSignal("vol", 1.5, now, "sentiment", "spike")
         prediction = TrendPrediction(
             direction=TrendDirection.RISING,
@@ -274,7 +274,7 @@ class TestTrendAnalysisResult:
         assert ins[0]["data_points_analyzed"] == 100
 
     def test_to_dict_empty_lists(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         r = TrendAnalysisResult(
             user_id="u1",
             analysis_id="a1",

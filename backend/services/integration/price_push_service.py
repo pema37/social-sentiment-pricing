@@ -10,7 +10,7 @@ PATCHED: Added error codes for frontend handling (Issue 2 fix)
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, List
 from uuid import UUID
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def utc_now() -> datetime:
     """Return current UTC time as naive datetime."""
-    return datetime.utcnow()
+    return datetime.now(UTC)
 
 
 class PricePushService:

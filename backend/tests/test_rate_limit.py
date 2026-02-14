@@ -6,7 +6,7 @@ Pure async logic, no DB dependencies.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
@@ -32,7 +32,7 @@ class TestRateLimitStateInit:
         assert s.last_request_at is None
 
     def test_custom_values(self):
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         s = RateLimitState(
             remaining=10,
             limit=40,
@@ -222,14 +222,14 @@ class TestShouldWait:
     def test_limited_future_reset_returns_true(self):
         s = RateLimitState(
             is_limited=True,
-            reset_at=datetime.utcnow() + timedelta(seconds=30),
+            reset_at=datetime.now(UTC) + timedelta(seconds=30),
         )
         assert s.should_wait() is True
 
     def test_limited_past_reset_returns_false_and_clears(self):
         s = RateLimitState(
             is_limited=True,
-            reset_at=datetime.utcnow() - timedelta(seconds=10),
+            reset_at=datetime.now(UTC) - timedelta(seconds=10),
         )
         assert s.should_wait() is False
         assert s.is_limited is False  # auto-cleared
@@ -237,7 +237,7 @@ class TestShouldWait:
     def test_not_limited_with_reset_at_returns_false(self):
         s = RateLimitState(
             is_limited=False,
-            reset_at=datetime.utcnow() + timedelta(seconds=30),
+            reset_at=datetime.now(UTC) + timedelta(seconds=30),
         )
         assert s.should_wait() is False
 
@@ -258,7 +258,7 @@ class TestGetWaitTime:
     def test_limited_future_reset_returns_positive(self):
         s = RateLimitState(
             is_limited=True,
-            reset_at=datetime.utcnow() + timedelta(seconds=10),
+            reset_at=datetime.now(UTC) + timedelta(seconds=10),
         )
         wait = s.get_wait_time()
         assert 9.0 <= wait <= 11.0  # allow clock drift
@@ -266,14 +266,14 @@ class TestGetWaitTime:
     def test_limited_past_reset_returns_zero(self):
         s = RateLimitState(
             is_limited=True,
-            reset_at=datetime.utcnow() - timedelta(seconds=10),
+            reset_at=datetime.now(UTC) - timedelta(seconds=10),
         )
         assert s.get_wait_time() == 0.0
 
     def test_limited_reset_at_now_returns_near_zero(self):
         s = RateLimitState(
             is_limited=True,
-            reset_at=datetime.utcnow(),
+            reset_at=datetime.now(UTC),
         )
         assert s.get_wait_time() <= 0.1
 
@@ -412,7 +412,7 @@ class TestWaitIfNeeded:
         t = RateLimitTracker()
         state = await t.get_state("store-1")
         state.is_limited = True
-        state.reset_at = datetime.utcnow() + timedelta(seconds=0.1)
+        state.reset_at = datetime.now(UTC) + timedelta(seconds=0.1)
 
         with patch("services.integration.rate_limit.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             wait = await t.wait_if_needed("store-1")
@@ -424,7 +424,7 @@ class TestWaitIfNeeded:
         t = RateLimitTracker()
         state = await t.get_state("store-1")
         state.is_limited = True
-        state.reset_at = datetime.utcnow() - timedelta(seconds=10)
+        state.reset_at = datetime.now(UTC) - timedelta(seconds=10)
 
         wait = await t.wait_if_needed("store-1")
         assert wait == 0.0
@@ -527,7 +527,7 @@ class TestEdgeCases:
         """If should_wait returns True, get_wait_time should return > 0"""
         s = RateLimitState(
             is_limited=True,
-            reset_at=datetime.utcnow() + timedelta(seconds=5),
+            reset_at=datetime.now(UTC) + timedelta(seconds=5),
         )
         assert s.should_wait() is True
         assert s.get_wait_time() > 0

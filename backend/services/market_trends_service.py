@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 from core.config import settings
 
@@ -224,7 +224,7 @@ class MarketTrendsService:
             return {
                 "trends": data.get("trends", [])[:limit],
                 "ai_summary": data.get("ai_summary", "Market analysis complete."),
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "category": category,
                 "source": source,
                 "ai_provider": provider
@@ -349,7 +349,7 @@ class MarketTrendsService:
         return {
             "trends": sample_trends[:limit],
             "ai_summary": "These are currently trending products based on social media activity and e-commerce data. Consider adding these to your store to capitalize on current demand.",
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "category": category,
             "source": None,
             "ai_provider": "fallback"

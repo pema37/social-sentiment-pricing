@@ -464,43 +464,43 @@ class TestIsBlackoutPeriod:
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_within_normal_blackout(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 3, 0)  # 3am
+        mock_dt.now.return_value = datetime(2026, 1, 1, 3, 0)  # 3am
         settings = make_settings(blackout_hours_start=0, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is True
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_outside_normal_blackout(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 12, 0)  # noon
+        mock_dt.now.return_value = datetime(2026, 1, 1, 12, 0)  # noon
         settings = make_settings(blackout_hours_start=0, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is False
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_overnight_blackout_late_night(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 23, 0)  # 11pm
+        mock_dt.now.return_value = datetime(2026, 1, 1, 23, 0)  # 11pm
         settings = make_settings(blackout_hours_start=22, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is True
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_overnight_blackout_early_morning(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 3, 0)  # 3am
+        mock_dt.now.return_value = datetime(2026, 1, 1, 3, 0)  # 3am
         settings = make_settings(blackout_hours_start=22, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is True
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_overnight_blackout_midday_outside(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 12, 0)  # noon
+        mock_dt.now.return_value = datetime(2026, 1, 1, 12, 0)  # noon
         settings = make_settings(blackout_hours_start=22, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is False
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_exactly_at_start_is_blackout(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 0, 0)  # midnight
+        mock_dt.now.return_value = datetime(2026, 1, 1, 0, 0)  # midnight
         settings = make_settings(blackout_hours_start=0, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is True
 
     @patch(f"{SERVICE_PATH}.datetime")
     def test_exactly_at_end_is_not_blackout(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2026, 1, 1, 6, 0)  # 6am
+        mock_dt.now.return_value = datetime(2026, 1, 1, 6, 0)  # 6am
         settings = make_settings(blackout_hours_start=0, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is False
 

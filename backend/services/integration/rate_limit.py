@@ -9,7 +9,7 @@ Proactively tracks API rate limits to avoid hitting them.
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -33,23 +33,23 @@ class RateLimitState:
             self.remaining = int(limit) - int(current)
             self.limit = int(limit)
             self.is_limited = self.remaining <= 2
-        self.last_request_at = datetime.utcnow()
+        self.last_request_at = datetime.now(UTC)
     
     def update_from_woocommerce_headers(self, headers: dict):
         """Update state from WooCommerce response headers"""
         # WooCommerce doesn't have standard rate limit headers
-        self.last_request_at = datetime.utcnow()
+        self.last_request_at = datetime.now(UTC)
     
     def mark_rate_limited(self, retry_after: Optional[int] = None):
         """Mark as rate limited (e.g., after receiving 429)"""
         self.is_limited = True
         if retry_after:
-            self.reset_at = datetime.utcnow()
+            self.reset_at = datetime.now(UTC)
     
     def should_wait(self) -> bool:
         """Check if we should wait before making a request"""
         if self.is_limited:
-            if self.reset_at and datetime.utcnow() > self.reset_at:
+            if self.reset_at and datetime.now(UTC) > self.reset_at:
                 self.is_limited = False
                 return False
             return True
@@ -60,7 +60,7 @@ class RateLimitState:
         if not self.is_limited:
             return 0.0
         if self.reset_at:
-            delta = (self.reset_at - datetime.utcnow()).total_seconds()
+            delta = (self.reset_at - datetime.now(UTC)).total_seconds()
             return max(0.0, delta)
         return 1.0
 

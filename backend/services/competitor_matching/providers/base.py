@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 
-from ..models import (
+from ..schemas import (
     SearchProvider,
     MatchedProduct,
     ProviderResult,

@@ -60,8 +60,8 @@ class AlertChannel(str, Enum):
 
 
 _alert_mod = MagicMock()
-_alert_mod.Alert = MagicMock
-_alert_mod.AlertConfiguration = MagicMock
+_alert_mod.Alert = MagicMock()
+_alert_mod.AlertConfiguration = MagicMock()
 _alert_mod.AlertType = AlertType
 _alert_mod.AlertSeverity = AlertSeverity
 _alert_mod.AlertStatus = AlertStatus
@@ -94,6 +94,28 @@ for _m in _MOCKED:
 del _m
 
 SVC_MOD = "services.notification.alert_generator"
+
+class _ColumnMock:
+    def __lt__(self, other): return MagicMock()
+    def __le__(self, other): return MagicMock()
+    def __gt__(self, other): return MagicMock()
+    def __ge__(self, other): return MagicMock()
+    def __eq__(self, other): return MagicMock()
+    def __ne__(self, other): return MagicMock()
+    def __hash__(self): return id(self)
+
+class _FakeAlert:
+    id = _ColumnMock()
+    configuration_id = _ColumnMock()
+    created_at = _ColumnMock()
+    user_id = _ColumnMock()
+    alert_type = _ColumnMock()
+    severity = _ColumnMock()
+    status = _ColumnMock()
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -788,6 +810,9 @@ class TestCreateAndDispatch:
 # ──────────────────────────────────────────────
 # _check_limits
 # ──────────────────────────────────────────────
+@patch(f"{SVC_MOD}.Alert", _FakeAlert)
+@patch(f"{SVC_MOD}.select", MagicMock())
+@patch(f"{SVC_MOD}.func", MagicMock())
 class TestCheckLimits:
 
     @pytest.mark.asyncio

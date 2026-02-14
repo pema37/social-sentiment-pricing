@@ -13,7 +13,7 @@ unexpected failures. See SSP_AUDIT_REPORT.md.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional, Tuple, List
 from uuid import UUID
 
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 def utc_now() -> datetime:
     """Return current UTC time as naive datetime."""
-    return datetime.utcnow()
+    return datetime.now(UTC)
 
 
 class SyncError(Exception):

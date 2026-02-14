@@ -4,6 +4,7 @@ Tests for services.integration.handlers.product_sync_handler
 
 import sys
 import types
+import os
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from uuid import uuid4
@@ -26,11 +27,26 @@ _needed = [
     "services.integration.shopify_service",
     "services.integration.woocommerce_service",
     "services.integration.repositories",
+    "services.integration.handlers",
 ]
+
+# Package stubs need __path__ pointing to real dirs for submodule resolution
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PACKAGES = {
+    "sqlalchemy": [],
+    "sqlalchemy.ext": [],
+    "models": [],
+    "core": [],
+    "services": [os.path.join(_backend_dir, "services")],
+    "services.integration": [os.path.join(_backend_dir, "services", "integration")],
+    "services.integration.handlers": [os.path.join(_backend_dir, "services", "integration", "handlers")],
+}
 
 for _mod_name in _needed:
     if _mod_name not in sys.modules:
         _stubs[_mod_name] = types.ModuleType(_mod_name)
+        if _mod_name in _PACKAGES:
+            _stubs[_mod_name].__path__ = _PACKAGES[_mod_name]
         sys.modules[_mod_name] = _stubs[_mod_name]
 
 # Provide minimal objects

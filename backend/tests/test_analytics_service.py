@@ -7,7 +7,7 @@ to avoid Python 3.13 MagicMock comparison dunder restrictions.
 
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 
 # ── Import isolation ──────────────────────────────────────────────
@@ -65,13 +65,11 @@ class _FakeRecStatus:
     REJECTED = "rejected"
     EXPIRED = "expired"
 
-sys.modules["models.price_recommendation"].RecommendationStatus = _FakeRecStatus
 
 class _FakeAlertStatus:
     SENT = "sent"
     READ = "read"
 
-sys.modules["models.alert"].AlertStatus = _FakeAlertStatus
 
 from services.analytics.analytics_service import AnalyticsService
 
@@ -153,7 +151,7 @@ def _make_product(**overrides):
     p.current_price = overrides.get("current_price", Decimal("29.99"))
     p.base_price = overrides.get("base_price", Decimal("24.99"))
     p.auto_pricing_enabled = overrides.get("auto_pricing_enabled", True)
-    p.updated_at = overrides.get("updated_at", datetime.utcnow())
+    p.updated_at = overrides.get("updated_at", datetime.now(UTC))
     return p
 
 def _make_alert(**overrides):
@@ -624,7 +622,7 @@ class TestGetSentimentTrend:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         rows = []
         for i in range(6):
             row = MagicMock()
@@ -645,7 +643,7 @@ class TestGetSentimentTrend:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         scores = [0.3, 0.32, 0.31, 0.7, 0.72, 0.71]
         rows = []
         for i, score in enumerate(scores):
@@ -667,7 +665,7 @@ class TestGetSentimentTrend:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         scores = [0.8, 0.78, 0.79, 0.3, 0.28, 0.29]
         rows = []
         for i, score in enumerate(scores):
@@ -689,7 +687,7 @@ class TestGetSentimentTrend:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         rows = []
         for i in range(4):
             row = MagicMock()
@@ -721,7 +719,7 @@ class TestGetSentimentTrend:
         svc = AnalyticsService(session=session, user_id="user-1")
 
         row = MagicMock()
-        row.bucket_time = datetime.utcnow()
+        row.bucket_time = datetime.now(UTC)
         row.avg_score = 0.65
         row.mention_count = 5
 
@@ -738,7 +736,7 @@ class TestGetSentimentTrend:
         svc = AnalyticsService(session=session, user_id="user-1")
 
         row = MagicMock()
-        row.bucket_time = datetime.utcnow()
+        row.bucket_time = datetime.now(UTC)
         row.avg_score = None
         row.mention_count = 0
 

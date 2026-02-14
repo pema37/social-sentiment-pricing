@@ -9,7 +9,7 @@ FIX (2026-01-27): Fixed _check_daily_limit() bug - was returning False when no s
 FIX (2026-01-27): Added clearer error messages for common failure scenarios.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from uuid import UUID
 import logging
@@ -59,7 +59,7 @@ class ApprovalService:
                 "INVALID_STATUS"
             )
         
-        if recommendation.valid_until < datetime.utcnow():
+        if recommendation.valid_until < datetime.now(UTC):
             recommendation.status = RecommendationStatus.EXPIRED
             self.db.add(recommendation)
             await self.db.commit()
@@ -73,7 +73,7 @@ class ApprovalService:
             else RecommendationStatus.APPROVED
         )
         recommendation.reviewed_by = user_id
-        recommendation.reviewed_at = datetime.utcnow()
+        recommendation.reviewed_at = datetime.now(UTC)
         
         self.db.add(recommendation)
         await self.db.commit()
@@ -98,7 +98,7 @@ class ApprovalService:
         
         recommendation.status = RecommendationStatus.REJECTED
         recommendation.reviewed_by = user_id
-        recommendation.reviewed_at = datetime.utcnow()
+        recommendation.reviewed_at = datetime.now(UTC)
         recommendation.rejection_reason = reason
         
         self.db.add(recommendation)
@@ -139,7 +139,7 @@ class ApprovalService:
         
         # Update product price
         product.current_price = recommendation.recommended_price
-        product.updated_at = datetime.utcnow()
+        product.updated_at = datetime.now(UTC)
         self.db.add(product)
         
         # Create price history record
@@ -169,7 +169,7 @@ class ApprovalService:
         
         # Update recommendation status
         recommendation.status = RecommendationStatus.APPLIED
-        recommendation.applied_at = datetime.utcnow()
+        recommendation.applied_at = datetime.now(UTC)
         recommendation.applied_to_platform = platform_result.get("platform")
         self.db.add(recommendation)
         
@@ -205,7 +205,7 @@ class ApprovalService:
                 "INVALID_STATUS"
             )
         
-        if recommendation.valid_until < datetime.utcnow():
+        if recommendation.valid_until < datetime.now(UTC):
             recommendation.status = RecommendationStatus.EXPIRED
             self.db.add(recommendation)
             await self.db.commit()
@@ -226,7 +226,7 @@ class ApprovalService:
         
         # Step 1: Update product price (not committed yet)
         product.current_price = recommendation.recommended_price
-        product.updated_at = datetime.utcnow()
+        product.updated_at = datetime.now(UTC)
         self.db.add(product)
         
         # Step 2: Push to e-commerce BEFORE committing
@@ -267,8 +267,8 @@ class ApprovalService:
         # Step 4: Update recommendation - go straight to APPLIED
         recommendation.status = RecommendationStatus.APPLIED
         recommendation.reviewed_by = user_id
-        recommendation.reviewed_at = datetime.utcnow()
-        recommendation.applied_at = datetime.utcnow()
+        recommendation.reviewed_at = datetime.now(UTC)
+        recommendation.applied_at = datetime.now(UTC)
         recommendation.applied_to_platform = platform_result.get("platform")
         self.db.add(recommendation)
         
@@ -327,7 +327,7 @@ class ApprovalService:
         if settings.max_auto_changes_per_day <= 0:
             return True, "OK"
         
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         
         stmt = (
             select(func.count(PriceRecommendation.id))
@@ -347,7 +347,7 @@ class ApprovalService:
     
     async def get_approval_stats(self, user_id: UUID, days: int = 30) -> dict:
         """Get approval statistics for a user."""
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(UTC) - timedelta(days=days)
         
         # Total recommendations
         stmt_total = (

@@ -8,7 +8,7 @@ Separated from routes for testability and reusability.
 import os
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional, Tuple
 from uuid import UUID, uuid4
 
@@ -165,8 +165,8 @@ class SubscriptionService:
             subscription.status = "active"
             subscription.monthly_price = "0.00"
             subscription.cancel_at_period_end = False
-            subscription.cancelled_at = datetime.utcnow()
-            subscription.updated_at = datetime.utcnow()
+            subscription.cancelled_at = datetime.now(UTC)
+            subscription.updated_at = datetime.now(UTC)
             # Keep period dates for record but they no longer matter for free
             
             self.session.add(subscription)
@@ -356,7 +356,7 @@ class SubscriptionService:
             currency="MNEE",
             recipient_address=recipient_address,  # FIXED: Network-aware!
             memo=f"SSP-{payment_id_str[:8]}",
-            expires_at=datetime.utcnow() + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
             network=network,  # NEW: Tell frontend which network
             network_options=["bsv", "ethereum"],
         )
@@ -428,10 +428,10 @@ class SubscriptionService:
         # Update payment record
         payment.status = "confirmed" if verification.verified else "processing"
         payment.txid = transaction_hash
-        payment.updated_at = datetime.utcnow()
+        payment.updated_at = datetime.now(UTC)
         
         if verification.verified:
-            payment.confirmed_at = datetime.utcnow()
+            payment.confirmed_at = datetime.now(UTC)
             payment.from_address = verification.from_address
         
         # Activate subscription if verified (or if demo mode)
@@ -440,7 +440,7 @@ class SubscriptionService:
         
         if should_activate:
             payment.status = "confirmed"
-            payment.confirmed_at = datetime.utcnow()
+            payment.confirmed_at = datetime.now(UTC)
             subscription = await self._activate_subscription(
                 user=user,
                 tier=tier,
@@ -516,9 +516,9 @@ class SubscriptionService:
         """Create or update user's subscription."""
         # Calculate period
         if billing_cycle == "yearly":
-            period_end = datetime.utcnow() + timedelta(days=365)
+            period_end = datetime.now(UTC) + timedelta(days=365)
         else:
-            period_end = datetime.utcnow() + timedelta(days=30)
+            period_end = datetime.now(UTC) + timedelta(days=30)
         
         # Find existing subscription
         result = await self.session.execute(
@@ -529,15 +529,15 @@ class SubscriptionService:
         if subscription:
             subscription.tier = tier
             subscription.status = "active"
-            subscription.current_period_start = datetime.utcnow()
+            subscription.current_period_start = datetime.now(UTC)
             subscription.current_period_end = period_end
-            subscription.updated_at = datetime.utcnow()
+            subscription.updated_at = datetime.now(UTC)
         else:
             subscription = Subscription(
                 user_id=user.id,
                 tier=tier,
                 status="active",
-                current_period_start=datetime.utcnow(),
+                current_period_start=datetime.now(UTC),
                 current_period_end=period_end,
             )
             self.session.add(subscription)

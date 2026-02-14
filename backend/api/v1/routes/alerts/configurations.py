@@ -1,7 +1,7 @@
 # backend/api/v1/routes/alerts/configurations.py
 """Alert configuration CRUD endpoints."""
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, List
 from uuid import UUID
 
@@ -125,7 +125,7 @@ async def update_alert_configuration(
     for field, value in update_data.items():
         setattr(config, field, value)
     
-    config.updated_at = datetime.utcnow()
+    config.updated_at = datetime.now(UTC)
     session.add(config)
     await session.commit()
     await session.refresh(config)

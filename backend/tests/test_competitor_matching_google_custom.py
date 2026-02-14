@@ -26,7 +26,7 @@ sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 import pytest
 
-from services.competitor_matching.models import SearchProvider, ProviderResult
+from services.competitor_matching.schemas import SearchProvider, ProviderResult
 from services.competitor_matching.providers.google_custom import GoogleCustomSearchProvider
 
 

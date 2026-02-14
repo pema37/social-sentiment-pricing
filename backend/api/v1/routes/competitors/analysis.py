@@ -2,7 +2,7 @@
 """Competitor analysis and comparison endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from typing import List
 
@@ -116,7 +116,7 @@ async def get_competitor_alerts(
     current_user: User = Depends(get_current_user),
 ):
     """Get recent significant competitor price changes."""
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     
     result = await db.execute(
         select(CompetitorPriceHistory)

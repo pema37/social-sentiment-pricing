@@ -30,7 +30,7 @@ from urllib.parse import parse_qs, urlparse, unquote
 import httpx
 
 from .base import BaseSearchProvider
-from ..models import (
+from ..schemas import (
     SearchProvider,
     MatchedProduct,
     ProviderResult,

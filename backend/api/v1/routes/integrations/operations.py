@@ -2,7 +2,7 @@
 """Price push and health check endpoints."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -112,8 +112,8 @@ async def push_price(
         link.external_price = float(price_request.new_price)
         if price_request.compare_at_price:
             link.external_compare_at_price = float(price_request.compare_at_price)
-        link.last_price_push_at = datetime.utcnow()
-        link.updated_at = datetime.utcnow()
+        link.last_price_push_at = datetime.now(UTC)
+        link.updated_at = datetime.now(UTC)
         db.add(link)
         await db.commit()
         
@@ -170,5 +170,5 @@ async def check_integration_health(
         platform=integration.platform,
         store_url=integration.store_url,
         status=status_result.value,
-        checked_at=datetime.utcnow(),
+        checked_at=datetime.now(UTC),
     )

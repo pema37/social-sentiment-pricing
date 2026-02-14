@@ -3,7 +3,7 @@ Calculation utilities for trend analysis.
 Handles sentiment calculations, trend detection, and metrics.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 
 class TrendCalculators:
@@ -63,7 +63,7 @@ class TrendCalculators:
         if not mentions_data or days < 14:
             return 0.0
         
-        mid_date = datetime.utcnow() - timedelta(days=days // 2)
+        mid_date = datetime.now(UTC) - timedelta(days=days // 2)
         recent = [m for m in mentions_data if m["created_at"] >= mid_date]
         older = [m for m in mentions_data if m["created_at"] < mid_date]
         

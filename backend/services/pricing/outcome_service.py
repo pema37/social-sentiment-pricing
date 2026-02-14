@@ -3,7 +3,7 @@
 Outcome Service - Records and analyzes recommendation outcomes.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -89,7 +89,7 @@ class OutcomeService:
         )
         
         # Current timestamp for measured_at
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         
         outcome = RecommendationOutcome(
             user_id=user_id,
@@ -187,7 +187,7 @@ class OutcomeService:
     ) -> list[RecommendationOutcome]:
         """List outcomes with filters."""
         
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.user_id == user_id,
@@ -214,7 +214,7 @@ class OutcomeService:
         if not rule or rule.user_id != user_id:
             raise ValueError("Rule not found")
         
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.rule_id == rule_id,
@@ -278,7 +278,7 @@ class OutcomeService:
     async def get_accuracy_stats(self, user_id: UUID, days: int = 30) -> dict:
         """Get overall accuracy statistics."""
         
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.user_id == user_id,
@@ -382,7 +382,7 @@ class OutcomeService:
     async def get_historical_accuracy_for_rule_type(self, user_id: UUID, rule_type: str, days: int = 90) -> Decimal:
         """Get historical success rate for a rule type (used by confidence calculator)."""
         
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.user_id == user_id,

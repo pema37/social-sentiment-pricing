@@ -4,7 +4,7 @@ Converts AI JSON responses into structured data models.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 
 from core.logging import get_logger
@@ -43,7 +43,7 @@ class ResponseParser:
         mentions_count: int,
     ) -> TrendAnalysisResult:
         """Parse AI response into TrendAnalysisResult."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         
         # Parse market sentiment
         try:
@@ -232,7 +232,7 @@ class ResponseParser:
     @staticmethod
     def parse_risk_response(ai_response: dict) -> list[RiskAlert]:
         """Parse standalone risk detection response."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         return ResponseParser._parse_risks(ai_response.get("risks", []), now)
     
     # ==========================================
@@ -287,7 +287,7 @@ class ResponseParser:
             confidence=confidence,
             confidence_score=confidence_score,
             reasoning=reasoning,
-            valid_until=datetime.utcnow() + timedelta(days=optimal_window),
+            valid_until=datetime.now(UTC) + timedelta(days=optimal_window),
             triggers=ai_response.get("risks", []),
         )
     
@@ -308,7 +308,7 @@ class ResponseParser:
             detailed_analysis=ai_response.get("detailed_analysis", ""),
             key_factors=ai_response.get("key_factors", []),
             data_points_analyzed=data_points,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC),
             model_used=model_used,
         )
     

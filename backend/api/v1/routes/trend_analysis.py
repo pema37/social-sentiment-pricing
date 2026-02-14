@@ -5,7 +5,7 @@ Endpoints for AI-powered trend analysis, pricing opportunities,
 risk detection, and market insights.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -171,7 +171,7 @@ async def detect_risks(
             ],
             overall_risk_level=overall_level,
             summary=summary,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(UTC),
         )
     
     except Exception as e:
@@ -241,7 +241,7 @@ async def get_quick_stats(
     from models.social_mention import SocialMention
     
     user_id = str(current_user.id)
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     
     try:
         # Get products

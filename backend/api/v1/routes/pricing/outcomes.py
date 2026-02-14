@@ -3,7 +3,7 @@
 Recommendation outcome tracking endpoints.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from uuid import UUID
 
@@ -71,7 +71,7 @@ async def list_outcomes(
     current_user: User = Depends(get_current_user),
 ):
     """List recommendation outcomes."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     
     query = (
         select(RecommendationOutcome)

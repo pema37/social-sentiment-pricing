@@ -6,7 +6,7 @@ Pure async logic, no DB dependencies.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
@@ -184,7 +184,7 @@ class TestCircuitBreakerStateTransitions:
         assert cb.state == CircuitState.OPEN
 
         # Simulate time passed by backdating last_failure_time
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=60)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=60)
         await cb._check_state()
 
         assert cb.state == CircuitState.HALF_OPEN
@@ -226,7 +226,7 @@ class TestCircuitBreakerStateTransitions:
         cb = CircuitBreaker("test", config=cfg)
 
         await cb.record_failure()
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=60)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=60)
         await cb._check_state()
 
         assert cb.state == CircuitState.HALF_OPEN
@@ -395,7 +395,7 @@ class TestAsyncContextManager:
     async def test_raises_circuit_open_error_when_open(self):
         cb = CircuitBreaker("test")
         cb._state = CircuitState.OPEN
-        cb._last_failure_time = datetime.utcnow()  # recent, won't transition
+        cb._last_failure_time = datetime.now(UTC)  # recent, won't transition
 
         with pytest.raises(CircuitOpenError) as exc_info:
             async with cb:
@@ -428,7 +428,7 @@ class TestAsyncContextManager:
         cfg = CircuitBreakerConfig(failure_threshold=1, timeout=0.0)
         cb = CircuitBreaker("test", config=cfg)
         cb._state = CircuitState.OPEN
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=60)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=60)
 
         async with cb:
             assert cb.state == CircuitState.HALF_OPEN
@@ -454,7 +454,7 @@ class TestAsyncContextManager:
         assert cb.state == CircuitState.OPEN
 
         # 3. Backdate to trigger timeout → HALF_OPEN on next entry
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=60)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=60)
 
         # 4. Succeed → CLOSED
         async with cb:
@@ -510,7 +510,7 @@ class TestCheckState:
         cfg = CircuitBreakerConfig(timeout=1.0)
         cb = CircuitBreaker("test", config=cfg)
         cb._state = CircuitState.OPEN
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=5)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=5)
 
         await cb._check_state()
         assert cb.state == CircuitState.HALF_OPEN
@@ -521,7 +521,7 @@ class TestCheckState:
         cfg = CircuitBreakerConfig(timeout=3600.0)
         cb = CircuitBreaker("test", config=cfg)
         cb._state = CircuitState.OPEN
-        cb._last_failure_time = datetime.utcnow()
+        cb._last_failure_time = datetime.now(UTC)
 
         await cb._check_state()
         assert cb.state == CircuitState.OPEN
@@ -734,7 +734,7 @@ class TestEdgeCases:
         assert cb.state == CircuitState.OPEN
 
         # OPEN → HALF_OPEN
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=60)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=60)
         await cb._check_state()
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -743,7 +743,7 @@ class TestEdgeCases:
         assert cb.state == CircuitState.OPEN
 
         # OPEN → HALF_OPEN again
-        cb._last_failure_time = datetime.utcnow() - timedelta(seconds=60)
+        cb._last_failure_time = datetime.now(UTC) - timedelta(seconds=60)
         await cb._check_state()
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -766,7 +766,7 @@ class TestEdgeCases:
         cfg = CircuitBreakerConfig(timeout=45.0)
         cb = CircuitBreaker("my-shop", config=cfg)
         cb._state = CircuitState.OPEN
-        cb._last_failure_time = datetime.utcnow()
+        cb._last_failure_time = datetime.now(UTC)
 
         with pytest.raises(CircuitOpenError) as exc_info:
             async with cb:

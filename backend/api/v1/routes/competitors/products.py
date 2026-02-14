@@ -2,7 +2,7 @@
 """Competitor Product CRUD endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime, timedelta  # Added timedelta
+from datetime import datetime, timedelta, UTC  # Added timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -189,7 +189,7 @@ async def update_competitor_product(
     for field, value in update_data.items():
         setattr(cp, field, value)
     
-    cp.updated_at = datetime.utcnow()
+    cp.updated_at = datetime.now(UTC)
     db.add(cp)
     await db.commit()
     await db.refresh(cp)
@@ -257,7 +257,7 @@ async def get_competitor_product_price_history(
         raise HTTPException(status_code=404, detail="Competitor product not found")
     
     # Calculate date cutoff
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = datetime.now(UTC) - timedelta(days=days)
     
     # Fetch price history
     history_result = await db.execute(

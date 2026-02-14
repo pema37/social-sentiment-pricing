@@ -1,7 +1,7 @@
 # backend/api/v1/routes/alerts/crisis_detection.py
 """AI-powered crisis detection endpoint."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List
 from uuid import UUID
 
@@ -134,7 +134,7 @@ async def detect_sentiment_crises(
     """
     from services.ai_generator import ai_generator
     
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     previous_cutoff = cutoff - timedelta(hours=hours)
     
     # Get all user's products
