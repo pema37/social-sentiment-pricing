@@ -22,12 +22,14 @@ import pytest
 # ---------------------------------------------------------------------------
 # 1. sys.modules stub isolation
 # ---------------------------------------------------------------------------
+
 _MOCKED = [
-    "db.session", "core.logging", "core.config", "openai",
+    "db.session", "core.config", "openai",
 ]
+
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
-for _m in ("db.session", "core.logging"):
+for _m in ("db.session",):
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 

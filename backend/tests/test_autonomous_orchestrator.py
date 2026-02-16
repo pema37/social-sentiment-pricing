@@ -34,10 +34,11 @@ sys.modules["google"] = _google
 sys.modules["google.genai"] = _genai
 sys.modules["google.genai.types"] = _genai_types
 
-for mod in ["db.session", "core.logging"]:
+
+for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
+
 
 from services.ai_trend_analysis.autonomous_orchestrator import (
     AgentPhase,

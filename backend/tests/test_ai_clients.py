@@ -32,20 +32,13 @@ from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
-# Save originals so we can restore after this module's tests finish.
-_MOCKED_MODULES = ["db.session", "core.logging", "core.config", "google.genai", "google.genai.types"]
+# core.logging and core.config are handled by conftest.py (autouse).
+_MOCKED_MODULES = ["db.session", "google.genai", "google.genai.types"]
 _originals = {mod: sys.modules.get(mod) for mod in _MOCKED_MODULES}
 
 for mod in _MOCKED_MODULES:
     if _originals[mod] is None:
         sys.modules[mod] = MagicMock()
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
-
-# Mock settings
-mock_settings = MagicMock()
-mock_settings.OPENAI_API_KEY = "test-openai-key"
-mock_settings.GEMINI_API_KEY = "test-gemini-key"
-sys.modules["core.config"].settings = mock_settings
 
 from services.ai_trend_analysis.ai_clients import (
     GEMINI3_FLASH,
