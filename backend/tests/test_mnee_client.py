@@ -28,18 +28,16 @@ import pytest
 # so Python can find mnee_client.py on disk WITHOUT executing __init__.py.
 # ---------------------------------------------------------------------------
 _MOCKED = [
-    "db.session", "core.logging",
+    "db.session",
     "services.payment",
     "services.payment.exceptions",
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
-# Ensure db.session / core.logging stubs
-for _m in ("db.session", "core.logging"):
+# Ensure db.session stub
+for _m in ("db.session"):
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
-if hasattr(sys.modules.get("core.logging"), "get_logger"):
-    sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 # Compute real filesystem paths
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

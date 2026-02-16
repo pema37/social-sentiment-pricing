@@ -12,7 +12,7 @@ from decimal import Decimal
 
 # ── Import isolation ──────────────────────────────────────────────
 _MOCKED_MODULES = [
-    "db.session", "core.logging",
+    "db.session",
     "models.product", "models.competitor", "models.sentiment",
     "models.price_recommendation", "models.price_history",
     "models.alert",
@@ -24,7 +24,6 @@ for mod in _MOCKED_MODULES:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 # Fake schema classes — pass-through constructors
 class _FakeDashboardOverview:
