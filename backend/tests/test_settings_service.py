@@ -22,13 +22,16 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
+# Force fresh mocks — other test files may have polluted these modules
 for mod in [
     "db.session",
     "models.product",
     "models.pricing_settings",
 ]:
-    if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
+    sys.modules[mod] = MagicMock()
+
+# Force fresh import of the service under test
+sys.modules.pop("services.pricing.settings_service", None)
 
 # Fix comparison operators on PricingSettings columns
 from models.pricing_settings import PricingSettings
