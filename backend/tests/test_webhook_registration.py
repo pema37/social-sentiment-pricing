@@ -25,7 +25,7 @@ import pytest
 # 1. sys.modules stub isolation
 # ---------------------------------------------------------------------------
 _MOCKED = [
-    "db.session", "core.logging",
+    "db.session",
     "models.integration",
     "core.config", "core.encryption",
     "services.integration.schemas",
@@ -35,12 +35,10 @@ _MOCKED = [
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
-# Ensure db.session / core.logging stubs
-for _m in ("db.session", "core.logging"):
+# Ensure db.session stub
+for _m in ("db.session"):
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
-if hasattr(sys.modules.get("core.logging"), "get_logger"):
-    sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 # Compute real filesystem paths
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
