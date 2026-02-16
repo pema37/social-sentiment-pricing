@@ -10,7 +10,26 @@ from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
 import httpx
 import pytest
 
+# Force fresh import — other test files replace parent packages with MagicMock
+import sys
+import os
+from types import ModuleType
+
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _pkg, _subdir in [
+    ("services", "services"),
+    ("services.integration", "services/integration"),
+]:
+    _existing = sys.modules.get(_pkg)
+    if _existing is None or not hasattr(_existing, '__path__'):
+        _mod = ModuleType(_pkg)
+        _mod.__path__ = [os.path.join(_backend_dir, _subdir)]
+        _mod.__package__ = _pkg
+        sys.modules[_pkg] = _mod
+sys.modules.pop("services.integration.retry", None)
+
 from services.integration.retry import (
+
     RetryConfig,
     DEFAULT_RETRY_CONFIG,
     calculate_backoff_delay,
