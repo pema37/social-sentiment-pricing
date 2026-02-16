@@ -19,11 +19,15 @@ _MOCKED_MODULES = [
     "services.integration.rate_limit",
     "services.integration.http_client",
 ]
-_originals = {mod: sys.modules.get(mod) for mod in _MOCKED_MODULES}
 
+_originals = {mod: sys.modules.get(mod) for mod in _MOCKED_MODULES}
 for mod in _MOCKED_MODULES:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
+
+# Force fresh import — other test files pollute services.integration.base
+# by replacing EcommerceService with MagicMock at collection time
+sys.modules.pop("services.integration.base", None)
 
 # Wire up specific names the module expects
 _retry_mod = sys.modules["services.integration.retry"]
