@@ -10,10 +10,9 @@ from unittest.mock import MagicMock
 from datetime import datetime, timezone, timedelta
 
 # Standard import isolation
-for mod in ["db.session", "core.logging"]:
+for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 from services.trust_scoring.utils import (
     normalize_text,

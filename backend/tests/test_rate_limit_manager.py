@@ -12,12 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
-_MOCKED = ["core.logging"]
-_originals = {m: sys.modules.get(m) for m in _MOCKED}
-
-_log_mod = MagicMock()
-_log_mod.get_logger = MagicMock(return_value=MagicMock())
-sys.modules["core.logging"] = _log_mod
+# core.logging is handled by conftest.py (autouse).
 
 from services.rate_limit_manager import (
     CircuitState,
@@ -29,17 +24,6 @@ from services.rate_limit_manager import (
     record_api_rate_limit,
     record_api_failure,
 )
-
-# Restore
-for _m in _MOCKED:
-    if _originals[_m] is None:
-        sys.modules.pop(_m, None)
-    else:
-        sys.modules[_m] = _originals[_m]
-del _m
-
-SVC_MOD = "services.rate_limit_manager"
-
 
 # ──────────────────────────────────────────────
 # CircuitState enum

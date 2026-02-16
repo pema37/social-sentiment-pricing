@@ -21,16 +21,15 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+
 # === Import isolation ===
+# core.logging and core.config are handled by conftest.py (autouse).
 for mod in [
     "db.session",
-    "core.logging",
 ]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
-
-# Ensure core.logging.get_logger returns a mock logger
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
+        
 
 import pytest
 

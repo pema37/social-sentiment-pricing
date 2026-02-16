@@ -21,14 +21,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
-for mod in ["db.session", "core.logging", "core.config", "google.genai", "google.genai.types"]:
+for mod in ["db.session", "google.genai", "google.genai.types"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 mock_settings = MagicMock()
 mock_settings.OPENAI_API_KEY = "test"
 mock_settings.GEMINI_API_KEY = "test"
-sys.modules["core.config"].settings = mock_settings
 
 from services.ai_trend_analysis.visual_analyzer import (
     AgentRole,

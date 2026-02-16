@@ -15,10 +15,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # ── Import isolation ──────────────────────────────────────────────
-for mod in ["db.session", "core.logging", "google.genai"]:
+# core.logging and core.config are handled by conftest.py (autouse).
+# Only db.session and google.genai need file-level stubs.
+for mod in ["db.session", "google.genai"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
-sys.modules["core.logging"].get_logger = MagicMock(return_value=MagicMock())
 
 from services.ai_trend_analysis.analyzer import AITrendAnalyzer
 
