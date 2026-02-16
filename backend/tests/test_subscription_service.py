@@ -25,11 +25,13 @@ _MOCKED = [
     "services.payment.base",
     "schemas.payment",
 ]
-_originals = {m: sys.modules.get(m) for m in _MOCKED}
 
+_originals = {m: sys.modules.get(m) for m in _MOCKED}
 for _m in _MOCKED:
-    if _m not in sys.modules:
-        sys.modules[_m] = MagicMock()
+    sys.modules[_m] = MagicMock()
+
+# Force fresh import of service under test
+sys.modules.pop("services.payment.subscription_service", None)
 
 # PlanInfo — simple stand-in
 class _FakePlanInfo:
