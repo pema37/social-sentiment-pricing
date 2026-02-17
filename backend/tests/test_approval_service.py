@@ -18,6 +18,10 @@ import pytest
 sys.modules["db.session"] = MagicMock()
 sys.modules.pop("services.pricing.approval_service", None)
 
+# Ensure models.integration is loaded so SQLAlchemy can resolve
+# Product -> ProductIntegrationLink relationships
+import models.integration  # noqa: F401
+
 from services.pricing.approval_service import ApprovalService, ApprovalError
 from models.price_recommendation import RecommendationStatus
 

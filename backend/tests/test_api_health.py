@@ -7,7 +7,47 @@ ARRAY columns in pricing_rules model. These tests verify the API
 surface is correctly wired without hitting the database.
 """
 
+import sys
+import os
 import pytest
+
+# fastapi_x402 requires PAY_TO_ADDRESS when app initializes
+os.environ.setdefault("PAY_TO_ADDRESS", "0xTEST_ADDRESS")
+
+
+# ===================================================================
+# Override conftest autouse fixtures — this file needs real modules
+# to import the full FastAPI app.
+# ===================================================================
+@pytest.fixture(autouse=True)
+def _mock_core_config():
+    """Override conftest: app import needs real core.config."""
+    pass
+
+@pytest.fixture(autouse=True)
+def _mock_core_logging():
+    """Override conftest: app import needs real core.logging."""
+    pass
+
+@pytest.fixture(autouse=True)
+def _clean_polluted_modules():
+    """Remove stub modules left by other test files so real app can import."""
+    import sys as _sys
+    polluted = [k for k in _sys.modules
+                if isinstance(_sys.modules[k], type(_sys)) is False
+                and k.startswith(("services.", "models."))
+                and hasattr(_sys.modules[k], "__path__") is False
+                and not hasattr(_sys.modules[k], "__file__")]
+    # Also remove any services.* that are plain ModuleType stubs without __file__
+    from types import ModuleType
+    to_remove = []
+    for k, v in _sys.modules.items():
+        if k.startswith("services.") and isinstance(v, ModuleType) and not hasattr(v, "__file__"):
+            to_remove.append(k)
+    saved = {k: _sys.modules.pop(k) for k in to_remove if k in _sys.modules}
+    yield
+    # Restore after test (in case other tests need them)
+    _sys.modules.update(saved)
 
 
 # ===================================================================

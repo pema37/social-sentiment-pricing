@@ -85,6 +85,24 @@ class _FakeProductModel:
     user_id = MagicMock()
 
 
+# Save original attributes before overwriting
+_SENTINEL = object()
+_saved_attrs = {}
+for _key, _attr in [
+    ("models.integration", "Integration"),
+    ("models.integration", "ProductIntegrationLink"),
+    ("models.integration", "IntegrationStatus"),
+    ("models.integration", "EcommercePlatform"),
+    ("models.product", "Product"),
+    ("core.encryption", "decrypt_token"),
+    ("services.integration.models", "PriceUpdateRequest"),
+    ("services.integration.models", "PriceUpdateResult"),
+    ("services.integration.models", "PriceUpdateResponse"),
+    ("services.integration.sync_service", "SyncService"),
+]:
+    if _key in sys.modules:
+        _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
+
 _integ_mod = sys.modules["models.integration"]
 _integ_mod.Integration = _FakeIntegrationModel
 _integ_mod.ProductIntegrationLink = _FakeProductIntegrationLink
@@ -109,6 +127,16 @@ from services.integration.price_push_service import PricePushService
 for _name, _mod in _stubs.items():
     if _name in sys.modules and sys.modules[_name] is _mod:
         del sys.modules[_name]
+# Restore overwritten attributes on pre-existing modules
+for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
+    if _mod_key in sys.modules:
+        if _orig_val is _SENTINEL:
+            try:
+                delattr(sys.modules[_mod_key], _attr_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys.modules[_mod_key], _attr_name, _orig_val)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

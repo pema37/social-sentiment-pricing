@@ -47,6 +47,21 @@ class _FakeEcommercePlatform:
     WOOCOMMERCE = "woocommerce"
 
 
+# Save original attributes before overwriting
+_SENTINEL = object()
+_saved_attrs = {}
+for _key, _attr in [
+    ("models.integration", "Integration"),
+    ("models.integration", "IntegrationStatus"),
+    ("models.integration", "EcommercePlatform"),
+    ("core.encryption", "decrypt_token"),
+    ("services.integration.shopify_service", "ShopifyService"),
+    ("services.integration.woocommerce_service", "WooCommerceService"),
+    ("services.integration.sync_service", "SyncService"),
+]:
+    if _key in sys.modules:
+        _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
+
 _integ_mod = sys.modules["models.integration"]
 _integ_mod.Integration = MagicMock
 _integ_mod.IntegrationStatus = _FakeIntegrationStatus
@@ -70,6 +85,16 @@ from services.integration.webhook_handler import (
 for _name, _mod in _stubs.items():
     if _name in sys.modules and sys.modules[_name] is _mod:
         del sys.modules[_name]
+# Restore overwritten attributes on pre-existing modules
+for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
+    if _mod_key in sys.modules:
+        if _orig_val is _SENTINEL:
+            try:
+                delattr(sys.modules[_mod_key], _attr_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys.modules[_mod_key], _attr_name, _orig_val)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

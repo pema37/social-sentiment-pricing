@@ -37,6 +37,29 @@ for _mod_name in _needed:
         _stubs[_mod_name] = types.ModuleType(_mod_name)
         sys.modules[_mod_name] = _stubs[_mod_name]
 
+# Save original attributes before overwriting
+_SENTINEL = object()
+_saved_attrs = {}
+for _key, _attr in [
+    ("core.config", "settings"),
+    ("services.integration.base", "EcommerceService"),
+    ("services.integration.schemas", "OAuthResult"),
+    ("services.integration.schemas", "ExternalProduct"),
+    ("services.integration.schemas", "ExternalProductVariant"),
+    ("services.integration.schemas", "ProductSyncResult"),
+    ("services.integration.schemas", "PriceUpdateRequest"),
+    ("services.integration.schemas", "PriceUpdateResponse"),
+    ("services.integration.schemas", "PriceUpdateResult"),
+    ("services.integration.schemas", "WebhookRegistration"),
+    ("services.integration.schemas", "ConnectionStatus"),
+    ("services.integration.retry", "RetryConfig"),
+    ("services.integration.retry", "execute_with_retry"),
+    ("services.integration.http_client", "RetryableClient"),
+    ("services.integration.circuit_breaker", "CircuitOpenError"),
+]:
+    if _key in sys.modules:
+        _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
+
 # Provide settings
 _settings = MagicMock()
 _settings.SHOPIFY_CLIENT_ID = "test-client-id"
@@ -154,6 +177,16 @@ from services.integration.shopify_service import ShopifyService
 for _name, _mod in _stubs.items():
     if _name in sys.modules and sys.modules[_name] is _mod:
         del sys.modules[_name]
+# Restore overwritten attributes on pre-existing modules
+for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
+    if _mod_key in sys.modules:
+        if _orig_val is _SENTINEL:
+            try:
+                delattr(sys.modules[_mod_key], _attr_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys.modules[_mod_key], _attr_name, _orig_val)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

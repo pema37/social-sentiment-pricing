@@ -50,6 +50,20 @@ class _FakeSentimentDataPoint:
     def __init__(self, **kw):
         for k, v in kw.items(): setattr(self, k, v)
 
+# Save original attributes before overwriting
+_SENTINEL = object()
+_saved_attrs = {}
+for _key, _attr in [
+    ("schemas.analytics", "DashboardOverview"),
+    ("schemas.analytics", "ProductSummary"),
+    ("schemas.analytics", "RecommendationStats"),
+    ("schemas.analytics", "AlertAnalytics"),
+    ("schemas.analytics", "SentimentAnalytics"),
+    ("schemas.analytics", "SentimentDataPoint"),
+]:
+    if _key in sys.modules:
+        _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
+
 _schema_mod = sys.modules["schemas.analytics"]
 _schema_mod.DashboardOverview = _FakeDashboardOverview
 _schema_mod.ProductSummary = _FakeProductSummary
@@ -78,6 +92,17 @@ for _mod in _MOCKED_MODULES:
         sys.modules.pop(_mod, None)
     else:
         sys.modules[_mod] = _originals[_mod]
+
+# Restore overwritten attributes on pre-existing modules
+for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
+    if _mod_key in sys.modules:
+        if _orig_val is _SENTINEL:
+            try:
+                delattr(sys.modules[_mod_key], _attr_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys.modules[_mod_key], _attr_name, _orig_val)
 del _mod
 
 import pytest

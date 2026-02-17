@@ -26,10 +26,9 @@ _needed = [
     "services.integration.circuit_breaker",
 ]
 
+_originals = {m: sys.modules.get(m) for m in _needed}
 for _mod_name in _needed:
-    if _mod_name not in sys.modules:
-        _stubs[_mod_name] = types.ModuleType(_mod_name)
-        sys.modules[_mod_name] = _stubs[_mod_name]
+    sys.modules[_mod_name] = types.ModuleType(_mod_name)
 
 # Provide base class
 class _FakeEcommerceService:
@@ -116,9 +115,11 @@ sys.modules["services.integration.circuit_breaker"].CircuitOpenError = type("Cir
 from services.integration.woocommerce_service import WooCommerceService
 
 # Restore
-for _name, _mod in _stubs.items():
-    if _name in sys.modules and sys.modules[_name] is _mod:
-        del sys.modules[_name]
+for _name in _needed:
+    if _originals[_name] is None:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _originals[_name]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -46,12 +46,14 @@ for _m in ("db.session"):
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Ensure parent packages with real paths
+_parent_originals = {}
 for _pkg, _subdir in [
     ("services", "services"),
     ("services.products", "services/products"),
     ("models", "models"),
     ("schemas", "schemas"),
 ]:
+    _parent_originals[_pkg] = sys.modules.get(_pkg)
     if _pkg not in sys.modules:
         _mod = ModuleType(_pkg)
         _mod.__path__ = [os.path.join(_backend_dir, _subdir)]
@@ -205,6 +207,13 @@ for _m in _MOCKED:
         sys.modules.pop(_m, None)
     else:
         sys.modules[_m] = _originals[_m]
+
+# Restore parent packages
+for _pkg, _orig in _parent_originals.items():
+    if _orig is None:
+        sys.modules.pop(_pkg, None)
+    else:
+        sys.modules[_pkg] = _orig
 del _m
 
 

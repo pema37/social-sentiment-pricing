@@ -64,6 +64,23 @@ class _FakeEcommercePlatform(str, Enum):
     WOOCOMMERCE = "woocommerce"
 
 
+# Save original attributes before overwriting
+_SENTINEL = object()
+_saved_attrs = {}
+for _key, _attr in [
+    ("models.integration", "Integration"),
+    ("models.integration", "EcommercePlatform"),
+    ("core.encryption", "decrypt_token"),
+    ("services.integration.models", "ExternalProduct"),
+    ("services.integration.base", "EcommerceService"),
+    ("services.integration.shopify_service", "ShopifyService"),
+    ("services.integration.woocommerce_service", "WooCommerceService"),
+    ("services.integration.repositories", "ProductRepository"),
+    ("services.integration.repositories", "LinkRepository"),
+]:
+    if _key in sys.modules:
+        _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
+
 sys.modules["models.integration"].Integration = MagicMock
 sys.modules["models.integration"].EcommercePlatform = _FakeEcommercePlatform
 sys.modules["core.encryption"].decrypt_token = MagicMock(return_value="test-token")
@@ -100,6 +117,16 @@ from services.integration.handlers.product_sync_handler import (
 for _name, _mod in _stubs.items():
     if _name in sys.modules and sys.modules[_name] is _mod:
         del sys.modules[_name]
+# Restore overwritten attributes on pre-existing modules
+for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
+    if _mod_key in sys.modules:
+        if _orig_val is _SENTINEL:
+            try:
+                delattr(sys.modules[_mod_key], _attr_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys.modules[_mod_key], _attr_name, _orig_val)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

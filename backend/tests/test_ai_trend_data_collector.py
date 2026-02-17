@@ -586,7 +586,8 @@ class TestGetCurrentAlerts:
         alert.message = "Competitor dropped price"
         scalars.all.return_value = [alert]
         collector = DataCollector(db)
-        result = await collector.get_current_alerts(user_id="user-1")
+        with patch("services.ai_trend_analysis.data_collector.select"):
+            result = await collector.get_current_alerts(user_id="user-1")
         assert len(result) == 1
 
     @pytest.mark.asyncio

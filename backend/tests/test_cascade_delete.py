@@ -87,7 +87,12 @@ _model_names = {
     "models.integration": ("ProductIntegrationLink", "product_integration_links"),
 }
 
+# Save original attributes before overwriting
+_SENTINEL = object()
+_saved_attrs = {}
 for mod_name, (cls_name, table_name) in _model_names.items():
+    if mod_name in sys.modules:
+        _saved_attrs[(mod_name, cls_name)] = getattr(sys.modules[mod_name], cls_name, _SENTINEL)
     mock_model = MagicMock()
     mock_model.__tablename__ = table_name
     mock_model.product_id = MagicMock()
@@ -113,6 +118,17 @@ class _AlertStatus(str, Enum):
     ACTIVE = "active"
     RESOLVED = "resolved"
 
+for _key, _attr in [
+    ("models.alert", "AlertType"),
+    ("models.alert", "AlertSeverity"),
+    ("models.alert", "AlertChannel"),
+    ("models.alert", "AlertStatus"),
+    ("models.user", "User"),
+    ("models.product", "Product"),
+]:
+    if _key in sys.modules:
+        _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
+
 _alert_mod = sys.modules["models.alert"]
 _alert_mod.AlertType = _AlertType
 _alert_mod.AlertSeverity = _AlertSeverity
@@ -136,6 +152,17 @@ for _m in _MOCKED:
     else:
         sys.modules[_m] = _originals[_m]
 del _m
+
+# Restore overwritten attributes on pre-existing modules
+for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
+    if _mod_key in sys.modules:
+        if _orig_val is _SENTINEL:
+            try:
+                delattr(sys.modules[_mod_key], _attr_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys.modules[_mod_key], _attr_name, _orig_val)
 
 SVC_MOD = "services.products.cascade_delete"
 
