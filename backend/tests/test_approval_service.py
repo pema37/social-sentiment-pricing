@@ -14,9 +14,9 @@ from uuid import uuid4
 
 import pytest
 
-# ── Import isolation: mock db.session before importing the service ──
-if "db.session" not in sys.modules:
-    sys.modules["db.session"] = MagicMock()
+# ── Import isolation: force fresh mocks to prevent cross-test pollution ──
+sys.modules["db.session"] = MagicMock()
+sys.modules.pop("services.pricing.approval_service", None)
 
 from services.pricing.approval_service import ApprovalService, ApprovalError
 from models.price_recommendation import RecommendationStatus
