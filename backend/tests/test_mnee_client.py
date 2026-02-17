@@ -43,11 +43,10 @@ for _m in ("db.session"):
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Ensure services package exists with real path
-if "services" not in sys.modules:
-    _svc = ModuleType("services")
-    _svc.__path__ = [os.path.join(_backend_dir, "services")]
-    _svc.__package__ = "services"
-    sys.modules["services"] = _svc
+_svc = ModuleType("services")
+_svc.__path__ = [os.path.join(_backend_dir, "services")]
+_svc.__package__ = "services"
+sys.modules["services"] = _svc
 
 # Pre-load services.payment as bare package (bypasses __init__.py eager imports)
 _pay_pkg = ModuleType("services.payment")
@@ -89,8 +88,9 @@ sys.modules["services.payment.exceptions"] = _exc_stub
 # ---------------------------------------------------------------------------
 # 2. Import module under test
 # ---------------------------------------------------------------------------
+# Force fresh import — other test files may have cached this with different exception classes
+sys.modules.pop("services.payment.mnee_client", None)
 from services.payment.mnee_client import MneeClient, MneeEnvironment
-
 # ---------------------------------------------------------------------------
 # 3. Restore sys.modules
 # ---------------------------------------------------------------------------
