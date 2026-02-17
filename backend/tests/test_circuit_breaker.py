@@ -11,6 +11,10 @@ from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 
+# Force fresh import — test_woocommerce_service replaces CircuitOpenError with a fake
+import sys
+sys.modules.pop("services.integration.circuit_breaker", None)
+
 from services.integration.circuit_breaker import (
     CircuitState,
     CircuitBreakerConfig,
