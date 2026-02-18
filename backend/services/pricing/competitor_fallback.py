@@ -6,6 +6,11 @@ Used when no pricing rules match (e.g., insufficient sentiment data).
 Provides basic price recommendations based on competitive positioning.
 
 FIX (2026-01-24): Now respects user's auto-approval settings.
+FIX (2026-02-18): Wired PipelineAdapter to produce typed ScoutOutput,
+AnalystOutput, StrategistOutput evidence chains — same pattern as
+recommendation_service.py, with rule=None. Evidence is stored in
+factors dict → extracted by record_merchant_decision() → stored as
+JSONB on RecommendationOutcome for calibration & backward learning.
 """
 
 import logging
@@ -21,6 +26,7 @@ from models.price_recommendation import PriceRecommendation, RecommendationStatu
 from models.pricing_settings import PricingSettings
 from .rule_evaluator import MarketSignals
 from .settings_service import SettingsService
+from .pipeline_adapter import PipelineAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +82,7 @@ class CompetitorFallbackService:
             return None
         
         # Apply constraints and validate
+        raw_price_before_constraints = new_price
         new_price = self._apply_constraints(new_price, product)
         change_percent = self._calculate_change_percent(product.current_price, new_price)
         
@@ -94,7 +101,9 @@ class CompetitorFallbackService:
             reasoning=reasoning,
             competitor_id=competitor_id,
             competitor_price=competitor_price,
-            settings=settings
+            settings=settings,
+            signals=signals,
+            raw_price_before_constraints=raw_price_before_constraints,
         )
     
     def _find_valid_competitor_price(
@@ -185,7 +194,9 @@ class CompetitorFallbackService:
         reasoning: str,
         competitor_id: Optional[str],
         competitor_price: Decimal,
-        settings: PricingSettings
+        settings: PricingSettings,
+        signals: MarketSignals,
+        raw_price_before_constraints: Optional[Decimal] = None,
     ) -> PriceRecommendation:
         """Create and persist the recommendation."""
         valid_until = datetime.now(UTC) + timedelta(
@@ -195,6 +206,66 @@ class CompetitorFallbackService:
         factors = self._build_factors(
             product.current_price, new_price, competitor_id, competitor_price
         )
+        
+        # ══════════════════════════════════════════════════════════════
+        # INTELLIGENCE ENVIRONMENT: Build typed agent evidence chains
+        # Same pattern as recommendation_service.py, with rule=None
+        # ══════════════════════════════════════════════════════════════
+        
+        try:
+            scout_output = PipelineAdapter.build_scout_output(product, signals)
+            
+            # Competitor fallback has no confidence_breakdown from
+            # ConfidenceCalculator, so build a minimal one that
+            # PipelineAdapter.build_analyst_output() can consume.
+            confidence_breakdown = {
+                "components": {
+                    "signal_agreement": {"score": 0.5},
+                    "market_stability": {"score": 0.5},
+                    "rule_confidence": {"score": 0.3},  # Lower: no rule matched
+                    "data_quality": {
+                        "score": round(scout_output.data_completeness, 4)
+                    },
+                    "historical_accuracy": {"score": 0.5},
+                },
+            }
+            
+            analyst_output = PipelineAdapter.build_analyst_output(
+                scout_output, confidence_breakdown, signals, rule=None
+            )
+            strategist_output = PipelineAdapter.build_strategist_output(
+                analyst_output,
+                product,
+                new_price,
+                change_percent,
+                COMPETITOR_CONFIDENCE,
+                reasoning,
+                factors,
+                rule=None,
+                raw_price_before_boundaries=raw_price_before_constraints,
+            )
+            
+            # Store typed evidence in factors for record_merchant_decision()
+            factors["scout_evidence"] = scout_output.to_evidence()
+            factors["analyst_evidence"] = analyst_output.to_evidence()
+            factors["strategist_evidence"] = strategist_output.to_evidence()
+            
+            logger.debug(
+                f"Built typed evidence chain for competitor fallback "
+                f"product {product.id}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to build typed evidence for competitor fallback "
+                f"product {product.id}: {e}"
+            )
+            # Graceful degradation: recommendation still works,
+            # just without typed evidence. record_merchant_decision()
+            # falls back to old-style extraction from match_details/price_impacts.
+        
+        # ══════════════════════════════════════════════════════════════
+        # END INTELLIGENCE ENVIRONMENT
+        # ══════════════════════════════════════════════════════════════
         
         requires_approval = self.settings_service.check_requires_approval(
             product, change_percent, COMPETITOR_CONFIDENCE, settings
@@ -222,7 +293,8 @@ class CompetitorFallbackService:
         logger.info(
             f"Generated competitor fallback for product {product.id}: "
             f"${product.current_price} → ${new_price} ({change_percent:+.1f}%), "
-            f"requires_approval={requires_approval}"
+            f"requires_approval={requires_approval}, "
+            f"evidence_chain={'complete' if 'scout_evidence' in factors else 'partial'}"
         )
         
         # Auto-apply if eligible
@@ -275,8 +347,6 @@ class CompetitorFallbackService:
             logger.info(f"Auto-applied competitor fallback {recommendation.id}")
         except Exception as e:
             logger.warning(f"Auto-apply failed for competitor fallback {recommendation.id}: {e}")
-
-
 
 
             

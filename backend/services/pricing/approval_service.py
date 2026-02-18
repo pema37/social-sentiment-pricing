@@ -1,4 +1,3 @@
-# backend/services/pricing/approval_service.py
 """
 Approval Service - Core approval workflow and price application.
 
@@ -7,9 +6,12 @@ FIX (2025-01-25): Extracted e-commerce push to EcommercePushService.
 FIX (2025-01-25): Now pushes to ALL active platforms, not just the first one.
 FIX (2026-01-27): Fixed _check_daily_limit() bug - was returning False when no settings exist.
 FIX (2026-01-27): Added clearer error messages for common failure scenarios.
+FIX (2026-02-17): Wired intelligence environment feedback loop — record_merchant_decision()
+                   called on apply_price(), auto_approve_and_apply(), and reject().
 """
 
 from datetime import datetime, timedelta, UTC
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 import logging
@@ -50,6 +52,10 @@ class ApprovalService:
         Approve a recommendation (manual approval only).
         
         For auto-approval with immediate application, use auto_approve_and_apply() instead.
+        
+        NOTE: No outcome is recorded here. The decision isn't final until
+        apply_price() runs — the price hasn't changed yet, so there's
+        nothing to measure. Outcome is recorded when price is actually applied.
         """
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
@@ -104,6 +110,15 @@ class ApprovalService:
         self.db.add(recommendation)
         await self.db.commit()
         await self.db.refresh(recommendation)
+        
+        # ── Intelligence Environment: record rejection ──
+        # No price change to measure, but we track the decision for
+        # merchant pattern analysis → Strategist guardrail calibration.
+        await self._record_decision(
+            recommendation_id=recommendation.id,
+            user_id=user_id,
+            merchant_decision="rejected",
+        )
         
         return recommendation
     
@@ -175,6 +190,16 @@ class ApprovalService:
         
         await self.db.commit()
         await self.db.refresh(recommendation)
+        
+        # ── Intelligence Environment: record merchant decision ──
+        # Price is now applied and pushed — record the outcome for
+        # feedback loop measurement at 7d/14d/30d windows.
+        await self._record_decision(
+            recommendation_id=recommendation.id,
+            user_id=user_id,
+            merchant_decision="accepted",
+            actual_price_set=recommendation.recommended_price,
+        )
         
         return recommendation
     
@@ -280,6 +305,14 @@ class ApprovalService:
             f"Auto-applied recommendation {recommendation_id}: "
             f"${old_price} -> ${recommendation.recommended_price} "
             f"(pushed to {platform_result.get('platform')})"
+        )
+        
+        # ── Intelligence Environment: record auto-apply decision ──
+        await self._record_decision(
+            recommendation_id=recommendation.id,
+            user_id=user_id,
+            merchant_decision="auto_applied",
+            actual_price_set=recommendation.recommended_price,
         )
         
         return recommendation
@@ -398,5 +431,39 @@ class ApprovalService:
             "auto_approval_ratio": auto_approval_ratio,
         }
     
+    # ──────────────────────────────────────────────
+    # INTELLIGENCE ENVIRONMENT: FEEDBACK LOOP HOOK
+    # ──────────────────────────────────────────────
 
-    
+    async def _record_decision(
+        self,
+        recommendation_id: UUID,
+        user_id: UUID,
+        merchant_decision: str,
+        actual_price_set: Optional[Decimal] = None,
+    ) -> None:
+        """
+        Fire-and-forget: record merchant decision for the intelligence
+        environment feedback loop. Failures are logged, never raised.
+        
+        Uses lazy import (same pattern as EcommercePushService) to
+        avoid circular imports.
+        """
+        try:
+            from services.pricing.outcome_service import OutcomeService
+            outcome_svc = OutcomeService(self.db)
+            await outcome_svc.record_merchant_decision(
+                recommendation_id=recommendation_id,
+                user_id=user_id,
+                merchant_decision=merchant_decision,
+                actual_price_set=actual_price_set,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to record outcome for recommendation "
+                f"{recommendation_id}: {e}"
+            )
+
+
+
+            

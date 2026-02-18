@@ -67,6 +67,9 @@ from api.v1.routes.trend_analysis import router as trend_analysis_router
 from api.v1.routes.diagnostic import router as diagnostic_router
 from api.v1.routes.products_import import router as products_import_router
 
+# Intelligence Environment — standalone at /api/v1/outcomes
+from api.v1.routes.pricing.outcomes import router as outcomes_router
+
 # Gemini 3 Hackathon Demo Routes
 from api.v1.routes.visual_pricing import router as visual_pricing_router
 from api.v1.routes.crisis_detection import router as crisis_detection_router
@@ -102,7 +105,9 @@ app = FastAPI(
 # ── NEW: Initialize x402 payment middleware ───────────────
 # Uses Base Sepolia testnet with free x402.org facilitator
 # Set PAY_TO_ADDRESS in your .env file
-init_x402(app, network="base-sepolia")
+import os
+if os.getenv("PAY_TO_ADDRESS"):
+    init_x402(app, network="base-sepolia")
 
 # ───────────────────── Exception Handlers ───────────────────── #
 app.state.limiter = limiter
@@ -155,6 +160,9 @@ app.include_router(market_trends_router, prefix="/api/v1")
 app.include_router(trend_analysis_router, prefix="/api/v1")
 app.include_router(trust_scoring_router, prefix="/api/v1")
 app.include_router(diagnostic_router, prefix="/api/v1")
+
+# Intelligence Environment — outcomes served at /api/v1/outcomes/*
+app.include_router(outcomes_router, prefix="/api/v1/outcomes", tags=["outcomes"])
 
 # Gemini 3 Hackathon Demo Routes
 app.include_router(visual_pricing_router, prefix="/api/v1")

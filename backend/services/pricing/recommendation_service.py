@@ -1,4 +1,3 @@
-# backend/services/pricing/recommendation_service.py
 """
 Recommendation Service - Generates price recommendations based on rules and signals.
 
@@ -9,9 +8,14 @@ Dependencies:
 - SettingsService: Manages user settings with defaults (Priority 2)
 - CompetitorFallbackService: Generates competitor-only recommendations
 - PriceCalculator, BoundaryEnforcer, ReasoningGenerator: Calculation helpers
+- PipelineAdapter: Converts service outputs to typed agent contracts
 
 FIX (2026-01-28) Bug #1: Always refresh product from DB before generating
 recommendations to ensure current_price reflects actual database state.
+FIX (2026-02-17): Wired PipelineAdapter to produce typed ScoutOutput,
+AnalystOutput, StrategistOutput evidence chains on every recommendation.
+Evidence is stored in factors dict → extracted by record_merchant_decision()
+→ stored as JSONB on RecommendationOutcome for calibration & backward learning.
 """
 
 import logging
@@ -38,6 +42,7 @@ from .recommendation_helpers import (
     BoundaryEnforcer,
     ReasoningGenerator,
 )
+from .pipeline_adapter import PipelineAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +83,6 @@ class RecommendationService:
         """
         # =============================================================
         # BUGFIX (2026-01-28): Always refresh product from DB first
-        # =============================================================
-        # The product object passed in may have stale data from earlier
-        # in the request lifecycle. Refresh to ensure we have the actual
-        # current_price from the database before any calculations.
         # =============================================================
         await self.db.refresh(product)
         logger.debug(
@@ -153,6 +154,9 @@ class RecommendationService:
             )
             return None
         
+        # ── Capture raw price before boundary enforcement ──
+        raw_price_before_boundaries = new_price
+        
         # Apply boundaries
         new_price = BoundaryEnforcer.apply_boundaries(new_price, product, rule)
         change_percent = BoundaryEnforcer.calculate_change_percent(
@@ -165,19 +169,64 @@ class RecommendationService:
             signals, price_impacts, rule.rule_type.value
         )
         
-        # Build factors
+        # Get confidence breakdown (feeds AnalystOutput)
+        confidence_breakdown = self.confidence_calculator.get_confidence_breakdown(
+            signals, price_impacts, rule.rule_type.value
+        )
+        
+        # ══════════════════════════════════════════════════════════════
+        # INTELLIGENCE ENVIRONMENT: Build typed agent evidence chains
+        # ══════════════════════════════════════════════════════════════
+        
+        try:
+            scout_output = PipelineAdapter.build_scout_output(product, signals)
+            analyst_output = PipelineAdapter.build_analyst_output(
+                scout_output, confidence_breakdown, signals, rule
+            )
+        except Exception as e:
+            logger.warning(f"Failed to build Scout/Analyst outputs: {e}")
+            scout_output = None
+            analyst_output = None
+        
+        # Build factors dict (includes typed evidence when available)
         factors = {
             "match_details": match_details,
             "price_impacts": price_impacts,
-            "confidence_breakdown": self.confidence_calculator.get_confidence_breakdown(
-                signals, price_impacts, rule.rule_type.value
-            ),
+            "confidence_breakdown": confidence_breakdown,
         }
         
         # Generate reasoning
         reasoning = ReasoningGenerator.generate(
             product, rule, match_details, new_price, change_percent, signals
         )
+        
+        # Build StrategistOutput (needs reasoning + factors)
+        try:
+            if analyst_output is not None:
+                strategist_output = PipelineAdapter.build_strategist_output(
+                    analyst_output,
+                    product,
+                    new_price,
+                    change_percent,
+                    confidence,
+                    reasoning,
+                    factors,
+                    rule,
+                    raw_price_before_boundaries,
+                )
+                # Store typed evidence in factors for record_merchant_decision()
+                factors["scout_evidence"] = scout_output.to_evidence()
+                factors["analyst_evidence"] = analyst_output.to_evidence()
+                factors["strategist_evidence"] = strategist_output.to_evidence()
+            else:
+                strategist_output = None
+        except Exception as e:
+            logger.warning(f"Failed to build Strategist output: {e}")
+            strategist_output = None
+        
+        # ══════════════════════════════════════════════════════════════
+        # END INTELLIGENCE ENVIRONMENT
+        # ══════════════════════════════════════════════════════════════
         
         # Get settings (Priority 2 fix ensures defaults exist)
         settings = await self.settings_service.get_or_create(user_id)
@@ -189,7 +238,6 @@ class RecommendationService:
         )
         
         # Create recommendation
-        # NOTE: current_price now guaranteed to be fresh from DB refresh above
         recommendation = PriceRecommendation(
             user_id=user_id,
             product_id=product.id,
@@ -208,7 +256,8 @@ class RecommendationService:
         logger.info(
             f"Creating recommendation for product {product.id}: "
             f"${product.current_price} → ${new_price} ({change_percent:+.1f}%), "
-            f"confidence={confidence:.2f}, requires_approval={requires_approval}"
+            f"confidence={confidence:.2f}, requires_approval={requires_approval}, "
+            f"evidence_chain={'complete' if strategist_output else 'partial'}"
         )
         
         # Update rule's last_triggered_at
@@ -286,8 +335,6 @@ class RecommendationService:
         
         logger.info(f"Expired {len(expired)} old recommendations")
         return len(expired)
+    
 
-
-
-
-        
+    
