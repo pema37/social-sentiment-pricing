@@ -104,21 +104,6 @@ class ShopifyService(
         query: str,
         variables: Optional[dict] = None,
     ) -> dict:
-        """
-        Execute a GraphQL query/mutation against Shopify Admin API.
-
-        Routes through RetryableClient.post() so every call gets:
-        - Automatic retries with exponential backoff
-        - Rate limit tracking & wait-if-needed
-        - Circuit breaker protection
-
-        Returns:
-            The "data" portion of the GraphQL response.
-
-        Raises:
-            httpx.HTTPStatusError: on HTTP-level failures (401, 429, etc.)
-            ValueError: if GraphQL returns top-level errors
-        """
         payload: dict = {"query": query}
         if variables:
             payload["variables"] = variables

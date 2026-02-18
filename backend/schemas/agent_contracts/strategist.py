@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .shared import PriceDirection
 from .analyst import ConfidenceDecomposition
@@ -116,18 +116,16 @@ class StrategistOutput(BaseModel):
         description="Which LLM/model produced this recommendation",
     )
 
-    @field_validator("change_percent", mode="after")
-    @classmethod
-    def validate_direction_matches(cls, v, info):
+    @model_validator(mode="after")
+    def validate_direction_matches(self):
         """Ensure change_percent sign matches change_direction."""
-        direction = info.data.get("change_direction")
-        if direction == PriceDirection.INCREASE and v < 0:
+        if self.change_direction == PriceDirection.INCREASE and self.change_percent < 0:
             raise ValueError("change_percent must be positive for INCREASE direction")
-        if direction == PriceDirection.DECREASE and v > 0:
+        if self.change_direction == PriceDirection.DECREASE and self.change_percent > 0:
             raise ValueError("change_percent must be negative for DECREASE direction")
-        if direction == PriceDirection.HOLD and abs(v) > Decimal("0.5"):
+        if self.change_direction == PriceDirection.HOLD and abs(self.change_percent) > Decimal("0.5"):
             raise ValueError("change_percent should be near zero for HOLD direction")
-        return v
+        return self
 
     def to_evidence(self) -> dict:
         """Serialize for JSONB storage on RecommendationOutcome.strategist_evidence."""

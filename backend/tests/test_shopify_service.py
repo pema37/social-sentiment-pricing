@@ -247,15 +247,12 @@ def _gql_response(data: dict) -> dict:
     return {"data": data}
 
 
-def _mock_httpx_response(json_data: dict, status_code: int = 200):
-    """Create a mock httpx response."""
-    resp = MagicMock()
-    resp.json.return_value = json_data
-    resp.status_code = status_code
-    resp.content = b"content"
-    resp.headers = {}
-    return resp
-
+def _mock_httpx_response(data, status_code=200):
+    mock = MagicMock()  # NOT AsyncMock
+    mock.json = MagicMock(return_value=data)  # sync, like real httpx
+    mock.status_code = status_code
+    mock.raise_for_status = MagicMock()
+    return mock
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests
@@ -644,7 +641,7 @@ class TestFetchProducts:
             }
         }
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(gql_data)
             MockRC.return_value = mock_rc
@@ -674,7 +671,7 @@ class TestFetchProducts:
             }
         }
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(gql_data)
             MockRC.return_value = mock_rc
@@ -697,7 +694,7 @@ class TestFetchProducts:
             }
         }
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(gql_data)
             MockRC.return_value = mock_rc
@@ -712,7 +709,7 @@ class TestFetchProducts:
     async def test_graphql_error_returns_failure(self):
         svc = ShopifyService()
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(
                 {"errors": [{"message": "Throttled"}]}
@@ -733,7 +730,7 @@ class TestFetchSingleProduct:
 
         gql_data = {"data": {"product": node}}
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(gql_data)
             MockRC.return_value = mock_rc
@@ -750,7 +747,7 @@ class TestFetchSingleProduct:
 
         gql_data = {"data": {"product": None}}
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(gql_data)
             MockRC.return_value = mock_rc
@@ -766,7 +763,7 @@ class TestFetchSingleProduct:
 
         gql_data = {"data": {"product": _gql_product_node(product_id=123)}}
 
-        with patch("services.integration.shopify_service.RetryableClient") as MockRC:
+        with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             mock_rc.post.return_value = _mock_httpx_response(gql_data)
             MockRC.return_value = mock_rc
