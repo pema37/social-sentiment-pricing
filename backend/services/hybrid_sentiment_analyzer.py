@@ -13,11 +13,15 @@ RATE LIMIT HANDLING:
 - Detects 429 errors from Gemini/OpenAI
 - Raises RateLimitError for caller to handle
 - Caller should fall back to VADER-only on rate limit
+
+FIX (2026-02-19): Migrated from deprecated google.generativeai to google-genai SDK.
+- Uses google.genai.Client with native async (client.aio.models.generate_content)
+- Removed run_in_executor hack for sync-to-async bridging
+- Model updated from gemini-2.0-flash-exp to gemini-2.0-flash
 """
 
 import asyncio
 from dataclasses import dataclass, field
-from decimal import Decimal
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import logging
@@ -98,7 +102,7 @@ class HybridSentimentAnalyzer:
     """
     Multi-source sentiment analyzer combining:
     - VADER (always runs - fast, free, good for social media)
-    - Gemini (primary AI - fast, cost-effective)
+    - Gemini (primary AI - fast, cost-effective via google-genai SDK)
     - OpenAI GPT-4o-mini (fallback if Gemini fails - better nuance/sarcasm)
     - Trust Scoring (filters bots/spam, weights by author credibility)
     """
@@ -113,17 +117,16 @@ class HybridSentimentAnalyzer:
         except ImportError:
             logger.warning("VADER not installed - pip install vaderSentiment")
         
-        # Gemini - primary AI
+        # Gemini - primary AI (using google-genai SDK)
         self.gemini_client = None
-        self.gemini_model = "gemini-2.0-flash-exp"
+        self.gemini_model = "gemini-2.0-flash"
         if getattr(settings, 'GEMINI_API_KEY', None):
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self.gemini_client = genai.GenerativeModel(self.gemini_model)
-                logger.info("Gemini sentiment analyzer initialized (primary AI)")
+                from google import genai
+                self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                logger.info("Gemini sentiment analyzer initialized (primary AI - google-genai SDK)")
             except ImportError:
-                logger.warning("Google GenAI not installed - pip install google-generativeai")
+                logger.warning("Google GenAI not installed - pip install google-genai")
             except Exception as e:
                 logger.warning(f"Gemini initialization failed: {e}")
         
@@ -490,7 +493,8 @@ class HybridSentimentAnalyzer:
     
     async def _analyze_gemini(self, text: str) -> Dict:
         """
-        Run Gemini analysis (primary AI).
+        Run Gemini analysis (primary AI) using google-genai SDK.
+        Uses native async via client.aio.models.generate_content().
         
         Raises:
             RateLimitError: When Gemini returns 429 or quota exceeded.
@@ -513,10 +517,9 @@ Return ONLY valid JSON with no markdown formatting:
 }}"""
 
         try:
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.gemini_client.generate_content(prompt)
+            response = await self.gemini_client.aio.models.generate_content(
+                model=self.gemini_model,
+                contents=prompt,
             )
             
             result_text = response.text.strip()
@@ -688,6 +691,5 @@ Consider context like sarcasm, irony, and cultural nuances."""
 
 # Singleton instance
 hybrid_sentiment_analyzer = HybridSentimentAnalyzer()
-
 
 
