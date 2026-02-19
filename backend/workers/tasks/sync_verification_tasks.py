@@ -184,7 +184,7 @@ async def _verify_all_price_syncs() -> Dict:
             try:
                 # Decrypt credentials
                 try:
-                    access_token = decrypt_token(integration.encrypted_access_token)
+                    access_token = decrypt_token(integration.access_token_encrypted)
                 except Exception as e:
                     results["errors"] += 1
                     results["error_details"].append({
@@ -345,7 +345,7 @@ async def _auto_fix_price_mismatches(dry_run: bool = True) -> Dict:
                 continue
             
             try:
-                access_token = decrypt_token(integration.encrypted_access_token)
+                access_token = decrypt_token(integration.access_token_encrypted)
                 
                 from services.integration.models import PriceUpdateRequest
                 
