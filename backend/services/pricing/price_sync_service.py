@@ -4,6 +4,8 @@ Price Sync Service - Fetches live prices from connected e-commerce stores.
 
 FIX (2026-01-28) Priority 1: Ensures recommendations show actual store price,
 not stale DB data.
+FIX (2026-02-19) Priority 1: Fixed broken import - models.product_link does not
+exist. ProductIntegrationLink lives in models.integration.
 """
 
 import logging
@@ -36,9 +38,6 @@ class PriceSyncService:
         Returns:
             Live price as Decimal, or None if unable to fetch
         """
-        from models.integration import Integration
-        from models.product_link import ProductLink
-        
         try:
             link, integration = await self._get_active_link(product.id, user_id)
             if not link:
@@ -88,16 +87,15 @@ class PriceSyncService:
         user_id: UUID
     ) -> tuple:
         """Get active product link and integration."""
-        from models.integration import Integration
-        from models.product_link import ProductLink
+        from models.integration import Integration, ProductIntegrationLink
         
         stmt = (
-            select(ProductLink, Integration)
-            .join(Integration, ProductLink.integration_id == Integration.id)
-            .where(ProductLink.product_id == product_id)
+            select(ProductIntegrationLink, Integration)
+            .join(Integration, ProductIntegrationLink.integration_id == Integration.id)
+            .where(ProductIntegrationLink.product_id == product_id)
             .where(Integration.user_id == user_id)
             .where(Integration.status == 'active')
-            .where(ProductLink.sync_enabled == True)
+            .where(ProductIntegrationLink.sync_enabled == True)
         )
         result = await self.db.execute(stmt)
         row = result.first()
@@ -146,7 +144,6 @@ class PriceSyncService:
         if live_data and live_data.get('price') is not None:
             return Decimal(str(live_data['price']))
         return None
+    
 
-
-
-        
+    
