@@ -9,6 +9,7 @@ PATCHED (2025-01-28): Fixed Bug #3 - Rate limit now returns HTTP 429
 NEW (2025-01-29): Added Visual Pricing Intelligence demo for Gemini 3 Hackathon
 NEW (2025-01-30): Added Crisis Detection, Launch Detection, Market Trends Visual demos
 FIXED (2025-01-30): Added products_import router - CSV import was returning 404
+NEW (2026-02-18): Phase 5 — Intelligence Environment dashboard routes
 """
 
 """
@@ -69,6 +70,9 @@ from api.v1.routes.products_import import router as products_import_router
 
 # Intelligence Environment — standalone at /api/v1/outcomes
 from api.v1.routes.pricing.outcomes import router as outcomes_router
+
+# Intelligence Environment — Phase 5 dashboard at /api/v1/intelligence
+from api.v1.routes.intelligence import router as intelligence_router
 
 # Gemini 3 Hackathon Demo Routes
 from api.v1.routes.visual_pricing import router as visual_pricing_router
@@ -163,6 +167,9 @@ app.include_router(diagnostic_router, prefix="/api/v1")
 
 # Intelligence Environment — outcomes served at /api/v1/outcomes/*
 app.include_router(outcomes_router, prefix="/api/v1/outcomes", tags=["outcomes"])
+
+# Intelligence Environment — Phase 5 dashboard at /api/v1/intelligence/*
+app.include_router(intelligence_router, prefix="/api/v1")
 
 # Gemini 3 Hackathon Demo Routes
 app.include_router(visual_pricing_router, prefix="/api/v1")

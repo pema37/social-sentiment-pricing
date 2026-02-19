@@ -8,6 +8,7 @@ This module configures the Celery app with:
 
 PATCHED (2025-01-07): Added sync_verification_tasks for periodic price sync checks
 PATCHED (2026-02-17): Added outcome_measurement_tasks for multi-window feedback loop
+PATCHED (2026-02-18): Phase 5 — Added intelligence_tasks for IE learning/experimentation/calibration
 """
 
 import os
@@ -28,6 +29,7 @@ celery_app = Celery(
         "workers.tasks.sync_verification_tasks",
         "workers.tasks.outcome_measurement_tasks",
         "workers.tasks.benchmark_refresh_tasks",
+        "workers.tasks.intelligence_tasks",
     ]
 )
 
@@ -97,7 +99,7 @@ celery_app.conf.beat_schedule = {
         "options": {"queue": "celery"},
     },
 
-    # === Outcome Measurement tasks (feedback loop) ===
+    # === Outcome Measurement tasks (Phase 1 feedback loop) ===
 
     # Measure 7-day impact daily at 2 AM
     "measure-outcomes-7d": {
@@ -119,7 +121,8 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=4, minute=0),
         "options": {"queue": "celery"},
     },
-        # === Benchmark Materialized View Refresh ===
+
+    # === Benchmark Materialized View Refresh ===
 
     # Refresh category benchmark views daily at 4:30 AM
     "refresh-benchmark-views": {
@@ -128,4 +131,25 @@ celery_app.conf.beat_schedule = {
         "options": {"queue": "celery"},
     },
 }
+
+# ═══════════════════════════════════════════════════════════════════════
+# Phase 5: Intelligence Environment — register IE beat schedule
+# Merges 10 tasks (learning, experimentation, calibration, drift detection)
+# into beat_schedule non-destructively alongside Phase 1 tasks above.
+#
+# Schedule added:
+#   4:00 AM Sun  — weekly_feature_compute      (Phase 3A)
+#   5:00 AM Sun  — weekly_prior_update          (Phase 3A)
+#   5:30 AM Sun  — refresh_context_cache        (Phase 3A)
+#   6:00 AM Daily — daily_bandit_update          (Phase 3B)
+#   6:30 AM Sun  — weekly_convergence_check     (Phase 3B)
+#   7:00 AM Daily — persist_bandit_state         (Phase 3B)
+#   7:30 AM Sun  — weekly_calibration           (Phase 3C)
+#   8:00 AM Sun  — weekly_drift_detection       (Phase 3C)
+#   8:30 AM Sun  — weekly_scout_feedback        (Phase 3C)
+#   9:00 AM Sun  — weekly_analyst_feedback      (Phase 3C)
+# ═══════════════════════════════════════════════════════════════════════
+from workers.tasks.intelligence_tasks import register_ie_beat_schedule
+register_ie_beat_schedule(celery_app)
+
 

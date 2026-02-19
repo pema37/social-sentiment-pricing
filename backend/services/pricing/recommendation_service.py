@@ -16,6 +16,10 @@ FIX (2026-02-17): Wired PipelineAdapter to produce typed ScoutOutput,
 AnalystOutput, StrategistOutput evidence chains on every recommendation.
 Evidence is stored in factors dict → extracted by record_merchant_decision()
 → stored as JSONB on RecommendationOutcome for calibration & backward learning.
+FIX (2026-02-18): Phase 5 — Wired IE orchestrator (ExperimentManager →
+ScoringEngine → ContextInjector → Calibrator) as enhancement layer.
+If IE is enabled and succeeds, uses its suggested price + calibrated confidence.
+If IE fails or is disabled, falls back to existing PipelineAdapter flow unchanged.
 """
 
 import logging
@@ -43,6 +47,13 @@ from .recommendation_helpers import (
     ReasoningGenerator,
 )
 from .pipeline_adapter import PipelineAdapter
+
+# --- Phase 5: Intelligence Environment ---
+from backend.services.scoring.ie_orchestrator import (
+    create_ie_orchestrator,
+    IEStatus,
+    IERecommendation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +146,98 @@ class RecommendationService:
         result = await self.db.execute(stmt)
         return result.scalars().first() is not None
     
+    # =========================================================================
+    # Phase 5: Intelligence Environment Enhancement Layer
+    # =========================================================================
+    
+    async def _try_ie_recommendation(
+        self,
+        product: Product,
+        signals,
+        rule: Optional[PricingRule],
+    ) -> Optional[IERecommendation]:
+        """
+        Try to get an IE-enhanced recommendation.
+        
+        Returns IERecommendation if IE is enabled and succeeds,
+        None if IE is disabled or fails (caller falls back to existing flow).
+        
+        The IE orchestrator runs:
+          ExperimentManager → ScoringEngine → ContextInjector → Calibrator
+        
+        All components have circuit breakers — if any single component fails,
+        the others continue. If the overall pipeline fails, we return None
+        and the existing PipelineAdapter flow handles the recommendation.
+        """
+        try:
+            # Build product context for the IE orchestrator
+            competitor_prices = []
+            if hasattr(signals, "competitor_prices"):
+                competitor_prices = [
+                    float(p.price)
+                    for p in (signals.competitor_prices or [])
+                    if hasattr(p, "price")
+                ]
+            elif isinstance(signals, dict) and "competitor_prices" in signals:
+                competitor_prices = [
+                    float(p.price) if hasattr(p, "price") else float(p)
+                    for p in (signals.get("competitor_prices") or [])
+                ]
+            
+            product_context = {
+                "product_id": str(product.id),
+                "merchant_id": str(product.merchant_id) if hasattr(product, "merchant_id") else str(product.user_id),
+                "category_id": str(product.category_id) if getattr(product, "category_id", None) else None,
+                "current_price": float(product.current_price),
+                "cost": float(product.cost) if getattr(product, "cost", None) else None,
+                "competitor_prices": competitor_prices,
+                "historical_sales": getattr(signals, "historical_sales", []) if not isinstance(signals, dict) else signals.get("historical_sales", []),
+                "sentiment_score": getattr(signals, "sentiment_score", None) if not isinstance(signals, dict) else signals.get("sentiment_score"),
+                "review_count": getattr(signals, "review_count", None) if not isinstance(signals, dict) else signals.get("review_count"),
+                "search_volume_trend": getattr(signals, "search_volume_trend", None) if not isinstance(signals, dict) else signals.get("search_volume_trend"),
+            }
+            
+            # Create orchestrator with DB session factory
+            orchestrator = create_ie_orchestrator(
+                db_session_factory=lambda: self.db,
+            )
+            
+            # Generate IE recommendation
+            ie_result = orchestrator.generate_recommendation(product_context)
+            
+            if ie_result.status in (IEStatus.SUCCESS, IEStatus.PARTIAL):
+                logger.info(
+                    "IE recommendation for product %s: %s → %s "
+                    "(conf: %.3f, status: %s, duration: %dms)",
+                    product.id,
+                    ie_result.current_price,
+                    ie_result.suggested_price,
+                    ie_result.calibrated_confidence,
+                    ie_result.status.value,
+                    ie_result.total_duration_ms,
+                )
+                return ie_result
+            else:
+                logger.info(
+                    "IE returned %s for product %s, falling back to existing pipeline",
+                    ie_result.status.value,
+                    product.id,
+                )
+                return None
+        
+        except Exception as exc:
+            logger.warning(
+                "IE orchestrator failed for product %s: %s. "
+                "Falling back to existing pipeline.",
+                product.id,
+                exc,
+            )
+            return None
+    
+    # =========================================================================
+    # Rule-Based Recommendation (with IE enhancement)
+    # =========================================================================
+    
     async def _create_rule_based_recommendation(
         self,
         product: Product,
@@ -175,7 +278,42 @@ class RecommendationService:
         )
         
         # ══════════════════════════════════════════════════════════════
+        # PHASE 5: Try IE-enhanced recommendation
+        # If IE succeeds, override price + confidence with IE values.
+        # If IE fails, continue with existing PipelineAdapter flow.
+        # ══════════════════════════════════════════════════════════════
+        
+        ie_result = await self._try_ie_recommendation(product, signals, rule)
+        ie_was_used = False
+        
+        if ie_result is not None:
+            # IE succeeded — use its suggested price and calibrated confidence
+            ie_suggested_price = Decimal(str(ie_result.suggested_price))
+            
+            # Still enforce boundaries for safety (merchant guardrails)
+            new_price = BoundaryEnforcer.apply_boundaries(
+                ie_suggested_price, product, rule
+            )
+            change_percent = BoundaryEnforcer.calculate_change_percent(
+                product.current_price, new_price
+            )
+            
+            # Override confidence with IE's calibrated confidence
+            confidence = ie_result.calibrated_confidence
+            ie_was_used = True
+            
+            logger.info(
+                "Using IE recommendation for product %s: %s → %s (IE conf: %.3f)",
+                product.id,
+                product.current_price,
+                new_price,
+                confidence,
+            )
+        
+        # ══════════════════════════════════════════════════════════════
         # INTELLIGENCE ENVIRONMENT: Build typed agent evidence chains
+        # (runs regardless of IE — provides structured evidence for
+        #  record_merchant_decision → calibration → backward learning)
         # ══════════════════════════════════════════════════════════════
         
         try:
@@ -194,6 +332,41 @@ class RecommendationService:
             "price_impacts": price_impacts,
             "confidence_breakdown": confidence_breakdown,
         }
+        
+        # ── Phase 5: Store IE metadata in factors ──
+        if ie_was_used and ie_result is not None:
+            factors["ie_status"] = ie_result.status.value
+            factors["ie_pipeline_version"] = ie_result.pipeline_version
+            factors["ie_calibrated_confidence"] = ie_result.calibrated_confidence
+            factors["ie_raw_confidence"] = ie_result.raw_confidence
+            factors["ie_total_duration_ms"] = ie_result.total_duration_ms
+            
+            if ie_result.experiment:
+                factors["ie_experiment"] = {
+                    "strategy_name": ie_result.experiment.strategy_name,
+                    "arm_index": ie_result.experiment.arm_index,
+                    "is_exploration": ie_result.experiment.is_exploration,
+                }
+            
+            if ie_result.calibration:
+                factors["ie_calibration"] = {
+                    "method": ie_result.calibration.calibration_method,
+                    "sample_count": ie_result.calibration.sample_count,
+                    "is_reliable": ie_result.calibration.is_reliable,
+                }
+            
+            if ie_result.warnings:
+                factors["ie_warnings"] = ie_result.warnings
+            
+            if ie_result.timings:
+                factors["ie_timings"] = {
+                    t.component: {
+                        "duration_ms": t.duration_ms,
+                        "success": t.success,
+                        "error": t.error,
+                    }
+                    for t in ie_result.timings
+                }
         
         # Generate reasoning
         reasoning = ReasoningGenerator.generate(
@@ -253,11 +426,14 @@ class RecommendationService:
             valid_until=valid_until,
         )
         
+        evidence_status = "ie+pipeline" if ie_was_used else (
+            "pipeline" if strategist_output else "partial"
+        )
         logger.info(
             f"Creating recommendation for product {product.id}: "
             f"${product.current_price} → ${new_price} ({change_percent:+.1f}%), "
             f"confidence={confidence:.2f}, requires_approval={requires_approval}, "
-            f"evidence_chain={'complete' if strategist_output else 'partial'}"
+            f"evidence_chain={evidence_status}"
         )
         
         # Update rule's last_triggered_at
@@ -336,5 +512,6 @@ class RecommendationService:
         logger.info(f"Expired {len(expired)} old recommendations")
         return len(expired)
     
+
 
     
