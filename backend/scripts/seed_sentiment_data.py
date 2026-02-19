@@ -27,11 +27,11 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlmodel import Session, select
-from backend.db.session import engine
-from backend.models.user import User
-from backend.models.product import Product
-from backend.models.social_mention import SocialMention
-from backend.models.sentiment import Sentiment
+from db.session import engine
+from models.user import User
+from models.product import Product
+from models.social_mention import SocialMention
+from models.sentiment import Sentiment
 
 
 # =============================================================================

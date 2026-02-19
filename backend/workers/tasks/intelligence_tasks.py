@@ -43,7 +43,7 @@ def _get_celery_app():
 
 def _get_db_session():
     """Get a sync DB session for Celery tasks."""
-    from backend.db.session import SessionLocal
+    from db.session import SessionLocal
     return SessionLocal()
 
 
@@ -102,7 +102,7 @@ def weekly_feature_compute_impl() -> dict:
     Calls: feature_engineer.compute_all_categories()
     Output: Cached features for prior_updater and context_injector.
     """
-    from backend.services.scoring.learning.feature_engineer import FeatureEngineer
+    from services.scoring.learning.feature_engineer import FeatureEngineer
 
     db = _get_db_session()
     try:
@@ -123,7 +123,7 @@ def weekly_prior_update_impl() -> dict:
     Calls: prior_updater.update_all_priors()
     Uses: EMA alpha=0.3, max 20% shift, outlier filtering.
     """
-    from backend.services.scoring.learning.prior_updater import PriorUpdater
+    from services.scoring.learning.prior_updater import PriorUpdater
 
     db = _get_db_session()
     try:
@@ -144,7 +144,7 @@ def refresh_context_cache_impl() -> dict:
     Calls: context_injector.refresh_cache()
     Output: Pre-computed context strings for all active categories.
     """
-    from backend.services.scoring.learning.context_injector import ContextInjector
+    from services.scoring.learning.context_injector import ContextInjector
 
     db = _get_db_session()
     try:
@@ -167,7 +167,7 @@ def daily_bandit_update_impl() -> dict:
     Updates: Beta distribution parameters for each arm.
     Marks: pricing_outcomes.bandit_processed = true
     """
-    from backend.services.scoring.experimentation.experiment_manager import (
+    from services.scoring.experimentation.experiment_manager import (
         ExperimentManager,
     )
 
@@ -190,7 +190,7 @@ def weekly_convergence_check_impl() -> dict:
     Calls: experiment_manager.check_all_convergence()
     Updates: bandit_state.converged_arm when winner detected.
     """
-    from backend.services.scoring.experimentation.experiment_manager import (
+    from services.scoring.experimentation.experiment_manager import (
         ExperimentManager,
     )
 
@@ -214,7 +214,7 @@ def persist_bandit_state_impl() -> dict:
     Calls: experiment_manager.persist_state()
     Writes: Full Beta distribution params to bandit_state table.
     """
-    from backend.services.scoring.experimentation.experiment_manager import (
+    from services.scoring.experimentation.experiment_manager import (
         ExperimentManager,
     )
 
@@ -238,7 +238,7 @@ def weekly_calibration_impl() -> dict:
     Calls: calibrator.recalibrate_all()
     Updates: Per-category calibration maps.
     """
-    from backend.services.scoring.learning.calibrator import Calibrator
+    from services.scoring.learning.calibrator import Calibrator
 
     db = _get_db_session()
     try:
@@ -259,7 +259,7 @@ def weekly_drift_detection_impl() -> dict:
     Calls: drift_detector.detect_all()
     Output: Drift alerts for categories needing attention.
     """
-    from backend.services.scoring.learning.drift_detector import DriftDetector
+    from services.scoring.learning.drift_detector import DriftDetector
 
     db = _get_db_session()
     try:
@@ -281,7 +281,7 @@ def weekly_scout_feedback_impl() -> dict:
     Calls: scout_feedback.compute_priority_adjustments()
     Output: ScrapingPriorityAdjustments for Scout scheduler.
     """
-    from backend.services.scoring.learning.scout_feedback import ScoutFeedback
+    from services.scoring.learning.scout_feedback import ScoutFeedback
 
     db = _get_db_session()
     try:
@@ -302,7 +302,7 @@ def weekly_analyst_feedback_impl() -> dict:
     Calls: analyst_feedback.compute_weight_recommendations()
     Output: Weight rebalancing suggestions for ScoreFusion.
     """
-    from backend.services.scoring.learning.analyst_feedback import AnalystFeedback
+    from services.scoring.learning.analyst_feedback import AnalystFeedback
 
     db = _get_db_session()
     try:
@@ -485,7 +485,7 @@ def register_ie_beat_schedule(app_instance) -> None:
     Merge IE beat schedules into the existing Celery Beat configuration.
 
     Usage in celery_app.py:
-        from backend.workers.tasks.intelligence_tasks import register_ie_beat_schedule
+        from workers.tasks.intelligence_tasks import register_ie_beat_schedule
         register_ie_beat_schedule(celery_app)
     """
     from celery.schedules import crontab

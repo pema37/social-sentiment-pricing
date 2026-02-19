@@ -60,7 +60,7 @@ def _make_records(
     reference_time=None,
 ):
     """Generate drift records in baseline and recent windows."""
-    from backend.services.scoring.learning.drift_detector import DriftRecord
+    from services.scoring.learning.drift_detector import DriftRecord
     now = reference_time or datetime.now(UTC)
     records = []
 
@@ -110,32 +110,32 @@ def _make_records(
 class TestDriftRecord:
 
     def test_was_successful(self):
-        from backend.services.scoring.learning.drift_detector import DriftRecord
+        from services.scoring.learning.drift_detector import DriftRecord
         r = DriftRecord("r1", "cat", datetime.now(UTC), 0.8, 5.0, "accepted")
         assert r.was_successful is True
 
     def test_was_successful_modified(self):
-        from backend.services.scoring.learning.drift_detector import DriftRecord
+        from services.scoring.learning.drift_detector import DriftRecord
         r = DriftRecord("r1", "cat", datetime.now(UTC), 0.8, 3.0, "modified")
         assert r.was_successful is True
 
     def test_not_successful_negative(self):
-        from backend.services.scoring.learning.drift_detector import DriftRecord
+        from services.scoring.learning.drift_detector import DriftRecord
         r = DriftRecord("r1", "cat", datetime.now(UTC), 0.8, -2.0, "accepted")
         assert r.was_successful is False
 
     def test_not_successful_rejected(self):
-        from backend.services.scoring.learning.drift_detector import DriftRecord
+        from services.scoring.learning.drift_detector import DriftRecord
         r = DriftRecord("r1", "cat", datetime.now(UTC), 0.8, 5.0, "rejected")
         assert r.was_successful is False
 
     def test_was_acted_on(self):
-        from backend.services.scoring.learning.drift_detector import DriftRecord
+        from services.scoring.learning.drift_detector import DriftRecord
         r = DriftRecord("r1", "cat", datetime.now(UTC), 0.8, 5.0, "accepted")
         assert r.was_acted_on is True
 
     def test_was_not_acted_on(self):
-        from backend.services.scoring.learning.drift_detector import DriftRecord
+        from services.scoring.learning.drift_detector import DriftRecord
         r = DriftRecord("r1", "cat", datetime.now(UTC), 0.8, 5.0, "ignored")
         assert r.was_acted_on is False
 
@@ -147,7 +147,7 @@ class TestDriftRecord:
 class TestDriftReport:
 
     def test_has_drift_true(self):
-        from backend.services.scoring.learning.drift_detector import DriftReport, DriftSeverity
+        from services.scoring.learning.drift_detector import DriftReport, DriftSeverity
         report = DriftReport(
             analyzed_at=datetime.now(UTC), category="all",
             period_start=datetime.now(UTC), period_end=datetime.now(UTC),
@@ -159,7 +159,7 @@ class TestDriftReport:
         assert report.has_drift is True
 
     def test_has_drift_false(self):
-        from backend.services.scoring.learning.drift_detector import DriftReport, DriftSeverity
+        from services.scoring.learning.drift_detector import DriftReport, DriftSeverity
         report = DriftReport(
             analyzed_at=datetime.now(UTC), category="all",
             period_start=datetime.now(UTC), period_end=datetime.now(UTC),
@@ -171,7 +171,7 @@ class TestDriftReport:
         assert report.has_drift is False
 
     def test_summary_string(self):
-        from backend.services.scoring.learning.drift_detector import DriftReport, DriftSeverity
+        from services.scoring.learning.drift_detector import DriftReport, DriftSeverity
         report = DriftReport(
             analyzed_at=datetime.now(UTC), category="electronics",
             period_start=datetime.now(UTC), period_end=datetime.now(UTC),
@@ -192,12 +192,12 @@ class TestDriftReport:
 class TestDriftDetectorDetect:
 
     def _detector(self, **kwargs):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         return DriftDetector(**kwargs)
 
     def test_stable_system_no_drift(self):
         """Stable baseline and recent → NONE or LOW severity."""
-        from backend.services.scoring.learning.drift_detector import DriftRecord, DriftSeverity
+        from services.scoring.learning.drift_detector import DriftRecord, DriftSeverity
         now = datetime.now(UTC)
         records = []
         # Baseline: uniform confidence, positive lift, all accepted
@@ -273,12 +273,12 @@ class TestDriftDetectorDetect:
 class TestCorrelationDrop:
 
     def _detector(self):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         return DriftDetector()
 
     def test_critical_correlation(self):
         """Very low recent correlation → CRITICAL."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         # Recent: random confidence, no correlation with revenue
         records = _make_records(
             baseline_conf=0.5, recent_conf=0.5,
@@ -293,12 +293,12 @@ class TestCorrelationDrop:
 class TestAcceptanceDecline:
 
     def _detector(self):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         return DriftDetector()
 
     def test_declining_acceptance(self):
         """Sharp acceptance drop → at least MEDIUM signal."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(
             baseline_acceptance=0.9,
             recent_acceptance=0.4,
@@ -313,7 +313,7 @@ class TestAcceptanceDecline:
 
     def test_stable_acceptance(self):
         """Stable acceptance → NONE."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(
             baseline_acceptance=0.8,
             recent_acceptance=0.8,
@@ -327,12 +327,12 @@ class TestAcceptanceDecline:
 class TestLiftDecline:
 
     def _detector(self):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         return DriftDetector()
 
     def test_declining_lift(self):
         """Sharp lift drop → at least MEDIUM."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(
             baseline_lift=8.0,
             recent_lift=2.0,
@@ -346,7 +346,7 @@ class TestLiftDecline:
 
     def test_stable_lift(self):
         """Stable lift → NONE."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(baseline_lift=5.0, recent_lift=5.0)
         report = self._detector().detect(records)
         lift_signals = [s for s in report.signals if s.signal_type == "lift_decline"]
@@ -357,7 +357,7 @@ class TestLiftDecline:
 class TestDistributionShift:
 
     def _detector(self):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         return DriftDetector()
 
     def test_shifted_distribution(self):
@@ -372,7 +372,7 @@ class TestDistributionShift:
 
     def test_stable_distribution(self):
         """Same distribution → NONE."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(baseline_conf=0.5, recent_conf=0.5)
         report = self._detector().detect(records)
         dist_signals = [s for s in report.signals if s.signal_type == "distribution_shift"]
@@ -383,12 +383,12 @@ class TestDistributionShift:
 class TestVolumeCheck:
 
     def _detector(self):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         return DriftDetector()
 
     def test_volume_drop(self):
         """Very few recent vs baseline → volume_drop signal."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(n_baseline=40, n_recent=2)
         report = self._detector().detect(records)
         vol_signals = [s for s in report.signals if s.signal_type == "volume_drop"]
@@ -399,7 +399,7 @@ class TestVolumeCheck:
 
     def test_stable_volume(self):
         """Similar per-day rates → NONE."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(n_baseline=20, n_recent=15)
         report = self._detector().detect(records)
         vol_signals = [s for s in report.signals if s.signal_type == "volume_drop"]
@@ -414,7 +414,7 @@ class TestVolumeCheck:
 class TestOverallAssessment:
 
     def _assess(self, severities):
-        from backend.services.scoring.learning.drift_detector import (
+        from services.scoring.learning.drift_detector import (
             DriftDetector, DriftSignal, DriftSeverity,
         )
         signals = [
@@ -428,47 +428,47 @@ class TestOverallAssessment:
         return DriftDetector._assess_overall(signals)
 
     def test_no_signals(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         assert self._assess([]) == DriftSeverity.NONE
 
     def test_single_critical(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         assert self._assess([DriftSeverity.CRITICAL]) == DriftSeverity.CRITICAL
 
     def test_two_high_escalate(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         result = self._assess([DriftSeverity.HIGH, DriftSeverity.HIGH])
         assert result == DriftSeverity.CRITICAL
 
     def test_single_high(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         result = self._assess([DriftSeverity.HIGH, DriftSeverity.LOW])
         assert result == DriftSeverity.HIGH
 
     def test_two_medium_escalate(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         result = self._assess([DriftSeverity.MEDIUM, DriftSeverity.MEDIUM])
         assert result == DriftSeverity.HIGH
 
     def test_single_medium(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         result = self._assess([DriftSeverity.MEDIUM, DriftSeverity.LOW])
         assert result == DriftSeverity.MEDIUM
 
     def test_all_low(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         result = self._assess([DriftSeverity.LOW, DriftSeverity.LOW])
         assert result == DriftSeverity.LOW
 
     def test_all_none(self):
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         result = self._assess([DriftSeverity.NONE, DriftSeverity.NONE])
         assert result == DriftSeverity.NONE
 
     def test_retrain_flag_high(self):
         """HIGH overall → should_retrain=True."""
         records = _make_records(baseline_acceptance=0.95, recent_acceptance=0.2)
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         report = DriftDetector().detect(records)
         # If overall is HIGH or CRITICAL, should_retrain is True
         if report.overall_severity.value in ("high", "critical"):
@@ -476,9 +476,9 @@ class TestOverallAssessment:
 
     def test_recalibrate_flag_medium(self):
         """MEDIUM+ overall → should_recalibrate=True."""
-        from backend.services.scoring.learning.drift_detector import DriftSeverity
+        from services.scoring.learning.drift_detector import DriftSeverity
         records = _make_records(baseline_acceptance=0.9, recent_acceptance=0.5)
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         report = DriftDetector().detect(records)
         if report.overall_severity in (DriftSeverity.MEDIUM, DriftSeverity.HIGH, DriftSeverity.CRITICAL):
             assert report.should_recalibrate is True
@@ -492,7 +492,7 @@ class TestDetectAllCategories:
 
     def test_multiple_categories(self):
         """Reports generated per category."""
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         records = _make_records(category="electronics")
         records += _make_records(category="fashion")
         detector = DriftDetector()
@@ -502,7 +502,7 @@ class TestDetectAllCategories:
         assert "fashion" in categories
 
     def test_empty_records(self):
-        from backend.services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.drift_detector import DriftDetector
         reports = DriftDetector().detect_all_categories([])
         assert reports == []
 
@@ -514,25 +514,25 @@ class TestDetectAllCategories:
 class TestSimplifiedKS:
 
     def test_identical_distributions(self):
-        from backend.services.scoring.learning.drift_detector import _simplified_ks
+        from services.scoring.learning.drift_detector import _simplified_ks
         a = [0.1, 0.3, 0.5, 0.7, 0.9]
         assert _simplified_ks(a, list(a)) == 0.0
 
     def test_completely_separated(self):
-        from backend.services.scoring.learning.drift_detector import _simplified_ks
+        from services.scoring.learning.drift_detector import _simplified_ks
         a = [0.0, 0.1, 0.2]
         b = [0.8, 0.9, 1.0]
         ks = _simplified_ks(a, b)
         assert ks > 0.5
 
     def test_empty_samples(self):
-        from backend.services.scoring.learning.drift_detector import _simplified_ks
+        from services.scoring.learning.drift_detector import _simplified_ks
         assert _simplified_ks([], [0.5]) == 0.0
         assert _simplified_ks([0.5], []) == 0.0
         assert _simplified_ks([], []) == 0.0
 
     def test_ks_between_0_and_1(self):
-        from backend.services.scoring.learning.drift_detector import _simplified_ks
+        from services.scoring.learning.drift_detector import _simplified_ks
         a = [0.1, 0.2, 0.3, 0.4, 0.5]
         b = [0.3, 0.4, 0.5, 0.6, 0.7]
         ks = _simplified_ks(a, b)

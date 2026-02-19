@@ -642,12 +642,12 @@ def create_ie_orchestrator(
         result = orchestrator.generate_recommendation(product_context)
     """
     # Lazy imports to avoid circular deps — these are the Phase 2-3 modules
-    from backend.services.scoring.engine import ScoringEngine
-    from backend.services.scoring.experimentation.experiment_manager import (
+    from services.scoring.engine import ScoringEngine
+    from services.scoring.experimentation.experiment_manager import (
         ExperimentManager,
     )
-    from backend.services.scoring.learning.calibrator import Calibrator
-    from backend.services.scoring.learning.context_injector import ContextInjector
+    from services.scoring.learning.calibrator import Calibrator
+    from services.scoring.learning.context_injector import ContextInjector
 
     # Feature flag check
     flags = merchant_feature_flags or {}

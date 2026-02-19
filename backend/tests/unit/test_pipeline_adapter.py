@@ -42,8 +42,8 @@ _mock_core_db = types.ModuleType("core.db.session")
 _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
-from backend.services.pricing.pipeline_adapter import PipelineAdapter
-from backend.schemas.agent_contracts import (
+from services.pricing.pipeline_adapter import PipelineAdapter
+from schemas.agent_contracts import (
     ScoutOutput,
     AnalystOutput,
     StrategistOutput,

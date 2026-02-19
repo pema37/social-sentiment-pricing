@@ -91,7 +91,7 @@ class TestScoringContextDefaults:
     """Test ScoringContext dataclass defaults."""
 
     def test_default_values(self):
-        from backend.services.scoring.learning.context_injector import ScoringContext
+        from services.scoring.learning.context_injector import ScoringContext
         ctx = ScoringContext(category="test")
         assert ctx.category == "test"
         assert ctx.merchant_bias == 0.0
@@ -115,7 +115,7 @@ class TestBuildScoringContext:
     """Test structured context for the scoring engine."""
 
     def _injector(self):
-        from backend.services.scoring.learning.context_injector import ContextInjector
+        from services.scoring.learning.context_injector import ContextInjector
         return ContextInjector()
 
     def test_none_features_returns_default(self):
@@ -352,7 +352,7 @@ class TestBuildAgentContext:
     """Test human-readable context for LLM prompts."""
 
     def _injector(self):
-        from backend.services.scoring.learning.context_injector import ContextInjector
+        from services.scoring.learning.context_injector import ContextInjector
         return ContextInjector()
 
     def test_none_features_empty_string(self):
@@ -525,7 +525,7 @@ class TestBuildMinimalContext:
     """Test one-line context summary."""
 
     def _injector(self):
-        from backend.services.scoring.learning.context_injector import ContextInjector
+        from services.scoring.learning.context_injector import ContextInjector
         return ContextInjector()
 
     def test_none_features(self):
@@ -575,14 +575,14 @@ class TestBuildConvenience:
     """Test the combined build() method."""
 
     def _injector(self):
-        from backend.services.scoring.learning.context_injector import ContextInjector
+        from services.scoring.learning.context_injector import ContextInjector
         return ContextInjector()
 
     def test_returns_tuple(self):
         """build() returns (ScoringContext, str)."""
         features = FakeCategoryFeatures(n_outcomes=20)
         scoring_ctx, agent_text = self._injector().build(features)
-        from backend.services.scoring.learning.context_injector import ScoringContext
+        from services.scoring.learning.context_injector import ScoringContext
         assert isinstance(scoring_ctx, ScoringContext)
         assert isinstance(agent_text, str)
 
@@ -617,7 +617,7 @@ class TestContextInjectorEdgeCases:
     """Boundary conditions and edge cases."""
 
     def _injector(self):
-        from backend.services.scoring.learning.context_injector import ContextInjector
+        from services.scoring.learning.context_injector import ContextInjector
         return ContextInjector()
 
     def test_exactly_threshold_outcomes(self):

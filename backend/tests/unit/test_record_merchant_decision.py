@@ -16,7 +16,7 @@ asyncpg engine creation at import time.
 NOTE: Do NOT use MagicMock(spec=ModelClass) — Python 3.13 rejects speccing
 against Mock objects. Use plain MagicMock() instead.
 
-NOTE: Do NOT import from backend.models.* directly — the module is already
+NOTE: Do NOT import from models.* directly — the module is already
 loaded as models.* by OutcomeService. Importing via backend.models.* creates
 a second module entry that re-runs the SQLModel table=True class, crashing
 with "Table already defined".
@@ -52,10 +52,10 @@ _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
 # ── Import the service under test ──
-from backend.services.pricing.outcome_service import OutcomeService
+from services.pricing.outcome_service import OutcomeService
 
 # ── Pull enums from the ALREADY-LOADED module (same path the source used) ──
-# Do NOT do `from backend.models.recommendation_outcome import ...`
+# Do NOT do `from models.recommendation_outcome import ...`
 # because that triggers a second table registration.
 _outcome_mod = sys.modules["models.recommendation_outcome"]
 OutcomeLabel = _outcome_mod.OutcomeLabel

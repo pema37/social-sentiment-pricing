@@ -162,7 +162,7 @@ class TestStep1_GenerateRecommendation:
     """IE Orchestrator produces a traced recommendation."""
 
     def _make_orchestrator(self, **kwargs):
-        from backend.services.scoring.ie_orchestrator import (
+        from services.scoring.ie_orchestrator import (
             IEOrchestrator, IEOrchestratorConfig,
         )
         return IEOrchestrator(
@@ -174,7 +174,7 @@ class TestStep1_GenerateRecommendation:
         )
 
     def test_generates_recommendation(self):
-        from backend.services.scoring.ie_orchestrator import IEStatus
+        from services.scoring.ie_orchestrator import IEStatus
         orch = self._make_orchestrator()
         result = orch.generate_recommendation({
             "product_id": "prod-001",
@@ -237,7 +237,7 @@ class TestStep1_GenerateRecommendation:
         assert result.total_duration_ms >= 0
 
     def test_fallback_when_disabled(self):
-        from backend.services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig, IEStatus
+        from services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig, IEStatus
         orch = IEOrchestrator(
             experiment_manager=FakeExperimentManager(),
             scoring_engine=FakeScoringEngine(),
@@ -257,7 +257,7 @@ class TestStep1_GenerateRecommendation:
 
     def test_graceful_degradation_scoring_failure(self):
         """Scoring engine failure → FALLBACK status."""
-        from backend.services.scoring.ie_orchestrator import IEStatus
+        from services.scoring.ie_orchestrator import IEStatus
         broken_scorer = MagicMock()
         broken_scorer.score.side_effect = RuntimeError("boom")
         orch = self._make_orchestrator(scoring_engine=broken_scorer)
@@ -271,7 +271,7 @@ class TestStep1_GenerateRecommendation:
 
     def test_graceful_degradation_experiment_failure(self):
         """Experiment failure → WARNING but still produces result."""
-        from backend.services.scoring.ie_orchestrator import IEStatus
+        from services.scoring.ie_orchestrator import IEStatus
         broken_exp = MagicMock()
         broken_exp.get_experiment_config.side_effect = RuntimeError("boom")
         orch = self._make_orchestrator(experiment_manager=broken_exp)
@@ -294,7 +294,7 @@ class TestStep2_OutcomeRecording:
 
     def test_ie_metadata_in_factors(self):
         """IE orchestrator populates factors dict with IE metadata."""
-        from backend.services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig
+        from services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig
 
         orch = IEOrchestrator(
             experiment_manager=FakeExperimentManager(),
@@ -351,7 +351,7 @@ class TestStep3_MeasurementAndCalibration:
 
     def test_calibrator_measures_quality(self):
         """Calibrator.measure produces CalibrationReport from outcomes."""
-        from backend.services.scoring.learning.calibrator import (
+        from services.scoring.learning.calibrator import (
             Calibrator, CalibrationRecord,
         )
         records = [
@@ -371,7 +371,7 @@ class TestStep3_MeasurementAndCalibration:
 
     def test_calibrator_builds_map_when_miscalibrated(self):
         """If miscalibrated, build_calibration_map produces correction function."""
-        from backend.services.scoring.learning.calibrator import (
+        from services.scoring.learning.calibrator import (
             Calibrator, CalibrationRecord, CalibrationMap,
         )
         # Overconfident records: high confidence, poor outcomes
@@ -394,7 +394,7 @@ class TestStep3_MeasurementAndCalibration:
 
     def test_drift_detector_runs_on_accumulated_data(self):
         """Drift detector processes outcome records for degradation signals."""
-        from backend.services.scoring.learning.drift_detector import (
+        from services.scoring.learning.drift_detector import (
             DriftDetector, DriftRecord, DriftSeverity,
         )
         now = datetime.now(UTC)
@@ -435,7 +435,7 @@ class TestStep4_FeedbackLoops:
 
     def test_scout_feedback_identifies_data_gaps(self):
         """Scout feedback correlates failures with data quality gaps."""
-        from backend.services.scoring.learning.scout_feedback import (
+        from services.scoring.learning.scout_feedback import (
             ScoutFeedbackAnalyzer, OutcomeWithDataQuality,
         )
         outcomes = []
@@ -476,7 +476,7 @@ class TestStep4_FeedbackLoops:
 
     def test_analyst_feedback_adjusts_weights(self):
         """Analyst feedback identifies predictive vs noisy components."""
-        from backend.services.scoring.learning.analyst_feedback import (
+        from services.scoring.learning.analyst_feedback import (
             AnalystFeedbackAnalyzer, OutcomeWithComponents,
         )
         outcomes = []
@@ -510,7 +510,7 @@ class TestStep5_ContextInjectionLoop:
 
     def test_context_enriches_next_recommendation(self):
         """Second recommendation includes category context from first cycle."""
-        from backend.services.scoring.ie_orchestrator import (
+        from services.scoring.ie_orchestrator import (
             IEOrchestrator, IEOrchestratorConfig,
         )
         ctx_injector = FakeContextInjector()
@@ -544,7 +544,7 @@ class TestStep5_ContextInjectionLoop:
 
     def test_calibrator_adjusts_subsequent_confidence(self):
         """Calibrator trained from outcomes adjusts next recommendation's confidence."""
-        from backend.services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig
+        from services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig
 
         # First cycle: no calibration adjustment
         cal = FakeCalibrator(adjustment=0.0)
@@ -601,19 +601,19 @@ class TestFullIECycle:
     """
 
     def test_complete_cycle(self):
-        from backend.services.scoring.ie_orchestrator import (
+        from services.scoring.ie_orchestrator import (
             IEOrchestrator, IEOrchestratorConfig, IEStatus,
         )
-        from backend.services.scoring.learning.calibrator import (
+        from services.scoring.learning.calibrator import (
             Calibrator, CalibrationRecord,
         )
-        from backend.services.scoring.learning.drift_detector import (
+        from services.scoring.learning.drift_detector import (
             DriftDetector, DriftRecord,
         )
-        from backend.services.scoring.learning.scout_feedback import (
+        from services.scoring.learning.scout_feedback import (
             ScoutFeedbackAnalyzer, OutcomeWithDataQuality,
         )
-        from backend.services.scoring.learning.analyst_feedback import (
+        from services.scoring.learning.analyst_feedback import (
             AnalystFeedbackAnalyzer, OutcomeWithComponents,
         )
 
@@ -768,13 +768,13 @@ class TestFullIECycle:
 
     def test_system_handles_zero_outcomes(self):
         """IE works fine with no historical outcomes (cold start)."""
-        from backend.services.scoring.ie_orchestrator import (
+        from services.scoring.ie_orchestrator import (
             IEOrchestrator, IEOrchestratorConfig, IEStatus,
         )
-        from backend.services.scoring.learning.calibrator import Calibrator
-        from backend.services.scoring.learning.drift_detector import DriftDetector
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.calibrator import Calibrator
+        from services.scoring.learning.drift_detector import DriftDetector
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
 
         # Calibration with no data
         cal_report = Calibrator().measure([], category="electronics")

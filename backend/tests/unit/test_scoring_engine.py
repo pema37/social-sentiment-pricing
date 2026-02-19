@@ -140,7 +140,7 @@ class TestScoringEngineInit:
 
     def test_default_init(self):
         """Engine initializes with default config."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         assert engine._prior_store is not None
         assert engine._elasticity_calc is not None
@@ -150,23 +150,23 @@ class TestScoringEngineInit:
 
     def test_custom_guardrail_config(self):
         """Engine accepts custom GuardrailConfig."""
-        from backend.services.scoring.engine import ScoringEngine
-        from backend.services.scoring.fusion_types import GuardrailConfig
+        from services.scoring.engine import ScoringEngine
+        from services.scoring.fusion_types import GuardrailConfig
         config = GuardrailConfig()
         engine = ScoringEngine(guardrail_config=config)
         assert engine._fusion is not None
 
     def test_custom_prior_store(self):
         """Engine accepts injected CategoryPriorStore."""
-        from backend.services.scoring.engine import ScoringEngine
-        from backend.services.scoring.category_priors import CategoryPriorStore
+        from services.scoring.engine import ScoringEngine
+        from services.scoring.category_priors import CategoryPriorStore
         store = CategoryPriorStore()
         engine = ScoringEngine(prior_store=store)
         assert engine._prior_store is store
 
     def test_prior_store_property(self):
         """prior_store property exposes the store for batch jobs."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         assert engine.prior_store is engine._prior_store
 
@@ -180,7 +180,7 @@ class TestScoringEnginePipeline:
 
     def _make_engine_with_mocks(self):
         """Create engine with mocked internal components."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
 
         engine = ScoringEngine()
 
@@ -201,7 +201,7 @@ class TestScoringEnginePipeline:
 
     def test_happy_path_returns_result(self):
         """Full pipeline returns ScoringEngineResult with all components."""
-        from backend.services.scoring.engine import ScoringEngineResult
+        from services.scoring.engine import ScoringEngineResult
         engine = self._make_engine_with_mocks()
         scout = FakeScoutOutput()
 
@@ -322,13 +322,13 @@ class TestBridgeHelpers:
 
     def test_get_our_price_float(self):
         """Extracts float price from ScoutOutput."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(our_price=42.50)
         assert ScoringEngine._get_our_price(scout) == 42.50
 
     def test_get_our_price_decimal(self):
         """Converts Decimal price to float."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(our_price=Decimal("42.50"))
         result = ScoringEngine._get_our_price(scout)
         assert isinstance(result, float)
@@ -336,44 +336,44 @@ class TestBridgeHelpers:
 
     def test_get_our_price_zero(self):
         """Zero price returns 0.0."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(our_price=0)
         assert ScoringEngine._get_our_price(scout) == 0.0
 
     def test_get_our_price_none(self):
         """None price returns 0.0."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(our_price=None)
         assert ScoringEngine._get_our_price(scout) == 0.0
 
     def test_get_our_price_missing_attr(self):
         """Object without our_price returns 0.0."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         obj = MagicMock(spec=[])  # Empty spec — no attributes
         assert ScoringEngine._get_our_price(obj) == 0.0
 
     def test_get_sentiment_score_normal(self):
         """Extracts sentiment score from nested sentiment object."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(sentiment=FakeSentiment(overall_score=0.65))
         assert ScoringEngine._get_sentiment_score(scout) == 0.65
 
     def test_get_sentiment_score_none_sentiment(self):
         """No sentiment returns None."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(sentiment=None)
         assert ScoringEngine._get_sentiment_score(scout) is None
 
     def test_get_sentiment_score_none_overall(self):
         """Sentiment with no overall_score returns None."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         sentiment = MagicMock(spec=[])  # No overall_score
         scout = FakeScoutOutput(sentiment=sentiment)
         assert ScoringEngine._get_sentiment_score(scout) is None
 
     def test_get_sentiment_score_decimal(self):
         """Decimal sentiment score converted to float."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         sentiment = FakeSentiment(overall_score=Decimal("0.55"))
         scout = FakeScoutOutput(sentiment=sentiment)
         result = ScoringEngine._get_sentiment_score(scout)
@@ -390,7 +390,7 @@ class TestUrgencySignalBuilding:
 
     def test_full_signals(self):
         """All signals available — all fields populated."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput()
         signals = FakeSignals()
         position = FakePositionResult()
@@ -407,7 +407,7 @@ class TestUrgencySignalBuilding:
 
     def test_no_signals(self):
         """No MarketSignals — trend fields are None."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput()
         position = FakePositionResult()
 
@@ -421,7 +421,7 @@ class TestUrgencySignalBuilding:
 
     def test_no_sentiment(self):
         """No sentiment on ScoutOutput — sentiment fields are None."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput(sentiment=None)
         signals = FakeSignals()
         position = FakePositionResult()
@@ -433,7 +433,7 @@ class TestUrgencySignalBuilding:
 
     def test_crisis_from_scout(self):
         """Crisis detected via scout sentiment."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         sentiment = FakeSentiment(overall_score=-0.8, crisis_detected=True, crisis_severity=0.9)
         scout = FakeScoutOutput(sentiment=sentiment)
         position = FakePositionResult()
@@ -445,7 +445,7 @@ class TestUrgencySignalBuilding:
 
     def test_crisis_from_viral_negative(self):
         """Crisis inferred from viral + negative sentiment (scout didn't catch it)."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         sentiment = FakeSentiment(overall_score=-0.7, crisis_detected=False)
         scout = FakeScoutOutput(sentiment=sentiment)
         signals = FakeSignals(viral_detected=True)
@@ -457,7 +457,7 @@ class TestUrgencySignalBuilding:
 
     def test_no_crisis_from_viral_positive(self):
         """Viral + positive sentiment does NOT trigger crisis."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         sentiment = FakeSentiment(overall_score=0.5, crisis_detected=False)
         scout = FakeScoutOutput(sentiment=sentiment)
         signals = FakeSignals(viral_detected=True)
@@ -469,7 +469,7 @@ class TestUrgencySignalBuilding:
 
     def test_inventory_fields_are_none(self):
         """Inventory/search signals not yet connected — always None."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = FakeScoutOutput()
         position = FakePositionResult()
 
@@ -490,7 +490,7 @@ class TestPositionBridge:
 
     def test_competitors_converted_to_price_points(self):
         """ScoutOutput competitors are bridged to CompetitorPricePoint."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult()
@@ -511,7 +511,7 @@ class TestPositionBridge:
 
     def test_empty_competitors(self):
         """No competitors — empty list passed to calculator."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult(competitor_count=0)
@@ -525,7 +525,7 @@ class TestPositionBridge:
 
     def test_none_competitors(self):
         """None competitors treated as empty list."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult(competitor_count=0)
@@ -539,7 +539,7 @@ class TestPositionBridge:
 
     def test_sale_price_bridged(self):
         """Competitor sale_price converted to float."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult()
@@ -556,7 +556,7 @@ class TestPositionBridge:
 
     def test_none_sale_price(self):
         """None sale_price stays None."""
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult()
@@ -579,7 +579,7 @@ class TestAnalystFieldBuilder:
     """Test _build_analyst_fields output structure."""
 
     def _build(self, **overrides):
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         scout = overrides.pop("scout", FakeScoutOutput())
         elasticity = overrides.pop("elasticity", FakeElasticityResult())
         position = overrides.pop("position", FakePositionResult())
@@ -727,7 +727,7 @@ class TestScoringEngineResult:
 
     def test_slots(self):
         """Result uses __slots__ for memory efficiency."""
-        from backend.services.scoring.engine import ScoringEngineResult
+        from services.scoring.engine import ScoringEngineResult
         result = ScoringEngineResult(
             elasticity=FakeElasticityResult(),
             position=FakePositionResult(),
@@ -741,7 +741,7 @@ class TestScoringEngineResult:
 
     def test_no_extra_attributes(self):
         """__slots__ prevents adding extra attributes."""
-        from backend.services.scoring.engine import ScoringEngineResult
+        from services.scoring.engine import ScoringEngineResult
         result = ScoringEngineResult(
             elasticity=FakeElasticityResult(),
             position=FakePositionResult(),
@@ -762,7 +762,7 @@ class TestEdgeCases:
     """Edge cases and boundary conditions."""
 
     def _make_engine_with_mocks(self):
-        from backend.services.scoring.engine import ScoringEngine
+        from services.scoring.engine import ScoringEngine
         engine = ScoringEngine()
         engine._elasticity_calc = MagicMock()
         engine._elasticity_calc.compute.return_value = FakeElasticityResult()

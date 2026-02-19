@@ -51,7 +51,7 @@ def isolate_modules():
 # ──────────────────────────────────────────────────────────
 
 def _make_outcome(**kwargs):
-    from backend.services.scoring.learning.scout_feedback import OutcomeWithDataQuality
+    from services.scoring.learning.scout_feedback import OutcomeWithDataQuality
     defaults = dict(
         recommendation_id="rec-001",
         category="electronics",
@@ -156,7 +156,7 @@ class TestOutcomeWithDataQuality:
 class TestScrapingPriorityAdjustment:
 
     def test_is_significant(self):
-        from backend.services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
+        from services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
         adj = ScrapingPriorityAdjustment(
             category="electronics", adjustment_type="competitor_price",
             priority_boost=0.3, reason="test",
@@ -165,7 +165,7 @@ class TestScrapingPriorityAdjustment:
         assert adj.is_significant is True
 
     def test_not_significant_low_boost(self):
-        from backend.services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
+        from services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
         adj = ScrapingPriorityAdjustment(
             category="electronics", adjustment_type="competitor_price",
             priority_boost=0.01, reason="test",
@@ -174,7 +174,7 @@ class TestScrapingPriorityAdjustment:
         assert adj.is_significant is False
 
     def test_not_significant_low_confidence(self):
-        from backend.services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
+        from services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
         adj = ScrapingPriorityAdjustment(
             category="electronics", adjustment_type="competitor_price",
             priority_boost=0.3, reason="test",
@@ -190,7 +190,7 @@ class TestScrapingPriorityAdjustment:
 class TestScoutFeedbackReport:
 
     def test_significant_adjustments_filter(self):
-        from backend.services.scoring.learning.scout_feedback import (
+        from services.scoring.learning.scout_feedback import (
             ScoutFeedbackReport, ScrapingPriorityAdjustment,
         )
         adj1 = ScrapingPriorityAdjustment(
@@ -214,7 +214,7 @@ class TestScoutFeedbackReport:
         assert sig[0].category == "a"
 
     def test_summary_string(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackReport
+        from services.scoring.learning.scout_feedback import ScoutFeedbackReport
         report = ScoutFeedbackReport(
             analyzed_at=datetime.now(UTC),
             total_outcomes_analyzed=20,
@@ -235,7 +235,7 @@ class TestScoutFeedbackReport:
 class TestAnalyzerHappyPath:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
         return ScoutFeedbackAnalyzer()
 
     def test_empty_outcomes(self):
@@ -309,7 +309,7 @@ class TestAnalyzerHappyPath:
 class TestCompetitorGapDetection:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
         return ScoutFeedbackAnalyzer()
 
     def test_low_competitor_count_detected(self):
@@ -375,7 +375,7 @@ class TestCompetitorGapDetection:
 class TestSentimentGapDetection:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
         return ScoutFeedbackAnalyzer()
 
     def test_no_sentiment_detected(self):
@@ -416,7 +416,7 @@ class TestSentimentGapDetection:
 class TestFreshnessGapDetection:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
         return ScoutFeedbackAnalyzer()
 
     def test_stale_data_detected(self):
@@ -461,7 +461,7 @@ class TestFreshnessGapDetection:
 class TestMultipleCategories:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
         return ScoutFeedbackAnalyzer()
 
     def test_separate_category_analysis(self):
@@ -501,7 +501,7 @@ class TestMultipleCategories:
 class TestScoutFeedbackEdgeCases:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+        from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
         return ScoutFeedbackAnalyzer()
 
     def test_all_failures(self):

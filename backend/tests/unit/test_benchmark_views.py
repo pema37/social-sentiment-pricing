@@ -46,7 +46,7 @@ _mock_core_db = types.ModuleType("core.db.session")
 _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
-from backend.services.pricing.outcome_benchmarks import OutcomeBenchmarkService
+from services.pricing.outcome_benchmarks import OutcomeBenchmarkService
 
 # Pull enums from already-loaded module
 _outcome_mod = sys.modules["models.recommendation_outcome"]

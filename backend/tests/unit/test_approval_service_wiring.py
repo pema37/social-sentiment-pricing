@@ -41,7 +41,7 @@ _mock_core_db = types.ModuleType("core.db.session")
 _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
-from backend.services.pricing.approval_service import ApprovalService, ApprovalError
+from services.pricing.approval_service import ApprovalService, ApprovalError
 
 # Pull enums from already-loaded modules (same path source uses)
 _rec_mod = sys.modules["models.price_recommendation"]

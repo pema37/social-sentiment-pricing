@@ -15,7 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.services.ai_trend_analysis.autonomous_orchestrator import (
+from services.ai_trend_analysis.autonomous_orchestrator import (
     AutonomousOrchestrator,
     AutonomousTrigger,
     PricingDecision,

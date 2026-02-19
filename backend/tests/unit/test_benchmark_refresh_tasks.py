@@ -70,7 +70,7 @@ if "core.logging" not in sys.modules:
     _saved["core.logging"] = None
 
 # Now import the module under test
-from backend.workers.tasks.benchmark_refresh_tasks import (
+from workers.tasks.benchmark_refresh_tasks import (
     _refresh_benchmark_views,
     _get_view_stats,
     refresh_benchmark_views,

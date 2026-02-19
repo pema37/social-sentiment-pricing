@@ -50,7 +50,7 @@ def isolate_modules():
 # ──────────────────────────────────────────────────────────
 
 def _make_outcome(**kwargs):
-    from backend.services.scoring.learning.analyst_feedback import OutcomeWithComponents
+    from services.scoring.learning.analyst_feedback import OutcomeWithComponents
     defaults = dict(
         recommendation_id="rec-001",
         category="electronics",
@@ -156,7 +156,7 @@ class TestOutcomeWithComponents:
 class TestWeightAdjustmentRecommendation:
 
     def test_summary_with_changes(self):
-        from backend.services.scoring.learning.analyst_feedback import (
+        from services.scoring.learning.analyst_feedback import (
             WeightAdjustmentRecommendation, ComponentAnalysis,
         )
         rec = WeightAdjustmentRecommendation(
@@ -176,7 +176,7 @@ class TestWeightAdjustmentRecommendation:
         assert "50 outcomes" in s
 
     def test_summary_no_changes(self):
-        from backend.services.scoring.learning.analyst_feedback import WeightAdjustmentRecommendation
+        from services.scoring.learning.analyst_feedback import WeightAdjustmentRecommendation
         rec = WeightAdjustmentRecommendation(
             category="electronics", n_outcomes=50,
             n_successes=30, n_failures=20,
@@ -199,7 +199,7 @@ class TestWeightAdjustmentRecommendation:
 class TestAnalystFeedbackReport:
 
     def test_categories_with_changes(self):
-        from backend.services.scoring.learning.analyst_feedback import (
+        from services.scoring.learning.analyst_feedback import (
             AnalystFeedbackReport, WeightAdjustmentRecommendation,
         )
         rec1 = WeightAdjustmentRecommendation(
@@ -220,7 +220,7 @@ class TestAnalystFeedbackReport:
         assert len(report.categories_with_changes) == 1
 
     def test_summary_string(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackReport
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackReport
         report = AnalystFeedbackReport(
             analyzed_at=datetime.now(UTC),
             total_outcomes=100,
@@ -236,7 +236,7 @@ class TestAnalystFeedbackReport:
 class TestAnalyzerHappyPath:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         return AnalystFeedbackAnalyzer()
 
     def test_empty_outcomes(self):
@@ -291,7 +291,7 @@ class TestAnalyzerHappyPath:
 class TestComponentAnalysis:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         return AnalystFeedbackAnalyzer()
 
     def test_predictive_component_positive_separation(self):
@@ -337,7 +337,7 @@ class TestComponentAnalysis:
 class TestWeightComputation:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         return AnalystFeedbackAnalyzer()
 
     def test_weights_sum_to_one(self):
@@ -400,7 +400,7 @@ class TestWeightComputation:
 class TestAutoApplyLogic:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         return AnalystFeedbackAnalyzer()
 
     def test_small_change_auto_applies(self):
@@ -413,14 +413,14 @@ class TestAutoApplyLogic:
 
     def test_large_change_manual_review(self):
         """Change > 4% → should_apply=False, needs manual review."""
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         # We test the reason generation directly
         reason = AnalystFeedbackAnalyzer._get_apply_reason(0.06, [])
         assert "manual review" in reason.lower()
 
     def test_tiny_change_not_applied(self):
         """Change <= 0.5% → too small to matter."""
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         reason = AnalystFeedbackAnalyzer._get_apply_reason(0.003, [])
         assert "too small" in reason.lower()
 
@@ -432,7 +432,7 @@ class TestAutoApplyLogic:
 class TestPearsonRPerComponent:
 
     def test_perfect_correlation(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         records = [
             _make_outcome(
                 recommendation_id=f"r-{i}",
@@ -446,13 +446,13 @@ class TestPearsonRPerComponent:
         assert r > 0.99
 
     def test_insufficient_pairs(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         records = [_make_outcome(recommendation_id=f"r-{i}") for i in range(3)]
         r = AnalystFeedbackAnalyzer._pearson_r("elasticity", records)
         assert r is None
 
     def test_none_revenue_excluded(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         records = [
             _make_outcome(recommendation_id=f"r-{i}", revenue_delta_pct=None)
             for i in range(10)
@@ -462,7 +462,7 @@ class TestPearsonRPerComponent:
 
     def test_correlation_present_in_analysis(self):
         """Component analysis includes correlation value."""
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         outcomes = _make_predictive_dataset(n=20)
         report = AnalystFeedbackAnalyzer().analyze(outcomes)
         rec = report.category_recommendations[0]
@@ -477,7 +477,7 @@ class TestPearsonRPerComponent:
 class TestMultipleCategories:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         return AnalystFeedbackAnalyzer()
 
     def test_separate_categories(self):
@@ -509,7 +509,7 @@ class TestMultipleCategories:
 class TestAnalystFeedbackEdgeCases:
 
     def _analyzer(self):
-        from backend.services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         return AnalystFeedbackAnalyzer()
 
     def test_all_same_scores(self):

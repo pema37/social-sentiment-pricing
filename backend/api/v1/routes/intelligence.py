@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.deps import get_current_user, get_db
+from core.deps import get_current_user, get_db
 
 logger = logging.getLogger(__name__)
 
@@ -409,25 +409,25 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
     # Check scoring engine importability
     scoring_healthy = True
     try:
-        from backend.services.scoring.engine import ScoringEngine  # noqa: F401
+        from services.scoring.engine import ScoringEngine  # noqa: F401
     except Exception:
         scoring_healthy = False
 
     experiment_healthy = True
     try:
-        from backend.services.scoring.experimentation.experiment_manager import ExperimentManager  # noqa: F401
+        from services.scoring.experimentation.experiment_manager import ExperimentManager  # noqa: F401
     except Exception:
         experiment_healthy = False
 
     calibrator_healthy = True
     try:
-        from backend.services.scoring.learning.calibrator import Calibrator  # noqa: F401
+        from services.scoring.learning.calibrator import Calibrator  # noqa: F401
     except Exception:
         calibrator_healthy = False
 
     context_healthy = True
     try:
-        from backend.services.scoring.learning.context_injector import ContextInjector  # noqa: F401
+        from services.scoring.learning.context_injector import ContextInjector  # noqa: F401
     except Exception:
         context_healthy = False
 

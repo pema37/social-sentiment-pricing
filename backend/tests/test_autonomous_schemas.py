@@ -18,7 +18,7 @@ from pydantic import ValidationError
 import os
 os.environ.setdefault("GEMINI_API_KEY", "test-dummy-key")
 
-from backend.services.ai_trend_analysis.autonomous_orchestrator import (
+from services.ai_trend_analysis.autonomous_orchestrator import (
     AgentPhase,
     AgentStreamEvent,
     MarketAssessment,

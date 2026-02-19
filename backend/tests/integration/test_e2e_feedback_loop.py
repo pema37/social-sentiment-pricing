@@ -53,8 +53,8 @@ _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
 # Import after isolation
-from backend.services.pricing.pipeline_adapter import PipelineAdapter
-from backend.services.pricing.recommendation_helpers import (
+from services.pricing.pipeline_adapter import PipelineAdapter
+from services.pricing.recommendation_helpers import (
     PriceCalculator,
     BoundaryEnforcer,
     ReasoningGenerator,
@@ -410,7 +410,7 @@ class TestPhase2ApplyRecordsOutcome:
         mock_outcome_inst.record_merchant_decision = AsyncMock()
         mock_outcome_cls.return_value = mock_outcome_inst
 
-        from backend.services.pricing.approval_service import ApprovalService
+        from services.pricing.approval_service import ApprovalService
         svc = ApprovalService(db)
 
         with patch("services.pricing.ecommerce_push_service.EcommercePushService", mock_push_cls), \
@@ -495,7 +495,7 @@ class TestPhase3OutcomeExtractsEvidence:
         mock_result.scalars.return_value = mock_scalars
         db.execute = AsyncMock(return_value=mock_result)
 
-        from backend.services.pricing.outcome_service import OutcomeService
+        from services.pricing.outcome_service import OutcomeService
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -554,7 +554,7 @@ class TestPhase3OutcomeExtractsEvidence:
         mock_result.scalars.return_value = mock_scalars
         db.execute = AsyncMock(return_value=mock_result)
 
-        from backend.services.pricing.outcome_service import OutcomeService
+        from services.pricing.outcome_service import OutcomeService
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -590,7 +590,7 @@ class TestPhase3OutcomeExtractsEvidence:
         mock_result.scalars.return_value = mock_scalars
         db.execute = AsyncMock(return_value=mock_result)
 
-        from backend.services.pricing.outcome_service import OutcomeService
+        from services.pricing.outcome_service import OutcomeService
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -729,7 +729,7 @@ class TestPhase5FullChain:
         mock_result.scalars.return_value = mock_scalars
         db.execute = AsyncMock(return_value=mock_result)
 
-        from backend.services.pricing.outcome_service import OutcomeService
+        from services.pricing.outcome_service import OutcomeService
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,

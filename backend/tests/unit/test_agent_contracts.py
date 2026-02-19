@@ -17,7 +17,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from backend.schemas.agent_contracts import (
+from schemas.agent_contracts import (
     ScoutOutput,
     CompetitorPrice,
     SentimentSnapshot,

@@ -49,7 +49,7 @@ from .recommendation_helpers import (
 from .pipeline_adapter import PipelineAdapter
 
 # --- Phase 5: Intelligence Environment ---
-from backend.services.scoring.ie_orchestrator import (
+from services.scoring.ie_orchestrator import (
     create_ie_orchestrator,
     IEStatus,
     IERecommendation,
