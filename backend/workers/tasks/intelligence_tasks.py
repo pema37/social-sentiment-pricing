@@ -36,7 +36,8 @@ logger = logging.getLogger(__name__)
 
 # Lazy import to avoid circular deps at module level
 def _get_celery_app():
-    from backend.workers.celery_app import celery_app
+    from workers.celery_app import celery_app
+
     return celery_app
 
 

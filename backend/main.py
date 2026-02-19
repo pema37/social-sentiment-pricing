@@ -36,7 +36,11 @@ from core.exception_handlers import (
 )
 
 # ── NEW: x402 import ──────────────────────────────────────
-from fastapi_x402 import init_x402
+try:
+    from fastapi_x402 import init_x402
+    HAS_X402 = True
+except ImportError:
+    HAS_X402 = False
 
 # Configure logging first
 configure_logging()

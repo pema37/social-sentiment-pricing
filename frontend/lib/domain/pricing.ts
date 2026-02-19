@@ -3,7 +3,15 @@
 // Single place to fix when API changes - components don't know API details
 
 import { z } from 'zod';
-import type { PricingRule, CreatePricingRuleRequest, RuleType, RuleAction } from '@/types';
+import type {
+  PricingRule,
+  CreatePricingRuleRequest,
+  RuleType,
+  RuleAction,
+  PriceRecommendation,
+  PricingSettings,
+  RecommendationStatus,
+} from '@/types';
 
 // Import centralized error handling for API responses
 export { parseApiError, getErrorMessage, isAuthError } from '@/lib/api/errors';
@@ -34,30 +42,10 @@ const ruleActions = [
 const ACTIONS_WITHOUT_VALUE: RuleAction[] = ['match_competitor'];
 
 /**
- * Custom Zod transformer for decimal strings
- * - Handles empty strings → undefined
- * - Handles ".5" → "0.5"
- * - Handles "5%" → "5"
- * - Returns undefined for invalid values
- */
-const decimalString = z.string().transform((val) => {
-  if (val === '') return undefined;
-  
-  let cleaned = val.trim().replace(/%/g, '');
-  
-  if (cleaned.startsWith('.')) cleaned = '0' + cleaned;
-  if (cleaned.startsWith('-.')) cleaned = '-0' + cleaned.substring(1);
-  if (cleaned === '' || cleaned === '-') return undefined;
-  
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? undefined : cleaned;
-});
-
-/**
  * Zod schema for validating a decimal string is valid
  */
 const validDecimalString = z.string().refine((val) => {
-  if (val === '') return true; // Empty is okay (optional)
+  if (val === '') return true;
   let cleaned = val.trim().replace(/%/g, '');
   if (cleaned.startsWith('.')) cleaned = '0' + cleaned;
   if (cleaned.startsWith('-.')) cleaned = '-0' + cleaned.substring(1);
@@ -92,66 +80,29 @@ export const ruleFormSchema = z.object({
   max_price: validDecimalString,
   cooldown_hours: z.string(),
 }).superRefine((data, ctx) => {
-  // Conditional validation based on scope_type
   if (data.scope_type === 'single' && !data.product_id) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Select a product',
-      path: ['product_id'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select a product', path: ['product_id'] });
   }
   if (data.scope_type === 'multiple' && data.applies_to_products.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Select at least one product',
-      path: ['applies_to_products'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select at least one product', path: ['applies_to_products'] });
   }
   if (data.scope_type === 'categories' && data.applies_to_categories.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Select at least one category',
-      path: ['applies_to_categories'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Select at least one category', path: ['applies_to_categories'] });
   }
-
-  // Conditional validation based on rule_type
   if (data.rule_type === 'sentiment_threshold' && !data.sentiment_threshold) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Required',
-      path: ['sentiment_threshold'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required', path: ['sentiment_threshold'] });
   }
   if (data.rule_type === 'time_based' && !data.time_days) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Required',
-      path: ['time_days'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required', path: ['time_days'] });
   }
   if (data.rule_type === 'volume_surge' && !data.volume_threshold) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Required',
-      path: ['volume_threshold'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required', path: ['volume_threshold'] });
   }
   if (data.rule_type === 'viral_detection' && !data.viral_threshold_reach) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Required',
-      path: ['viral_threshold_reach'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required', path: ['viral_threshold_reach'] });
   }
-
-  // Action value required for most actions
   if (!ACTIONS_WITHOUT_VALUE.includes(data.action) && !data.action_value.trim()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Action value is required',
-      path: ['action_value'],
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Action value is required', path: ['action_value'] });
   }
 });
 
@@ -161,7 +112,6 @@ export const ruleFormSchema = z.object({
 
 export type ScopeType = 'single' | 'multiple' | 'categories' | 'all';
 
-/** Infer form data type from schema */
 export type RuleFormData = z.input<typeof ruleFormSchema>;
 
 export type RuleFormErrors = Partial<Record<keyof RuleFormData, string>>;
@@ -170,55 +120,31 @@ export type RuleFormErrors = Partial<Record<keyof RuleFormData, string>>;
 // DECIMAL HANDLING UTILITIES
 // ============================================
 
-/**
- * Normalize a string to a valid decimal string for the API
- */
 export function normalizeDecimal(value: string | number | undefined | null): string | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
+  if (value === undefined || value === null || value === '') return undefined;
   if (typeof value === 'number') {
     if (isNaN(value)) return undefined;
     return value.toString();
   }
-
   let cleaned = value.toString().trim().replace(/%/g, '');
-
   if (cleaned.startsWith('.')) cleaned = '0' + cleaned;
   if (cleaned.startsWith('-.')) cleaned = '-0' + cleaned.substring(1);
   if (cleaned === '' || cleaned === '-') return undefined;
-
   const num = parseFloat(cleaned);
   return isNaN(num) ? undefined : cleaned;
 }
 
-/**
- * Check if a value represents a valid decimal
- */
 export function isValidDecimal(value: string | number | undefined | null): boolean {
   return normalizeDecimal(value) !== undefined;
 }
 
-/**
- * Parse string to integer, handling edge cases
- */
 export function parseInteger(value: string | number | undefined | null): number | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value === 'number') {
-    return isNaN(value) ? undefined : Math.floor(value);
-  }
-
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'number') return isNaN(value) ? undefined : Math.floor(value);
   const num = parseInt(value.toString().trim(), 10);
   return isNaN(num) ? undefined : num;
 }
 
-/**
- * Convert API decimal (string | null) to form string
- */
 export function decimalToFormString(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
   return value.toString();
@@ -228,7 +154,6 @@ export function decimalToFormString(value: string | number | null | undefined): 
 // TRANSFORMATIONS: API → Form
 // ============================================
 
-/** Default form data for new rules */
 export const DEFAULT_FORM_DATA: RuleFormData = {
   name: '',
   description: '',
@@ -254,9 +179,6 @@ export const DEFAULT_FORM_DATA: RuleFormData = {
   cooldown_hours: '24',
 };
 
-/**
- * Transform API PricingRule response to form data
- */
 export function ruleToFormData(rule: Partial<PricingRule>): RuleFormData {
   const scopeType: ScopeType = rule.applies_to_all_products
     ? 'all'
@@ -296,9 +218,6 @@ export function ruleToFormData(rule: Partial<PricingRule>): RuleFormData {
 // TRANSFORMATIONS: Form → API
 // ============================================
 
-/**
- * Transform form data to API request payload
- */
 export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest {
   const actionValue = ACTIONS_WITHOUT_VALUE.includes(form.action)
     ? '0'
@@ -315,7 +234,6 @@ export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest 
     cooldown_hours: parseInteger(form.cooldown_hours) ?? 24,
   };
 
-  // Scoping
   switch (form.scope_type) {
     case 'single':
       payload.product_id = form.product_id || undefined;
@@ -334,7 +252,6 @@ export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest 
       break;
   }
 
-  // Rule type-specific fields
   switch (form.rule_type) {
     case 'sentiment_threshold': {
       const threshold = normalizeDecimal(form.sentiment_threshold);
@@ -357,7 +274,6 @@ export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest 
       break;
   }
 
-  // Constraints
   const maxChangePercent = normalizeDecimal(form.max_change_percent);
   const minPrice = normalizeDecimal(form.min_price);
   const maxPrice = normalizeDecimal(form.max_price);
@@ -373,18 +289,10 @@ export function formDataToRequest(form: RuleFormData): CreatePricingRuleRequest 
 // VALIDATION
 // ============================================
 
-/**
- * Validate form data using Zod schema
- * Returns errors object compatible with form state
- */
 export function validateRuleForm(form: RuleFormData): RuleFormErrors {
   const result = ruleFormSchema.safeParse(form);
-  
-  if (result.success) {
-    return {};
-  }
+  if (result.success) return {};
 
-  // Convert Zod errors to form errors format
   const errors: RuleFormErrors = {};
   for (const issue of result.error.issues) {
     const path = issue.path[0] as keyof RuleFormData;
@@ -392,27 +300,17 @@ export function validateRuleForm(form: RuleFormData): RuleFormErrors {
       errors[path] = issue.message;
     }
   }
-  
   return errors;
 }
 
-/**
- * Check if form has validation errors
- */
 export function isFormValid(form: RuleFormData): boolean {
   return ruleFormSchema.safeParse(form).success;
 }
 
-/**
- * Validate and transform in one step
- * Returns either the API payload or validation errors
- */
-export function validateAndTransform(form: RuleFormData): 
+export function validateAndTransform(form: RuleFormData):
   | { success: true; data: CreatePricingRuleRequest }
   | { success: false; errors: RuleFormErrors } {
-  
   const validation = ruleFormSchema.safeParse(form);
-  
   if (!validation.success) {
     const errors: RuleFormErrors = {};
     for (const issue of validation.error.issues) {
@@ -423,8 +321,247 @@ export function validateAndTransform(form: RuleFormData):
     }
     return { success: false, errors };
   }
-  
   return { success: true, data: formDataToRequest(form) };
 }
 
+// ============================================
+// LABEL MAPS — single source for all UI labels
+// ============================================
+
+export const RULE_TYPE_LABELS: Record<RuleType, string> = {
+  sentiment_threshold: 'Sentiment Threshold',
+  competitor_relative: 'Competitor Relative',
+  time_based: 'Time-Based',
+  volume_surge: 'Volume Surge',
+  viral_detection: 'Viral Detection',
+};
+
+export const RULE_ACTION_LABELS: Record<RuleAction, string> = {
+  increase_percent: 'Increase %',
+  decrease_percent: 'Decrease %',
+  set_absolute: 'Set Price',
+  match_competitor: 'Match Competitor',
+  undercut_competitor: 'Undercut Competitor',
+};
+
+export const RECOMMENDATION_STATUS_LABELS: Record<RecommendationStatus, string> = {
+  pending: 'Pending Review',
+  auto_approved: 'Auto-Approved',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  applied: 'Applied',
+  expired: 'Expired',
+};
+
+// ============================================
+// DISPLAY TYPES — what list/card components consume
+// ============================================
+
+export interface RuleDisplay {
+  id: string;
+  name: string;
+  description: string;
+  ruleType: RuleType;
+  ruleTypeLabel: string;
+  isActive: boolean;
+  priority: number;
+  action: RuleAction;
+  actionLabel: string;
+  actionValue: string;
+  summary: string;
+  constraintsSummary: string;
+  scopeSummary: string;
+  cooldownHours: number;
+  createdAt: Date;
+  updatedAt: Date;
+  _raw: PricingRule;
+}
+
+export interface RecommendationDisplay {
+  id: string;
+  productId: string;
+  ruleId: string | null;
+  currentPrice: number;
+  recommendedPrice: number;
+  changePercent: number;
+  changeDirection: 'up' | 'down' | 'flat';
+  isAggressive: boolean;
+  confidenceScore: number;
+  confidenceLabel: 'low' | 'medium' | 'high';
+  reasoning: string;
+  factors: Record<string, unknown>;
+  status: RecommendationStatus;
+  statusLabel: string;
+  requiresApproval: boolean;
+  expiresAt: Date;
+  createdAt: Date;
+  _raw: PriceRecommendation;
+}
+
+// ============================================
+// DISPLAY TRANSFORMS: API → Card/List props
+// ============================================
+
+export function toRuleDisplay(rule: PricingRule): RuleDisplay {
+  return {
+    id: rule.id,
+    name: rule.name,
+    description: rule.description ?? '',
+    ruleType: rule.rule_type,
+    ruleTypeLabel: RULE_TYPE_LABELS[rule.rule_type] ?? rule.rule_type,
+    isActive: rule.is_active,
+    priority: rule.priority,
+    action: rule.action,
+    actionLabel: RULE_ACTION_LABELS[rule.action] ?? rule.action,
+    actionValue: rule.action_value,
+    summary: buildRuleSummary(rule),
+    constraintsSummary: buildConstraintsSummary(rule),
+    scopeSummary: buildScopeSummary(rule),
+    cooldownHours: rule.cooldown_hours,
+    createdAt: new Date(rule.created_at),
+    updatedAt: new Date(rule.updated_at),
+    _raw: rule,
+  };
+}
+
+export function toRecommendationDisplay(rec: PriceRecommendation): RecommendationDisplay {
+  const current = parseFloat(rec.current_price);
+  const recommended = parseFloat(rec.recommended_price);
+  const pct = rec.change_percent;
+
+  return {
+    id: rec.id,
+    productId: rec.product_id,
+    ruleId: rec.rule_id,
+    currentPrice: current,
+    recommendedPrice: recommended,
+    changePercent: pct,
+    changeDirection: pct > 0.1 ? 'up' : pct < -0.1 ? 'down' : 'flat',
+    isAggressive: Math.abs(pct) > 10,
+    confidenceScore: rec.confidence_score,
+    confidenceLabel:
+      rec.confidence_score >= 0.8 ? 'high' :
+      rec.confidence_score >= 0.5 ? 'medium' : 'low',
+    reasoning: rec.reasoning,
+    factors: rec.factors,
+    status: rec.status,
+    statusLabel: RECOMMENDATION_STATUS_LABELS[rec.status] ?? rec.status,
+    requiresApproval: rec.requires_approval,
+    expiresAt: new Date(rec.expires_at),
+    createdAt: new Date(rec.created_at),
+    _raw: rec,
+  };
+}
+
+// ============================================
+// SETTINGS TRANSFORMS
+// Matches actual PricingSettings type from types/pricing.ts
+// ============================================
+
+export interface SettingsFormValues {
+  autoApproveEnabled: boolean;
+  autoApproveMaxIncrease: number;
+  autoApproveMaxDecrease: number;
+  autoApproveMinConfidence: number;
+  minMarginPercent: number;
+  maxAutoChangesPerDay: number;
+  globalCooldownHours: number;
+  blackoutHoursStart: number | null;
+  blackoutHoursEnd: number | null;
+  requireApprovalAbovePrice: number | null;
+  recommendationValidHours: number;
+  notifyOnAutoApply: boolean;
+  notifyOnPending: boolean;
+  notificationEmail: string;
+  notificationSlackWebhook: string;
+}
+
+export function settingsToForm(s: PricingSettings): SettingsFormValues {
+  return {
+    autoApproveEnabled: s.auto_approve_enabled,
+    autoApproveMaxIncrease: s.auto_approve_max_increase,
+    autoApproveMaxDecrease: s.auto_approve_max_decrease,
+    autoApproveMinConfidence: s.auto_approve_min_confidence,
+    minMarginPercent: s.min_margin_percent,
+    maxAutoChangesPerDay: s.max_auto_changes_per_day,
+    globalCooldownHours: s.global_cooldown_hours,
+    blackoutHoursStart: s.blackout_hours_start,
+    blackoutHoursEnd: s.blackout_hours_end,
+    requireApprovalAbovePrice: s.require_approval_above_price,
+    recommendationValidHours: s.recommendation_valid_hours,
+    notifyOnAutoApply: s.notify_on_auto_apply,
+    notifyOnPending: s.notify_on_pending,
+    notificationEmail: s.notification_email ?? '',
+    notificationSlackWebhook: s.notification_slack_webhook ?? '',
+  };
+}
+
+export function formToSettingsPayload(form: SettingsFormValues) {
+  return {
+    auto_approve_enabled: form.autoApproveEnabled,
+    auto_approve_max_increase: form.autoApproveMaxIncrease,
+    auto_approve_max_decrease: form.autoApproveMaxDecrease,
+    auto_approve_min_confidence: form.autoApproveMinConfidence,
+    min_margin_percent: form.minMarginPercent,
+    max_auto_changes_per_day: form.maxAutoChangesPerDay,
+    global_cooldown_hours: form.globalCooldownHours,
+    blackout_hours_start: form.blackoutHoursStart,
+    blackout_hours_end: form.blackoutHoursEnd,
+    require_approval_above_price: form.requireApprovalAbovePrice,
+    recommendation_valid_hours: form.recommendationValidHours,
+    notify_on_auto_apply: form.notifyOnAutoApply,
+    notify_on_pending: form.notifyOnPending,
+    notification_email: form.notificationEmail || null,
+    notification_slack_webhook: form.notificationSlackWebhook || null,
+  };
+}
+
+// ============================================
+// PRIVATE HELPERS
+// ============================================
+
+function buildRuleSummary(rule: PricingRule): string {
+  const action = RULE_ACTION_LABELS[rule.action] ?? rule.action;
+  const val = rule.action_value;
+
+  switch (rule.rule_type) {
+    case 'sentiment_threshold':
+      return `${action} ${val}% when sentiment ${rule.sentiment_direction ?? '>'} ${rule.sentiment_threshold ?? '0'}`;
+    case 'competitor_relative':
+      return `${action} ${val}% based on competitor pricing`;
+    case 'time_based':
+      return `${action} ${val}% after ${rule.time_days ?? 0} days`;
+    case 'volume_surge':
+      return `${action} ${val}% when volume exceeds ${rule.volume_threshold ?? 0}`;
+    case 'viral_detection':
+      return `${action} ${val}% when reach exceeds ${rule.viral_threshold_reach ?? 0}`;
+    default:
+      return `${action} ${val}%`;
+  }
+}
+
+function buildConstraintsSummary(rule: PricingRule): string {
+  const parts: string[] = [];
+  if (rule.max_change_percent) parts.push(`Max ±${rule.max_change_percent}%`);
+  if (rule.min_price) parts.push(`Floor $${rule.min_price}`);
+  if (rule.max_price) parts.push(`Ceiling $${rule.max_price}`);
+  if (rule.cooldown_hours > 0) parts.push(`${rule.cooldown_hours}h cooldown`);
+  return parts.length > 0 ? parts.join(' · ') : 'No constraints';
+}
+
+function buildScopeSummary(rule: PricingRule): string {
+  if (rule.applies_to_all_products) return 'All products';
+
+  const products = rule.applies_to_products?.length ?? 0;
+  const categories = rule.applies_to_categories?.length ?? 0;
+
+  if (products === 0 && categories === 0) {
+    return rule.product_id ? '1 product' : 'All products';
+  }
+
+  const parts: string[] = [];
+  if (products > 0) parts.push(`${products} product${products > 1 ? 's' : ''}`);
+  if (categories > 0) parts.push(`${categories} categor${categories > 1 ? 'ies' : 'y'}`);
+  return parts.join(', ');
+}
 
