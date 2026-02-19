@@ -25,7 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_current_user, get_db
+from core.deps import get_current_user
+from db.session import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class IEDashboard(BaseModel):
 
 @router.get("/health", response_model=IEHealthStatus)
 async def get_ie_health(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
 ):
     """
@@ -172,7 +173,7 @@ async def get_ie_health(
 
 @router.get("/dashboard", response_model=IEDashboard)
 async def get_ie_dashboard(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
     top_n: int = Query(default=10, ge=1, le=50, description="Number of top categories to return"),
 ):
@@ -197,7 +198,7 @@ async def get_ie_dashboard(
 
 @router.get("/experiments", response_model=list[ExperimentStatus])
 async def get_experiment_statuses(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
     category_id: Optional[str] = Query(default=None, description="Filter by category"),
 ):
@@ -277,7 +278,7 @@ async def get_experiment_statuses(
 @router.get("/experiments/{category_id}", response_model=ExperimentStatus)
 async def get_experiment_status(
     category_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
 ):
     """Get experiment status for a specific category."""
@@ -289,7 +290,7 @@ async def get_experiment_status(
 
 @router.get("/calibration", response_model=list[CalibrationReport])
 async def get_calibration_reports(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
     category_id: Optional[str] = Query(default=None),
 ):
@@ -305,7 +306,7 @@ async def get_calibration_reports(
 
 @router.get("/drift-alerts", response_model=list[DriftAlert])
 async def get_drift_alerts(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
     severity: Optional[str] = Query(default=None, description="Filter: info | warning | critical"),
     active_only: bool = Query(default=True, description="Only show unresolved alerts"),
@@ -325,7 +326,7 @@ async def get_drift_alerts(
 
 @router.get("/categories", response_model=list[CategoryPerformance])
 async def get_category_performance(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
     min_recommendations: int = Query(default=5, ge=1, description="Minimum recommendations to include"),
     sort_by: str = Query(default="total_recommendations", description="Sort field"),
@@ -344,7 +345,7 @@ async def get_category_performance(
 @router.get("/categories/{category_id}", response_model=CategoryPerformance)
 async def get_category_detail(
     category_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
 ):
     """Get detailed performance for a specific category."""
