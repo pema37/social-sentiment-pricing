@@ -10,11 +10,7 @@ NEW (2025-01-29): Added Visual Pricing Intelligence demo for Gemini 3 Hackathon
 NEW (2025-01-30): Added Crisis Detection, Launch Detection, Market Trends Visual demos
 FIXED (2025-01-30): Added products_import router - CSV import was returning 404
 NEW (2026-02-18): Phase 5 — Intelligence Environment dashboard routes
-"""
-
-"""
-ActualPrice API - Main Application Entry Point
-x402 Agentic Commerce Integration for SF x402 Hackathon (Feb 2026)
+FIXED (2026-02-19): Made x402 and autonomous pipeline imports conditional
 """
 
 from contextlib import asynccontextmanager
@@ -35,7 +31,7 @@ from core.exception_handlers import (
     database_exception_handler,
 )
 
-# ── NEW: x402 import ──────────────────────────────────────
+# ── Optional: x402 import ─────────────────────────────────
 try:
     from fastapi_x402 import init_x402
     HAS_X402 = True
@@ -85,8 +81,19 @@ from api.v1.routes.launch_detection import router as launch_detection_router
 from api.v1.routes.market_trends_visual import router as market_trends_visual_router
 from api.v1.routes.market_intelligence import router as market_intelligence_router
 
-# ── NEW: x402 Agent API ───────────────────────────────────
-from api.v1.routes.x402_agent_api import router as x402_agent_router
+# ── Optional: x402 Agent API ──────────────────────────────
+try:
+    from api.v1.routes.x402_agent_api import router as x402_agent_router
+    HAS_X402_ROUTER = True
+except ImportError:
+    HAS_X402_ROUTER = False
+
+# ── Optional: Autonomous pipeline ─────────────────────────
+try:
+    from api.v1.routes.autonomous_pipeline import router as autonomous_pipeline_router
+    HAS_AUTONOMOUS = True
+except ImportError:
+    HAS_AUTONOMOUS = False
 
 
 @asynccontextmanager
@@ -110,11 +117,10 @@ app = FastAPI(
     redirect_slashes=False,
 )
 
-# ── NEW: Initialize x402 payment middleware ───────────────
+# ── Optional: Initialize x402 payment middleware ──────────
 # Uses Base Sepolia testnet with free x402.org facilitator
-# Set PAY_TO_ADDRESS in your .env file
 import os
-if os.getenv("PAY_TO_ADDRESS"):
+if HAS_X402 and os.getenv("PAY_TO_ADDRESS"):
     init_x402(app, network="base-sepolia")
 
 # ───────────────────── Exception Handlers ───────────────────── #
@@ -182,8 +188,13 @@ app.include_router(launch_detection_router, prefix="/api/v1")
 app.include_router(market_trends_visual_router, prefix="/api/v1")
 app.include_router(market_intelligence_router, prefix="/api/v1")
 
-# ── NEW: x402 Agent API Routes ────────────────────────────
-app.include_router(x402_agent_router)  # /api/v1/agent/*
+# ── Optional: x402 Agent API Routes ───────────────────────
+if HAS_X402_ROUTER:
+    app.include_router(x402_agent_router)  # /api/v1/agent/*
+
+# ── Optional: Autonomous pipeline Routes ──────────────────
+if HAS_AUTONOMOUS:
+    app.include_router(autonomous_pipeline_router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -194,7 +205,7 @@ async def root():
         "version": settings.APP_VERSION,
         "status": "running",
         "docs": "/docs",
-        "x402_agent_api": "/api/v1/agent/health",
+        "x402_enabled": HAS_X402_ROUTER,
     }
 
 
