@@ -34,7 +34,7 @@ from alembic import op
 
 # Update this to your latest migration revision
 revision = "ie002_materialized_benchmark_views"
-down_revision = None  # ← SET THIS to your current head revision
+down_revision = "ie001_feedback_loop"
 branch_labels = None
 depends_on = None
 
