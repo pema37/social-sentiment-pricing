@@ -26,7 +26,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = "ie004"
-down_revision = ("ie003_experiment_bandit", "fa2643be5ee3")
+down_revision = "ie003_experiment_bandit"
 branch_labels = None
 depends_on = None
 

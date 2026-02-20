@@ -28,7 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers
 revision = "ie001_feedback_loop"
-down_revision = "2e0555049c32"
+down_revision = "fa2643be5ee3"
 branch_labels = None
 depends_on = None
 
