@@ -27,7 +27,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, DateTime, Text
 from sqlalchemy.types import Float as SAFloat
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
@@ -164,7 +164,7 @@ class RecommendationOutcome(SQLModel, table=True):
     )
     actual_price_set: Optional[Decimal] = Field(default=None, decimal_places=2)
     merchant_modification_percent: Optional[float] = Field(default=None)
-    decided_at: Optional[datetime] = Field(default=None)
+    decided_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
     # ── Multi-window revenue measurement (new) ──
     # Filled by background job at 7d, 14d, 30d after price_applied_at.
@@ -214,10 +214,10 @@ class RecommendationOutcome(SQLModel, table=True):
     )
 
     # ── Timestamps (existing) ──
-    price_applied_at: datetime = Field(index=True)
+    price_applied_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
     measurement_window_hours: int = Field(default=48)
-    measured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    measured_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
 
     class Config:
         use_enum_values = True

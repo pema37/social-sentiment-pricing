@@ -19,7 +19,7 @@ from typing import Optional, List
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column
+from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
 
@@ -113,14 +113,13 @@ class PricingRule(SQLModel, table=True):
     
     # Cooldown
     cooldown_hours: int = Field(default=24)
-    last_triggered_at: Optional[datetime] = Field(default=None)
+    last_triggered_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     
     # Timestamps - use naive UTC datetimes for asyncpg compatibility
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     )
-    updated_at: Optional[datetime] = Field(default=None)
+    updated_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
     class Config:
         use_enum_values = True

@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field, Relationship, Column
 from sqlalchemy import Text
+from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy import String
 
@@ -100,12 +101,12 @@ class AlertConfiguration(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     )
-    last_triggered_at: Optional[datetime] = Field(default=None)
+    last_triggered_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     
     # Relationships
     alerts: List["Alert"] = Relationship(back_populates="configuration")
@@ -158,13 +159,12 @@ class Alert(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        index=True
+        sa_column=Column(DateTime(timezone=True), nullable=False, index=True, default=lambda: datetime.now(timezone.utc))
     )
-    sent_at: Optional[datetime] = Field(default=None)
-    acknowledged_at: Optional[datetime] = Field(default=None)
+    sent_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    acknowledged_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     acknowledged_by: Optional[UUID] = Field(default=None)
-    resolved_at: Optional[datetime] = Field(default=None)
+    resolved_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     
     # Relationships
     configuration: Optional[AlertConfiguration] = Relationship(

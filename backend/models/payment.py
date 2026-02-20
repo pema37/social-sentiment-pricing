@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 from enum import Enum
 
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, DateTime, Text
 
 
 class PaymentStatus(str, Enum):
@@ -76,10 +76,10 @@ class Payment(PaymentBase, table=True):
     )
     
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: Optional[datetime] = Field(default=None)
-    confirmed_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    expires_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    confirmed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     
     # Metadata (JSON string for flexibility)
     # NOTE: Cannot use 'metadata' as property name - conflicts with SQLAlchemy

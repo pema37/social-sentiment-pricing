@@ -7,6 +7,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 from enum import Enum
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, DateTime
 
 
 class SubscriptionTier(str, Enum):
@@ -41,11 +42,11 @@ class SubscriptionBase(SQLModel):
     monthly_price: str = Field(default="0.00", max_length=20)
     
     # Billing period
-    current_period_start: Optional[datetime] = Field(default=None)
-    current_period_end: Optional[datetime] = Field(default=None)
+    current_period_start: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    current_period_end: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     
     # Cancellation
-    cancelled_at: Optional[datetime] = Field(default=None)
+    cancelled_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     cancel_at_period_end: bool = Field(default=False)
 
 
@@ -61,8 +62,8 @@ class Subscription(SubscriptionBase, table=True):
     user_id: UUID = Field(foreign_key="users.id", unique=True, index=True)
     
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
 
 
 # =============================================================================
