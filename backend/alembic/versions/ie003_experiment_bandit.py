@@ -1,6 +1,6 @@
 """ie003: Add experiment columns and bandit state table
 
-Adds Thompson Sampling experiment tracking to pricing_outcomes
+Adds Thompson Sampling experiment tracking to recommendation_outcomes
 and creates bandit_state table for crash recovery.
 
 Revision ID: ie003_experiment_bandit
@@ -33,11 +33,11 @@ depends_on = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # 1. Add experiment columns to pricing_outcomes
+    # 1. Add experiment columns to recommendation_outcomes
     #    (ie001 already added confidence_decomposition and agent_evidence)
     # ------------------------------------------------------------------
     op.add_column(
-        "pricing_outcomes",
+        "recommendation_outcomes",
         sa.Column(
             "strategy_arm",
             sa.String(length=100),
@@ -46,7 +46,7 @@ def upgrade() -> None:
         ),
     )
     op.add_column(
-        "pricing_outcomes",
+        "recommendation_outcomes",
         sa.Column(
             "is_exploration",
             sa.Boolean(),
@@ -56,7 +56,7 @@ def upgrade() -> None:
         ),
     )
     op.add_column(
-        "pricing_outcomes",
+        "recommendation_outcomes",
         sa.Column(
             "bandit_processed",
             sa.Boolean(),
@@ -66,7 +66,7 @@ def upgrade() -> None:
         ),
     )
     op.add_column(
-        "pricing_outcomes",
+        "recommendation_outcomes",
         sa.Column(
             "experiment_assignment_id",
             sa.String(length=36),
@@ -75,7 +75,7 @@ def upgrade() -> None:
         ),
     )
     op.add_column(
-        "pricing_outcomes",
+        "recommendation_outcomes",
         sa.Column(
             "scoring_version",
             sa.String(length=50),
@@ -86,16 +86,16 @@ def upgrade() -> None:
 
     # Index for bandit processing: find unprocessed outcomes quickly
     op.create_index(
-        "ix_pricing_outcomes_bandit_unprocessed",
-        "pricing_outcomes",
+        "ix_recommendation_outcomes_bandit_unprocessed",
+        "recommendation_outcomes",
         ["bandit_processed"],
         postgresql_where=sa.text("bandit_processed = false"),
     )
 
     # Index for experiment analysis: filter by strategy arm
     op.create_index(
-        "ix_pricing_outcomes_strategy_arm",
-        "pricing_outcomes",
+        "ix_recommendation_outcomes_strategy_arm",
+        "recommendation_outcomes",
         ["strategy_arm"],
         postgresql_where=sa.text("strategy_arm IS NOT NULL"),
     )
@@ -182,7 +182,7 @@ def upgrade() -> None:
             "id",
             sa.String(length=36),
             primary_key=True,
-            comment="UUID primary key (referenced by pricing_outcomes.experiment_assignment_id)",
+            comment="UUID primary key (referenced by recommendation_outcomes.experiment_assignment_id)",
         ),
         sa.Column(
             "recommendation_id",
@@ -238,7 +238,7 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------
-    # 4. Add scoring_version to pricing_recommendations if not exists
+    # 4. Add scoring_version to price_recommendations if not exists
     #    (for tracking which pipeline version generated each recommendation)
     # ------------------------------------------------------------------
     # Check if column already exists (defensive — ie001 may have added it)
@@ -246,12 +246,12 @@ def upgrade() -> None:
     result = conn.execute(
         sa.text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='pricing_recommendations' AND column_name='scoring_version'"
+            "WHERE table_name='price_recommendations' AND column_name='scoring_version'"
         )
     )
     if result.fetchone() is None:
         op.add_column(
-            "pricing_recommendations",
+            "price_recommendations",
             sa.Column(
                 "scoring_version",
                 sa.String(length=50),
@@ -269,26 +269,26 @@ def downgrade() -> None:
     op.drop_table("bandit_state")
 
     # Drop indexes
-    op.drop_index("ix_pricing_outcomes_strategy_arm", "pricing_outcomes")
-    op.drop_index("ix_pricing_outcomes_bandit_unprocessed", "pricing_outcomes")
+    op.drop_index("ix_recommendation_outcomes_strategy_arm", "recommendation_outcomes")
+    op.drop_index("ix_recommendation_outcomes_bandit_unprocessed", "recommendation_outcomes")
 
-    # Drop columns from pricing_outcomes
-    op.drop_column("pricing_outcomes", "scoring_version")
-    op.drop_column("pricing_outcomes", "experiment_assignment_id")
-    op.drop_column("pricing_outcomes", "bandit_processed")
-    op.drop_column("pricing_outcomes", "is_exploration")
-    op.drop_column("pricing_outcomes", "strategy_arm")
+    # Drop columns from recommendation_outcomes
+    op.drop_column("recommendation_outcomes", "scoring_version")
+    op.drop_column("recommendation_outcomes", "experiment_assignment_id")
+    op.drop_column("recommendation_outcomes", "bandit_processed")
+    op.drop_column("recommendation_outcomes", "is_exploration")
+    op.drop_column("recommendation_outcomes", "strategy_arm")
 
-    # Conditionally drop scoring_version from pricing_recommendations
+    # Conditionally drop scoring_version from price_recommendations
     conn = op.get_bind()
     result = conn.execute(
         sa.text(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='pricing_recommendations' AND column_name='scoring_version'"
+            "WHERE table_name='price_recommendations' AND column_name='scoring_version'"
         )
     )
     if result.fetchone() is not None:
-        op.drop_column("pricing_recommendations", "scoring_version")
+        op.drop_column("price_recommendations", "scoring_version")
 
 
         

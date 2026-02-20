@@ -59,7 +59,7 @@ def upgrade():
                 created_at
             FROM recommendation_outcomes
             WHERE product_category IS NOT NULL
-              AND outcome_label != 'inconclusive'
+              AND outcome_label != 'INCONCLUSIVE'
               AND created_at >= NOW() - INTERVAL '90 days'
         ),
         category_stats AS (
@@ -67,8 +67,8 @@ def upgrade():
                 product_category,
                 COUNT(DISTINCT user_id) AS merchant_count,
                 COUNT(*) AS total_outcomes,
-                SUM(CASE WHEN outcome_label = 'positive' THEN 1 ELSE 0 END) AS positive_count,
-                SUM(CASE WHEN outcome_label = 'negative' THEN 1 ELSE 0 END) AS negative_count,
+                SUM(CASE WHEN outcome_label = 'POSITIVE' THEN 1 ELSE 0 END) AS positive_count,
+                SUM(CASE WHEN outcome_label = 'NEGATIVE' THEN 1 ELSE 0 END) AS negative_count,
                 ROUND(AVG(original_confidence)::numeric, 4) AS avg_confidence,
                 ROUND(AVG(revenue_lift_7d)::numeric, 2) AS avg_lift_7d,
                 ROUND(AVG(revenue_lift_14d)::numeric, 2) AS avg_lift_14d,
@@ -85,7 +85,7 @@ def upgrade():
                     ORDER BY price_change_percent
                 ) AS pct_rank
             FROM category_outcomes
-            WHERE outcome_label = 'positive'
+            WHERE outcome_label = 'POSITIVE'
         ),
         quartiles AS (
             SELECT
@@ -95,7 +95,7 @@ def upgrade():
                 ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_change_percent)::numeric, 2) AS change_p75,
                 COUNT(*) AS positive_sample_size
             FROM category_outcomes
-            WHERE outcome_label = 'positive'
+            WHERE outcome_label = 'POSITIVE'
             GROUP BY product_category
             HAVING COUNT(*) >= 3
         )
@@ -144,7 +144,7 @@ def upgrade():
             FROM recommendation_outcomes
             WHERE product_category IS NOT NULL
               AND data_completeness IS NOT NULL
-              AND outcome_label != 'inconclusive'
+              AND outcome_label != 'INCONCLUSIVE'
               AND created_at >= NOW() - INTERVAL '90 days'
         ),
         tier_stats AS (
@@ -152,7 +152,7 @@ def upgrade():
                 product_category,
                 data_quality_tier,
                 COUNT(*) AS tier_total,
-                SUM(CASE WHEN outcome_label = 'negative' THEN 1 ELSE 0 END) AS tier_failures
+                SUM(CASE WHEN outcome_label = 'NEGATIVE' THEN 1 ELSE 0 END) AS tier_failures
             FROM gap_data
             GROUP BY product_category, data_quality_tier
         ),
@@ -244,7 +244,7 @@ def upgrade():
             NOW() AS refreshed_at
         FROM recommendation_outcomes
         WHERE product_category IS NOT NULL
-          AND outcome_label != 'inconclusive'
+          AND outcome_label != 'INCONCLUSIVE'
           AND created_at >= NOW() - INTERVAL '90 days'
         GROUP BY product_category
         HAVING COUNT(DISTINCT user_id) >= 5
