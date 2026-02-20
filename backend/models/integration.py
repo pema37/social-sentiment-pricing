@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
-from sqlalchemy import Column, DateTime as SAColumn, Text, LargeBinary, ForeignKey
+from sqlalchemy import Column as SAColumn, DateTime, Text, LargeBinary, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 if TYPE_CHECKING:
