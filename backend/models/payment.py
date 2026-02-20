@@ -4,7 +4,7 @@ Payment Model
 Tracks MNEE payment transactions for subscriptions and other purchases.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 from enum import Enum
@@ -76,8 +76,8 @@ class Payment(PaymentBase, table=True):
     )
     
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = Field(default=None)
     confirmed_at: Optional[datetime] = Field(default=None)
     

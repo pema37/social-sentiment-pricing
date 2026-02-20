@@ -46,11 +46,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _utcnow() -> datetime:
-    """Return current UTC time as naive datetime (for DB compatibility)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 @router.get("/", response_model=IntegrationListResponse)
 async def list_integrations(
     request: Request,
@@ -175,7 +170,7 @@ async def update_integration(
         
         logger.info(f"WooCommerce credentials updated for integration {integration_id}")
     
-    integration.updated_at = _utcnow()
+    integration.updated_at = datetime.now(timezone.utc)
     db.add(integration)
     await db.commit()
     await db.refresh(integration)
@@ -269,7 +264,7 @@ async def disconnect_integration(
             logger.warning(f"Failed to unregister webhooks: {e}")
     
     integration.status = IntegrationStatus.DISCONNECTED
-    integration.updated_at = _utcnow()
+    integration.updated_at = datetime.now(timezone.utc)
     db.add(integration)
     await db.commit()
     

@@ -5,7 +5,7 @@ These models define the structure of trend analysis results.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -77,7 +77,7 @@ class TrendPrediction:
     timeframe_days: int  # Days until expected change
     reasoning: str
     supporting_signals: list[TrendSignal] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass

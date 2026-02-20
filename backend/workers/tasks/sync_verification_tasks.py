@@ -468,7 +468,7 @@ async def _recover_stuck_syncs() -> Dict:
         "details": [],
     }
     
-    cutoff = datetime.utcnow() - timedelta(minutes=STUCK_SYNC_TIMEOUT_MINUTES)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=STUCK_SYNC_TIMEOUT_MINUTES)
     
     async with session_maker() as db:
         # Find all integrations with sync_status = 'syncing'
@@ -492,7 +492,7 @@ async def _recover_stuck_syncs() -> Dict:
             
             if stuck_log and stuck_log.started_at < cutoff:
                 # This sync has been running too long - mark as failed
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 stuck_duration_minutes = (now - stuck_log.started_at).total_seconds() / 60
                 
                 stuck_log.success = False

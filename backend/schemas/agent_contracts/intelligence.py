@@ -6,7 +6,7 @@ These describe intelligence environment concepts (calibration, benchmarks,
 data gaps) — not basic pricing CRUD.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -41,7 +41,7 @@ class ConfidenceCalibrationResponse(BaseModel):
     total_outcomes: int = Field(ge=0)
     period_days: int
     category: Optional[str] = None
-    computed_at: datetime = Field(default_factory=lambda: datetime.now())
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Merchant Modification Patterns ────────────────────────────────
@@ -74,7 +74,7 @@ class MerchantPatternResponse(BaseModel):
         description="Median % change the merchant actually applies.",
     )
     period_days: int
-    computed_at: datetime = Field(default_factory=lambda: datetime.now())
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Category Benchmarks ───────────────────────────────────────────
@@ -111,7 +111,7 @@ class CategoryBenchmarkResponse(BaseModel):
     optimal_change_median_pct: Optional[float] = None
 
     period_days: int
-    computed_at: datetime = Field(default_factory=lambda: datetime.now())
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Data Gap Failure Rates ────────────────────────────────────────
@@ -154,7 +154,7 @@ class DataGapResponse(BaseModel):
     )
     products_with_no_outcomes: int = Field(ge=0)
     period_days: int
-    computed_at: datetime = Field(default_factory=lambda: datetime.now())
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Elasticity Accuracy ───────────────────────────────────────────
@@ -183,7 +183,7 @@ class ElasticityAccuracyResponse(BaseModel):
     total_observations: int = Field(ge=0)
     period_days: int
     category: Optional[str] = None
-    computed_at: datetime = Field(default_factory=lambda: datetime.now())
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Dashboard Summaries ───────────────────────────────────────────

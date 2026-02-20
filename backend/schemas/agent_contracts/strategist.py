@@ -7,7 +7,7 @@ Produces: The final recommendation that becomes PriceRecommendation
 Stored in: strategist_evidence JSONB column on RecommendationOutcome
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -45,7 +45,7 @@ class StrategistOutput(BaseModel):
     product_id: UUID
     scout_scouted_at: datetime
     analyst_analyzed_at: datetime
-    strategized_at: datetime = Field(default_factory=lambda: datetime.now())
+    strategized_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # The recommendation (→ becomes PriceRecommendation fields)
     current_price: Decimal

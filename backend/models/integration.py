@@ -6,7 +6,6 @@ Stores encrypted credentials for Shopify/WooCommerce connections
 
 Aligned with architecture doc: Section 6.1 Shopify Integration
 
-FIX (2026-01-24): Replaced datetime.utcnow() with datetime.now(timezone.utc)
 to fix deprecation warnings and ensure timezone-aware datetimes.
 """
 
@@ -24,9 +23,6 @@ if TYPE_CHECKING:
     from models.product import Product
 
 
-def _utcnow() -> datetime:
-    """Return current UTC time as naive datetime for database compatibility."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class EcommercePlatform(str, Enum):
@@ -106,8 +102,8 @@ class Integration(SQLModel, table=True):
     settings: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     
     # ========== Timestamps ==========
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     # ========== Relationships ==========
     user: Optional["User"] = Relationship(back_populates="integrations")
@@ -133,7 +129,7 @@ class IntegrationSyncLog(SQLModel, table=True):
     
     # Sync details
     sync_type: str = Field(max_length=50)  # "full", "incremental", "webhook"
-    started_at: datetime = Field(default_factory=_utcnow, index=True)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     completed_at: Optional[datetime] = Field(default=None)
     duration_seconds: Optional[float] = Field(default=None)
     
@@ -183,8 +179,8 @@ class ProductIntegrationLink(SQLModel, table=True):
     sync_enabled: bool = Field(default=True)
     
     # Timestamps
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     integration: Optional["Integration"] = Relationship(back_populates="product_links")

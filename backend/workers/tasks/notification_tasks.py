@@ -54,7 +54,7 @@ async def _dispatch_alert_async(alert_id: str) -> Dict[str, Any]:
     from models.user import User
     from services.notification import NotificationDispatcher
     from services.notification.webhook_service import WebhookService
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     # Use existing get_session_context from session.py
     async with get_session_context() as session:
@@ -186,7 +186,7 @@ async def _dispatch_alert_async(alert_id: str) -> Dict[str, Any]:
         # Update alert status
         alert.channels_sent = channels_sent
         alert.channels_failed = channels_failed
-        alert.sent_at = datetime.utcnow()
+        alert.sent_at = datetime.now(timezone.utc)
         
         if channels_sent:
             alert.status = AlertStatus.SENT

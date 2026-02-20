@@ -12,7 +12,7 @@ Scoping: Rules can apply to:
 - Products by category (applies_to_categories = ["Electronics", ...])
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Optional, List
@@ -117,7 +117,7 @@ class PricingRule(SQLModel, table=True):
     
     # Timestamps - use naive UTC datetimes for asyncpg compatibility
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         nullable=False
     )
     updated_at: Optional[datetime] = Field(default=None)

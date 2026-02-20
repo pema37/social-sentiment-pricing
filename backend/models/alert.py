@@ -100,10 +100,10 @@ class AlertConfiguration(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow
+        default_factory=lambda: datetime.now(timezone.utc)
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow
+        default_factory=lambda: datetime.now(timezone.utc)
     )
     last_triggered_at: Optional[datetime] = Field(default=None)
     
@@ -158,7 +158,7 @@ class Alert(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         index=True
     )
     sent_at: Optional[datetime] = Field(default=None)

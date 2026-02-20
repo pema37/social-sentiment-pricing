@@ -6,7 +6,7 @@ Feeds into: Analyst
 Stored in: scout_evidence JSONB column on RecommendationOutcome
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -65,7 +65,7 @@ class ScoutOutput(BaseModel):
 
     # Identity
     product_id: UUID
-    scouted_at: datetime = Field(default_factory=lambda: datetime.now())
+    scouted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Competitor intelligence
     competitors: list[CompetitorPrice] = Field(default_factory=list)

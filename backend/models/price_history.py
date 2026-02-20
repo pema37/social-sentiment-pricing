@@ -3,7 +3,7 @@
 Price History Model - Tracks all price changes with audit trail.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -63,7 +63,7 @@ class PriceHistory(SQLModel, table=True):
     
     # Timestamps - use naive datetime for TIMESTAMP WITHOUT TIME ZONE
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         nullable=False
     )
 

@@ -2,7 +2,7 @@
 Subscription Model
 Tracks user subscription tiers, billing periods, and limits.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 from enum import Enum
@@ -61,8 +61,8 @@ class Subscription(SubscriptionBase, table=True):
     user_id: UUID = Field(foreign_key="users.id", unique=True, index=True)
     
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================

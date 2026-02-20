@@ -18,7 +18,7 @@ router = APIRouter(prefix="/crisis", tags=["Crisis Detection"])
 def generate_mock_data(product: str, crisis: bool = False) -> list[SentimentDataPoint]:
     """Generate mock sentiment data for demo."""
     import random
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     data = []
     
     for i in range(24):  # 24 hours of data

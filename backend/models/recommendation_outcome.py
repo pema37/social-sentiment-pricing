@@ -20,7 +20,7 @@ decomposition, agent evidence chain, merchant decision tracking, cross-merchant
 fields, analyst scoring snapshot, measurement status state machine.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -216,8 +216,8 @@ class RecommendationOutcome(SQLModel, table=True):
     # ── Timestamps (existing) ──
     price_applied_at: datetime = Field(index=True)
     measurement_window_hours: int = Field(default=48)
-    measured_at: datetime = Field(default_factory=datetime.utcnow)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    measured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
         use_enum_values = True

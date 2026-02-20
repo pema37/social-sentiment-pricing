@@ -7,7 +7,7 @@ Feeds into: Strategist
 Stored in: analyst_evidence JSONB column on RecommendationOutcome
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -86,7 +86,7 @@ class AnalystOutput(BaseModel):
     scout_scouted_at: datetime = Field(
         description="When Scout gathered the data. For staleness detection.",
     )
-    analyzed_at: datetime = Field(default_factory=lambda: datetime.now())
+    analyzed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Elasticity analysis (→ feeds Strategist magnitude)
     elasticity: ElasticityEstimate

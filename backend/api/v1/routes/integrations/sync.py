@@ -34,10 +34,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _utcnow() -> datetime:
-    """Return current UTC time as naive datetime."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
 
 async def run_sync_background(
     integration_id: UUID,
@@ -188,7 +184,7 @@ async def get_sync_progress(
         
         # Calculate elapsed time
         if started_at:
-            elapsed_seconds = (_utcnow() - started_at).total_seconds()
+            elapsed_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
         
         # Estimate total based on previous syncs
         if integration.products_synced and integration.products_synced > 0:

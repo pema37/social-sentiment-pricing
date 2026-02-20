@@ -29,12 +29,12 @@ class User(SQLModel, table=True):
     eth_wallet_address: Optional[str] = Field(default=None, max_length=42)
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: Optional[datetime] = Field(
-        default_factory=datetime.utcnow,
-        sa_column=Column(DateTime(timezone=True), onupdate=datetime.utcnow),
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc)),
     )
 
     # Relationships
