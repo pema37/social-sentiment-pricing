@@ -15,6 +15,10 @@ echo "DATABASE_URL set: $([ -n "$DATABASE_URL" ] && echo 'yes' || echo 'NO')"
 echo "REDIS_URL set: $([ -n "$REDIS_URL" ] && echo 'yes' || echo 'NO')"
 echo "==============================="
 
+# Run database migrations
+echo "Running Alembic migrations..."
+cd /app && python -m alembic upgrade head
+echo "Migrations complete."
 # Clear stale Celery beat schedule
 echo "Clearing stale celerybeat-schedule files..."
 rm -f celerybeat-schedule /app/celerybeat-schedule 2>/dev/null || true
