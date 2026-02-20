@@ -100,14 +100,43 @@ async def init_oauth(
 @router.get("/oauth/callback")
 async def oauth_callback(
     code: str,
-    state: str,
-    shop: str = None,
+    shop: str,
+    state: str = None,
+    hmac: str = None,
+    host: str = None,
+    timestamp: str = None,
     db: AsyncSession = Depends(get_session),
 ):
-    """OAuth callback endpoint. Redirects to frontend with success/error status."""
-    stmt = select(Integration).where(Integration.oauth_state == state)
-    result = await db.execute(stmt)
-    integration = result.scalars().first()
+    """OAuth callback - handles both authenticated flow and fresh Shopify installs."""
+    
+    integration = None
+    
+    # Try finding by state (existing authenticated flow)
+    if state:
+        stmt = select(Integration).where(Integration.oauth_state == state)
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+    
+    # Fresh Shopify install — no state match, find or create by shop
+    if not integration and shop:
+        stmt = select(Integration).where(
+            Integration.platform == EcommercePlatform.SHOPIFY,
+            Integration.store_url == shop,
+        )
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+        
+        if not integration:
+            # Create new integration for this shop (user linked later)
+            integration = Integration(
+                platform=EcommercePlatform.SHOPIFY,
+                store_url=shop,
+                store_name=shop.replace(".myshopify.com", ""),
+                status=IntegrationStatus.DISCONNECTED,
+                access_token_encrypted=b"pending",
+            )
+            db.add(integration)
+            await db.flush()
     
     if not integration:
         error_url = f"{settings.FRONTEND_URL}/integrations?error=invalid_state&message=OAuth+session+expired+or+invalid"
@@ -159,10 +188,17 @@ async def oauth_callback(
     except Exception as e:
         logger.warning(f"Auto webhook registration failed: {e}")
     
-    success_url = (
-        f"{settings.FRONTEND_URL}/integrations"
-        f"?connected=true&integration_id={integration.id}&platform={integration.platform.value}"
-    )
+    # Redirect back into Shopify Admin if host param present
+    if host:
+        success_url = (
+            f"{settings.FRONTEND_URL}/dashboard"
+            f"?shop={shop}&host={host}&connected=true&integration_id={integration.id}"
+        )
+    else:
+        success_url = (
+            f"{settings.FRONTEND_URL}/integrations"
+            f"?connected=true&integration_id={integration.id}&platform={integration.platform.value}"
+        )
     return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
 
 
@@ -237,6 +273,5 @@ async def connect_woocommerce(
         logger.warning(f"Auto webhook registration failed: {e}")
     
     return IntegrationResponse.model_validate(integration)
-
 
 

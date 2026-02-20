@@ -56,8 +56,9 @@ class Integration(SQLModel, table=True):
     )
     
     # Foreign key to user (will become organization_id later)
-    user_id: uuid_lib.UUID = Field(
-        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Optional[uuid_lib.UUID] = Field(
+        default=None,
+        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     )
     
     # Platform identification
