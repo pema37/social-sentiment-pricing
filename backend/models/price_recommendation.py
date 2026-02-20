@@ -13,6 +13,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
+from sqlalchemy import Column, DateTime
 from sqlalchemy import Column, Text
 from sqlalchemy.types import JSON
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -75,7 +76,8 @@ class PriceRecommendation(SQLModel, table=True):
     
     # Expiry
     valid_until: datetime = Field(
-        description="Recommendation expires if not acted on"
+        description="Recommendation expires if not acted on",
+        sa_column=Column(DateTime(timezone=True), nullable=False)
     )
     
     # Review tracking
@@ -83,17 +85,17 @@ class PriceRecommendation(SQLModel, table=True):
         default=None,
         sa_column=Column(PG_UUID(as_uuid=True), nullable=True)
     )
-    reviewed_at: Optional[datetime] = Field(default=None)
+    reviewed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     rejection_reason: Optional[str] = Field(default=None, max_length=500)
     
     # Application tracking
-    applied_at: Optional[datetime] = Field(default=None)
+    applied_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     applied_to_platform: Optional[str] = Field(default=None, max_length=50)
     
     # Timestamps
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     )
 
     class Config:
