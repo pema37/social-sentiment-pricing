@@ -17,7 +17,7 @@ echo "==============================="
 
 # Run database migrations
 echo "Running Alembic migrations..."
-cd /app && python -m alembic upgrade head
+cd /app && python -m alembic upgrade head || echo "WARNING: Migration failed, continuing startup..."
 echo "Migrations complete."
 # Clear stale Celery beat schedule
 echo "Clearing stale celerybeat-schedule files..."
