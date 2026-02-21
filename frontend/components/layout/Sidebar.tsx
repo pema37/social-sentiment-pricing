@@ -1,11 +1,13 @@
 // frontend/components/layout/Sidebar.tsx
 // Main navigation for the dashboard - always visible on the left
+// Updated Feb 21, 2026 — Shopify embedded context awareness
 
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useShopifyEmbedded } from '@/lib/context/shopify-embedded';
 import {
   LayoutDashboard,
   Package,
@@ -20,56 +22,79 @@ import {
   ListChecks,
   Bell,
   BarChart3,
-  Wallet, 
-  Sparkles, 
+  Wallet,
+  Sparkles,
   TrendingUp,
   LogOut,
-  ShieldCheck,  // NEW: Trust scoring icon
+  ShieldCheck,
+  CreditCard,
 } from 'lucide-react';
 
-// Navigation items - each page in the dashboard
-const navItems = [
+// ─── Nav item type ───────────────────────────────────────────────────
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  /** If true, only show in standalone (non-Shopify) mode */
+  standaloneOnly?: boolean;
+  /** If true, only show in Shopify embedded mode */
+  embeddedOnly?: boolean;
+}
+
+// ─── Navigation config ───────────────────────────────────────────────
+
+const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Analytics', href: '/analytics', icon: BarChart3 },
   { label: 'Products', href: '/products', icon: Package },
   { label: 'Integrations', href: '/integrations', icon: Plug },
   { label: 'Competitors', href: '/competitors', icon: Users },
   { label: 'Sentiment', href: '/sentiment', icon: MessageSquare },
-  { label: 'Trust Scoring', href: '/sentiment/trust', icon: ShieldCheck },  // NEW
+  { label: 'Trust Scoring', href: '/sentiment/trust', icon: ShieldCheck },
   { label: 'Alerts', href: '/alerts', icon: Bell },
   { label: 'AI Support', href: '/support', icon: Sparkles },
   { label: 'Market Trends', href: '/trends', icon: TrendingUp },
 ];
 
-// Pricing section items
-const pricingItems = [
+const pricingItems: NavItem[] = [
   { label: 'Recommendations', href: '/pricing', icon: DollarSign },
   { label: 'Rules', href: '/pricing/rules', icon: Sliders },
   { label: 'Pricing Settings', href: '/pricing/settings', icon: ListChecks },
-  { label: 'Payments (MNEE)', href: '/payments', icon: Wallet },
+  // Standalone: show MNEE payments
+  { label: 'Payments (MNEE)', href: '/payments', icon: Wallet, standaloneOnly: true },
+  // Embedded: show Shopify billing link instead
+  { label: 'Billing', href: '/settings/billing', icon: CreditCard, embeddedOnly: true },
 ];
 
-// System items
-const systemItems = [
+const systemItems: NavItem[] = [
   { label: 'Settings', href: '/settings', icon: Settings },
   { label: 'API Keys', href: '/api-keys', icon: Key },
   { label: 'Admin', href: '/admin', icon: Shield },
 ];
+
+// ─── Component ───────────────────────────────────────────────────────
 
 interface SidebarProps {
   onLogout?: () => void;
 }
 
 export function Sidebar({ onLogout }: SidebarProps) {
-  // Get current path to highlight active nav item
   const pathname = usePathname();
+  const { isEmbedded } = useShopifyEmbedded();
 
-  // Check if nav item is active
+  // Filter items based on embedded context
+  const filterItems = (items: NavItem[]): NavItem[] =>
+    items.filter((item) => {
+      if (item.standaloneOnly && isEmbedded) return false;
+      if (item.embeddedOnly && !isEmbedded) return false;
+      return true;
+    });
+
   const isActive = (href: string) => {
     if (href === '/pricing') {
       return pathname === '/pricing' || pathname?.startsWith('/pricing/recommendations');
     }
-    // Exact match for sentiment/trust to avoid conflict with /sentiment
     if (href === '/sentiment/trust') {
       return pathname === '/sentiment/trust';
     }
@@ -79,10 +104,9 @@ export function Sidebar({ onLogout }: SidebarProps) {
     return pathname === href || pathname?.startsWith(`${href}/`);
   };
 
-  // Render a nav item
-  const renderNavItem = (item: { label: string; href: string; icon: typeof LayoutDashboard }) => {
+  const renderNavItem = (item: NavItem) => {
     const active = isActive(item.href);
-    
+
     return (
       <li key={item.href}>
         <Link
@@ -102,7 +126,6 @@ export function Sidebar({ onLogout }: SidebarProps) {
     );
   };
 
-  // Render a section header
   const renderSectionHeader = (title: string) => (
     <li className="pt-4 pb-2">
       <span className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -125,23 +148,21 @@ export function Sidebar({ onLogout }: SidebarProps) {
       <nav className="flex-1 mt-6 px-3 overflow-y-auto">
         <ul className="space-y-1">
           {/* Main Navigation */}
-          {navItems.map(renderNavItem)}
+          {filterItems(navItems).map(renderNavItem)}
 
           {/* Pricing Section */}
           {renderSectionHeader('Pricing')}
-          {pricingItems.map(renderNavItem)}
+          {filterItems(pricingItems).map(renderNavItem)}
 
           {/* System Section */}
           {renderSectionHeader('System')}
-          {systemItems.map(renderNavItem)}
+          {filterItems(systemItems).map(renderNavItem)}
         </ul>
       </nav>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          LOGOUT BUTTON - At bottom of sidebar
-          Important for mobile/iPad users (David's feedback)
-      ═══════════════════════════════════════════════════════════════════ */}
-      {onLogout && (
+      {/* Logout Button — only in standalone mode
+          Inside Shopify, merchants don't "sign out" of an embedded app */}
+      {!isEmbedded && onLogout && (
         <div className="p-4 border-t border-gray-700">
           <button
             onClick={onLogout}
@@ -159,6 +180,5 @@ export function Sidebar({ onLogout }: SidebarProps) {
     </aside>
   );
 }
-
 
 

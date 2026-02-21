@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChainId } from 'wagmi';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
@@ -11,14 +12,50 @@ import {
 } from '@/components/features/payments';
 import { EthWalletCard } from '@/components/features/payments/EthWalletCard';
 import { getMneeContractAddress, getNetworkName } from '@/lib/web3/config';
+import { useShopifyEmbedded } from '@/lib/context/shopify-embedded';
 
 export type PaymentNetwork = 'ethereum' | 'bsv';
 
 export default function PaymentsPage() {
+  const { isEmbedded } = useShopifyEmbedded();
+  const router = useRouter();
+
+  // Inside Shopify → billing is handled through Shopify Billing API, not MNEE
+  if (isEmbedded) {
+    return (
+      <div className="space-y-8">
+        <SectionHeader
+          title="Payments & Subscription"
+          description="Your billing is managed through Shopify."
+        />
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+          <p className="text-sm text-blue-800 mb-4">
+            As a Shopify merchant, your subscription is managed through your Shopify account.
+            View and manage your plan in billing settings.
+          </p>
+          <button
+            onClick={() => router.push('/settings/billing')}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Go to Billing Settings
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Standalone → show full MNEE crypto payments UI
+  return <MneePaymentsContent />;
+}
+
+// =============================================================================
+// MNEE PAYMENTS (standalone only — never shown inside Shopify)
+// =============================================================================
+
+function MneePaymentsContent() {
   const [activeNetwork, setActiveNetwork] = useState<PaymentNetwork>('ethereum');
   const chainId = useChainId();
-  
-  // Get network-aware contract address
+
   const mneeContract = getMneeContractAddress(chainId);
   const networkName = getNetworkName(chainId);
 
@@ -65,28 +102,28 @@ export default function PaymentsPage() {
       {activeNetwork === 'ethereum' && (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
           <p className="text-sm text-purple-800">
-            <strong>MNEE ERC-20</strong> — Pay using MNEE tokens on Ethereum. 
+            <strong>MNEE ERC-20</strong> — Pay using MNEE tokens on Ethereum.
             Connect your MetaMask or WalletConnect-compatible wallet.
           </p>
         </div>
       )}
-      
+
       {activeNetwork === 'bsv' && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
           <p className="text-sm text-orange-800">
-            <strong>MNEE on BSV</strong> — Pay using MNEE stablecoin on the BSV network. 
+            <strong>MNEE on BSV</strong> — Pay using MNEE stablecoin on the BSV network.
             Lower fees, faster transactions.
           </p>
         </div>
       )}
 
-      {/* Wallet and Current Plan - Side by Side on Desktop */}
+      {/* Wallet and Current Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {activeNetwork === 'ethereum' ? <EthWalletCard /> : <BsvWalletCard />}
         <CurrentPlan />
       </div>
 
-      {/* Subscription Plans - PASS activeNetwork! */}
+      {/* Subscription Plans */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Subscription Plans</h2>
         <SubscriptionPlans activeNetwork={activeNetwork} />
@@ -108,8 +145,8 @@ export default function PaymentsPage() {
               Contract ({networkName}): <code className="bg-blue-100 px-1 rounded text-xs">{mneeContract}</code>
             </p>
           ) : (
-            <p>On BSV, use wallets like{' '} 
-              <a            
+            <p>On BSV, use wallets like{' '}
+              <a
                 href="https://handcash.io"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -134,6 +171,10 @@ export default function PaymentsPage() {
     </div>
   );
 }
+
+// =============================================================================
+// Icons
+// =============================================================================
 
 function EthereumIcon() {
   return (
@@ -161,5 +202,4 @@ function BsvIcon() {
     </svg>
   );
 }
-
 

@@ -1,6 +1,7 @@
 // frontend/components/layout/DashboardShell.tsx
 // DashboardShell Component
 // Wraps all dashboard pages with Sidebar + Topbar + content area
+// Updated Feb 21, 2026 — Shopify embedded context awareness
 
 'use client';
 
@@ -10,6 +11,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { Menu, X, User, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useShopifyEmbedded } from '@/lib/context/shopify-embedded';
 import { NotificationBell } from '@/components/features/alerts';
 
 interface DashboardShellProps {
@@ -21,9 +23,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuthStore();
+  const { isEmbedded } = useShopifyEmbedded();
 
   // Close sidebar when route changes (user clicked a nav link)
-  // This is a valid use case - disabling the eslint rule
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSidebarOpen(false);
@@ -41,7 +43,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     };
   }, [sidebarOpen]);
 
-  // Handle logout
+  // Handle logout — only used in standalone mode
   const handleLogout = () => {
     logout();
     router.push('/login');
@@ -51,7 +53,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     <div className="min-h-screen bg-gray-50">
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
@@ -64,7 +66,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
         lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <Sidebar onLogout={handleLogout} />
+        {/* Only pass onLogout in standalone mode */}
+        <Sidebar onLogout={isEmbedded ? undefined : handleLogout} />
       </div>
 
       {/* Mobile close button */}
@@ -82,9 +85,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <div className="lg:ml-60">
         {/* ═══════════════════════════════════════════════════════════════════
             Mobile header - Shows hamburger + logo + alerts/profile/logout
-            
-            FIX (2026-01-27): Added "relative z-50" to ensure this header 
-            stays ABOVE the overlay (z-40). Without this, the overlay 
+
+            FIX (2026-01-27): Added "relative z-50" to ensure this header
+            stays ABOVE the overlay (z-40). Without this, the overlay
             intercepts clicks and Profile/Logout buttons become unresponsive
             when the sidebar is open.
         ═══════════════════════════════════════════════════════════════════ */}
@@ -107,7 +110,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
             <span className="font-semibold text-gray-900">ActualPrice</span>
           </div>
 
-          {/* Right: Alerts, Profile, Logout - ALWAYS VISIBLE */}
+          {/* Right: Alerts, Profile, Logout */}
           <div className="flex items-center gap-2">
             <NotificationBell />
             <button
@@ -117,13 +120,16 @@ export function DashboardShell({ children }: DashboardShellProps) {
             >
               <User className="w-5 h-5" />
             </button>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            {/* Logout — only in standalone mode */}
+            {!isEmbedded && (
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
