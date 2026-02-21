@@ -1,42 +1,45 @@
 """
 Shopify Billing API Routes
 
-Endpoints for Shopify-native billing via the Billing API.
-These are separate from the MNEE payment routes and only apply
-to merchants who installed via the Shopify App Store.
+Endpoints for Shopify-native app subscription billing.
+Separate from MNEE payment routes — these handle Shopify App Store billing.
 
-Endpoints:
-  POST /shopify/billing/subscribe     — Create subscription, get confirmationUrl
-  GET  /shopify/billing/callback      — Shopify redirects here after approval
-  GET  /shopify/billing/status        — Check current billing status
-  POST /shopify/billing/change-plan   — Upgrade/downgrade (creates new subscription)
-  POST /shopify/billing/cancel        — Cancel active subscription
-  GET  /shopify/billing/plans         — List available Shopify plans
+Flow:
+  1. GET  /plans         → list available plans (public)
+  2. POST /subscribe     → create subscription → returns confirmationUrl
+  3. [Merchant approves on Shopify → redirected back to frontend with charge_id]
+  4. POST /verify        → frontend calls this with charge_id to confirm activation
+  5. GET  /status        → check active billing status
+  6. POST /change-plan   → upgrade/downgrade
+  7. POST /cancel        → cancel subscription
 """
 
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.deps import get_current_user
+from core.rate_limit import limiter, WRITE_RATE_LIMIT, READ_RATE_LIMIT
 from db.session import get_session
 from models.user import User
-from services.integration.shopify_billing import ShopifyBillingService
 from schemas.shopify_billing import (
     SHOPIFY_PLANS,
     ShopifySubscribeRequest,
     ShopifySubscribeResponse,
-    ShopifyBillingCallbackResponse,
-    ShopifyBillingStatusResponse,
     ShopifyPlanChangeRequest,
     ShopifyCancelRequest,
     ShopifyCancelResponse,
+    ShopifyBillingStatusResponse,
+    ShopifyBillingCallbackResponse,
     ShopifyPlanInfo,
     ShopifyPlansListResponse,
 )
+from services.integration.shopify_billing import ShopifyBillingService
 
 logger = logging.getLogger(__name__)
 
@@ -44,25 +47,31 @@ router = APIRouter(prefix="/shopify/billing", tags=["shopify-billing"])
 
 
 # =============================================================================
-# DEPENDENCY
+# Verify Request Schema (inline — only used by this route)
 # =============================================================================
 
-def get_billing_service(
-    session: AsyncSession = Depends(get_session),
-) -> ShopifyBillingService:
-    """Dependency injection for Shopify billing service."""
-    return ShopifyBillingService(session)
+class ShopifyVerifyRequest(BaseModel):
+    """Request to verify a charge after Shopify approval redirect."""
+    charge_id: str = Field(
+        ..., description="Numeric charge ID from Shopify callback URL"
+    )
+    shop_domain: Optional[str] = Field(
+        default=None,
+        description="Shop domain (auto-detected if not provided)",
+    )
 
 
 # =============================================================================
-# LIST PLANS
+# PUBLIC ENDPOINTS (no auth required)
 # =============================================================================
 
 @router.get("/plans", response_model=ShopifyPlansListResponse)
 async def list_shopify_plans():
     """
-    List all available Shopify billing plans.
-    No authentication required — used by the embedded app for plan display.
+    List available Shopify billing plans.
+
+    No auth required — this can be called from the embedded app
+    before the merchant has logged in, to display pricing.
     """
     plans = [
         ShopifyPlanInfo(
@@ -79,21 +88,25 @@ async def list_shopify_plans():
 
 
 # =============================================================================
-# CREATE SUBSCRIPTION
+# AUTHENTICATED ENDPOINTS
 # =============================================================================
 
 @router.post("/subscribe", response_model=ShopifySubscribeResponse)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def create_shopify_subscription(
+    request: Request,
     data: ShopifySubscribeRequest,
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    service: ShopifyBillingService = Depends(get_billing_service),
 ):
     """
     Create a Shopify recurring subscription.
 
-    Returns a confirmationUrl — redirect the merchant there to approve the charge.
-    After approval, Shopify redirects to /shopify/billing/callback with charge_id.
+    Returns a confirmation_url to redirect the merchant to Shopify's
+    billing approval page. After approval, Shopify redirects back to
+    the frontend with a charge_id param.
     """
+    service = ShopifyBillingService(db)
     result = await service.create_subscription(
         tier=data.tier,
         user_id=current_user.id,
@@ -109,91 +122,117 @@ async def create_shopify_subscription(
     return result
 
 
-# =============================================================================
-# BILLING CALLBACK (Shopify redirects here after merchant approves/declines)
-# =============================================================================
-
-@router.get("/callback")
-async def shopify_billing_callback(
-    charge_id: str = Query(..., description="Shopify charge ID from redirect"),
-    shop: str = Query(None, description="Shop domain"),
-    session: AsyncSession = Depends(get_session),
+@router.post("/verify", response_model=ShopifyBillingCallbackResponse)
+@limiter.limit(WRITE_RATE_LIMIT)
+async def verify_shopify_charge(
+    request: Request,
+    data: ShopifyVerifyRequest,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Shopify billing callback — merchant was redirected here after approving
-    or declining the charge.
+    Verify a Shopify charge after the merchant approves it.
 
-    Shopify appends ?charge_id=<numeric_id> to our returnUrl.
-    We verify the subscription status and activate if ACTIVE.
-
-    Then redirect the merchant back into the app.
+    Called by the frontend when the billing page loads with a charge_id
+    query param (Shopify redirects back to the app URL after approval).
+    Confirms the subscription is ACTIVE via GraphQL and updates
+    the local Subscription record.
     """
-    service = ShopifyBillingService(session)
+    shop_domain = data.shop_domain
+    service = ShopifyBillingService(db)
 
-    is_active, tier, shopify_sub_id = await service.verify_subscription(
-        charge_id=charge_id,
-        shop_domain=shop or "",
+    # If no shop_domain provided, find it from the user's integration
+    if not shop_domain:
+        integration = await service._get_shopify_integration(user_id=current_user.id)
+        if integration:
+            shop_domain = integration.store_url
+
+    if not shop_domain:
+        return ShopifyBillingCallbackResponse(
+            success=False,
+            status="error",
+            message="No shop domain found. Please provide shop_domain.",
+        )
+
+    is_active, tier, gid = await service.verify_subscription(
+        charge_id=data.charge_id,
+        shop_domain=shop_domain,
     )
 
     if is_active:
-        logger.info(
-            f"Billing approved for {shop}: tier={tier}, charge_id={charge_id}"
-        )
-        # Redirect back to the app billing page with success
-        redirect_url = (
-            f"{settings.FRONTEND_URL}/settings/billing"
-            f"?billing=approved&tier={tier or 'starter'}&shop={shop or ''}"
+        return ShopifyBillingCallbackResponse(
+            success=True,
+            status="active",
+            tier=tier,
+            message=f"Subscription activated: {tier} plan",
         )
     else:
-        logger.warning(
-            f"Billing not approved for {shop}: charge_id={charge_id}"
+        return ShopifyBillingCallbackResponse(
+            success=False,
+            status="declined",
+            tier=tier,
+            message="Subscription was not approved or is not yet active.",
         )
-        # Redirect back with declined status
-        redirect_url = (
-            f"{settings.FRONTEND_URL}/settings/billing"
-            f"?billing=declined&shop={shop or ''}"
-        )
+
+
+@router.get("/callback")
+async def shopify_billing_callback(
+    charge_id: str,
+    shop: str = None,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Legacy billing callback (GET redirect).
+
+    For embedded apps, Shopify redirects to the app URL (frontend) instead
+    of this endpoint. This is a fallback that forwards to the frontend.
+    """
+    redirect_url = (
+        f"{settings.FRONTEND_URL}/settings/billing"
+        f"?charge_id={charge_id}"
+    )
+    if shop:
+        redirect_url += f"&shop={shop}"
 
     return RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
 
 
-# =============================================================================
-# CHECK BILLING STATUS
-# =============================================================================
-
 @router.get("/status", response_model=ShopifyBillingStatusResponse)
+@limiter.limit(READ_RATE_LIMIT)
 async def get_shopify_billing_status(
-    shop_domain: str = Query(None, description="Shop domain (optional)"),
+    request: Request,
+    shop_domain: str = None,
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    service: ShopifyBillingService = Depends(get_billing_service),
 ):
     """
     Check the current Shopify billing status.
-    Queries Shopify's activeSubscriptions to get authoritative status.
+
+    Queries Shopify's activeSubscriptions for the authoritative
+    subscription state (not our local DB copy).
     """
+    service = ShopifyBillingService(db)
     return await service.get_subscription_status(
         user_id=current_user.id,
         shop_domain=shop_domain,
     )
 
 
-# =============================================================================
-# CHANGE PLAN (Upgrade / Downgrade)
-# =============================================================================
-
 @router.post("/change-plan", response_model=ShopifySubscribeResponse)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def change_shopify_plan(
+    request: Request,
     data: ShopifyPlanChangeRequest,
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    service: ShopifyBillingService = Depends(get_billing_service),
 ):
     """
-    Upgrade or downgrade the Shopify plan.
+    Change Shopify plan (upgrade or downgrade).
 
-    Creates a new subscription with APPLY_IMMEDIATELY replacement behavior.
-    Shopify automatically cancels the old subscription and prorates the charge.
-    Returns a new confirmationUrl for the merchant to approve.
+    Creates a new subscription with APPLY_IMMEDIATELY replacement
+    behavior. Merchant must approve the new charge via Shopify.
     """
+    service = ShopifyBillingService(db)
     result = await service.create_subscription(
         tier=data.new_tier,
         user_id=current_user.id,
@@ -209,21 +248,21 @@ async def change_shopify_plan(
     return result
 
 
-# =============================================================================
-# CANCEL SUBSCRIPTION
-# =============================================================================
-
 @router.post("/cancel", response_model=ShopifyCancelResponse)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def cancel_shopify_subscription(
+    request: Request,
     data: ShopifyCancelRequest,
+    db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    service: ShopifyBillingService = Depends(get_billing_service),
 ):
     """
     Cancel the active Shopify subscription.
-    Optionally prorates the remaining billing period.
-    Downgrades the local subscription to free.
+
+    Calls Shopify's appSubscriptionCancel mutation and downgrades
+    the local subscription to free tier.
     """
+    service = ShopifyBillingService(db)
     result = await service.cancel_subscription(
         prorate=data.prorate,
         user_id=current_user.id,

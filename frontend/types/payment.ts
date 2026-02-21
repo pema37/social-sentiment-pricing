@@ -257,6 +257,17 @@ export interface ShopifySubscribeResponse {
 }
 
 /**
+ * Shopify billing callback/verify response
+ * Matches: components["schemas"]["ShopifyBillingCallbackResponse"]
+ */
+export interface ShopifyBillingCallbackResponse {
+  success: boolean;
+  status: string;
+  tier: string | null;
+  message: string;
+}
+
+/**
  * Shopify billing status response
  * Matches: components["schemas"]["ShopifyBillingStatusResponse"]
  */
@@ -332,5 +343,4 @@ export const SUBSCRIPTION_STATUS_COLORS: Record<SubscriptionStatus, string> = {
 export interface PlansResponse {
   plans: SubscriptionPlan[];
 }
-
 

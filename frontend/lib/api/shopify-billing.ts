@@ -16,6 +16,7 @@ import type {
   ShopifySubscribeRequest,
   ShopifySubscribeResponse,
   ShopifyBillingStatusResponse,
+  ShopifyBillingCallbackResponse,
   ShopifyPlanChangeRequest,
   ShopifyCancelRequest,
   ShopifyCancelResponse,
@@ -27,6 +28,7 @@ export type {
   ShopifySubscribeRequest,
   ShopifySubscribeResponse,
   ShopifyBillingStatusResponse,
+  ShopifyBillingCallbackResponse,
   ShopifyPlanChangeRequest,
   ShopifyCancelRequest,
   ShopifyCancelResponse,
@@ -40,6 +42,15 @@ declare global {
       redirectExternal?: (url: string) => void;
     };
   }
+}
+
+// =============================================================================
+// Verify Request Type
+// =============================================================================
+
+export interface ShopifyVerifyRequest {
+  charge_id: string;
+  shop_domain?: string | null;
 }
 
 // =============================================================================
@@ -64,6 +75,16 @@ export async function createShopifySubscription(
   data: ShopifySubscribeRequest
 ): Promise<ShopifySubscribeResponse> {
   return api.post<ShopifySubscribeResponse>(`${BILLING_BASE}/subscribe`, data);
+}
+
+/**
+ * Verify a Shopify charge after merchant approval.
+ * Called when the billing page loads with ?charge_id= in the URL.
+ */
+export async function verifyShopifyCharge(
+  data: ShopifyVerifyRequest
+): Promise<ShopifyBillingCallbackResponse> {
+  return api.post<ShopifyBillingCallbackResponse>(`${BILLING_BASE}/verify`, data);
 }
 
 /**

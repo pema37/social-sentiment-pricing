@@ -1,7 +1,7 @@
 // frontend/app/(dashboard)/settings/billing/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardTitle } from '@/components/ui';
 import { Button } from '@/components/ui/Button';
@@ -18,6 +18,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 // MNEE billing (existing)
@@ -34,7 +35,7 @@ import {
   useShopifyChangePlan,
   useShopifyCancelSubscription,
 } from '@/lib/hooks/use-shopify-billing';
-import { getShopifyContext } from '@/lib/api/shopify-billing';
+import { getShopifyContext, verifyShopifyCharge } from '@/lib/api/shopify-billing';
 import type { ShopifyPlanInfo } from '@/lib/api/shopify-billing';
 
 // =============================================================================
@@ -71,15 +72,68 @@ const PLAN_CONFIG: Record<string, {
 
 function ShopifyBillingPage({ shop }: { shop: string | null }) {
   const searchParams = useSearchParams();
-  const billingResult = searchParams.get('billing');
-  const billingTier = searchParams.get('tier');
+  const chargeId = searchParams.get('charge_id');
   const justInstalled = searchParams.get('installed') === 'true';
+
+  // Verification state
+  const [verifyState, setVerifyState] = useState<{
+    status: 'idle' | 'verifying' | 'approved' | 'declined' | 'error';
+    tier: string | null;
+    message: string | null;
+  }>({ status: chargeId ? 'verifying' : 'idle', tier: null, message: null });
 
   const { data: plans, isLoading: plansLoading } = useShopifyPlans();
   const { data: status, isLoading: statusLoading, refetch: refetchStatus } = useShopifyBillingStatus(shop || undefined);
   const subscribeMutation = useShopifySubscribe();
   const changePlanMutation = useShopifyChangePlan();
   const cancelMutation = useShopifyCancelSubscription();
+
+  // Verify charge_id on mount if present in URL
+  useEffect(() => {
+    if (!chargeId) return;
+
+    let cancelled = false;
+
+    async function verify() {
+      try {
+        const result = await verifyShopifyCharge({
+          charge_id: chargeId!,
+          shop_domain: shop,
+        });
+
+        if (cancelled) return;
+
+        if (result.success) {
+          setVerifyState({
+            status: 'approved',
+            tier: result.tier || null,
+            message: result.message,
+          });
+          // Refresh billing status after successful verification
+          refetchStatus();
+        } else {
+          setVerifyState({
+            status: 'declined',
+            tier: result.tier || null,
+            message: result.message,
+          });
+        }
+      } catch {
+        if (cancelled) return;
+        setVerifyState({
+          status: 'error',
+          tier: null,
+          message: 'Failed to verify subscription. Please refresh the page.',
+        });
+      }
+    }
+
+    verify();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chargeId, shop, refetchStatus]);
 
   const isLoading = plansLoading || statusLoading;
   const currentTier = status?.tier || null;
@@ -101,32 +155,56 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
 
   return (
     <div className="space-y-6">
-      {/* Billing result banners */}
-      {billingResult === 'approved' && (
+      {/* Verification banners */}
+      {verifyState.status === 'verifying' && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+          <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+          <div>
+            <p className="font-medium text-blue-800">Verifying subscription...</p>
+            <p className="text-sm text-blue-700">
+              Confirming your plan with Shopify. This takes a moment.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {verifyState.status === 'approved' && (
         <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
           <CheckCircle2 className="w-5 h-5 text-green-600" />
           <div>
             <p className="font-medium text-green-800">Subscription Activated!</p>
             <p className="text-sm text-green-700">
-              Your {billingTier} plan is now active. Enjoy ActualPrice!
+              Your {verifyState.tier} plan is now active. Enjoy ActualPrice!
             </p>
           </div>
         </div>
       )}
 
-      {billingResult === 'declined' && (
+      {verifyState.status === 'declined' && (
         <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-yellow-600" />
           <div>
             <p className="font-medium text-yellow-800">Subscription Not Approved</p>
             <p className="text-sm text-yellow-700">
-              The charge was not approved. You can try again below.
+              {verifyState.message || 'The charge was not approved. You can try again below.'}
             </p>
           </div>
         </div>
       )}
 
-      {justInstalled && !billingResult && (
+      {verifyState.status === 'error' && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <div>
+            <p className="font-medium text-red-800">Verification Error</p>
+            <p className="text-sm text-red-700">
+              {verifyState.message || 'Something went wrong. Please refresh the page.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {justInstalled && verifyState.status === 'idle' && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
           <Sparkles className="w-5 h-5 text-blue-600" />
           <div>
@@ -608,5 +686,4 @@ export default function BillingSettingsPage() {
 
   return <MneeBillingPage />;
 }
-
 
