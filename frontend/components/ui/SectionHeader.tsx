@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { ReactNode } from 'react';
 
 interface SectionHeaderProps {
-  title: string;              // Main heading text
+  title: ReactNode;           // Main heading text (can include components)
   description?: string;       // Optional subtitle/description
   action?: ReactNode;         // Optional action button on the right
   className?: string;

@@ -9,7 +9,7 @@ Prevents cascade failures by failing fast when a service is down.
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Optional, List
 
@@ -82,7 +82,7 @@ class CircuitBreaker:
         async with self._lock:
             if self._state == CircuitState.OPEN:
                 if self._last_failure_time:
-                    elapsed = (datetime.utcnow() - self._last_failure_time).total_seconds()
+                    elapsed = (datetime.now(UTC) - self._last_failure_time).total_seconds()
                     if elapsed >= self.config.timeout:
                         logger.info(f"Circuit {self.name}: OPEN -> HALF_OPEN")
                         self._state = CircuitState.HALF_OPEN
@@ -107,7 +107,7 @@ class CircuitBreaker:
         
         async with self._lock:
             self._failure_count += 1
-            self._last_failure_time = datetime.utcnow()
+            self._last_failure_time = datetime.now(UTC)
             
             if self._state == CircuitState.HALF_OPEN:
                 logger.warning(f"Circuit {self.name}: HALF_OPEN -> OPEN")

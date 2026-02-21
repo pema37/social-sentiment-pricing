@@ -10,10 +10,17 @@ interface ProductSummaryCardProps {
 }
 
 export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
+  // Safe fallback for price_change_percent
+  const priceChangePercent = product.price_change_percent ?? 0;
+  // Safe fallback for sentiment_score
+  const sentimentScore = product.sentiment_score ?? null;
+  // Safe parse for current_price
+  const currentPrice = parseFloat(product.current_price || '0') || 0;
+
   const priceChangeColor =
-    product.price_change_percent > 0
+    priceChangePercent > 0
       ? 'text-green-600'
-      : product.price_change_percent < 0
+      : priceChangePercent < 0
       ? 'text-red-600'
       : 'text-gray-500';
 
@@ -39,25 +46,25 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
       <div className="mt-3 flex items-end justify-between">
         <div>
           <p className="text-lg font-semibold text-gray-900">
-            ${parseFloat(product.current_price).toFixed(2)}
+            ${currentPrice.toFixed(2)}
           </p>
           <p className={`text-sm ${priceChangeColor}`}>
-            {product.price_change_percent > 0 ? '+' : ''}
-            {product.price_change_percent.toFixed(1)}% from base
+            {priceChangePercent > 0 ? '+' : ''}
+            {(Number(priceChangePercent ?? 0)).toFixed(1)}% from base
           </p>
         </div>
         <div className="text-right">
-          {product.sentiment_score !== null && (
+          {sentimentScore !== null && typeof sentimentScore === 'number' && (
             <p
               className={`text-sm font-medium ${
-                product.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
+                sentimentScore >= 0 ? 'text-green-600' : 'text-red-600'
               }`}
             >
-              {product.sentiment_score >= 0 ? '+' : ''}
-              {product.sentiment_score.toFixed(2)}
+              {sentimentScore >= 0 ? '+' : ''}
+              {(Number(sentimentScore ?? 0)).toFixed(2)}
             </p>
           )}
-          <p className="text-xs text-gray-500">{product.mention_count_24h} mentions</p>
+          <p className="text-xs text-gray-500">{product.mention_count_24h ?? 0} mentions</p>
         </div>
       </div>
 
@@ -72,3 +79,4 @@ export function ProductSummaryCard({ product }: ProductSummaryCardProps) {
     </Link>
   );
 }
+

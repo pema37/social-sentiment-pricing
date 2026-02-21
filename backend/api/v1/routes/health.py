@@ -3,7 +3,7 @@
 Health check endpoints for monitoring and orchestration.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, Any
 
 from fastapi import APIRouter, Depends
@@ -19,15 +19,15 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
-START_TIME = datetime.utcnow()
+START_TIME = datetime.now(UTC)
 
 
 async def check_database(session: AsyncSession) -> Dict[str, Any]:
     """Check database connectivity."""
     try:
-        start = datetime.utcnow()
+        start = datetime.now(UTC)
         await session.execute(text("SELECT 1"))
-        latency_ms = (datetime.utcnow() - start).total_seconds() * 1000
+        latency_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return {
             "status": "healthy",
             "latency_ms": round(latency_ms, 2),
@@ -44,11 +44,11 @@ def check_redis_sync() -> Dict[str, Any]:
     """Check Redis connectivity (sync version)."""
     try:
         import redis
-        start = datetime.utcnow()
+        start = datetime.now(UTC)
         r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
         r.ping()
         r.close()
-        latency_ms = (datetime.utcnow() - start).total_seconds() * 1000
+        latency_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return {
             "status": "healthy",
             "latency_ms": round(latency_ms, 2),
@@ -70,11 +70,11 @@ async def health_check(session: AsyncSession = Depends(get_session)):
     except Exception:
         db_status = "error"
 
-    uptime_seconds = (datetime.utcnow() - START_TIME).total_seconds()
+    uptime_seconds = (datetime.now(UTC) - START_TIME).total_seconds()
 
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
         "database": db_status,
@@ -98,7 +98,7 @@ async def readiness_probe(session: AsyncSession = Depends(get_session)):
     
     response_data = {
         "status": "ready" if db_healthy else "not_ready",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "checks": {
             "database": db_check,
             "redis": redis_check,
@@ -127,11 +127,11 @@ async def detailed_health_check(session: AsyncSession = Depends(get_session)):
     else:
         overall = "unhealthy"
     
-    uptime_seconds = (datetime.utcnow() - START_TIME).total_seconds()
+    uptime_seconds = (datetime.now(UTC) - START_TIME).total_seconds()
     
     return {
         "status": overall,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
         "uptime_seconds": round(uptime_seconds, 2),

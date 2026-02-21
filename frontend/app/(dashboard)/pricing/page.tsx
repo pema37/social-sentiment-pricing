@@ -5,10 +5,11 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Settings, RefreshCw } from 'lucide-react';
+import { DollarSign, Settings, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { AIBadge } from '@/components/ui/ai-badge';
 import {
   RecommendationsList,
   RecommendationsListSkeleton,
@@ -20,6 +21,7 @@ import {
   usePricingRecommendationStats,
 } from '@/lib/hooks/use-pricing';
 import { useProducts } from '@/lib/hooks/use-products';
+import { api } from '@/lib/api/client';
 import type { RecommendationStatus } from '@/types';
 
 // ============================================
@@ -52,6 +54,7 @@ export default function PricingPage() {
   const router = useRouter();
   const [filterStatus, setFilterStatus] = useState<RecommendationStatus | 'all'>('pending');
   const [actionLoadingId, setActionLoadingId] = useState<string | undefined>();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Fetch recommendations
   const {
@@ -64,7 +67,7 @@ export default function PricingPage() {
   });
 
   // Fetch stats
-  const { data: stats } = usePricingRecommendationStats();
+  const { data: stats, refetch: refetchStats } = usePricingRecommendationStats();
 
   // Fetch products for names
   const { data: productsData, isLoading: isLoadingProducts } = useProducts({
@@ -85,6 +88,50 @@ export default function PricingPage() {
       productSkus[product.id] = product.sku;
     });
   }
+
+  // Handle generate recommendations
+  const handleGenerateRecommendations = useCallback(async () => {
+    setIsGenerating(true);
+    try {
+      const result = await api.post<{
+        message: string;
+        products_checked: number;
+        recommendations_created: number;
+        results: Array<{
+          product_id: string;
+          product_name: string;
+          success: boolean;
+          recommendation_id?: string;
+          message?: string;
+          error?: string;
+        }>;
+      }>('/api/v1/pricing/recommendations/generate-all', {});
+
+      if (result.recommendations_created > 0) {
+        toast.success(
+          `Generated ${result.recommendations_created} recommendation${result.recommendations_created > 1 ? 's' : ''} from ${result.products_checked} products`
+        );
+      } else {
+        toast.info(
+          `Checked ${result.products_checked} products. No new recommendations needed.`,
+          {
+            description: 'Products may already be optimally priced or no rules matched.',
+          }
+        );
+      }
+
+      // Refresh data
+      refetchRecommendations();
+      refetchStats();
+    } catch (error) {
+      console.error('Generate error:', error);
+      toast.error('Failed to generate recommendations', {
+        description: error instanceof Error ? error.message : 'Please try again',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [refetchRecommendations, refetchStats]);
 
   // Handle approve
   const handleApprove = useCallback(
@@ -162,28 +209,41 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Page Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      {/* Page Header - Responsive */}
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Title Row */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <DollarSign className="h-6 w-6 text-green-600" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
             Price Recommendations
+            <AIBadge />
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-sm sm:text-base text-gray-600 mt-1">
             Review and approve AI-generated pricing suggestions
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Actions Row - Wraps on mobile */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="secondary"
             size="sm"
             onClick={() => refetchRecommendations()}
             disabled={isLoading}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
+          </Button>
+
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleGenerateRecommendations}
+            disabled={isGenerating}
+          >
+            <Sparkles className={`h-4 w-4 mr-1.5 ${isGenerating ? 'animate-pulse' : ''}`} />
+            {isGenerating ? 'Generating...' : 'Generate Recommendations'}
           </Button>
 
           <Button
@@ -191,14 +251,14 @@ export default function PricingPage() {
             size="sm"
             onClick={() => router.push('/pricing/rules')}
           >
-            <Settings className="h-4 w-4 mr-2" />
+            <Settings className="h-4 w-4 mr-1.5" />
             Pricing Rules
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Stats - Responsive grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatCard
           label="Pending Review"
           value={stats?.total_pending ?? 0}
@@ -217,6 +277,30 @@ export default function PricingPage() {
           value={stats?.avg_confidence ? `${Math.round(stats.avg_confidence * 100)}%` : '—'}
         />
       </div>
+
+      {/* Info banner when no recommendations */}
+      {!isLoading && (!recommendationsData?.items || recommendationsData.items.length === 0) && (
+        <Card padding="md" className="mb-6 bg-blue-50 border-blue-200">
+          <h3 className="text-blue-800 font-medium mb-2">No Recommendations Yet</h3>
+          <p className="text-blue-700 text-sm mb-3">
+            To generate recommendations, make sure you have:
+          </p>
+          <ul className="text-blue-700 text-sm list-disc list-inside mb-4 space-y-1">
+            <li>At least one <strong>active pricing rule</strong> configured</li>
+            <li>Competitor products linked with current prices</li>
+            <li>Price differences that match your rule conditions</li>
+          </ul>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleGenerateRecommendations}
+            disabled={isGenerating}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {isGenerating ? 'Generating...' : 'Generate Recommendations Now'}
+          </Button>
+        </Card>
+      )}
 
       {/* Recommendations List */}
       {isLoading ? (
@@ -238,3 +322,4 @@ export default function PricingPage() {
     </div>
   );
 }
+

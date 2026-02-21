@@ -6,3 +6,4 @@ export { AlertsList } from './AlertsList';
 export { NotificationBell } from './NotificationBell';
 export { AlertConfigurationCard } from './AlertConfigurationCard';
 export { AlertConfigurationForm } from './AlertConfigurationForm';
+export { CrisisDetectionCard } from './CrisisDetectionCard';

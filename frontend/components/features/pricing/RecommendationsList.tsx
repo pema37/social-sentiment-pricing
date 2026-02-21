@@ -164,7 +164,7 @@ function FilterTabs({
   counts: Record<string, number>;
 }) {
   return (
-    <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg overflow-x-auto">
+    <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg overflow-x-auto scrollbar-hide">
       {filterTabs.map((tab) => {
         const count = counts[tab.value] ?? 0;
         const isActive = value === tab.value;
@@ -174,7 +174,7 @@ function FilterTabs({
             key={tab.value}
             onClick={() => onChange(tab.value)}
             className={cn(
-              'px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors',
+              'shrink-0 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors',
               isActive
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
@@ -184,7 +184,7 @@ function FilterTabs({
             {count > 0 && (
               <span
                 className={cn(
-                  'ml-1.5 px-1.5 py-0.5 text-xs rounded-full',
+                  'ml-1 sm:ml-1.5 px-1.5 py-0.5 text-xs rounded-full',
                   isActive ? 'bg-gray-100' : 'bg-gray-200'
                 )}
               >
@@ -235,10 +235,10 @@ export function RecommendationsList({
 
   return (
     <div className={cn('space-y-4', className)}>
-      {/* Filter Tabs */}
+      {/* Filter Tabs - Scrollable on mobile */}
       {showFilters && onFilterChange && (
-        <div className="flex items-center gap-3">
-          <Filter className="h-4 w-4 text-gray-400" />
+        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1">
+          <Filter className="h-4 w-4 text-gray-400 shrink-0" />
           <FilterTabs
             value={filterStatus}
             onChange={onFilterChange}

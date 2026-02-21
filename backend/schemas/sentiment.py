@@ -1,10 +1,8 @@
 # backend/schemas/sentiment.py
-
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
-
 from pydantic import BaseModel, Field
 
 
@@ -18,10 +16,17 @@ class SentimentAnalyzeRequest(BaseModel):
     url: Optional[str] = None
 
 
+class SentimentBulkItem(BaseModel):
+    """Single item for bulk analysis"""
+    text: str = Field(..., min_length=1)
+    source: Optional[str] = None
+    author: Optional[str] = None
+    url: Optional[str] = None
+
+
 class SentimentBulkRequest(BaseModel):
     """Analyze multiple texts at once"""
-    product_id: UUID
-    items: List[SentimentAnalyzeRequest]
+    items: List[SentimentBulkItem]
 
 
 # ============== Response Schemas ==============
@@ -80,10 +85,14 @@ class SentimentResponse(BaseModel):
     """Response matching route expectations"""
     sentiment_id: Optional[UUID] = None
     text: Optional[str] = None
-    sentiment_score: Decimal = Field(ge=-1, le=1)
+    sentiment_score: float = Field(ge=-1, le=1)
     sentiment_label: str
-    confidence: Decimal = Field(ge=0, le=1)
+    confidence: float = Field(ge=0, le=1)
     emotions: Optional[dict] = None
+    # AI-powered fields
+    topics: Optional[List[str]] = None
+    is_sarcastic: Optional[bool] = None
+    ai_powered: bool = False
 
     class Config:
         from_attributes = True
@@ -106,4 +115,10 @@ class SocialMentionResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        
+
+
+class AIStatusResponse(BaseModel):
+    """Response for AI status check"""
+    openai_available: bool
+    model: Optional[str] = None
+    features: List[str] = []

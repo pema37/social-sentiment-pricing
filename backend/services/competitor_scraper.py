@@ -10,6 +10,10 @@ Future phases will add:
 - API integrations for partners
 - Proxy rotation for rate limiting
 - ML-based price extraction
+
+PATCHED (2025-01-07): Added price anomaly detection to prevent obviously 
+wrong prices from being saved. Uses ratio-based validation that works for
+any product regardless of price range.
 """
 
 import uuid as uuid_lib
@@ -75,6 +79,15 @@ class CompetitorScraperService:
         "Connection": "keep-alive",
     }
 
+    # ========== NEW: Price validation thresholds (ratio-based, works for any price) ==========
+    # Maximum ratio increase from last known price (5x = 500% increase)
+    MAX_PRICE_INCREASE_RATIO = Decimal("5.0")
+    # Minimum ratio from last known price (0.1x = 90% decrease)
+    MIN_PRICE_DECREASE_RATIO = Decimal("0.1")
+    # Maximum ratio vs our product's price (competitor 20x our price is suspicious)
+    MAX_COMPETITOR_VS_OUR_PRICE_RATIO = Decimal("20.0")
+    # ========== END NEW ==========
+
     def __init__(
         self,
         timeout: float = 30.0,
@@ -88,7 +101,8 @@ class CompetitorScraperService:
     async def scrape_price(
         self,
         competitor_product: CompetitorProduct,
-        competitor: Competitor
+        competitor: Competitor,
+        our_product_price: Optional[Decimal] = None,  # NEW: Added parameter
     ) -> ScrapeResult:
         """
         Scrape the current price for a competitor product.
@@ -96,6 +110,7 @@ class CompetitorScraperService:
         Args:
             competitor_product: The competitor product mapping
             competitor: The competitor entity (contains scraping config)
+            our_product_price: Our product's current price (for validation)
             
         Returns:
             ScrapeResult with price or error
@@ -125,6 +140,27 @@ class CompetitorScraperService:
                     raw_price_text=raw_text
                 )
 
+            # ========== NEW: Price anomaly detection ==========
+            validation_result = self._validate_price(
+                price=price,
+                last_price=competitor_product.current_price,
+                our_product_price=our_product_price,
+                url=url
+            )
+            
+            if not validation_result["valid"]:
+                logger.warning(
+                    f"Price anomaly rejected for {url}: "
+                    f"scraped=${price}, last=${competitor_product.current_price}, "
+                    f"reason={validation_result['reason']}"
+                )
+                return ScrapeResult(
+                    success=False,
+                    error=f"Price anomaly: {validation_result['reason']}",
+                    raw_price_text=raw_text
+                )
+            # ========== END NEW ==========
+
             # Check availability
             is_available = self._check_availability(soup, config)
 
@@ -143,6 +179,83 @@ class CompetitorScraperService:
         except Exception as e:
             logger.exception(f"Scraping error for {url}")
             return ScrapeResult(success=False, error=str(e))
+
+    # ========== NEW: Price validation method ==========
+    def _validate_price(
+        self,
+        price: Decimal,
+        last_price: Optional[Decimal],
+        our_product_price: Optional[Decimal] = None,
+        url: str = ""
+    ) -> dict:
+        """
+        Validate scraped price for anomalies.
+        
+        Uses ratio-based checks that work for ANY product regardless of price range.
+        A $10 product and a $10,000 product both use the same validation logic.
+        
+        Checks:
+        1. Price must be positive
+        2. If we have a last known price, new price must be within reasonable ratio
+        3. If we have our product's price, competitor shouldn't be wildly different
+        
+        Args:
+            price: The scraped price to validate
+            last_price: Last known competitor price (may be None for first scrape)
+            our_product_price: Our product's current price (may be None)
+            url: URL being scraped (for logging only)
+            
+        Returns:
+            dict with 'valid' (bool) and 'reason' (str if invalid)
+        """
+        # Check 1: Price must be positive
+        if price <= Decimal("0"):
+            return {
+                "valid": False,
+                "reason": f"Price ${price} is zero or negative"
+            }
+        
+        # Check 2: Compare to last known price (if available)
+        if last_price and last_price > Decimal("0"):
+            ratio = price / last_price
+            
+            # Reject massive increases (e.g., $39 -> $2095 is 53x)
+            if ratio > self.MAX_PRICE_INCREASE_RATIO:
+                return {
+                    "valid": False,
+                    "reason": (
+                        f"Price ${price} is {ratio:.1f}x the last price ${last_price}. "
+                        f"Max allowed increase is {self.MAX_PRICE_INCREASE_RATIO}x"
+                    )
+                }
+            
+            # Reject massive decreases (likely scraping wrong element)
+            if ratio < self.MIN_PRICE_DECREASE_RATIO:
+                return {
+                    "valid": False,
+                    "reason": (
+                        f"Price ${price} is only {ratio:.1%} of last price ${last_price}. "
+                        f"Min allowed is {self.MIN_PRICE_DECREASE_RATIO:.0%}"
+                    )
+                }
+        
+        # Check 3: Compare to our product's price (if available)
+        if our_product_price and our_product_price > Decimal("0"):
+            ratio = price / our_product_price
+            
+            # Competitor being 20x our price is almost certainly a scraping error
+            if ratio > self.MAX_COMPETITOR_VS_OUR_PRICE_RATIO:
+                return {
+                    "valid": False,
+                    "reason": (
+                        f"Price ${price} is {ratio:.1f}x our price ${our_product_price}. "
+                        f"This is likely a scraping error."
+                    )
+                }
+        
+        # All checks passed
+        return {"valid": True, "reason": None}
+    # ========== END NEW ==========
 
     async def _fetch_page(
         self,
@@ -250,14 +363,28 @@ class CompetitorScraperService:
                 # Look for Product schema
                 if data.get('@type') == 'Product':
                     offers = data.get('offers', {})
-                    if isinstance(offers, list):
-                        offers = offers[0] if offers else {}
                     
-                    price_str = str(offers.get('price', ''))
-                    if price_str:
-                        price = self._parse_price(price_str)
-                        if price:
-                            return price, price_str
+                    # ========== CHANGED: Handle multiple offers - take LOWEST price ==========
+                    if isinstance(offers, list):
+                        prices = []
+                        for offer in offers:
+                            price_str = str(offer.get('price', ''))
+                            if price_str:
+                                parsed = self._parse_price(price_str)
+                                if parsed and parsed > 0:
+                                    prices.append(parsed)
+                        if prices:
+                            # Return LOWEST price (most likely single product, not bundle)
+                            min_price = min(prices)
+                            logger.debug(f"JSON-LD had {len(prices)} offers, using min: ${min_price}")
+                            return min_price, str(min_price)
+                    # ========== END CHANGED ==========
+                    else:
+                        price_str = str(offers.get('price', ''))
+                        if price_str:
+                            price = self._parse_price(price_str)
+                            if price:
+                                return price, price_str
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
 

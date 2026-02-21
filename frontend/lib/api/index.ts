@@ -9,6 +9,7 @@ export { alertsApi } from './alerts';
 export { competitorsApi } from './competitors';
 export * as integrationsApi from './integrations';
 export { pricingApi } from './pricing';
+export { trustScoringApi } from './trust-scoring'; 
 export * from './auth';
 export * from './client';
 export * from './products';
@@ -18,3 +19,6 @@ export * from './alerts';
 export * from './competitors';
 export * from './pricing';
 export * from './integrations';
+export * from './payments';
+export * from './trust-scoring';  
+

@@ -95,7 +95,7 @@ export function CompetitorProductCard({
               <p className="text-xs text-gray-500">Competitor Price</p>
               <p className="font-semibold text-gray-900">
                 {competitorProduct.current_price
-                  ? `${competitorProduct.currency} ${parseFloat(competitorProduct.current_price).toFixed(2)}`
+                  ? `${competitorProduct.currency} ${(parseFloat(competitorProduct.current_price) || 0).toFixed(2)}`
                   : 'No price'}
               </p>
             </div>
@@ -104,7 +104,7 @@ export function CompetitorProductCard({
               <div>
                 <p className="text-xs text-gray-500">Your Price</p>
                 <p className="font-semibold text-gray-900">
-                  ${parseFloat(yourPrice).toFixed(2)}
+                  ${(parseFloat(yourPrice) || 0).toFixed(2)}
                 </p>
               </div>
             )}
@@ -115,10 +115,10 @@ export function CompetitorProductCard({
                 <p className={`font-semibold ${
                   priceDiff > 0 ? 'text-red-600' : priceDiff < 0 ? 'text-green-600' : 'text-gray-600'
                 }`}>
-                  {priceDiff > 0 ? '+' : ''}{priceDiff.toFixed(2)}
+                  {priceDiff > 0 ? '+' : ''}{(priceDiff ?? 0).toFixed(2)}
                   {priceDiffPercent !== null && (
                     <span className="text-xs ml-1">
-                      ({priceDiffPercent > 0 ? '+' : ''}{priceDiffPercent.toFixed(1)}%)
+                      ({priceDiffPercent > 0 ? '+' : ''}{(priceDiffPercent ?? 0).toFixed(1)}%)
                     </span>
                   )}
                 </p>
@@ -158,3 +158,4 @@ export function CompetitorProductCard({
     </div>
   );
 }
+

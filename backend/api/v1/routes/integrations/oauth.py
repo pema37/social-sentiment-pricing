@@ -3,7 +3,7 @@
 
 import logging
 import secrets
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
@@ -46,16 +46,16 @@ def get_ecommerce_service(platform: EcommercePlatform):
 @router.post("/oauth/init", response_model=OAuthInitResponse)
 @limiter.limit(WRITE_RATE_LIMIT)
 async def init_oauth(
-    http_request: Request,
-    request: OAuthInitRequest,
+    request: Request,
+    data: OAuthInitRequest,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """Start OAuth flow for connecting a store."""
     stmt = select(Integration).where(
         Integration.user_id == current_user.id,
-        Integration.platform == request.platform,
-        Integration.store_url == request.store_url,
+        Integration.platform == data.platform,
+        Integration.store_url == data.store_url,
     )
     result = await db.execute(stmt)
     existing = result.scalars().first()
@@ -67,11 +67,11 @@ async def init_oauth(
         )
     
     state = secrets.token_urlsafe(32)
-    service = get_ecommerce_service(request.platform)
+    service = get_ecommerce_service(data.platform)
     redirect_uri = f"{settings.BACKEND_URL}/api/v1/integrations/oauth/callback"
     
     auth_url = service.generate_oauth_url(
-        store_url=request.store_url,
+        store_url=data.store_url,
         state=state,
         redirect_uri=redirect_uri,
     )
@@ -79,13 +79,13 @@ async def init_oauth(
     if existing:
         existing.oauth_state = state
         existing.status = IntegrationStatus.DISCONNECTED
-        existing.store_url = request.store_url
+        existing.store_url = data.store_url
         db.add(existing)
     else:
         integration = Integration(
             user_id=current_user.id,
-            platform=request.platform,
-            store_url=request.store_url,
+            platform=data.platform,
+            store_url=data.store_url,
             status=IntegrationStatus.DISCONNECTED,
             oauth_state=state,
             access_token_encrypted=b"pending",
@@ -100,14 +100,43 @@ async def init_oauth(
 @router.get("/oauth/callback")
 async def oauth_callback(
     code: str,
-    state: str,
-    shop: str = None,
+    shop: str,
+    state: str = None,
+    hmac: str = None,
+    host: str = None,
+    timestamp: str = None,
     db: AsyncSession = Depends(get_session),
 ):
-    """OAuth callback endpoint. Redirects to frontend with success/error status."""
-    stmt = select(Integration).where(Integration.oauth_state == state)
-    result = await db.execute(stmt)
-    integration = result.scalars().first()
+    """OAuth callback - handles both authenticated flow and fresh Shopify installs."""
+    
+    integration = None
+    
+    # Try finding by state (existing authenticated flow)
+    if state:
+        stmt = select(Integration).where(Integration.oauth_state == state)
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+    
+    # Fresh Shopify install — no state match, find or create by shop
+    if not integration and shop:
+        stmt = select(Integration).where(
+            Integration.platform == EcommercePlatform.SHOPIFY,
+            Integration.store_url == shop,
+        )
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+        
+        if not integration:
+            # Create new integration for this shop (user linked later)
+            integration = Integration(
+                platform=EcommercePlatform.SHOPIFY,
+                store_url=shop,
+                store_name=shop.replace(".myshopify.com", ""),
+                status=IntegrationStatus.DISCONNECTED,
+                access_token_encrypted=b"pending",
+            )
+            db.add(integration)
+            await db.flush()
     
     if not integration:
         error_url = f"{settings.FRONTEND_URL}/integrations?error=invalid_state&message=OAuth+session+expired+or+invalid"
@@ -144,7 +173,7 @@ async def oauth_callback(
     integration.status = IntegrationStatus.ACTIVE
     integration.oauth_state = None
     integration.error_message = None
-    integration.updated_at = datetime.utcnow()
+    integration.updated_at = datetime.now(UTC)
     
     db.add(integration)
     await db.commit()
@@ -159,18 +188,25 @@ async def oauth_callback(
     except Exception as e:
         logger.warning(f"Auto webhook registration failed: {e}")
     
-    success_url = (
-        f"{settings.FRONTEND_URL}/integrations"
-        f"?connected=true&integration_id={integration.id}&platform={integration.platform.value}"
-    )
+    # Redirect back into Shopify Admin if host param present
+    if host:
+        success_url = (
+            f"{settings.FRONTEND_URL}/dashboard"
+            f"?shop={shop}&host={host}&connected=true&integration_id={integration.id}"
+        )
+    else:
+        success_url = (
+            f"{settings.FRONTEND_URL}/integrations"
+            f"?connected=true&integration_id={integration.id}&platform={integration.platform.value}"
+        )
     return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/woocommerce/connect", response_model=IntegrationResponse)
 @limiter.limit(WRITE_RATE_LIMIT)
 async def connect_woocommerce(
-    http_request: Request,
-    request: WooCommerceConnectRequest,
+    request: Request,
+    data: WooCommerceConnectRequest,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -178,7 +214,7 @@ async def connect_woocommerce(
     stmt = select(Integration).where(
         Integration.user_id == current_user.id,
         Integration.platform == EcommercePlatform.WOOCOMMERCE,
-        Integration.store_url == request.store_url,
+        Integration.store_url == data.store_url,
     )
     result = await db.execute(stmt)
     existing = result.scalars().first()
@@ -190,10 +226,10 @@ async def connect_woocommerce(
         )
     
     service = WooCommerceService()
-    credentials = f"{request.consumer_key}:{request.consumer_secret}"
+    credentials = f"{data.consumer_key}:{data.consumer_secret}"
     
     is_valid = await service.verify_credentials(
-        store_url=request.store_url,
+        store_url=data.store_url,
         access_token=credentials,
     )
     
@@ -207,16 +243,16 @@ async def connect_woocommerce(
         existing.access_token_encrypted = encrypt_token(credentials)
         existing.status = IntegrationStatus.ACTIVE
         existing.error_message = None
-        existing.store_name = request.store_name
-        existing.updated_at = datetime.utcnow()
+        existing.store_name = data.store_name
+        existing.updated_at = datetime.now(UTC)
         db.add(existing)
         integration = existing
     else:
         integration = Integration(
             user_id=current_user.id,
             platform=EcommercePlatform.WOOCOMMERCE,
-            store_url=request.store_url,
-            store_name=request.store_name,
+            store_url=data.store_url,
+            store_name=data.store_name,
             status=IntegrationStatus.ACTIVE,
             access_token_encrypted=encrypt_token(credentials),
             scopes=["read_products", "write_products"],
@@ -226,7 +262,7 @@ async def connect_woocommerce(
     await db.commit()
     await db.refresh(integration)
     
-    logger.info(f"WooCommerce connected for user {current_user.id}: {request.store_url}")
+    logger.info(f"WooCommerce connected for user {current_user.id}: {data.store_url}")
     
     try:
         webhook_service = WebhookRegistrationService(db)
@@ -237,3 +273,5 @@ async def connect_woocommerce(
         logger.warning(f"Auto webhook registration failed: {e}")
     
     return IntegrationResponse.model_validate(integration)
+
+

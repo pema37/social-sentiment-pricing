@@ -1,19 +1,34 @@
 # backend/services/pricing/rule_evaluator.py
 """
 Rule Evaluator - Evaluates pricing rules against market signals.
+
+Updated to support rule scoping:
+- applies_to_all_products: Rule applies to all user's products
+- applies_to_products: Rule applies to specific product IDs
+- applies_to_categories: Rule applies to products in specific categories
+- product_id: Legacy single-product targeting (still supported)
+
+PATCHED 2026-01-07: Fixed duplicate competitor UUID issue
+- Added name-based competitor matching when UUID doesn't match directly
+- Handles cases where multiple competitor entries exist with same name (e.g., "Amazon")
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.pricing_rule import PricingRule, RuleType
 from models.product import Product
+from models.competitor import Competitor
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,17 +67,65 @@ class RuleEvaluator:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def get_active_rules(self, product_id: UUID, user_id: UUID) -> list[PricingRule]:
-        """Get all active rules for a product, ordered by priority."""
+    async def get_active_rules(self, product_id: UUID, user_id: UUID, product_category: Optional[str] = None) -> list[PricingRule]:
+        """
+        Get all active rules that apply to a product, ordered by priority.
         
+        A rule applies to a product if ANY of these conditions are true:
+        1. applies_to_all_products is True
+        2. product_id matches the rule's product_id (legacy)
+        3. product_id is in applies_to_products list
+        4. product_category is in applies_to_categories list
+        """
+        
+        # Build query for rules that could apply to this product
         stmt = select(PricingRule).where(
-            PricingRule.product_id == product_id,
             PricingRule.user_id == user_id,
             PricingRule.is_active == True
         ).order_by(PricingRule.priority.desc())
         
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        all_rules = list(result.scalars().all())
+        
+        # Filter rules that apply to this product
+        applicable_rules = []
+        product_id_str = str(product_id)
+        
+        for rule in all_rules:
+            # Check if rule applies to this product
+            if self._rule_applies_to_product(rule, product_id, product_id_str, product_category):
+                applicable_rules.append(rule)
+        
+        return applicable_rules
+    
+    def _rule_applies_to_product(
+        self, 
+        rule: PricingRule, 
+        product_id: UUID, 
+        product_id_str: str,
+        product_category: Optional[str]
+    ) -> bool:
+        """Check if a rule applies to a specific product."""
+        
+        # 1. Check applies_to_all_products flag
+        if rule.applies_to_all_products:
+            return True
+        
+        # 2. Check legacy single product_id
+        if rule.product_id and rule.product_id == product_id:
+            return True
+        
+        # 3. Check applies_to_products list
+        if rule.applies_to_products:
+            if product_id_str in rule.applies_to_products:
+                return True
+        
+        # 4. Check applies_to_categories list
+        if rule.applies_to_categories and product_category:
+            if product_category in rule.applies_to_categories:
+                return True
+        
+        return False
     
     async def find_matching_rule(
         self,
@@ -72,7 +135,8 @@ class RuleEvaluator:
     ) -> tuple[Optional[PricingRule], Optional[dict]]:
         """Find the highest priority rule that matches current signals."""
         
-        rules = await self.get_active_rules(product.id, user_id)
+        # Get rules with category context
+        rules = await self.get_active_rules(product.id, user_id, product.category)
         
         for rule in rules:
             # Check cooldown
@@ -82,13 +146,14 @@ class RuleEvaluator:
                 if datetime.now(timezone.utc) < cooldown_until:
                     continue
             
-            match_details = self._evaluate_rule(rule, product, signals)
+            # PATCHED: Now async to support name-based competitor matching
+            match_details = await self._evaluate_rule(rule, product, signals)
             if match_details:
                 return rule, match_details
         
         return None, None
     
-    def _evaluate_rule(
+    async def _evaluate_rule(
         self,
         rule: PricingRule,
         product: Product,
@@ -100,7 +165,8 @@ class RuleEvaluator:
             return self._eval_sentiment_threshold(rule, signals)
         
         elif rule.rule_type == RuleType.COMPETITOR_RELATIVE:
-            return self._eval_competitor_relative(rule, signals)
+            # PATCHED: Now async to support name-based matching
+            return await self._eval_competitor_relative(rule, signals)
         
         elif rule.rule_type == RuleType.TIME_BASED:
             return self._eval_time_based(rule)
@@ -145,24 +211,121 @@ class RuleEvaluator:
         
         return None
     
-    def _eval_competitor_relative(
+    async def _eval_competitor_relative(
         self,
         rule: PricingRule,
         signals: MarketSignals
     ) -> Optional[dict]:
-        """Evaluate competitor-relative pricing rule."""
+        """
+        Evaluate competitor-relative pricing rule.
         
-        if not rule.competitor_id or rule.competitor_id not in signals.competitor_prices:
+        PATCHED: Now matches by competitor NAME when UUID doesn't match directly.
+        This handles cases where duplicate competitor entries exist (e.g., multiple "Amazon" UUIDs).
+        """
+        
+        # If a specific competitor is set on the rule
+        if rule.competitor_id:
+            # First try direct UUID match (fast path)
+            if rule.competitor_id in signals.competitor_prices:
+                competitor_price = signals.competitor_prices[rule.competitor_id]
+                logger.debug(f"Competitor rule matched by UUID: {rule.competitor_id}")
+                return {
+                    "rule_type": "competitor_relative",
+                    "competitor_id": str(rule.competitor_id),
+                    "competitor_price": float(competitor_price),
+                    "margin_percent": float(rule.competitor_margin_percent or 0),
+                    "price_position": rule.price_position,
+                }
+            
+            # UUID didn't match - try matching by competitor NAME
+            # This handles duplicate competitor entries (e.g., multiple "Amazon" UUIDs)
+            logger.debug(
+                f"Competitor UUID {rule.competitor_id} not in signals, "
+                f"attempting name-based match. Available: {list(signals.competitor_prices.keys())}"
+            )
+            matched = await self._match_competitor_by_name(rule.competitor_id, signals.competitor_prices)
+            if matched:
+                logger.info(
+                    f"Competitor rule matched by NAME: rule uses {rule.competitor_id}, "
+                    f"matched to {matched['competitor_id']} ({matched['name']})"
+                )
+                return {
+                    "rule_type": "competitor_relative",
+                    "competitor_id": str(matched["competitor_id"]),
+                    "competitor_price": float(matched["price"]),
+                    "margin_percent": float(rule.competitor_margin_percent or 0),
+                    "price_position": rule.price_position,
+                    "matched_by": "name",  # Flag for debugging
+                    "original_competitor_id": str(rule.competitor_id),  # For audit trail
+                }
+        
+        # If no specific competitor, check if ANY competitor price is available
+        if not rule.competitor_id and signals.competitor_prices:
+            # Use the lowest competitor price
+            min_price = min(signals.competitor_prices.values())
+            min_competitor_id = [k for k, v in signals.competitor_prices.items() if v == min_price][0]
+            logger.debug(f"Competitor rule using lowest price from {min_competitor_id}: ${min_price}")
+            return {
+                "rule_type": "competitor_relative",
+                "competitor_id": str(min_competitor_id),
+                "competitor_price": float(min_price),
+                "margin_percent": float(rule.competitor_margin_percent or 0),
+                "price_position": rule.price_position,
+            }
+        
+        logger.debug(f"Competitor rule not matched: competitor_id={rule.competitor_id}, available={list(signals.competitor_prices.keys())}")
+        return None
+    
+    async def _match_competitor_by_name(
+        self,
+        rule_competitor_id: UUID,
+        available_competitor_prices: dict[UUID, Decimal]
+    ) -> Optional[dict]:
+        """
+        Find a matching competitor by name when UUIDs don't match directly.
+        
+        This handles the case where:
+        - Rule targets competitor_id A (name="Amazon")
+        - Product's competitor data uses competitor_id B (name="Amazon")
+        - UUIDs differ but they're the same logical competitor
+        
+        Returns:
+            {"competitor_id": UUID, "price": Decimal, "name": str} or None
+        """
+        if not available_competitor_prices:
             return None
         
-        competitor_price = signals.competitor_prices[rule.competitor_id]
+        # Get the name of the rule's target competitor
+        stmt = select(Competitor.name).where(Competitor.id == rule_competitor_id)
+        result = await self.db.execute(stmt)
+        target_name = result.scalar()
         
-        return {
-            "rule_type": "competitor_relative",
-            "competitor_id": str(rule.competitor_id),
-            "competitor_price": float(competitor_price),
-            "margin_percent": float(rule.competitor_margin_percent or 0),
-        }
+        if not target_name:
+            logger.warning(f"Competitor {rule_competitor_id} not found in database")
+            return None
+        
+        # Normalize for comparison (lowercase, strip whitespace)
+        target_name_normalized = target_name.lower().strip()
+        logger.debug(f"Looking for competitor name match: '{target_name}'")
+        
+        # Get names for all available competitor prices
+        available_ids = list(available_competitor_prices.keys())
+        stmt = select(Competitor.id, Competitor.name).where(Competitor.id.in_(available_ids))
+        result = await self.db.execute(stmt)
+        available_competitors = result.all()
+        
+        # Find matching competitor by name
+        for comp_id, comp_name in available_competitors:
+            if comp_name and comp_name.lower().strip() == target_name_normalized:
+                logger.debug(f"Found name match: {comp_id} ('{comp_name}')")
+                return {
+                    "competitor_id": comp_id,
+                    "price": available_competitor_prices[comp_id],
+                    "name": comp_name,
+                }
+        
+        logger.debug(f"No name match found for '{target_name}' among {[c[1] for c in available_competitors]}")
+        return None
     
     def _eval_time_based(self, rule: PricingRule) -> Optional[dict]:
         """Evaluate time-based rule."""
@@ -240,4 +403,7 @@ class RuleEvaluator:
             }
         
         return None
+    
+
+
     

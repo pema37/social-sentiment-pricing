@@ -5,17 +5,20 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   devIndicators: false,
   
-  // Fix for external images (competitor logos, product images)
   images: {
     remotePatterns: [
-      // Allow images from any HTTPS source (for dynamic competitor sites)
       {
         protocol: 'https',
         hostname: '**',
       },
+      {
+        protocol: 'http',
+        hostname: '**',
+      },
     ],
-    // Fallback for older Next.js versions or specific domains
-    // domains: ['bestbuy.com', 'amazon.com', 'walmart.com', 'target.com'],
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
   async headers() {
@@ -25,11 +28,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org; frame-ancestors 'none';",
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org https://rpc.sepolia.org https://eth.merkle.io https://*.infura.io https://*.alchemy.com https://cloudflare-eth.com https://ethereum.publicnode.com https://sepolia.publicnode.com; frame-ancestors https://admin.shopify.com https://*.myshopify.com;",
           },
           {
             key: 'X-Content-Type-Options',
@@ -75,3 +74,4 @@ const config = process.env.NEXT_PUBLIC_SENTRY_DSN
   : nextConfig;
 
 export default config;
+

@@ -1,5 +1,13 @@
 # backend/core/security.py
 
+"""
+Security utilities for JWT authentication.
+
+PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
+- Access tokens: Short-lived (30 min) for API requests
+- Refresh tokens: Long-lived (7 days) for getting new access tokens
+"""
+
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -11,6 +19,7 @@ from core.config import settings
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = 7  # Refresh tokens last 7 days
 RESET_TOKEN_EXPIRE_MINUTES = 30
 
 # Password hashing context (bcrypt)
@@ -47,6 +56,26 @@ def create_access_token(
     return encoded_jwt
 
 
+def create_refresh_token(
+    data: Dict[str, Any],
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """
+    Create a signed JWT refresh token.
+    Refresh tokens are long-lived and used to get new access tokens.
+    """
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    to_encode.update({
+        "exp": expire,
+        "type": "refresh",
+    })
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
 def create_reset_token(user_id: str) -> str:
     """
     Create a password reset token (30-min expiry).
@@ -67,6 +96,23 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Verify it's an access token (not refresh or reset)
+        if payload.get("type") not in ["access", None]:  # None for backwards compatibility
+            return None
+        return payload
+    except JWTError:
+        return None
+
+
+def decode_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode and validate a JWT refresh token.
+    Returns payload dict if valid, or None if invalid/expired/wrong type.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None
         return payload
     except JWTError:
         return None
@@ -84,52 +130,6 @@ def decode_reset_token(token: str) -> Optional[str]:
         return payload.get("sub")
     except JWTError:
         return None
-
-
-
-# FastAPI dependencies for authentication
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-security_scheme = HTTPBearer()
-
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
-):
-    """
-    FastAPI dependency to get current authenticated user from JWT token.
-    """
-    from db.session import async_session
-    from models.user import User
     
-    token = credentials.credentials
-    payload = decode_access_token(token)
+
     
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-    
-    async with async_session() as session:
-        result = await session.execute(select(User).where(User.id == user_id))
-        user = result.scalars().first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    
-    return user

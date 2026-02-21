@@ -13,13 +13,13 @@ export function AuthShell({ children }: AuthShellProps) {
         {/* Logo / Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-600 rounded-xl mb-4">
-            <span className="text-white font-bold text-lg">SSP</span>
+            <span className="text-white font-bold text-lg">AP</span>
           </div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            Social Sentiment Pricing
+            ActualPrice
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            AI-powered pricing based on social sentiment
+            AI-powered pricing optimization for e-commerce
           </p>
         </div>
 
@@ -31,3 +31,4 @@ export function AuthShell({ children }: AuthShellProps) {
     </div>
   );
 }
+

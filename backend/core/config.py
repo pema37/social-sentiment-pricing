@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     # External APIs
     # ===================
     OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    YOUCOM_API_KEY: Optional[str] = None
     
     # Reddit
     REDDIT_CLIENT_ID: Optional[str] = None
@@ -95,6 +97,15 @@ class Settings(BaseSettings):
     # ===================
     ALERT_EMAIL: Optional[str] = None  # Email for critical alerts
     PAGERDUTY_KEY: Optional[str] = None  # PagerDuty integration key
+
+    # ===================
+    # MNEE Payments
+    # ===================
+    MNEE_API_KEY: str = ""
+    MNEE_ENVIRONMENT: str = "sandbox"  # sandbox or production
+    MNEE_WEBHOOK_SECRET: str = ""
+    SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address 
+    
     
     class Config:
         env_file = str(ENV_FILE)

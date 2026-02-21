@@ -1,9 +1,19 @@
 // Analytics domain types
+// AUTO-SYNCED with backend via openapi-typescript
+// Last synced: 2026-01-08
+// Source: components["schemas"]["DashboardOverview"], RecommendationStats, etc.
 
 import type { SentimentDataPoint, SentimentTrendDirection } from './sentiment';
 import type { ProductSummary } from './product';
 
-// Dashboard overview stats
+// ============================================
+// DASHBOARD OVERVIEW
+// ============================================
+
+/**
+ * Dashboard overview stats
+ * Matches: components["schemas"]["DashboardOverview"]
+ */
 export interface DashboardOverview {
   total_products: number;
   products_with_auto_pricing: number;
@@ -13,30 +23,52 @@ export interface DashboardOverview {
   pending_recommendations: number;
   applied_recommendations_7d: number;
   average_sentiment: number | null;
-  sentiment_trend: 'improving' | 'declining' | 'stable';
+  sentiment_trend: 'improving' | 'declining' | 'stable';  // Default: 'stable'
   total_mentions_24h: number;
 }
 
-// Recommendation stats
+// ============================================
+// RECOMMENDATION STATS
+// ============================================
+
+/**
+ * Recommendation statistics
+ * Matches: components["schemas"]["RecommendationStats"]
+ */
 export interface RecommendationStats {
-  total_pending: number;
-  total_approved: number;
-  total_rejected: number;
+  total_generated: number;
   total_applied: number;
+  total_rejected: number;
   total_expired: number;
-  avg_confidence_score: number | null;
-  avg_adjustment_percent: number | null;
+  total_pending: number;
+  approval_rate: number;
+  avg_confidence: number | null;
+  avg_price_change_percent: number | null;
 }
 
-// Alert analytics
+// ============================================
+// ALERT ANALYTICS
+// ============================================
+
+/**
+ * Alert analytics for dashboard
+ * Matches: components["schemas"]["AlertAnalytics"]
+ */
 export interface AlertAnalytics {
-  total_alerts: number;
-  by_severity: Record<string, number>;
-  by_type: Record<string, number>;
-  by_status: Record<string, number>;
+  total_alerts_7d: number;
+  by_type: Record<string, unknown>;
+  by_severity: Record<string, unknown>;
+  avg_resolution_time_hours: number | null;
+  by_status?: Record<string, number>;
 }
 
-// Sentiment trend (re-export with analytics context)
+// ============================================
+// SENTIMENT ANALYTICS
+// ============================================
+
+/**
+ * Sentiment trend with analytics context
+ */
 export interface SentimentTrendAnalytics {
   product_id: string | null;
   period_days: number;
@@ -45,6 +77,30 @@ export interface SentimentTrendAnalytics {
   change: number | null;
   trend: SentimentTrendDirection;
   timeline: SentimentDataPoint[];
+}
+
+// ============================================
+// ACCURACY STATS
+// ============================================
+
+/**
+ * Accuracy statistics for recommendations
+ * Matches: components["schemas"]["AccuracyStatsResponse"]
+ */
+export interface AccuracyStatsResponse {
+  period_days: number;
+  total_outcomes: number;
+  positive_count: number;
+  negative_count: number;
+  neutral_count: number;
+  inconclusive_count: number;
+  overall_success_rate: string;
+  avg_outcome_score: string;
+  total_revenue_impact: string;
+  avg_revenue_change_percent: string | null;
+  by_rule_type: Record<string, unknown>;
+  top_performing_rules: Record<string, unknown>[];
+  worst_performing_rules: Record<string, unknown>[];
 }
 
 // Re-export ProductSummary for convenience

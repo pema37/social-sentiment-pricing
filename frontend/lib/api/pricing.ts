@@ -1,5 +1,7 @@
-// Pricing API
+// frontend/lib/api/pricing.ts
 // API functions for pricing rules, recommendations, and settings
+//
+// FIX (2026-01-27): Added structured error handling for approval endpoints
 
 import { api } from './client';
 import type {
@@ -14,7 +16,63 @@ import type {
   PricingSettings,
   UpdatePricingSettingsRequest,
   PricingRecommendationStats,
+  ApprovalErrorDetail,
 } from '@/types';
+
+// ============================================
+// ERROR HANDLING
+// ============================================
+
+/**
+ * Custom error class for approval failures
+ * Contains structured error info from backend
+ */
+export class ApprovalError extends Error {
+  code: string;
+  suggestion: string;
+
+  constructor(detail: ApprovalErrorDetail) {
+    super(detail.message);
+    this.name = 'ApprovalError';
+    this.code = detail.error_code;
+    this.suggestion = detail.suggestion;
+  }
+}
+
+/**
+ * Parse error response and extract structured details if available
+ */
+function parseApprovalError(error: unknown): ApprovalError | Error {
+  // Check if it's an API error with structured detail
+  if (error && typeof error === 'object') {
+    const err = error as { detail?: ApprovalErrorDetail | string; message?: string };
+    
+    // Backend returns { detail: { message, error_code, suggestion } }
+    if (err.detail && typeof err.detail === 'object') {
+      const detail = err.detail as ApprovalErrorDetail;
+      if (detail.message && detail.error_code) {
+        return new ApprovalError(detail);
+      }
+    }
+    
+    // Fallback: detail is just a string
+    if (err.detail && typeof err.detail === 'string') {
+      return new Error(err.detail);
+    }
+    
+    // Fallback: message property
+    if (err.message) {
+      return new Error(err.message);
+    }
+  }
+  
+  // Unknown error format
+  if (error instanceof Error) {
+    return error;
+  }
+  
+  return new Error('An unexpected error occurred');
+}
 
 // ============================================
 // PRICING RULES
@@ -38,7 +96,7 @@ async function createRule(data: CreatePricingRuleRequest): Promise<PricingRule> 
 }
 
 async function updateRule(id: string, data: UpdatePricingRuleRequest): Promise<PricingRule> {
-  return api.put<PricingRule>(`/api/v1/pricing/rules/${id}`, data);
+  return api.patch<PricingRule>(`/api/v1/pricing/rules/${id}`, data);
 }
 
 async function deleteRule(id: string): Promise<void> {
@@ -67,31 +125,71 @@ async function getRecommendationById(id: string): Promise<PriceRecommendation> {
   return api.get<PriceRecommendation>(`/api/v1/pricing/recommendations/${id}`);
 }
 
+/**
+ * Approve a recommendation
+ * 
+ * FIX (2026-01-27): Now throws ApprovalError with structured error info
+ * including error_code and suggestion for better UX
+ * 
+ * @throws {ApprovalError} When approval fails with structured error
+ * @throws {Error} When approval fails with generic error
+ */
 async function approveRecommendation(
   id: string,
   data?: ApproveRecommendationRequest
 ): Promise<PriceRecommendation> {
-  return api.post<PriceRecommendation>(
-    `/api/v1/pricing/recommendations/${id}/approve`,
-    data ?? {}
-  );
+  try {
+    // Only include body if we have actual data to send
+    if (data && Object.keys(data).length > 0) {
+      return await api.post<PriceRecommendation>(
+        `/api/v1/pricing/recommendations/${id}/approve`,
+        data
+      );
+    }
+    // No body - just POST to the endpoint
+    return await api.post<PriceRecommendation>(
+      `/api/v1/pricing/recommendations/${id}/approve`
+    );
+  } catch (error) {
+    throw parseApprovalError(error);
+  }
 }
 
+/**
+ * Reject a recommendation
+ * 
+ * @throws {ApprovalError} When rejection fails with structured error
+ */
 async function rejectRecommendation(
   id: string,
   data: RejectRecommendationRequest
 ): Promise<PriceRecommendation> {
-  return api.post<PriceRecommendation>(
-    `/api/v1/pricing/recommendations/${id}/reject`,
-    data
-  );
+  try {
+    return await api.post<PriceRecommendation>(
+      `/api/v1/pricing/recommendations/${id}/reject`,
+      data
+    );
+  } catch (error) {
+    throw parseApprovalError(error);
+  }
 }
 
+/**
+ * Apply an approved recommendation to the store
+ * 
+ * Note: In the updated backend, approve() now also calls apply()
+ * automatically. This endpoint is for manual application if needed.
+ * 
+ * @throws {ApprovalError} When application fails with structured error
+ */
 async function applyRecommendation(id: string): Promise<PriceRecommendation> {
-  return api.post<PriceRecommendation>(
-    `/api/v1/pricing/recommendations/${id}/apply`,
-    {}
-  );
+  try {
+    return await api.post<PriceRecommendation>(
+      `/api/v1/pricing/recommendations/${id}/apply`
+    );
+  } catch (error) {
+    throw parseApprovalError(error);
+  }
 }
 
 async function getRecommendationStats(): Promise<PricingRecommendationStats> {
@@ -135,3 +233,10 @@ export const pricingApi = {
   getSettings,
   updateSettings,
 };
+
+// Export error utilities for use in components
+export { parseApprovalError };
+
+
+
+

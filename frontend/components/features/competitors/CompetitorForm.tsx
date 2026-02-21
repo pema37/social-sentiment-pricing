@@ -1,13 +1,24 @@
 // Competitor form component
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { X } from 'lucide-react';
-import type { Competitor, CreateCompetitorRequest } from '@/types';
+import { toast } from 'sonner';
+import type { Competitor, CreateCompetitorRequest, UpdateCompetitorRequest } from '@/types/competitor';
+
+// Domain layer
+import {
+  competitorToFormData,
+  validateAndCreateCompetitor,
+  validateAndUpdateCompetitor,
+  DEFAULT_COMPETITOR_FORM,
+  type CompetitorFormData,
+  type CompetitorFormErrors,
+} from '@/lib/domain/competitors';
 
 interface CompetitorFormProps {
   competitor?: Competitor | null;
-  onSubmit: (data: CreateCompetitorRequest) => void;
+  onSubmit: (data: CreateCompetitorRequest | UpdateCompetitorRequest) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
@@ -18,23 +29,33 @@ export function CompetitorForm({
   onCancel,
   isSubmitting,
 }: CompetitorFormProps) {
-  const [name, setName] = useState(competitor?.name ?? '');
-  const [website, setWebsite] = useState(competitor?.website ?? '');
-  const [description, setDescription] = useState(competitor?.description ?? '');
+  const [formData, setFormData] = useState<CompetitorFormData>(() =>
+    competitor ? competitorToFormData(competitor) : DEFAULT_COMPETITOR_FORM
+  );
+  const [errors, setErrors] = useState<CompetitorFormErrors>({});
+
+  const isEditing = !!competitor;
+
+  const handleChange = useCallback((field: keyof CompetitorFormData, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
+  }, [errors]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim()) return;
+    const result = isEditing
+      ? validateAndUpdateCompetitor(formData)
+      : validateAndCreateCompetitor(formData);
 
-    onSubmit({
-      name: name.trim(),
-      website: website.trim() || undefined,
-      description: description.trim() || undefined,
-    });
+    if (!result.success) {
+      setErrors(result.errors);
+      toast.error('Please fix the errors');
+      return;
+    }
+
+    onSubmit(result.data);
   };
-
-  const isEditing = !!competitor;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -59,12 +80,14 @@ export function CompetitorForm({
             </label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={formData.name}
+              onChange={(e) => handleChange('name', e.target.value)}
               placeholder="e.g., Amazon, Walmart"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                errors.name ? 'border-red-500' : 'border-gray-300'
+              }`}
             />
+            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
           </div>
 
           {/* Website */}
@@ -73,12 +96,15 @@ export function CompetitorForm({
               Website
             </label>
             <input
-              type="url"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://example.com"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              type="text"
+              value={formData.website}
+              onChange={(e) => handleChange('website', e.target.value)}
+              placeholder="example.com"
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                errors.website ? 'border-red-500' : 'border-gray-300'
+              }`}
             />
+            {errors.website && <p className="text-red-500 text-xs mt-1">{errors.website}</p>}
           </div>
 
           {/* Description */}
@@ -87,8 +113,8 @@ export function CompetitorForm({
               Description
             </label>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={formData.description}
+              onChange={(e) => handleChange('description', e.target.value)}
               placeholder="Optional notes about this competitor..."
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -106,7 +132,7 @@ export function CompetitorForm({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !name.trim()}
+              disabled={isSubmitting}
               className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Saving...' : isEditing ? 'Update' : 'Add Competitor'}
@@ -117,3 +143,6 @@ export function CompetitorForm({
     </div>
   );
 }
+
+
+

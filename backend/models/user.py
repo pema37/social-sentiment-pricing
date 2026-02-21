@@ -1,9 +1,7 @@
 # backend/models/user.py
-
 import uuid as uuid_lib
 from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
-
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -19,23 +17,24 @@ class User(SQLModel, table=True):
         default_factory=uuid_lib.uuid4,
         sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
     )
-
     email: str = Field(index=True, unique=True)
     username: Optional[str] = Field(default=None, index=True)
-    full_name: Optional[str] = Field(default=None, max_length=255) 
-
+    full_name: Optional[str] = Field(default=None, max_length=255)
     hashed_password: str
-
     role: str = Field(default="USER")
     is_active: bool = Field(default=True)
 
+    # Wallet addresses for MNEE payments
+    bsv_wallet_address: Optional[str] = Field(default=None, max_length=50)
+    eth_wallet_address: Optional[str] = Field(default=None, max_length=42)
+
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: Optional[datetime] = Field(
-        default_factory=datetime.utcnow,
-        sa_column=Column(DateTime(timezone=True), onupdate=datetime.utcnow),
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc)),
     )
 
     # Relationships

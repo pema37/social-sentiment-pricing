@@ -1,8 +1,8 @@
 // Link product to competitor form
 'use client';
 
-import { useState } from 'react';
-import { X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, AlertCircle, RefreshCw } from 'lucide-react';
 import { useProducts } from '@/lib/hooks/use-products';
 import { useCompetitors } from '@/lib/hooks/use-competitors';
 import type { CreateCompetitorProductRequest } from '@/types';
@@ -30,8 +30,28 @@ export function LinkProductForm({
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
 
-  const { data: productsData, isLoading: productsLoading } = useProducts();
-  const { data: competitorsData, isLoading: competitorsLoading } = useCompetitors();
+  const { 
+    data: productsData, 
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useProducts();
+  
+  const { 
+    data: competitorsData, 
+    isLoading: competitorsLoading,
+    isError: competitorsError,
+    refetch: refetchCompetitors,
+  } = useCompetitors();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // REFETCH DATA WHEN MODAL OPENS (David's bug fix)
+  // Ensures fresh data even if previous queries are stale/errored
+  // ═══════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    refetchProducts();
+    refetchCompetitors();
+  }, [refetchProducts, refetchCompetitors]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,9 +69,23 @@ export function LinkProductForm({
     });
   };
 
+  // Handle retry for failed queries
+  const handleRetry = () => {
+    if (productsError) refetchProducts();
+    if (competitorsError) refetchCompetitors();
+  };
+
   const isLoading = productsLoading || competitorsLoading;
+  const hasError = productsError || competitorsError;
   const products = productsData?.items ?? [];
   const competitors = competitorsData?.items ?? [];
+
+  // Helper to safely format price
+  const formatPrice = (price: string | number | null | undefined): string => {
+    if (price == null || price === '') return '0.00';
+    const num = typeof price === 'number' ? price : parseFloat(price);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -68,6 +102,32 @@ export function LinkProductForm({
           </button>
         </div>
 
+        {/* ═══════════════════════════════════════════════════════════════════
+            ERROR STATE - Show retry button (David's bug fix)
+        ═══════════════════════════════════════════════════════════════════ */}
+        {hasError && (
+          <div className="m-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800">
+                  {competitorsError ? 'Competitors failed to load' : 'Products failed to load'}
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  Please try again or refresh the page.
+                </p>
+              </div>
+              <button
+                onClick={handleRetry}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Your Product */}
           <div>
@@ -77,14 +137,16 @@ export function LinkProductForm({
             <select
               value={productId}
               onChange={(e) => setProductId(e.target.value)}
-              disabled={!!preselectedProductId || isLoading}
+              disabled={!!preselectedProductId || isLoading || productsError}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
               required
             >
-              <option value="">Select a product</option>
+              <option value="">
+                {productsLoading ? 'Loading products...' : 'Select a product'}
+              </option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name} - ${parseFloat(product.current_price).toFixed(2)}
+                  {product.name} - ${formatPrice(product.current_price)}
                 </option>
               ))}
             </select>
@@ -98,18 +160,20 @@ export function LinkProductForm({
             <select
               value={competitorId}
               onChange={(e) => setCompetitorId(e.target.value)}
-              disabled={!!preselectedCompetitorId || isLoading}
+              disabled={!!preselectedCompetitorId || isLoading || competitorsError}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
               required
             >
-              <option value="">Select a competitor</option>
+              <option value="">
+                {competitorsLoading ? 'Loading competitors...' : 'Select a competitor'}
+              </option>
               {competitors.map((competitor) => (
                 <option key={competitor.id} value={competitor.id}>
                   {competitor.name}
                 </option>
               ))}
             </select>
-            {competitors.length === 0 && !isLoading && (
+            {competitors.length === 0 && !isLoading && !competitorsError && (
               <p className="text-xs text-amber-600 mt-1">
                 No competitors yet. Add a competitor first.
               </p>
@@ -213,7 +277,7 @@ export function LinkProductForm({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !competitorId || !productId || !competitorProductName.trim()}
+              disabled={isSubmitting || hasError || !competitorId || !productId || !competitorProductName.trim()}
               className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Linking...' : 'Link Product'}
@@ -224,3 +288,5 @@ export function LinkProductForm({
     </div>
   );
 }
+
+

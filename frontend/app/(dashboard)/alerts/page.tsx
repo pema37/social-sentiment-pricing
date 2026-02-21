@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useAlerts, useAlertStats, useAcknowledgeAllAlerts } from '@/lib/hooks/use-alerts';
-import { AlertsList } from '@/components/features/alerts';
+import { AlertsList, CrisisDetectionCard } from '@/components/features/alerts';
 import type { AlertSeverity, AlertStatus } from '@/types';
 
 export default function AlertsPage() {
@@ -50,6 +50,9 @@ export default function AlertsPage() {
           {acknowledgeAll.isPending ? 'Acknowledging...' : 'Acknowledge All'}
         </button>
       </div>
+
+      {/* AI Crisis Detection */}
+      <CrisisDetectionCard />
 
       {/* Filters */}
       <div className="flex gap-4 mb-6">

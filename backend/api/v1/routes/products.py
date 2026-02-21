@@ -1,101 +1,105 @@
 # backend/api/v1/routes/products.py
+"""
+Products API Router
+===================
 
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import List
+Thin controller that handles HTTP routing and delegates to services.
+All business logic lives in services/products/.
+
+Best Practices Applied:
+- Thin Controllers: Routes just validate, authenticate, and delegate
+- Separation of Concerns: No business logic in route handlers
+- Consistent Responses: All list endpoints return PaginatedResponse
+- Proper HTTP Status Codes: 201 create, 204 delete, 404 not found
+"""
+
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from db.session import get_session
-from models import User, Product, Sentiment
-from schemas.product import (
-    ProductCreate,
-    ProductUpdate,
-    ProductRead,
-    PriceSuggestion,
-)
-from schemas.common import PaginatedResponse, PaginationParams
+from models.user import User
+from schemas.product import ProductCreate, ProductUpdate, ProductRead, PriceSuggestion
+from schemas.common import PaginatedResponse
 from api.v1.routes.auth import get_current_user
-from services.sentiment_analyzer import sentiment_analyzer
-from services.pricing_engine import pricing_engine
-from core.rate_limit import limiter, WRITE_RATE_LIMIT, ANALYSIS_RATE_LIMIT
+from core.rate_limit import limiter, WRITE_RATE_LIMIT, ANALYSIS_RATE_LIMIT, BULK_RATE_LIMIT
+
+# Import services
+from services.products import ProductService, ProductImportService
+from services.products.import_service import ImportProductRow
+
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-# ───────────────────────────── CRUD Endpoints ───────────────────────────── #
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEPENDENCY - Service Factory
+# Creates service instance with injected session
+# ═══════════════════════════════════════════════════════════════════════════════
 
-@router.post(
-    "",
-    response_model=ProductRead,
-    status_code=status.HTTP_201_CREATED,
-)
+def get_product_service(
+    session: AsyncSession = Depends(get_session),
+) -> ProductService:
+    """Dependency that creates ProductService with session."""
+    return ProductService(session)
+
+
+def get_import_service(
+    session: AsyncSession = Depends(get_session),
+) -> ProductImportService:
+    """Dependency that creates ProductImportService with session."""
+    return ProductImportService(session)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CREATE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
 @limiter.limit(WRITE_RATE_LIMIT)
 async def create_product(
     request: Request,
     payload: ProductCreate,
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
 ):
     """Create a new product."""
-    product = Product(
-        user_id=current_user.id,
-        name=payload.name,
-        sku=payload.sku,
-        description=payload.description,
-        category=payload.category,
-        image_url=payload.image_url,
-        is_active=payload.is_active,
-        base_price=payload.base_price,
-        current_price=payload.base_price,
-        cost=payload.cost,
-        min_price=payload.min_price,
-        max_price=payload.max_price,
-        sentiment_multiplier=payload.sentiment_multiplier,
-        auto_pricing_enabled=payload.auto_pricing_enabled,
-        keywords=payload.keywords,
-    )
-
-    session.add(product)
-    await session.commit()
-    await session.refresh(product)
-
+    product = await service.create(current_user.id, payload)
     return product
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# READ
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("", response_model=PaginatedResponse[ProductRead])
 async def list_products(
     request: Request,
-    pagination: PaginationParams = Depends(),
-    session: AsyncSession = Depends(get_session),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    is_active: Optional[bool] = Query(default=None),
+    category: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
 ):
     """List all products for the current user with pagination."""
-    # Count total
-    count_stmt = select(Product).where(Product.user_id == current_user.id)
-    count_result = await session.execute(count_stmt)
-    total = len(count_result.scalars().all())
-    
-    # Get paginated items
-    statement = (
-        select(Product)
-        .where(Product.user_id == current_user.id)
-        .offset(pagination.offset)
-        .limit(pagination.page_size)
+    products, total = await service.list(
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        is_active=is_active,
+        category=category,
     )
-    result = await session.execute(statement)
-    products = result.scalars().all()
     
-    total_pages = (total + pagination.page_size - 1) // pagination.page_size
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
     
     return PaginatedResponse(
         items=products,
         total=total,
-        page=pagination.page,
-        page_size=pagination.page_size,
+        page=page,
+        page_size=page_size,
         total_pages=total_pages,
     )
 
@@ -104,26 +108,24 @@ async def list_products(
 async def get_product(
     request: Request,
     product_id: UUID,
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
 ):
     """Get a specific product by ID."""
-    product = await session.get(Product, product_id)
-
+    product = await service.get_by_id(product_id, current_user.id)
+    
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
-
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
-        )
-
+    
     return product
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UPDATE
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.patch("/{product_id}", response_model=ProductRead)
 @limiter.limit(WRITE_RATE_LIMIT)
@@ -131,116 +133,231 @@ async def update_product(
     request: Request,
     product_id: UUID,
     payload: ProductUpdate,
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
 ):
-    """Update a product."""
-    product = await session.get(Product, product_id)
-
+    """Update a product (partial update)."""
+    product = await service.update(product_id, current_user.id, payload)
+    
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
-
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this product",
-        )
-
-    update_data = payload.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(product, key, value)
-
-    product.updated_at = datetime.now(timezone.utc)
-
-    session.add(product)
-    await session.commit()
-    await session.refresh(product)
-
+    
     return product
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DELETE
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit(WRITE_RATE_LIMIT)
 async def delete_product(
     request: Request,
     product_id: UUID,
-    session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
 ):
-    """Delete a product."""
-    product = await session.get(Product, product_id)
-
-    if not product:
+    """Delete a product and all related data."""
+    try:
+        deleted = await service.delete(product_id, current_user.id)
+        
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found",
+            )
+        
+        return None
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete product: {str(e)}",
         )
 
-    if product.user_id != current_user.id:
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BULK IMPORT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel, Field
+
+
+class ImportProductsRequest(BaseModel):
+    """Request body for bulk product import."""
+    products: List[ImportProductRow] = Field(..., min_length=1, max_length=1000)
+
+
+class ImportProductsResponse(BaseModel):
+    """Response for bulk product import."""
+    created: int
+    updated: int = 0
+    skipped: int = 0
+    failed: int
+    errors: List[str]
+
+
+@router.post("/import", response_model=ImportProductsResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(BULK_RATE_LIMIT)
+async def import_products(
+    request: Request,
+    payload: ImportProductsRequest,
+    current_user: User = Depends(get_current_user),
+    service: ProductImportService = Depends(get_import_service),
+):
+    """
+    Import multiple products from CSV data.
+    
+    Compatible with WooCommerce and Shopify CSV exports.
+    """
+    try:
+        result = await service.import_products(
+            user_id=current_user.id,
+            products=payload.products,
+            skip_duplicates=True,
+        )
+        
+        return ImportProductsResponse(
+            created=result.created,
+            updated=result.updated,
+            skipped=result.skipped,
+            failed=result.failed,
+            errors=result.errors[:10],  # Limit errors in response
+        )
+        
+    except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this product",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}",
         )
 
-    await session.delete(product)
-    await session.commit()
 
-    return None
-
-
-# ───────────────────────────── Price Suggestion ───────────────────────────── #
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI PRICE SUGGESTION
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/{product_id}/price-suggestion", response_model=PriceSuggestion)
 @limiter.limit(ANALYSIS_RATE_LIMIT)
 async def get_price_suggestion(
     request: Request,
     product_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    use_ai: bool = Query(False, description="Use AI for enhanced explanation"),
     current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
 ):
     """Get AI-powered price suggestion based on sentiment analysis."""
-    product = await session.get(Product, product_id)
+    suggestion = await service.get_price_suggestion(product_id, current_user.id)
+    
+    if not suggestion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    
+    # Enhance with AI explanation if requested
+    if use_ai:
+        from services.ai_generator import ai_generator
+        
+        if ai_generator.is_available():
+            try:
+                product = await service.get_by_id(product_id, current_user.id)
+                ai_explanation = await ai_generator.generate_pricing_explanation(
+                    product_name=product.name,
+                    current_price=float(suggestion["current_price"]),
+                    suggested_price=float(suggestion["suggested_price"]),
+                    sentiment_score=float(suggestion["factors"].get("sentiment_score", 0)),
+                    factors=[
+                        f"Sentiment: {suggestion['factors'].get('trend', 'stable')}",
+                        f"Mentions: {suggestion['factors'].get('mention_volume', 0)}",
+                    ],
+                )
+                suggestion["reasoning"] = ai_explanation["explanation"]
+                suggestion["factors"]["ai_key_factors"] = ai_explanation["key_factors"]
+                suggestion["factors"]["ai_powered"] = True
+            except Exception as e:
+                # Fall back to basic reasoning if AI fails
+                suggestion["factors"]["ai_powered"] = False
+    
+    return suggestion
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI DESCRIPTION GENERATOR 
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class GenerateDescriptionRequest(BaseModel):
+    """Request for AI description generation."""
+    tone: str = Field(default="professional", description="Tone: professional, casual, luxury, technical")
+    length: str = Field(default="medium", description="Length: short, medium, long")
+
+
+class GenerateDescriptionResponse(BaseModel):
+    """Response from AI description generation."""
+    description: str
+    seo_title: str
+    meta_description: str
+    suggested_keywords: List[str]
+    ai_generated: bool = True
+
+
+@router.post("/{product_id}/generate-description", response_model=GenerateDescriptionResponse)
+@limiter.limit(ANALYSIS_RATE_LIMIT)
+async def generate_description(
+    request: Request,
+    product_id: UUID,
+    payload: GenerateDescriptionRequest,
+    current_user: User = Depends(get_current_user),
+    service: ProductService = Depends(get_product_service),
+):
+    """
+    Generate AI-powered SEO-optimized product description.
+    
+    Uses GPT-4o-mini to create compelling product copy based on:
+    - Product name and category
+    - Keywords configured for sentiment tracking
+    - Existing description (if any) for improvement
+    """
+    from services.ai_generator import ai_generator
+    
+    if not ai_generator.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service not available. Please configure OPENAI_API_KEY.",
+        )
+    
+    # Get product
+    product = await service.get_by_id(product_id, current_user.id)
+    
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
-
-    if product.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this product",
+    
+    try:
+        result = await ai_generator.generate_product_description(
+            name=product.name,
+            category=product.category,
+            keywords=product.keywords,
+            current_description=product.description,
+            tone=payload.tone,
+            length=payload.length,
         )
-
-    statement = select(Sentiment).where(Sentiment.product_id == product_id)
-    result = await session.execute(statement)
-    sentiments = result.scalars().all()
-
-    if sentiments:
-        sentiment_data = [
-            {
-                "compound": s.compound_score,
-                "label": "positive" if s.compound_score > Decimal("0.05")
-                         else "negative" if s.compound_score < Decimal("-0.05")
-                         else "neutral"
-            }
-            for s in sentiments
-        ]
-        aggregate = sentiment_analyzer.calculate_aggregate(sentiment_data)
-        sentiment_score = aggregate["average_compound"]
-        mention_volume = aggregate["total_count"]
-    else:
-        sentiment_score = Decimal("0")
-        mention_volume = 0
-
-    suggestion = pricing_engine.calculate_suggestion(
-        product=product,
-        sentiment_score=sentiment_score,
-        mention_volume=mention_volume,
-    )
-
-    return suggestion
+        
+        return GenerateDescriptionResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+    

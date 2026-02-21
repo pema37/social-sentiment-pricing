@@ -14,7 +14,9 @@ const trendConfig = {
 
 export function TrendBadge({ trend, change, className }: TrendBadgeProps) {
   const config = trendConfig[trend];
-  const changeText = change !== null ? ` ${Math.abs(change * 100).toFixed(1)}%` : '';
+  const changeText = change != null && typeof change === 'number' 
+    ? ` ${Math.abs(Number(change ?? 0) * 100).toFixed(1)}%` 
+    : '';
   
   return (
     <span 
@@ -27,3 +29,5 @@ export function TrendBadge({ trend, change, className }: TrendBadgeProps) {
     </span>
   );
 }
+
+

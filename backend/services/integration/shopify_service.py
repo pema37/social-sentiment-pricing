@@ -1,51 +1,81 @@
 # backend/services/integration/shopify_service.py
-
 """
 Shopify Integration Service.
+
+MIGRATED (2026-02-15): REST Admin API → GraphQL Admin API
+Shopify requires all new apps to use GraphQL as of April 2025.
+https://shopify.dev/docs/apps/build/graphql/migrate
+
+PATCHED (2025-01-07): Added price verification after push to detect
+when Shopify silently rejects or modifies price updates.
+
+FIXED (2026-02-16): _graphql() now routes through RetryableClient
+instead of bypassing it via raw httpx.AsyncClient. This restores
+retry, rate limiting, and circuit breaker protections.
+
+MODULARIZED (2026-02-17): Split into mixins for maintainability.
+  - shopify_products.py  → Product fetching + parsing
+  - shopify_pricing.py   → Price updates + verification
+  - shopify_orders.py    → Orders API for outcome measurement
+  - shopify_webhooks.py  → Webhook registration + verification
+
+All downstream callers unchanged: ShopifyService().method() still works.
 """
 
-import hmac
-import hashlib
-import base64
 import logging
-import re
 from datetime import datetime
-from typing import Optional, List
+from decimal import Decimal
+from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
 
 from core.config import settings
 from .base import EcommerceService
-from .models import (
-    OAuthResult,
-    ExternalProduct,
-    ExternalProductVariant,
-    ProductSyncResult,
-    PriceUpdateRequest,
-    PriceUpdateResponse,
-    PriceUpdateResult,
-    WebhookRegistration,
-    ConnectionStatus,
-)
+from .schemas import OAuthResult, ConnectionStatus
 from .retry import RetryConfig, execute_with_retry
 from .http_client import RetryableClient
 from .circuit_breaker import CircuitOpenError
 
+# Mixins
+from .shopify_products import ShopifyProductsMixin
+from .shopify_pricing import ShopifyPricingMixin
+from .shopify_orders import ShopifyOrdersMixin
+from .shopify_webhooks import ShopifyWebhooksMixin
+
 logger = logging.getLogger(__name__)
 
 
-class ShopifyService(EcommerceService):
+class ShopifyService(
+    ShopifyProductsMixin,
+    ShopifyPricingMixin,
+    ShopifyOrdersMixin,
+    ShopifyWebhooksMixin,
+    EcommerceService,
+):
     """
-    Shopify REST Admin API integration.
-    
-    Rate Limits: 40 requests per app per store (leaky bucket)
+    Shopify GraphQL Admin API integration.
+
+    Migrated from REST to GraphQL per Shopify requirement (April 2025).
+    All admin calls go to: POST /admin/api/{version}/graphql.json
+
+    Rate Limits: 1,000 cost points per second (throttled query cost)
+
+    Methods are organized into mixins by domain:
+    - Products:  fetch_products, fetch_single_product
+    - Pricing:   update_price (with verification)
+    - Orders:    fetch_product_sales_data (for outcome measurement)
+    - Webhooks:  register_webhooks, unregister_webhooks, verify_webhook_signature
     """
-    
+
     API_VERSION = "2024-01"
-    REQUIRED_SCOPES = ["read_products", "write_products"]
+    REQUIRED_SCOPES = ["read_products", "write_products", "read_orders"]
     WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete"]
-    
+    WEBHOOK_TOPICS_GQL = ["PRODUCTS_CREATE", "PRODUCTS_UPDATE", "PRODUCTS_DELETE"]
+
+    # Price verification tolerance (rounding: $19.999 -> $20.00)
+    PRICE_VERIFICATION_TOLERANCE = Decimal("0.02")
+
     def __init__(self, retry_config: Optional[RetryConfig] = None):
         config = retry_config or RetryConfig(
             max_retries=3,
@@ -53,18 +83,64 @@ class ShopifyService(EcommerceService):
             max_delay=30.0,
         )
         super().__init__(config)
-    
+
     @property
     def platform_name(self) -> str:
         return "shopify"
-    
-    # ========== OAuth ==========
-    
-    def generate_oauth_url(
+
+    # ================================================================
+    # GraphQL core (used by all mixins)
+    # ================================================================
+
+    def _graphql_url(self, shop_domain: str) -> str:
+        """Single endpoint for ALL Shopify Admin API calls."""
+        return f"https://{shop_domain}/admin/api/{self.API_VERSION}/graphql.json"
+
+    async def _graphql(
         self,
-        store_url: str,
-        state: str,
-        redirect_uri: str
+        rc: RetryableClient,
+        shop_domain: str,
+        access_token: str,
+        query: str,
+        variables: Optional[dict] = None,
+    ) -> dict:
+        payload: dict = {"query": query}
+        if variables:
+            payload["variables"] = variables
+
+        response = await rc.post(
+            self._graphql_url(shop_domain),
+            headers=self._auth_headers(access_token),
+            json=payload,
+        )
+        body = response.json()
+
+        if body.get("errors"):
+            msgs = "; ".join(e.get("message", "") for e in body["errors"])
+            raise ValueError(f"GraphQL error: {msgs}")
+
+        return body.get("data", {})
+
+    # ================================================================
+    # GID helpers (used by all mixins)
+    # ================================================================
+
+    @staticmethod
+    def _gid(resource: str, numeric_id: str) -> str:
+        """Build Shopify Global ID → gid://shopify/Product/123"""
+        return f"gid://shopify/{resource}/{numeric_id}"
+
+    @staticmethod
+    def _numeric_id(gid: str) -> str:
+        """Extract '123' from gid://shopify/Product/123"""
+        return gid.rsplit("/", 1)[-1] if gid else gid
+
+    # ================================================================
+    # OAuth (unchanged – OAuth endpoints are NOT Admin API)
+    # ================================================================
+
+    def generate_oauth_url(
+        self, store_url: str, state: str, redirect_uri: str
     ) -> str:
         shop_domain = self._get_shop_domain(store_url)
         params = {
@@ -74,15 +150,12 @@ class ShopifyService(EcommerceService):
             "state": state,
         }
         return f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
-    
+
     async def exchange_oauth_code(
-        self,
-        store_url: str,
-        code: str,
-        redirect_uri: str
+        self, store_url: str, code: str, redirect_uri: str
     ) -> OAuthResult:
         shop_domain = self._get_shop_domain(store_url)
-        
+
         async def _exchange():
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
@@ -95,7 +168,7 @@ class ShopifyService(EcommerceService):
                 )
                 response.raise_for_status()
                 return response.json()
-        
+
         try:
             data = await execute_with_retry(
                 _exchange, config=self.retry_config, operation_name="shopify_oauth"
@@ -109,260 +182,54 @@ class ShopifyService(EcommerceService):
             return OAuthResult(success=False, error=f"HTTP {e.response.status_code}")
         except httpx.RequestError as e:
             return OAuthResult(success=False, error=str(e))
-    
+
     async def refresh_access_token(self, store_url: str, refresh_token: str) -> OAuthResult:
         return OAuthResult(success=False, error="Shopify tokens don't expire")
-    
+
+    # ================================================================
+    # Verify credentials
+    # ================================================================
+
     async def verify_credentials(self, store_url: str, access_token: str) -> bool:
+        shop_domain = self._get_shop_domain(store_url)
+        query = "{ shop { name } }"
         try:
-            shop_domain = self._get_shop_domain(store_url)
-            async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as client:
-                await client.get(
-                    f"https://{shop_domain}/admin/api/{self.API_VERSION}/shop.json",
-                    headers=self._auth_headers(access_token),
-                )
+            async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as rc:
+                await self._graphql(rc, shop_domain, access_token, query)
                 return True
-        except (httpx.HTTPStatusError, httpx.RequestError):
+        except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
             return False
-    
-    # ========== Products ==========
-    
-    async def fetch_products(
-        self,
-        store_url: str,
-        access_token: str,
-        cursor: Optional[str] = None,
-        limit: int = 50
-    ) -> ProductSyncResult:
-        shop_domain = self._get_shop_domain(store_url)
-        params = {"limit": min(limit, 250)}
-        if cursor:
-            params["page_info"] = cursor
-        
-        try:
-            async with RetryableClient(store_url, "shopify", self.retry_config, 30.0) as client:
-                response = await client.get(
-                    f"https://{shop_domain}/admin/api/{self.API_VERSION}/products.json",
-                    headers=self._auth_headers(access_token),
-                    params=params,
-                )
-                data = response.json()
-                products = [self._parse_product(p) for p in data.get("products", [])]
-                next_cursor = self._extract_next_cursor(response.headers.get("Link"))
-                
-                return ProductSyncResult(
-                    success=True,
-                    products=products,
-                    has_more=next_cursor is not None,
-                    next_cursor=next_cursor,
-                )
-        except CircuitOpenError:
-            return ProductSyncResult(success=False, error="Service temporarily unavailable")
-        except httpx.HTTPStatusError as e:
-            error_map = {401: "Unauthorized", 429: "Rate limited"}
-            return ProductSyncResult(
-                success=False,
-                error=error_map.get(e.response.status_code, f"HTTP {e.response.status_code}")
-            )
-        except httpx.RequestError as e:
-            return ProductSyncResult(success=False, error=f"Network error: {e}")
-    
-    async def fetch_single_product(
-        self,
-        store_url: str,
-        access_token: str,
-        external_product_id: str
-    ) -> Optional[ExternalProduct]:
-        shop_domain = self._get_shop_domain(store_url)
-        try:
-            async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as client:
-                response = await client.get(
-                    f"https://{shop_domain}/admin/api/{self.API_VERSION}/products/{external_product_id}.json",
-                    headers=self._auth_headers(access_token),
-                )
-                return self._parse_product(response.json().get("product", {}))
-        except (httpx.HTTPStatusError, httpx.RequestError):
-            return None
-    
-    async def update_price(
-        self,
-        store_url: str,
-        access_token: str,
-        request: PriceUpdateRequest
-    ) -> PriceUpdateResponse:
-        shop_domain = self._get_shop_domain(store_url)
-        
-        try:
-            # Get variant ID
-            variant_id = request.external_variant_id
-            if not variant_id:
-                product = await self.fetch_single_product(store_url, access_token, request.external_product_id)
-                if product and product.variants:
-                    variant_id = product.variants[0].id
-                else:
-                    return PriceUpdateResponse(
-                        result=PriceUpdateResult.PRODUCT_NOT_FOUND,
-                        external_product_id=request.external_product_id,
-                        error="No variant found"
-                    )
-            
-            # Get old price
-            current = await self.fetch_single_product(store_url, access_token, request.external_product_id)
-            old_price = current.price if current else None
-            
-            # Update
-            update_data = {"variant": {"id": variant_id, "price": str(request.new_price)}}
-            if request.compare_at_price:
-                update_data["variant"]["compare_at_price"] = str(request.compare_at_price)
-            
-            async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as client:
-                await client.put(
-                    f"https://{shop_domain}/admin/api/{self.API_VERSION}/variants/{variant_id}.json",
-                    headers=self._auth_headers(access_token),
-                    json=update_data,
-                )
-                return PriceUpdateResponse(
-                    result=PriceUpdateResult.SUCCESS,
-                    external_product_id=request.external_product_id,
-                    old_price=old_price,
-                    new_price=request.new_price,
-                )
-        except CircuitOpenError:
-            return PriceUpdateResponse(
-                result=PriceUpdateResult.FAILED,
-                external_product_id=request.external_product_id,
-                error="Service temporarily unavailable"
-            )
-        except httpx.HTTPStatusError as e:
-            result_map = {
-                401: PriceUpdateResult.UNAUTHORIZED,
-                404: PriceUpdateResult.PRODUCT_NOT_FOUND,
-                429: PriceUpdateResult.RATE_LIMITED,
-            }
-            return PriceUpdateResponse(
-                result=result_map.get(e.response.status_code, PriceUpdateResult.FAILED),
-                external_product_id=request.external_product_id,
-                error=f"HTTP {e.response.status_code}"
-            )
-        except httpx.RequestError as e:
-            return PriceUpdateResponse(
-                result=PriceUpdateResult.FAILED,
-                external_product_id=request.external_product_id,
-                error=str(e)
-            )
-    
-    # ========== Webhooks ==========
-    
-    async def register_webhooks(
-        self,
-        store_url: str,
-        access_token: str,
-        callback_url: str
-    ) -> List[WebhookRegistration]:
-        shop_domain = self._get_shop_domain(store_url)
-        results = []
-        
-        async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as client:
-            for topic in self.WEBHOOK_TOPICS:
-                try:
-                    response = await client.post(
-                        f"https://{shop_domain}/admin/api/{self.API_VERSION}/webhooks.json",
-                        headers=self._auth_headers(access_token),
-                        json={"webhook": {"topic": topic, "address": callback_url, "format": "json"}},
-                    )
-                    data = response.json()
-                    results.append(WebhookRegistration(
-                        success=True,
-                        webhook_id=str(data["webhook"]["id"]),
-                        topic=topic,
-                    ))
-                except (httpx.HTTPStatusError, httpx.RequestError) as e:
-                    results.append(WebhookRegistration(success=False, topic=topic, error=str(e)))
-        return results
-    
-    async def unregister_webhooks(
-        self,
-        store_url: str,
-        access_token: str,
-        webhook_ids: List[str]
-    ) -> bool:
-        shop_domain = self._get_shop_domain(store_url)
-        success = True
-        
-        async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as client:
-            for wid in webhook_ids:
-                try:
-                    await client.delete(
-                        f"https://{shop_domain}/admin/api/{self.API_VERSION}/webhooks/{wid}.json",
-                        headers=self._auth_headers(access_token),
-                    )
-                except (httpx.HTTPStatusError, httpx.RequestError):
-                    success = False
-        return success
-    
-    def verify_webhook_signature(self, payload: bytes, signature: str, secret: str) -> bool:
-        computed = base64.b64encode(hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()
-        return hmac.compare_digest(computed, signature)
-    
-    # ========== Health ==========
-    
+
+    # ================================================================
+    # Health check
+    # ================================================================
+
     async def health_check(self, store_url: str, access_token: str) -> ConnectionStatus:
         shop_domain = self._get_shop_domain(store_url)
+        query = "{ shop { name } }"
         try:
-            async with RetryableClient(store_url, "shopify", RetryConfig(max_retries=1), 10.0) as client:
-                await client.get(
-                    f"https://{shop_domain}/admin/api/{self.API_VERSION}/shop.json",
-                    headers=self._auth_headers(access_token),
-                )
+            async with RetryableClient(store_url, "shopify", RetryConfig(max_retries=1), 10.0) as rc:
+                await self._graphql(rc, shop_domain, access_token, query)
                 return ConnectionStatus.HEALTHY
         except httpx.HTTPStatusError as e:
             status_map = {401: ConnectionStatus.UNAUTHORIZED, 429: ConnectionStatus.RATE_LIMITED}
             return status_map.get(e.response.status_code, ConnectionStatus.UNHEALTHY)
-        except httpx.RequestError:
+        except (httpx.RequestError, ValueError):
             return ConnectionStatus.UNHEALTHY
-    
-    # ========== Helpers ==========
-    
+
+    # ================================================================
+    # Internal helpers
+    # ================================================================
+
     def _get_shop_domain(self, store_url: str) -> str:
         url = store_url.strip().lower().replace("https://", "").replace("http://", "").rstrip("/")
         if not url.endswith(".myshopify.com") and "." not in url:
             url = f"{url}.myshopify.com"
         return url
-    
+
     def _auth_headers(self, access_token: str) -> dict:
         return {"X-Shopify-Access-Token": access_token, "Content-Type": "application/json"}
-    
-    def _parse_product(self, data: dict) -> ExternalProduct:
-        variants = [
-            ExternalProductVariant(
-                id=str(v.get("id")),
-                title=v.get("title", ""),
-                price=float(v.get("price", 0)),
-                sku=v.get("sku"),
-                inventory_quantity=v.get("inventory_quantity"),
-                compare_at_price=float(v["compare_at_price"]) if v.get("compare_at_price") else None,
-            )
-            for v in data.get("variants", [])
-        ]
-        images = [img.get("src") for img in data.get("images", []) if img.get("src")]
-        
-        return ExternalProduct(
-            id=str(data.get("id")),
-            title=data.get("title", ""),
-            price=variants[0].price if variants else None,
-            compare_at_price=variants[0].compare_at_price if variants else None,
-            sku=variants[0].sku if variants else None,
-            description=data.get("body_html", ""),
-            inventory_quantity=variants[0].inventory_quantity if variants else None,
-            product_type=data.get("product_type", ""),
-            vendor=data.get("vendor", ""),
-            tags=data.get("tags", "").split(", ") if data.get("tags") else [],
-            images=images,
-            variants=variants,
-            created_at=self._parse_datetime(data.get("created_at")),
-            updated_at=self._parse_datetime(data.get("updated_at")),
-        )
-    
+
     def _parse_datetime(self, date_str: Optional[str]) -> Optional[datetime]:
         if not date_str:
             return None
@@ -370,10 +237,5 @@ class ShopifyService(EcommerceService):
             return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             return None
-    
-    def _extract_next_cursor(self, link_header: Optional[str]) -> Optional[str]:
-        if not link_header:
-            return None
-        match = re.search(r'<[^>]*page_info=([^>&]+)[^>]*>;\s*rel="next"', link_header)
-        return match.group(1) if match else None
-    
+
+            

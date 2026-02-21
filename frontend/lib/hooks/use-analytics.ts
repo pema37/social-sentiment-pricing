@@ -19,6 +19,7 @@ export function useDashboardOverview() {
     queryKey: analyticsKeys.dashboard(),
     queryFn: () => analyticsApi.getDashboard(),
     staleTime: 30 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -28,6 +29,7 @@ export function useProductSummaries(limit: number = 10) {
     queryKey: analyticsKeys.productSummaries(limit),
     queryFn: () => analyticsApi.getProductSummaries(limit),
     staleTime: 30 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -37,6 +39,7 @@ export function useRecommendationStats(days: number = 30) {
     queryKey: analyticsKeys.recommendationStats(days),
     queryFn: () => analyticsApi.getRecommendationStats(days),
     staleTime: 60 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -46,6 +49,7 @@ export function useAlertAnalytics(days: number = 30) {
     queryKey: analyticsKeys.alertAnalytics(days),
     queryFn: () => analyticsApi.getAlertAnalytics(days),
     staleTime: 60 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -55,6 +59,7 @@ export function useSentimentTrend(params?: { product_id?: string; days?: number;
     queryKey: analyticsKeys.sentimentTrend(params),
     queryFn: () => analyticsApi.getSentimentTrend(params),
     staleTime: 60 * 1000,
+    refetchOnMount: true,
   });
 }
 
@@ -68,3 +73,4 @@ export function useRefreshDashboard() {
     },
   };
 }
+

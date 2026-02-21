@@ -5,20 +5,24 @@ E-commerce Integration Model
 Stores encrypted credentials for Shopify/WooCommerce connections
 
 Aligned with architecture doc: Section 6.1 Shopify Integration
+
+to fix deprecation warnings and ensure timezone-aware datetimes.
 """
 
 import uuid as uuid_lib
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
-from sqlalchemy import Column as SAColumn, Text, LargeBinary, ForeignKey
+from sqlalchemy import Column as SAColumn, DateTime, Text, LargeBinary, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 if TYPE_CHECKING:
     from models.user import User
     from models.product import Product
+
+
 
 
 class EcommercePlatform(str, Enum):
@@ -43,6 +47,7 @@ class Integration(SQLModel, table=True):
     Note: Using user_id now, will migrate to organization_id when 
     Organization model is added for full multi-tenancy.
     """
+
     __tablename__ = "integrations"
 
     id: uuid_lib.UUID = Field(
@@ -51,8 +56,9 @@ class Integration(SQLModel, table=True):
     )
     
     # Foreign key to user (will become organization_id later)
-    user_id: uuid_lib.UUID = Field(
-        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Optional[uuid_lib.UUID] = Field(
+        default=None,
+        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     )
     
     # Platform identification
@@ -71,7 +77,7 @@ class Integration(SQLModel, table=True):
         default=None, 
         sa_column=SAColumn(LargeBinary, nullable=True)
     )
-    token_expires_at: Optional[datetime] = Field(default=None)
+    token_expires_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     
     # OAuth scopes granted
     scopes: List[str] = Field(default=[], sa_column=Column(JSON))
@@ -88,21 +94,17 @@ class Integration(SQLModel, table=True):
     oauth_state: Optional[str] = Field(default=None, max_length=64)
     
     # ========== Sync Metadata ==========
-    last_sync_at: Optional[datetime] = Field(default=None)
+    last_sync_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     sync_status: str = Field(default="idle", max_length=20)  # idle, syncing, error
     products_synced: int = Field(default=0)
     sync_cursor: Optional[str] = Field(default=None, max_length=500)
     
     # ========== Flexible Settings (Architecture Doc) ==========
-    settings: dict = Field(default={}, sa_column=Column(JSON))
+    settings: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     
     # ========== Timestamps ==========
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
     
     # ========== Relationships ==========
     user: Optional["User"] = Relationship(back_populates="integrations")
@@ -128,11 +130,8 @@ class IntegrationSyncLog(SQLModel, table=True):
     
     # Sync details
     sync_type: str = Field(max_length=50)  # "full", "incremental", "webhook"
-    started_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        index=True
-    )
-    completed_at: Optional[datetime] = Field(default=None)
+    started_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True, default=lambda: datetime.now(timezone.utc)))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     duration_seconds: Optional[float] = Field(default=None)
     
     # Results
@@ -155,6 +154,7 @@ class ProductIntegrationLink(SQLModel, table=True):
     """
     __tablename__ = "product_integration_links"
 
+
     id: uuid_lib.UUID = Field(
         default_factory=uuid_lib.uuid4,
         sa_column=SAColumn(PG_UUID(as_uuid=True), primary_key=True)
@@ -175,19 +175,16 @@ class ProductIntegrationLink(SQLModel, table=True):
     # Sync state
     external_price: Optional[float] = Field(default=None)
     external_compare_at_price: Optional[float] = Field(default=None)
-    last_price_push_at: Optional[datetime] = Field(default=None)
-    last_price_pull_at: Optional[datetime] = Field(default=None)
+    last_price_push_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_price_pull_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     sync_enabled: bool = Field(default=True)
     
     # Timestamps
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow
-    )
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
 
     # Relationships
     integration: Optional["Integration"] = Relationship(back_populates="product_links")
     product: Optional["Product"] = Relationship(back_populates="integration_links")
+
 

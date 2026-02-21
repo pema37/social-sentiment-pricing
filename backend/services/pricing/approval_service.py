@@ -1,25 +1,39 @@
-# backend/services/pricing/approval_service.py
 """
-Approval Service - Handles approval workflow and price application.
+Approval Service - Core approval workflow and price application.
 
-FIX APPLIED: Replaced all datetime.now(timezone.utc) with datetime.utcnow()
-to fix PostgreSQL TIMESTAMP WITHOUT TIME ZONE compatibility issues.
+FIX (2025-01-07): Made auto_approve_and_apply() atomic - single commit at the end.
+FIX (2025-01-25): Extracted e-commerce push to EcommercePushService.
+FIX (2025-01-25): Now pushes to ALL active platforms, not just the first one.
+FIX (2026-01-27): Fixed _check_daily_limit() bug - was returning False when no settings exist.
+FIX (2026-01-27): Added clearer error messages for common failure scenarios.
+FIX (2026-02-17): Wired intelligence environment feedback loop — record_merchant_decision()
+                   called on apply_price(), auto_approve_and_apply(), and reject().
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func
 
 from models.product import Product
-from models.pricing_rule import PricingRule
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
 from models.price_history import PriceHistory, ChangeReason
 from models.pricing_settings import PricingSettings
-from models.integration import Integration, ProductIntegrationLink, IntegrationStatus
+
+logger = logging.getLogger(__name__)
+
+
+class ApprovalError(Exception):
+    """Custom exception for approval failures with error codes."""
+    
+    def __init__(self, message: str, error_code: str = "APPROVAL_ERROR"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
 
 
 class ApprovalService:
@@ -34,26 +48,38 @@ class ApprovalService:
         user_id: UUID,
         auto: bool = False
     ) -> PriceRecommendation:
-        """Approve a recommendation."""
+        """
+        Approve a recommendation (manual approval only).
         
+        For auto-approval with immediate application, use auto_approve_and_apply() instead.
+        
+        NOTE: No outcome is recorded here. The decision isn't final until
+        apply_price() runs — the price hasn't changed yet, so there's
+        nothing to measure. Outcome is recorded when price is actually applied.
+        """
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
         if recommendation.status != RecommendationStatus.PENDING:
-            raise ValueError(f"Cannot approve recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot approve recommendation with status: {recommendation.status}",
+                "INVALID_STATUS"
+            )
         
-        # Compare naive datetimes (DB stores without timezone)
-        if recommendation.valid_until < datetime.utcnow():
+        if recommendation.valid_until < datetime.now(UTC):
             recommendation.status = RecommendationStatus.EXPIRED
             self.db.add(recommendation)
             await self.db.commit()
-            raise ValueError("Recommendation has expired")
+            raise ApprovalError(
+                "This recommendation has expired. Please generate a new one.",
+                "RECOMMENDATION_EXPIRED"
+            )
         
         recommendation.status = (
             RecommendationStatus.AUTO_APPROVED if auto 
             else RecommendationStatus.APPROVED
         )
         recommendation.reviewed_by = user_id
-        recommendation.reviewed_at = datetime.utcnow()
+        recommendation.reviewed_at = datetime.now(UTC)
         
         self.db.add(recommendation)
         await self.db.commit()
@@ -68,20 +94,31 @@ class ApprovalService:
         reason: Optional[str] = None
     ) -> PriceRecommendation:
         """Reject a recommendation."""
-        
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
         if recommendation.status != RecommendationStatus.PENDING:
-            raise ValueError(f"Cannot reject recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot reject recommendation with status: {recommendation.status}",
+                "INVALID_STATUS"
+            )
         
         recommendation.status = RecommendationStatus.REJECTED
         recommendation.reviewed_by = user_id
-        recommendation.reviewed_at = datetime.utcnow()
+        recommendation.reviewed_at = datetime.now(UTC)
         recommendation.rejection_reason = reason
         
         self.db.add(recommendation)
         await self.db.commit()
         await self.db.refresh(recommendation)
+        
+        # ── Intelligence Environment: record rejection ──
+        # No price change to measure, but we track the decision for
+        # merchant pattern analysis → Strategist guardrail calibration.
+        await self._record_decision(
+            recommendation_id=recommendation.id,
+            user_id=user_id,
+            merchant_decision="rejected",
+        )
         
         return recommendation
     
@@ -90,7 +127,13 @@ class ApprovalService:
         recommendation_id: UUID,
         user_id: UUID
     ) -> PriceRecommendation:
-        """Apply an approved recommendation - update product and push to e-commerce."""
+        """
+        Apply an approved recommendation - update product and push to e-commerce.
+        
+        Use this for manually approved recommendations.
+        For auto-approval flow, use auto_approve_and_apply() instead.
+        """
+        from services.pricing.ecommerce_push_service import EcommercePushService
         
         recommendation = await self._get_recommendation(recommendation_id, user_id)
         
@@ -98,19 +141,20 @@ class ApprovalService:
             RecommendationStatus.APPROVED,
             RecommendationStatus.AUTO_APPROVED
         ]:
-            raise ValueError(f"Cannot apply recommendation with status: {recommendation.status}")
+            raise ApprovalError(
+                f"Cannot apply recommendation with status: {recommendation.status}",
+                "INVALID_STATUS"
+            )
         
-        # Get product
         product = await self.db.get(Product, recommendation.product_id)
         if not product:
-            raise ValueError("Product not found")
+            raise ApprovalError("Product not found", "PRODUCT_NOT_FOUND")
         
-        # Store old price
         old_price = product.current_price
         
         # Update product price
         product.current_price = recommendation.recommended_price
-        product.updated_at = datetime.utcnow()
+        product.updated_at = datetime.now(UTC)
         self.db.add(product)
         
         # Create price history record
@@ -126,73 +170,152 @@ class ApprovalService:
         self.db.add(history)
         
         # Push to e-commerce platform
-        platform_result = await self._push_to_ecommerce(product, user_id)
+        push_service = EcommercePushService(self.db)
+        platform_result = await push_service.push_price(product)
+        
+        if not platform_result.get("success"):
+            product.current_price = old_price
+            self.db.add(product)
+            await self.db.rollback()
+            
+            error_msg = platform_result.get("error", "Unknown error pushing to platform")
+            error_code = platform_result.get("error_code", "PLATFORM_PUSH_FAILED")
+            raise ApprovalError(error_msg, error_code)
         
         # Update recommendation status
         recommendation.status = RecommendationStatus.APPLIED
-        recommendation.applied_at = datetime.utcnow()
+        recommendation.applied_at = datetime.now(UTC)
         recommendation.applied_to_platform = platform_result.get("platform")
         self.db.add(recommendation)
         
         await self.db.commit()
         await self.db.refresh(recommendation)
         
+        # ── Intelligence Environment: record merchant decision ──
+        # Price is now applied and pushed — record the outcome for
+        # feedback loop measurement at 7d/14d/30d windows.
+        await self._record_decision(
+            recommendation_id=recommendation.id,
+            user_id=user_id,
+            merchant_decision="accepted",
+            actual_price_set=recommendation.recommended_price,
+        )
+        
         return recommendation
     
     async def auto_approve_and_apply(
         self,
-        recommendation: PriceRecommendation,
+        recommendation_id: UUID,
         user_id: UUID
     ) -> PriceRecommendation:
-        """Auto-approve and immediately apply a recommendation."""
+        """
+        Auto-approve and immediately apply a recommendation - ATOMIC TRANSACTION.
         
-        # Check daily limit
-        if not await self._check_daily_limit(user_id):
-            return recommendation  # Leave as pending
+        Ensures either:
+        - Both approval AND price push succeed (commit once at the end)
+        - OR everything is rolled back (nothing committed)
+        """
+        from services.pricing.ecommerce_push_service import EcommercePushService
         
-        # Approve
-        recommendation = await self.approve(recommendation.id, user_id, auto=True)
+        # Check daily limit first
+        limit_ok, limit_msg = await self._check_daily_limit(user_id)
+        if not limit_ok:
+            raise ApprovalError(limit_msg, "DAILY_LIMIT_REACHED")
         
-        # Apply
-        recommendation = await self.apply_price(recommendation.id, user_id)
+        recommendation = await self._get_recommendation(recommendation_id, user_id)
         
-        return recommendation
-    
-    async def process_auto_approvals(self, user_id: UUID) -> list[PriceRecommendation]:
-        """Process all pending recommendations eligible for auto-approval."""
+        if recommendation.status != RecommendationStatus.PENDING:
+            raise ApprovalError(
+                f"Cannot approve: recommendation status is '{recommendation.status}', expected 'PENDING'",
+                "INVALID_STATUS"
+            )
         
-        settings = await self._get_user_settings(user_id)
-        if not settings or not settings.auto_approve_enabled:
-            return []
+        if recommendation.valid_until < datetime.now(UTC):
+            recommendation.status = RecommendationStatus.EXPIRED
+            self.db.add(recommendation)
+            await self.db.commit()
+            raise ApprovalError(
+                "This recommendation has expired. Please generate a new one.",
+                "RECOMMENDATION_EXPIRED"
+            )
         
-        # Check blackout hours
-        if self._in_blackout_period(settings):
-            return []
+        product = await self.db.get(Product, recommendation.product_id)
+        if not product:
+            raise ApprovalError("Product not found", "PRODUCT_NOT_FOUND")
         
-        # Get pending recommendations that don't require approval
-        stmt = (
-            select(PriceRecommendation)
-            .where(PriceRecommendation.user_id == user_id)
-            .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.requires_approval == False)
-            .where(PriceRecommendation.valid_until > datetime.utcnow())
+        old_price = product.current_price
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # ATOMIC TRANSACTION - ALL CHANGES, SINGLE COMMIT
+        # ═══════════════════════════════════════════════════════════════════════
+        
+        # Step 1: Update product price (not committed yet)
+        product.current_price = recommendation.recommended_price
+        product.updated_at = datetime.now(UTC)
+        self.db.add(product)
+        
+        # Step 2: Push to e-commerce BEFORE committing
+        push_service = EcommercePushService(self.db)
+        platform_result = await push_service.push_price(product)
+        
+        if not platform_result.get("success"):
+            product.current_price = old_price
+            await self.db.rollback()
+            
+            error_msg = platform_result.get("error", "Unknown error")
+            error_code = platform_result.get("error_code", "PLATFORM_PUSH_FAILED")
+            logger.warning(
+                f"Auto-apply failed for recommendation {recommendation_id}: "
+                f"[{error_code}] {error_msg}"
+            )
+            
+            # Provide helpful message based on error type
+            if error_code == "NO_ACTIVE_INTEGRATION_LINK":
+                raise ApprovalError(
+                    "This product isn't linked to your store. Go to Integrations → Sync Products to link it.",
+                    error_code
+                )
+            raise ApprovalError(f"Failed to push price to platform: {error_msg}", error_code)
+        
+        # Step 3: Create price history
+        history = PriceHistory(
+            user_id=user_id,
+            product_id=product.id,
+            old_price=old_price,
+            new_price=recommendation.recommended_price,
+            change_percent=recommendation.change_percent,
+            change_reason=ChangeReason.RECOMMENDATION_APPLIED.value,
+            recommendation_id=recommendation.id,
+        )
+        self.db.add(history)
+        
+        # Step 4: Update recommendation - go straight to APPLIED
+        recommendation.status = RecommendationStatus.APPLIED
+        recommendation.reviewed_by = user_id
+        recommendation.reviewed_at = datetime.now(UTC)
+        recommendation.applied_at = datetime.now(UTC)
+        recommendation.applied_to_platform = platform_result.get("platform")
+        self.db.add(recommendation)
+        
+        # Step 5: SINGLE COMMIT
+        await self.db.commit()
+        await self.db.refresh(recommendation)
+        
+        logger.info(
+            f"Auto-applied recommendation {recommendation_id}: "
+            f"${old_price} -> ${recommendation.recommended_price} "
+            f"(pushed to {platform_result.get('platform')})"
         )
         
-        result = await self.db.execute(stmt)
-        pending = list(result.scalars().all())
-        applied: list[PriceRecommendation] = []
+        # ── Intelligence Environment: record auto-apply decision ──
+        await self._record_decision(
+            recommendation_id=recommendation.id,
+            user_id=user_id,
+            merchant_decision="auto_applied",
+            actual_price_set=recommendation.recommended_price,
+        )
         
-        for recommendation in pending:
-            if not await self._check_daily_limit(user_id):
-                break  # Hit daily limit
-            
-            try:
-                result_rec = await self.auto_approve_and_apply(recommendation, user_id)
-                applied.append(result_rec)
-            except Exception:
-                continue  # Skip failed ones
-        
-        return applied
+        return recommendation
     
     async def _get_recommendation(
         self,
@@ -200,14 +323,13 @@ class ApprovalService:
         user_id: UUID
     ) -> PriceRecommendation:
         """Get recommendation and verify ownership."""
-        
         recommendation = await self.db.get(PriceRecommendation, recommendation_id)
         
         if not recommendation:
-            raise ValueError("Recommendation not found")
+            raise ApprovalError("Recommendation not found", "NOT_FOUND")
         
         if recommendation.user_id != user_id:
-            raise ValueError("Recommendation not found")
+            raise ApprovalError("Recommendation not found", "NOT_FOUND")
         
         return recommendation
     
@@ -217,130 +339,48 @@ class ApprovalService:
         result = await self.db.execute(stmt)
         return result.scalars().first()
     
-    async def _check_daily_limit(self, user_id: UUID) -> bool:
-        """Check if user has reached daily auto-change limit."""
+    async def _check_daily_limit(self, user_id: UUID) -> tuple[bool, str]:
+        """
+        Check if user has reached daily auto-change limit.
         
+        Returns:
+            tuple[bool, str]: (is_within_limit, message)
+            
+        FIX (2026-01-27): Previously returned False when no settings exist,
+        which blocked ALL approvals. Now returns True (no limit) in that case.
+        """
         settings = await self._get_user_settings(user_id)
-        if not settings:
-            return False
         
-        # Count today's auto-applied recommendations
-        today_start = datetime.utcnow().replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        # FIX: No settings means no limit configured - allow unlimited approvals
+        if not settings:
+            logger.debug(f"No pricing settings for user {user_id}, allowing unlimited approvals")
+            return True, "OK"
+        
+        # If limit is 0 or negative, treat as unlimited
+        if settings.max_auto_changes_per_day <= 0:
+            return True, "OK"
+        
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         
         stmt = (
             select(func.count(PriceRecommendation.id))
             .where(PriceRecommendation.user_id == user_id)
-            .where(PriceRecommendation.status == RecommendationStatus.AUTO_APPROVED)
+            .where(PriceRecommendation.status == RecommendationStatus.APPLIED)
             .where(PriceRecommendation.applied_at >= today_start)
         )
-        
         result = await self.db.execute(stmt)
         count = result.scalar() or 0
         
-        return count < settings.max_auto_changes_per_day
-    
-    def _in_blackout_period(self, settings: PricingSettings) -> bool:
-        """Check if current time is in blackout period."""
+        limit = settings.max_auto_changes_per_day
         
-        if settings.blackout_hours_start is None or settings.blackout_hours_end is None:
-            return False
+        if count >= limit:
+            return False, f"Daily limit reached ({count}/{limit}). Go to Settings → Pricing to increase your limit."
         
-        current_hour = datetime.utcnow().hour
-        
-        start = settings.blackout_hours_start
-        end = settings.blackout_hours_end
-        
-        # Handle overnight blackouts (e.g., 22:00 - 06:00)
-        if start > end:
-            return current_hour >= start or current_hour < end
-        else:
-            return start <= current_hour < end
-    
-    async def _push_to_ecommerce(self, product: Product, user_id: UUID) -> dict:
-        """Push price update to connected e-commerce platform."""
-        from core.encryption import decrypt_token
-        from services.integration.shopify_service import ShopifyService
-        from services.integration.woocommerce_service import WooCommerceService
-        from services.integration.base import PriceUpdateRequest, PriceUpdateResult
-        
-        try:
-            # Get product integration link
-            stmt = (
-                select(ProductIntegrationLink)
-                .where(ProductIntegrationLink.product_id == product.id)
-                .where(ProductIntegrationLink.sync_enabled == True)
-            )
-            result = await self.db.execute(stmt)
-            link = result.scalars().first()
-            
-            if not link:
-                return {"platform": None, "success": False, "error": "Product not linked to any platform"}
-            
-            # Get the integration
-            integration = await self.db.get(Integration, link.integration_id)
-            
-            if not integration:
-                return {"platform": None, "success": False, "error": "Integration not found"}
-            
-            if integration.status != IntegrationStatus.ACTIVE:
-                return {"platform": integration.platform.value, "success": False, "error": f"Integration status: {integration.status.value}"}
-            
-            # Decrypt access token
-            try:
-                access_token = decrypt_token(integration.access_token_encrypted)
-            except Exception as e:
-                return {"platform": integration.platform.value, "success": False, "error": f"Failed to decrypt token: {str(e)}"}
-            
-            # Build price update request
-            request = PriceUpdateRequest(
-                external_product_id=link.external_product_id,
-                external_variant_id=link.external_variant_id,
-                new_price=float(product.current_price),
-            )
-            
-            # Call appropriate service
-            if integration.platform.value == "shopify":
-                service = ShopifyService()
-                response = await service.update_price(
-                    store_url=integration.store_url,
-                    access_token=access_token,
-                    request=request
-                )
-            elif integration.platform.value == "woocommerce":
-                service = WooCommerceService()
-                response = await service.update_price(
-                    store_url=integration.store_url,
-                    access_token=access_token,
-                    request=request
-                )
-            else:
-                return {"platform": integration.platform.value, "success": False, "error": "Unsupported platform"}
-            
-            # Update link metadata
-            if response.result == PriceUpdateResult.SUCCESS:
-                link.last_price_push_at = datetime.utcnow()
-                link.external_price = float(product.current_price)
-                link.updated_at = datetime.utcnow()
-                self.db.add(link)
-            
-            return {
-                "platform": integration.platform.value,
-                "success": response.result == PriceUpdateResult.SUCCESS,
-                "external_id": link.external_product_id,
-                "new_price": float(product.current_price),
-                "old_price": response.old_price,
-                "error": response.error,
-            }
-            
-        except Exception as e:
-            return {"platform": None, "success": False, "error": str(e)}
+        return True, "OK"
     
     async def get_approval_stats(self, user_id: UUID, days: int = 30) -> dict:
         """Get approval statistics for a user."""
-        
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(UTC) - timedelta(days=days)
         
         # Total recommendations
         stmt_total = (
@@ -351,9 +391,8 @@ class ApprovalService:
         result = await self.db.execute(stmt_total)
         total = result.scalar() or 0
         
-        # By status - build dict with all status values
+        # By status
         by_status: dict[str, int] = {}
-        
         for status in RecommendationStatus:
             try:
                 status_value = status.value if hasattr(status, 'value') else str(status)
@@ -367,7 +406,6 @@ class ApprovalService:
                 count = result.scalar() or 0
                 by_status[status_value] = count
             except Exception:
-                # Skip problematic status values
                 continue
         
         # Average confidence of applied
@@ -379,16 +417,12 @@ class ApprovalService:
         )
         result = await self.db.execute(stmt_conf)
         avg_confidence = result.scalar()
-        avg_confidence_applied: Optional[float] = None
-        if avg_confidence is not None:
-            avg_confidence_applied = float(avg_confidence)
+        avg_confidence_applied: Optional[float] = float(avg_confidence) if avg_confidence else None
         
-        # Auto vs manual approval ratio
-        auto = by_status.get("auto_approved", 0)
-        manual = by_status.get("approved", 0)
-        auto_approval_ratio: float = 0.0
-        if (auto + manual) > 0:
-            auto_approval_ratio = float(auto) / float(auto + manual)
+        # Auto vs manual ratio
+        auto = by_status.get("AUTO_APPROVED", 0)
+        manual = by_status.get("APPROVED", 0)
+        auto_approval_ratio = float(auto) / float(auto + manual) if (auto + manual) > 0 else 0.0
         
         return {
             "total": total,
@@ -397,3 +431,39 @@ class ApprovalService:
             "auto_approval_ratio": auto_approval_ratio,
         }
     
+    # ──────────────────────────────────────────────
+    # INTELLIGENCE ENVIRONMENT: FEEDBACK LOOP HOOK
+    # ──────────────────────────────────────────────
+
+    async def _record_decision(
+        self,
+        recommendation_id: UUID,
+        user_id: UUID,
+        merchant_decision: str,
+        actual_price_set: Optional[Decimal] = None,
+    ) -> None:
+        """
+        Fire-and-forget: record merchant decision for the intelligence
+        environment feedback loop. Failures are logged, never raised.
+        
+        Uses lazy import (same pattern as EcommercePushService) to
+        avoid circular imports.
+        """
+        try:
+            from services.pricing.outcome_service import OutcomeService
+            outcome_svc = OutcomeService(self.db)
+            await outcome_svc.record_merchant_decision(
+                recommendation_id=recommendation_id,
+                user_id=user_id,
+                merchant_decision=merchant_decision,
+                actual_price_set=actual_price_set,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to record outcome for recommendation "
+                f"{recommendation_id}: {e}"
+            )
+
+
+
+            

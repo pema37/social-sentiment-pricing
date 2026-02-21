@@ -1,93 +1,143 @@
-// Sentiment overview widget for dashboard
+// Sentiment trend line chart
 'use client';
 
+import { useMemo } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
+import { Card, CardTitle } from '@/components/ui';
+import { useSentimentTrend } from '@/lib/hooks/use-analytics';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-interface SentimentOverviewProps {
-  trend: 'improving' | 'declining' | 'stable';
-  score: number | null;
-  mentions24h: number;
-  isLoading?: boolean;
+interface SentimentTrendChartProps {
+  productId?: string;
+  days?: number;
 }
 
-const trendConfig = {
-  improving: {
-    icon: TrendingUp,
-    color: 'text-green-500',
-    bgColor: 'bg-green-50',
-    label: 'Improving',
-  },
-  declining: {
-    icon: TrendingDown,
-    color: 'text-red-500',
-    bgColor: 'bg-red-50',
-    label: 'Declining',
-  },
-  stable: {
-    icon: Minus,
-    color: 'text-gray-500',
-    bgColor: 'bg-gray-50',
-    label: 'Stable',
-  },
-};
+// Helper to safely convert any value to a number
+function toSafeNumber(value: unknown, fallback = 0): number {
+  if (value == null) return fallback;
+  const num = Number(value);
+  return isNaN(num) ? fallback : num;
+}
 
-export function SentimentOverview({
-  trend,
-  score,
-  mentions24h,
-  isLoading,
-}: SentimentOverviewProps) {
-  const config = trendConfig[trend];
-  const Icon = config.icon;
+export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChartProps) {
+  const { data, isLoading } = useSentimentTrend({ product_id: productId, days });
+
+  const chartData = useMemo(() => {
+    if (!data?.timeline) return [];
+    
+    return data.timeline.map((point) => ({
+      date: new Date(point.timestamp).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      }),
+      // CRITICAL FIX: Use Number() to convert strings to numbers
+      score: toSafeNumber(point.score),
+      mentions: toSafeNumber(point.mention_count),
+    }));
+  }, [data]);
+
+  const trendConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+    up: { icon: TrendingUp, color: 'text-green-500', label: 'Improving' },
+    down: { icon: TrendingDown, color: 'text-red-500', label: 'Declining' },
+    stable: { icon: Minus, color: 'text-gray-500', label: 'Stable' },
+  };
+
+  const currentTrend = data?.trend || 'stable';
+  const TrendIcon = trendConfig[currentTrend]?.icon || Minus;
+  
+  // Safe change value - must be a real number
+  const changeValue = toSafeNumber(data?.change, NaN);
+  const hasValidChange = !isNaN(changeValue);
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="h-5 w-32 bg-gray-200 rounded animate-pulse" />
-            <div className="h-8 w-24 bg-gray-100 rounded animate-pulse mt-2" />
-          </div>
-          <div className="text-right">
-            <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-            <div className="h-7 w-16 bg-gray-100 rounded animate-pulse mt-1" />
-          </div>
-        </div>
-      </div>
+      <Card>
+        <CardTitle>Sentiment Trend</CardTitle>
+        <div className="h-64 mt-4 bg-gray-100 rounded animate-pulse" />
+      </Card>
     );
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
+    <Card>
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-gray-500">Overall Sentiment</h3>
-          <div className="flex items-center gap-3 mt-2">
-            <div className={`p-2 rounded-lg ${config.bgColor}`}>
-              <Icon className={`w-5 h-5 ${config.color}`} />
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-gray-900">{config.label}</p>
-              {score !== null && (
-                <p
-                  className={`text-sm font-medium ${
-                    score >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}
-                >
-                  {score >= 0 ? '+' : ''}
-                  {score.toFixed(2)} avg score
-                </p>
-              )}
-            </div>
-          </div>
+          <CardTitle>Sentiment Trend</CardTitle>
+          <p className="text-sm text-gray-500 mt-1">Last {days} days</p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">24h Mentions</p>
-          <p className="text-2xl font-semibold text-gray-900">
-            {mentions24h.toLocaleString()}
-          </p>
+        <div className="flex items-center gap-2">
+          <TrendIcon className={`w-5 h-5 ${trendConfig[currentTrend]?.color || 'text-gray-500'}`} />
+          <span className={`text-sm font-medium ${trendConfig[currentTrend]?.color || 'text-gray-500'}`}>
+            {trendConfig[currentTrend]?.label || 'Stable'}
+          </span>
+          {hasValidChange && (
+            <span className={`text-sm ${changeValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              ({changeValue >= 0 ? '+' : ''}{changeValue.toFixed(2)})
+            </span>
+          )}
         </div>
       </div>
-    </div>
+
+      <div className="h-64 mt-4">
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis 
+                dataKey="date" 
+                tick={{ fontSize: 12 }} 
+                stroke="#9ca3af"
+              />
+              <YAxis 
+                domain={[-1, 1]} 
+                tick={{ fontSize: 12 }} 
+                stroke="#9ca3af"
+                tickFormatter={(value) => toSafeNumber(value).toFixed(1)}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                }}
+                formatter={((value: unknown, name: unknown) => {
+                  const numValue = toSafeNumber(value);
+                  const strName = String(name || '');
+                  return [
+                    strName === 'score' ? numValue.toFixed(3) : numValue,
+                    strName === 'score' ? 'Sentiment' : 'Mentions',
+                  ];
+                }) as never}
+              />
+              <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="3 3" />
+              <Line
+                type="monotone"
+                dataKey="score"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#3b82f6' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            <p className="text-sm">No sentiment data available</p>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
+
+

@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pricingApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
+import { pricingKeys, productKeys } from '@/lib/api/query-keys';
 import type {
   PricingRule,
   CreatePricingRuleRequest,
@@ -24,29 +25,8 @@ export type {
   UpdatePricingRuleRequest,
 };
 
-// ============================================
-// QUERY KEYS
-// ============================================
-
-export const pricingKeys = {
-  all: ['pricing'] as const,
-  
-  // Rules
-  rules: () => [...pricingKeys.all, 'rules'] as const,
-  rulesList: (params?: { page?: number; page_size?: number; rule_type?: string; is_active?: boolean }) =>
-    [...pricingKeys.rules(), 'list', params] as const,
-  ruleDetail: (id: string) => [...pricingKeys.rules(), 'detail', id] as const,
-
-  // Recommendations
-  recommendations: () => [...pricingKeys.all, 'recommendations'] as const,
-  recommendationsList: (params?: { page?: number; page_size?: number; status?: string; product_id?: string }) =>
-    [...pricingKeys.recommendations(), 'list', params] as const,
-  recommendationDetail: (id: string) => [...pricingKeys.recommendations(), 'detail', id] as const,
-  recommendationStats: () => [...pricingKeys.recommendations(), 'stats'] as const,
-
-  // Settings
-  settings: () => [...pricingKeys.all, 'settings'] as const,
-};
+// Re-export keys for backwards compatibility
+export { pricingKeys };
 
 // ============================================
 // PRICING RULES HOOKS
@@ -96,7 +76,7 @@ export function useUpdatePricingRule() {
       pricingApi.updateRule(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.ruleDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.rulesList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.rules() });
       toast.success({ title: 'Rule updated', message: 'Pricing rule has been updated successfully' });
     },
     onError: (error: Error) => {
@@ -130,7 +110,7 @@ export function useTogglePricingRule() {
       pricingApi.updateRule(id, { is_active: isActive }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.ruleDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.rulesList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.rules() });
       toast.success({ 
         title: variables.isActive ? 'Rule activated' : 'Rule deactivated',
         message: `Pricing rule has been ${variables.isActive ? 'activated' : 'deactivated'}`,
@@ -174,18 +154,43 @@ export function usePricingRecommendationStats() {
   });
 }
 
-/** Approve recommendation */
+/**
+ * Approve recommendation
+ * 
+ * BUG FIX #2: Added invalidation for product queries since approval
+ * now triggers price push to e-commerce platform in the backend.
+ * This ensures the product detail page shows the updated price.
+ */
 export function useApproveRecommendation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data?: ApproveRecommendationRequest }) =>
       pricingApi.approveRecommendation(id, data),
-    onSuccess: (_, variables) => {
+    onSuccess: (response, variables) => {
+      // Invalidate recommendation queries
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
-      toast.success({ title: 'Recommendation approved', message: 'You can now apply this price change' });
+      
+      // BUG FIX #2: Also invalidate product queries since price may have changed
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+      
+      // If we have the product_id from response, invalidate that specific product
+      if (response?.product_id) {
+        queryClient.invalidateQueries({ queryKey: productKeys.detail(response.product_id) });
+        queryClient.invalidateQueries({ queryKey: productKeys.priceHistory(response.product_id) });
+      }
+      
+      // Check if price was actually applied (status = 'applied')
+      const wasApplied = response?.status === 'applied';
+      
+      toast.success({ 
+        title: wasApplied ? 'Price updated!' : 'Recommendation approved', 
+        message: wasApplied 
+          ? 'The new price has been applied to your store' 
+          : 'You can now apply this price change'
+      });
     },
     onError: (error: Error) => {
       toast.error({ title: 'Failed to approve', message: error.message });
@@ -202,7 +207,7 @@ export function useRejectRecommendation() {
       pricingApi.rejectRecommendation(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
       toast.success({ title: 'Recommendation rejected', message: 'The recommendation has been rejected' });
     },
@@ -212,18 +217,31 @@ export function useRejectRecommendation() {
   });
 }
 
-/** Apply approved recommendation to store */
+/**
+ * Apply approved recommendation to store
+ * 
+ * This is a separate step from approval - use when approval doesn't
+ * automatically push to the store.
+ */
 export function useApplyRecommendation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: string) => pricingApi.applyRecommendation(id),
-    onSuccess: (_, id) => {
+    onSuccess: (response, id) => {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationDetail(id) });
-      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationsList() });
+      queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
-      // Also invalidate products since prices changed
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      
+      // Invalidate all product queries since prices changed
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+      
+      // If we have the product_id from response, invalidate that specific product
+      if (response?.product_id) {
+        queryClient.invalidateQueries({ queryKey: productKeys.detail(response.product_id) });
+        queryClient.invalidateQueries({ queryKey: productKeys.priceHistory(response.product_id) });
+      }
+      
       toast.success({ title: 'Price updated!', message: 'The new price has been applied to your store' });
     },
     onError: (error: Error) => {
@@ -241,7 +259,7 @@ export function usePricingSettings() {
   return useQuery({
     queryKey: pricingKeys.settings(),
     queryFn: () => pricingApi.getSettings(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -260,3 +278,7 @@ export function useUpdatePricingSettings() {
     },
   });
 }
+
+
+
+

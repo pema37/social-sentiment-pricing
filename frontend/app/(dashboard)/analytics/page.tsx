@@ -214,8 +214,8 @@ export default function AnalyticsPage() {
                     {overview?.products_with_auto_pricing || 0} of {overview?.total_products || 0} products with auto-pricing
                   </p>
                   <p className="text-xs text-gray-500">
-                    {overview?.total_products && overview?.products_with_auto_pricing
-                      ? `${((overview.products_with_auto_pricing / overview.total_products) * 100).toFixed(0)}% coverage`
+                    {overview?.total_products && overview.total_products > 0 && overview?.products_with_auto_pricing != null
+                      ? `${(((overview.products_with_auto_pricing ?? 0) / overview.total_products) * 100).toFixed(0)}% coverage`
                       : '0% coverage'}
                   </p>
                 </div>
@@ -227,3 +227,4 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+

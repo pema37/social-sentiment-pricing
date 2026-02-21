@@ -33,7 +33,7 @@ export const MentionCard = memo(function MentionCard({ mention, className }: { m
           <SourceBadge source={mention.source} />
           {mention.author && <span className="text-sm text-gray-600">@{mention.author}</span>}
           {mention.author_followers && mention.author_followers > 1000 && (
-            <span className="text-xs text-gray-400">{(mention.author_followers / 1000).toFixed(1)}K followers</span>
+            <span className="text-xs text-gray-400">{((mention.author_followers ?? 0) / 1000).toFixed(1)}K followers</span>
           )}
         </div>
         <time dateTime={mention.collected_at} className="text-xs text-gray-400 whitespace-nowrap">{formatRelativeTime(mention.collected_at)}</time>

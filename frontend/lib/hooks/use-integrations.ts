@@ -4,10 +4,15 @@
  * Integration Hooks
  * 
  * React Query hooks for e-commerce platform integrations.
+ * 
+ * PATCHED (2026-01-28): Bug #6 fix - Added timeout protection to useSyncStatus
+ * to prevent infinite polling when sync gets stuck. See SSP_AUDIT_REPORT.md.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as integrationsApi from '@/lib/api/integrations';
+import { integrationKeys } from '@/lib/api/query-keys';
 import type {
   IntegrationUpdate,
   OAuthInitRequest,
@@ -18,17 +23,24 @@ import type {
   PricePushRequest,
 } from '@/types/integration';
 
-// Query keys
-export const integrationKeys = {
-  all: ['integrations'] as const,
-  list: () => [...integrationKeys.all, 'list'] as const,
-  detail: (id: string) => [...integrationKeys.all, 'detail', id] as const,
-  health: (id: string) => [...integrationKeys.all, 'health', id] as const,
-  syncStatus: (id: string) => [...integrationKeys.all, 'sync-status', id] as const,
-  syncLogs: (id: string, params?: { page?: number; pageSize?: number }) =>
-    [...integrationKeys.all, 'sync-logs', id, params] as const,
-  links: (id: string) => [...integrationKeys.all, 'links', id] as const,
-};
+// Re-export keys for backwards compatibility
+export { integrationKeys };
+
+// ========== NEW: Timeout configuration (Bug #6) ==========
+/**
+ * Maximum time to poll for sync status before giving up (5 minutes).
+ * If sync takes longer than this, we stop polling and show an error.
+ * 
+ * The backend has a 15-minute timeout for stuck syncs, but we timeout
+ * earlier on the frontend to give users feedback sooner.
+ */
+const SYNC_POLLING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Polling interval for sync status
+ */
+const SYNC_POLLING_INTERVAL_MS = 2000; // 2 seconds
+// ========== END NEW ==========
 
 // ==================== List & Detail ====================
 
@@ -37,7 +49,7 @@ export const integrationKeys = {
  */
 export function useIntegrations() {
   return useQuery({
-    queryKey: integrationKeys.list(),
+    queryKey: integrationKeys.lists(),
     queryFn: () => integrationsApi.getIntegrations(),
     staleTime: 30 * 1000,
   });
@@ -109,7 +121,7 @@ export function useUpdateIntegration() {
       integrationsApi.updateIntegration(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: integrationKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: integrationKeys.list() });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
     },
   });
 }
@@ -121,28 +133,96 @@ export function useUpdateIntegration() {
  */
 export function useIntegrationHealth(id: string | null) {
   return useQuery({
-    queryKey: integrationKeys.health(id || ''),
+    queryKey: [...integrationKeys.detail(id || ''), 'health'] as const,
     queryFn: () => integrationsApi.checkHealth(id!),
     enabled: !!id,
-    staleTime: 60 * 1000, // 1 minute
-    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 }
 
 // ==================== Sync Operations ====================
 
+// ========== PATCHED: useSyncStatus with timeout protection (Bug #6) ==========
 /**
- * Get current sync status
+ * Get current sync status with timeout protection
+ * 
+ * @param integrationId - The integration to check
+ * @param options.polling - Whether to poll for updates (default: false)
+ * @param options.onTimeout - Callback when polling times out
+ * 
+ * PATCHED (2026-01-28): Added timeout protection to prevent infinite spinner.
+ * If sync status stays 'syncing' for more than 5 minutes, we stop polling
+ * and call the onTimeout callback so the UI can show an error.
  */
-export function useSyncStatus(integrationId: string | null, options?: { polling?: boolean }) {
+export function useSyncStatus(
+  integrationId: string | null, 
+  options?: { 
+    polling?: boolean;
+    onTimeout?: () => void;
+  }
+) {
+  const queryClient = useQueryClient();
+  const pollingStartTime = useRef<number | null>(null);
+  const hasTimedOut = useRef(false);
+  
+  // Reset timeout tracking when polling starts
+  useEffect(() => {
+    if (options?.polling && integrationId) {
+      pollingStartTime.current = Date.now();
+      hasTimedOut.current = false;
+    } else {
+      pollingStartTime.current = null;
+    }
+  }, [options?.polling, integrationId]);
+  
   return useQuery({
     queryKey: integrationKeys.syncStatus(integrationId || ''),
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
     staleTime: 5 * 1000,
-    refetchInterval: options?.polling ? 2000 : false, // Poll every 2s if enabled
+    refetchInterval: options?.polling 
+      ? (query) => {
+          const data = query.state.data as SyncStatusResponse | undefined;
+          
+          // If sync is complete (idle or error), stop polling
+          if (data?.sync_status === 'idle' || data?.sync_status === 'error') {
+            pollingStartTime.current = null;
+            queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integrationId!) });
+            return false;
+          }
+          
+          // ========== NEW: Timeout check ==========
+          // If we've been polling for too long, stop and trigger timeout
+          if (pollingStartTime.current && !hasTimedOut.current) {
+            const elapsed = Date.now() - pollingStartTime.current;
+            if (elapsed > SYNC_POLLING_TIMEOUT_MS) {
+              hasTimedOut.current = true;
+              pollingStartTime.current = null;
+              
+              // Call timeout callback if provided
+              if (options?.onTimeout) {
+                // Use setTimeout to avoid calling during render
+                setTimeout(() => options.onTimeout?.(), 0);
+              }
+              
+              console.warn(
+                `[useSyncStatus] Polling timed out after ${SYNC_POLLING_TIMEOUT_MS / 1000}s ` +
+                `for integration ${integrationId}. Sync may be stuck.`
+              );
+              
+              return false; // Stop polling
+            }
+          }
+          // ========== END NEW ==========
+          
+          return SYNC_POLLING_INTERVAL_MS;
+        }
+      : false,
   });
 }
+// ========== END PATCHED ==========
 
 /**
  * Get sync history logs
@@ -152,7 +232,7 @@ export function useSyncLogs(
   params?: { page?: number; pageSize?: number }
 ) {
   return useQuery({
-    queryKey: integrationKeys.syncLogs(integrationId || '', params),
+    queryKey: [...integrationKeys.detail(integrationId || ''), 'sync-logs', params] as const,
     queryFn: () => integrationsApi.getSyncLogs(integrationId!, params?.page, params?.pageSize),
     enabled: !!integrationId,
     staleTime: 30 * 1000,
@@ -182,7 +262,7 @@ export function useTriggerSync() {
  */
 export function useProductLinks(integrationId: string | null) {
   return useQuery({
-    queryKey: integrationKeys.links(integrationId || ''),
+    queryKey: integrationKeys.linkedProducts(integrationId || ''),
     queryFn: () => integrationsApi.getProductLinks(integrationId!),
     enabled: !!integrationId,
     staleTime: 30 * 1000,
@@ -199,7 +279,7 @@ export function useCreateProductLink() {
     mutationFn: ({ integrationId, data }: { integrationId: string; data: ProductLinkCreate }) =>
       integrationsApi.createProductLink(integrationId, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -214,7 +294,7 @@ export function useDeleteProductLink() {
     mutationFn: ({ integrationId, linkId }: { integrationId: string; linkId: string }) =>
       integrationsApi.deleteProductLink(integrationId, linkId),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -231,7 +311,7 @@ export function usePushPrice() {
     mutationFn: ({ integrationId, data }: { integrationId: string; data: PricePushRequest }) =>
       integrationsApi.pushPrice(integrationId, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
@@ -246,34 +326,188 @@ export function usePushPricesBulk() {
     mutationFn: ({ integrationId, updates }: { integrationId: string; updates: PricePushRequest[] }) =>
       integrationsApi.pushPricesBulk(integrationId, { updates }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: integrationKeys.links(variables.integrationId) });
+      queryClient.invalidateQueries({ queryKey: integrationKeys.linkedProducts(variables.integrationId) });
     },
   });
 }
 
 // ==================== Polling Helper Hook ====================
 
+// ========== PATCHED: useSyncPolling with timeout protection (Bug #6) ==========
 /**
- * Hook to poll sync status until complete
+ * Hook to poll sync status until complete or timeout
  * Use this after triggering a sync to track progress
+ * 
+ * PATCHED (2026-01-28): Added timeout protection. If polling exceeds 5 minutes,
+ * returns isTimedOut: true so the UI can show an appropriate message.
  */
 export function useSyncPolling(integrationId: string | null) {
   const queryClient = useQueryClient();
   
-  return useQuery({
-    queryKey: [...integrationKeys.syncStatus(integrationId || ''), 'polling'],
+  // State includes integrationId to auto-reset when it changes
+  // No useEffect needed - we compute derived values during render
+  const [timeoutInfo, setTimeoutInfo] = useState<{
+    forIntegrationId: string | null;
+    isTimedOut: boolean;
+  }>({ forIntegrationId: null, isTimedOut: false });
+  
+  // Ref for tracking start time (doesn't need re-render)
+  const startTimeRef = useRef<{ id: string | null; time: number | null }>({ id: null, time: null });
+  
+  // Compute effective timeout - only valid if integrationId matches
+  const isTimedOut = timeoutInfo.forIntegrationId === integrationId && timeoutInfo.isTimedOut;
+  
+  const query = useQuery({
+    queryKey: [...integrationKeys.syncStatus(integrationId || ''), 'polling'] as const,
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
     refetchInterval: (query) => {
       const data = query.state.data as SyncStatusResponse | undefined;
-      // Stop polling when sync completes or errors
+      
+      // If sync is complete, stop polling
       if (data?.sync_status === 'idle' || data?.sync_status === 'error') {
-        // Invalidate related queries when done
+        startTimeRef.current = { id: null, time: null };
         queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integrationId!) });
-        queryClient.invalidateQueries({ queryKey: integrationKeys.syncLogs(integrationId!) });
         return false;
       }
-      return 2000; // Poll every 2 seconds while syncing
+      
+      // Initialize start time for this integrationId if not set
+      if (startTimeRef.current.id !== integrationId) {
+        startTimeRef.current = { id: integrationId, time: Date.now() };
+      }
+      
+      // Check for timeout
+      if (startTimeRef.current.time && !isTimedOut) {
+        const elapsed = Date.now() - startTimeRef.current.time;
+        if (elapsed > SYNC_POLLING_TIMEOUT_MS) {
+          setTimeoutInfo({ forIntegrationId: integrationId, isTimedOut: true });
+          startTimeRef.current = { id: null, time: null };
+          console.warn(`[useSyncPolling] Timed out for integration ${integrationId}`);
+          return false;
+        }
+      }
+      
+      return SYNC_POLLING_INTERVAL_MS;
     },
   });
+  
+  return {
+    ...query,
+    isTimedOut,
+  };
 }
+// ========== END PATCHED ==========
+
+
+// ========== NEW: Helper hook for handling sync with automatic timeout feedback ==========
+/**
+ * Combined hook for triggering sync and tracking its progress with timeout handling.
+ * 
+ * Usage:
+ * ```tsx
+ * const { triggerSync, syncStatus, isPolling, isTimedOut, error } = useSyncWithTimeout(integrationId);
+ * 
+ * // Trigger sync
+ * triggerSync();
+ * 
+ * // Show UI based on state
+ * if (isPolling) return <Spinner />;
+ * if (isTimedOut) return <TimeoutError />;
+ * if (error) return <Error message={error} />;
+ * ```
+ */
+export function useSyncWithTimeout(integrationId: string | null) {
+  const queryClient = useQueryClient();
+  
+  // State includes integrationId to auto-reset when it changes
+  // No useEffect needed - we compute derived values during render
+  const [syncState, setSyncState] = useState<{
+    forIntegrationId: string | null;
+    isPolling: boolean;
+    isTimedOut: boolean;
+  }>({ forIntegrationId: null, isPolling: false, isTimedOut: false });
+  
+  // Ref for start time (doesn't need re-render)
+  const startTimeRef = useRef<number | null>(null);
+  
+  // Compute effective values - only valid if integrationId matches
+  const isPolling = syncState.forIntegrationId === integrationId && syncState.isPolling;
+  const isTimedOut = syncState.forIntegrationId === integrationId && syncState.isTimedOut;
+
+  // Trigger sync mutation
+  const triggerMutation = useTriggerSync();
+  
+  // Sync status query
+  const statusQuery = useQuery({
+    queryKey: integrationKeys.syncStatus(integrationId || ''),
+    queryFn: () => integrationsApi.getSyncStatus(integrationId!),
+    enabled: !!integrationId && isPolling,
+    refetchInterval: (query) => {
+      if (!isPolling) return false;
+      
+      const data = query.state.data as SyncStatusResponse | undefined;
+      
+      // Sync complete - stop polling
+      if (data?.sync_status === 'idle' || data?.sync_status === 'error') {
+        setSyncState(prev => ({ ...prev, isPolling: false }));
+        startTimeRef.current = null;
+        queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: integrationKeys.detail(integrationId!) });
+        return false;
+      }
+      
+      // Check timeout (Date.now in callback is fine)
+      if (startTimeRef.current) {
+        const elapsed = Date.now() - startTimeRef.current;
+        if (elapsed > SYNC_POLLING_TIMEOUT_MS) {
+          setSyncState(prev => ({ ...prev, isTimedOut: true, isPolling: false }));
+          startTimeRef.current = null;
+          return false;
+        }
+      }
+      
+      return SYNC_POLLING_INTERVAL_MS;
+    },
+  });
+
+  const triggerSync = useCallback(async (syncType: SyncType = 'full') => {
+    if (!integrationId) return;
+    
+    // Set state for this specific integrationId (Date.now in callback is fine)
+    setSyncState({
+      forIntegrationId: integrationId,
+      isPolling: true,
+      isTimedOut: false,
+    });
+    startTimeRef.current = Date.now();
+    
+    try {
+      await triggerMutation.mutateAsync({ integrationId, syncType });
+      // Query will automatically start polling due to isPolling state change
+    } catch (error) {
+      setSyncState(prev => ({ ...prev, isPolling: false }));
+      startTimeRef.current = null;
+      throw error;
+    }
+  }, [integrationId, triggerMutation]);
+
+  // Get error from mutation or status response (handle both possible property names)
+  const statusError = statusQuery.data && 'error_message' in statusQuery.data 
+    ? (statusQuery.data as { error_message?: string }).error_message 
+    : statusQuery.data && 'error' in statusQuery.data 
+      ? (statusQuery.data as { error?: string }).error 
+      : null;
+
+  return {
+    triggerSync,
+    syncStatus: statusQuery.data,
+    isLoading: triggerMutation.isPending,
+    isPolling,
+    isTimedOut,
+    error: triggerMutation.error?.message || statusError || null,
+    refetch: statusQuery.refetch,
+  };
+}
+// ========== END NEW ==========
+
+

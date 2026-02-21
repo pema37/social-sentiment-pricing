@@ -1,13 +1,16 @@
-// Product hooks
+// lib/hooks/use-products.ts
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
+import { productKeys } from '@/lib/api/query-keys';
 import type { 
   Product,
   CreateProductRequest, 
   UpdateProductRequest,
   PaginatedProducts,
 } from '@/types';
+import type { ImportProductRow, ImportProductsResponse } from '@/lib/api/products';
 
 // Re-export types for convenience
 export type { Product, CreateProductRequest, UpdateProductRequest, PaginatedProducts };
@@ -16,16 +19,12 @@ export type { Product, CreateProductRequest, UpdateProductRequest, PaginatedProd
 export type ProductCreate = CreateProductRequest;
 export type ProductUpdate = UpdateProductRequest;
 
-// Query keys
-export const productKeys = {
-  all: ['products'] as const,
-  list: (params?: { page?: number; page_size?: number }) =>
-    [...productKeys.all, 'list', params] as const,
-  detail: (id: string) => [...productKeys.all, 'detail', id] as const,
-  suggestion: (id: string) => [...productKeys.all, 'suggestion', id] as const,
-  priceHistory: (id: string, params?: { days?: number }) =>
-    [...productKeys.all, 'price-history', id, params] as const,
-};
+// Re-export keys for backwards compatibility (other files may import from here)
+export { productKeys };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Queries
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Get paginated products
 export function useProducts(params?: { page?: number; page_size?: number }) {
@@ -33,6 +32,8 @@ export function useProducts(params?: { page?: number; page_size?: number }) {
     queryKey: productKeys.list(params),
     queryFn: () => productsApi.getAll(params),
     staleTime: 30 * 1000,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
 }
 
@@ -46,13 +47,13 @@ export function useProduct(id: string | null) {
   });
 }
 
-// Get price suggestion for a product
-export function usePriceSuggestion(id: string | null) {
+// Get price suggestion for a product (with AI explanation)
+export function usePriceSuggestion(id: string | null, useAi: boolean = true) {
   return useQuery({
-    queryKey: productKeys.suggestion(id || ''),
-    queryFn: () => productsApi.getSuggestion(id!),
+    queryKey: [...productKeys.priceSuggestion(id || ''), useAi],
+    queryFn: () => productsApi.getSuggestion(id!, useAi),
     enabled: !!id,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -65,6 +66,10 @@ export function usePriceHistory(id: string | null, params?: { days?: number; lim
     staleTime: 60 * 1000,
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mutations
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Create product
 export function useCreateProduct() {
@@ -91,7 +96,7 @@ export function useUpdateProduct() {
       productsApi.update(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success({ title: 'Product updated', message: 'Product details have been saved' });
     },
     onError: (error: Error) => {
@@ -106,11 +111,55 @@ export function useDeleteProduct() {
 
   return useMutation({
     mutationFn: (id: string) => productsApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productKeys.all });
-      toast.success({ title: 'Product deleted', message: 'Product has been removed' });
+    
+    onMutate: async (deletedId: string) => {
+      await queryClient.cancelQueries({ queryKey: productKeys.all });
+      
+      const previousData = queryClient.getQueriesData({ queryKey: productKeys.all });
+      
+      queryClient.setQueriesData(
+        { queryKey: productKeys.all },
+        (old: PaginatedProducts | Product[] | undefined) => {
+          if (!old) return old;
+          
+          if ('items' in old && Array.isArray(old.items)) {
+            return {
+              ...old,
+              items: old.items.filter((p: Product) => p.id !== deletedId),
+              total: Math.max(0, old.total - 1),
+            };
+          }
+          
+          if (Array.isArray(old)) {
+            return old.filter((p: Product) => p.id !== deletedId);
+          }
+          
+          return old;
+        }
+      );
+      
+      queryClient.removeQueries({ queryKey: productKeys.detail(deletedId) });
+      
+      return { previousData };
     },
-    onError: (error: Error) => {
+    
+    onSuccess: () => {
+      toast.success({ title: 'Product deleted', message: 'Product has been removed' });
+      
+      setTimeout(() => {
+        queryClient.invalidateQueries({ 
+          queryKey: productKeys.all,
+          refetchType: 'active',
+        });
+      }, 500);
+    },
+    
+    onError: (error: Error, deletedId: string, context) => {
+      if (context?.previousData) {
+        context.previousData.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
       toast.error({ title: 'Failed to delete product', message: error.message });
     },
   });
@@ -125,7 +174,7 @@ export function useToggleAutoPricing() {
       productsApi.update(id, { auto_pricing_enabled: enabled }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success({
         title: variables.enabled ? 'Auto-pricing enabled' : 'Auto-pricing disabled',
         message: `Auto-pricing has been ${variables.enabled ? 'enabled' : 'disabled'} for this product`,
@@ -142,15 +191,19 @@ export function useApplyPriceSuggestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, price }: { id: string; price: number }) =>
-      productsApi.update(id, { current_price: price }),
+    mutationFn: ({ id, price }: { id: string; price: number }) => {
+      if (price == null || isNaN(price)) {
+        return Promise.reject(new Error('Invalid price value'));
+      }
+      return productsApi.update(id, { current_price: price });
+    },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: productKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.suggestion(variables.id) });
-      queryClient.invalidateQueries({ queryKey: productKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productKeys.priceSuggestion(variables.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success({ 
         title: 'Price updated', 
-        message: `Price has been updated to $${variables.price.toFixed(2)}` 
+        message: `Price has been updated to $${(variables.price ?? 0).toFixed(2)}` 
       });
     },
     onError: (error: Error) => {
@@ -178,3 +231,32 @@ export function useBulkUpdatePricing() {
     },
   });
 }
+
+// Import products from CSV
+export function useImportProducts() {
+  const queryClient = useQueryClient();
+
+  return useMutation<ImportProductsResponse, Error, { products: ImportProductRow[] }>({
+    mutationFn: (data) => productsApi.import(data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+      
+      if (result.failed > 0) {
+        toast.warning({
+          title: 'Import completed with errors',
+          message: `${result.created} products imported, ${result.failed} failed`,
+        });
+      } else {
+        toast.success({
+          title: 'Import successful',
+          message: `${result.created} products have been imported`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast.error({ title: 'Import failed', message: error.message });
+    },
+  });
+}
+
+

@@ -4,11 +4,14 @@
 Integration Schemas
 
 Request/Response DTOs for e-commerce integration endpoints.
+
+FIX (2026-01-24): Added proper Dict[str, Any] type annotations to fix Pylance warnings.
+FIX (2026-01-27): Added consumer_key/consumer_secret to IntegrationUpdate for credential updates.
 """
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 from enum import Enum
 
@@ -109,10 +112,32 @@ class IntegrationCreate(BaseModel):
 
 
 class IntegrationUpdate(BaseModel):
-    """Update integration settings"""
+    """
+    Update integration settings.
+    
+    FIX (2026-01-27): Added consumer_key and consumer_secret fields to allow
+    updating WooCommerce credentials without deleting/reconnecting the integration.
+    """
     store_name: Optional[str] = Field(None, max_length=255)
     status: Optional[IntegrationStatus] = None
-    settings: Optional[dict] = None
+    settings: Optional[Dict[str, Any]] = None
+    # NEW (2026-01-27): Allow credential updates for WooCommerce reconnection
+    consumer_key: Optional[str] = Field(None, min_length=10)
+    consumer_secret: Optional[str] = Field(None, min_length=10)
+    
+    @field_validator("consumer_key")
+    @classmethod
+    def validate_consumer_key(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.startswith("ck_"):
+            raise ValueError("Consumer key must start with 'ck_'")
+        return v
+    
+    @field_validator("consumer_secret")
+    @classmethod
+    def validate_consumer_secret(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.startswith("cs_"):
+            raise ValueError("Consumer secret must start with 'cs_'")
+        return v
 
 
 class IntegrationResponse(BaseModel):
@@ -127,7 +152,7 @@ class IntegrationResponse(BaseModel):
     last_sync_at: Optional[datetime]
     sync_status: str
     products_synced: int
-    settings: dict
+    settings: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
     
@@ -249,7 +274,7 @@ class WebhookPayload(BaseModel):
     """Generic webhook payload wrapper"""
     topic: str
     shop: str
-    payload: dict
+    payload: Dict[str, Any]
 
 
 # ==================== Health Check ====================
@@ -262,3 +287,6 @@ class IntegrationHealthResponse(BaseModel):
     status: str  # healthy, unhealthy, rate_limited, unauthorized
     checked_at: datetime
 
+
+
+    

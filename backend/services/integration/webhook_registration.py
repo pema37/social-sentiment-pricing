@@ -18,7 +18,7 @@ from models.integration import Integration, IntegrationStatus, EcommercePlatform
 from core.config import settings
 from core.encryption import decrypt_token
 
-from .models import WebhookRegistration
+from .schemas import WebhookRegistration
 from .shopify_service import ShopifyService
 from .woocommerce_service import WooCommerceService
 
@@ -234,3 +234,5 @@ async def unregister_webhooks_for_integration(
     """
     service = WebhookRegistrationService(db)
     return await service.unregister_webhooks(integration_id)
+
+

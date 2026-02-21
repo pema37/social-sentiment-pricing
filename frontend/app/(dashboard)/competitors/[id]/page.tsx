@@ -16,8 +16,9 @@ import {
   CompetitorForm, 
   LinkProductForm,
   CompetitorProductCard,
+  AIAnalysisCard,
 } from '@/components/features/competitors';
-import type { CreateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
+import type { CreateCompetitorRequest, UpdateCompetitorRequest, CreateCompetitorProductRequest } from '@/types';
 
 export default function CompetitorDetailPage() {
   const params = useParams();
@@ -32,8 +33,8 @@ export default function CompetitorDetailPage() {
   const updateCompetitor = useUpdateCompetitor();
   const createCompetitorProduct = useCreateCompetitorProduct();
 
-  const handleUpdate = async (formData: CreateCompetitorRequest) => {
-    await updateCompetitor.mutateAsync({ id: competitorId, data: formData });
+  const handleUpdate = async (formData: CreateCompetitorRequest | UpdateCompetitorRequest) => {
+    await updateCompetitor.mutateAsync({ id: competitorId, data: formData as UpdateCompetitorRequest });
     setShowEditForm(false);
   };
 
@@ -137,6 +138,14 @@ export default function CompetitorDetailPage() {
         </div>
       </div>
 
+      {/* AI Strategy Analysis Card */}
+      <div className="mb-6">
+        <AIAnalysisCard 
+          competitorId={competitorId} 
+          competitorName={competitor.name} 
+        />
+      </div>
+
       {/* Linked Products */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -214,3 +223,5 @@ export default function CompetitorDetailPage() {
     </div>
   );
 }
+
+

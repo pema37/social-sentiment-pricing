@@ -6,7 +6,7 @@ Analytics service for dashboard metrics and reporting.
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, and_
 from sqlmodel import select
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from decimal import Decimal
 
@@ -35,7 +35,7 @@ class AnalyticsService:
     
     async def get_dashboard_overview(self) -> DashboardOverview:
         """Get main dashboard metrics."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # Product counts
@@ -134,7 +134,7 @@ class AnalyticsService:
     
     async def get_product_summaries(self, limit: int = 10) -> list[ProductSummary]:
         """Get product cards for dashboard."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         
         result = await self.session.execute(
             select(Product)
@@ -200,7 +200,7 @@ class AnalyticsService:
     
     async def get_recommendation_stats(self, days: int = 30) -> RecommendationStats:
         """Get recommendation performance stats."""
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(UTC) - timedelta(days=days)
         
         result = await self.session.execute(
             select(func.count(PriceRecommendation.id)).where(
@@ -257,7 +257,7 @@ class AnalyticsService:
     
     async def get_alert_analytics(self, days: int = 7) -> AlertAnalytics:
         """Get alert statistics."""
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(UTC) - timedelta(days=days)
         
         result = await self.session.execute(
             select(Alert).where(
@@ -295,7 +295,7 @@ class AnalyticsService:
         bucket: str = "day"
     ) -> SentimentAnalytics:
         """Get sentiment timeline data for charts."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
         
         # Build base query - join through Product to filter by user
@@ -372,7 +372,7 @@ class AnalyticsService:
         self, hours: int = 24, offset_hours: int = 0
     ) -> Optional[float]:
         """Get average sentiment for a time window."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         start = now - timedelta(hours=hours + offset_hours)
         end = now - timedelta(hours=offset_hours)
         

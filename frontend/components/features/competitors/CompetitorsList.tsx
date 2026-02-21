@@ -33,7 +33,9 @@ export function CompetitorsList({
     );
   }
 
-  if (error) {
+  // FIX: Only show error if there's NO data to display
+  // React Query can have both stale data AND an error from a failed refetch
+  if (error && competitors.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
         <p className="text-red-600 font-medium">Failed to load competitors</p>
@@ -62,6 +64,21 @@ export function CompetitorsList({
 
   return (
     <div className="space-y-4">
+      {/* Show warning banner if there's an error but we have stale data */}
+      {error && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
+          <span className="text-yellow-600 text-sm">
+            ⚠️ Failed to refresh data. Showing cached results.
+          </span>
+          <button 
+            onClick={() => window.location.reload()}
+            className="text-yellow-700 text-sm underline hover:no-underline ml-auto"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      
       {competitors.map((competitor) => (
         <CompetitorCard
           key={competitor.id}

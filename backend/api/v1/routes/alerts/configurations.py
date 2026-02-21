@@ -1,7 +1,7 @@
 # backend/api/v1/routes/alerts/configurations.py
 """Alert configuration CRUD endpoints."""
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, List
 from uuid import UUID
 
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from db.session import get_session
-from core.security import get_current_user
+from core.deps import get_current_user
 from core.rate_limit import limiter, WRITE_RATE_LIMIT
 from models.user import User
 from models.alert import AlertConfiguration, AlertType
@@ -125,7 +125,7 @@ async def update_alert_configuration(
     for field, value in update_data.items():
         setattr(config, field, value)
     
-    config.updated_at = datetime.utcnow()
+    config.updated_at = datetime.now(UTC)
     session.add(config)
     await session.commit()
     await session.refresh(config)

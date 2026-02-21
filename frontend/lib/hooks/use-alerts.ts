@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { alertsApi } from '@/lib/api';
 import { toast } from '@/lib/hooks/use-toast';
+import { alertKeys } from '@/lib/api/query-keys';
 import type { 
   AlertFilterParams, 
   AlertType,
@@ -9,23 +10,13 @@ import type {
   AlertConfigurationUpdate,
 } from '@/types';
 
-// Query keys
-export const alertKeys = {
-  all: ['alerts'] as const,
-  list: (params?: AlertFilterParams) => [...alertKeys.all, 'list', params] as const,
-  detail: (id: string) => [...alertKeys.all, 'detail', id] as const,
-  stats: () => [...alertKeys.all, 'stats'] as const,
-  unreadCount: () => [...alertKeys.all, 'unread-count'] as const,
-  configurations: () => [...alertKeys.all, 'configurations'] as const,
-  configurationsList: (params?: { alert_type?: AlertType; is_active?: boolean }) => 
-    [...alertKeys.configurations(), 'list', params] as const,
-  configurationDetail: (id: string) => [...alertKeys.configurations(), 'detail', id] as const,
-};
+// Re-export keys for backwards compatibility
+export { alertKeys };
 
 // Get paginated alerts
 export function useAlerts(params?: AlertFilterParams) {
   return useQuery({
-    queryKey: alertKeys.list(params),
+    queryKey: alertKeys.list(params as Record<string, unknown>),
     queryFn: () => alertsApi.getAll(params),
     staleTime: 30 * 1000,
   });
@@ -53,7 +44,7 @@ export function useAlertStats() {
 // Get unread count
 export function useUnreadAlertCount() {
   return useQuery({
-    queryKey: alertKeys.unreadCount(),
+    queryKey: [...alertKeys.all, 'unread-count'] as const,
     queryFn: () => alertsApi.getUnreadCount(),
     staleTime: 15 * 1000,
     refetchInterval: 60 * 1000,
@@ -68,9 +59,7 @@ export function useAcknowledgeAlert() {
     mutationFn: (id: string) => alertsApi.acknowledge(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: alertKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: alertKeys.list() });
-      queryClient.invalidateQueries({ queryKey: alertKeys.stats() });
-      queryClient.invalidateQueries({ queryKey: alertKeys.unreadCount() });
+      queryClient.invalidateQueries({ queryKey: alertKeys.all });
       toast.success('Alert acknowledged');
     },
     onError: (error: Error) => {
@@ -87,9 +76,7 @@ export function useResolveAlert() {
     mutationFn: (id: string) => alertsApi.resolve(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: alertKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: alertKeys.list() });
-      queryClient.invalidateQueries({ queryKey: alertKeys.stats() });
-      queryClient.invalidateQueries({ queryKey: alertKeys.unreadCount() });
+      queryClient.invalidateQueries({ queryKey: alertKeys.all });
       toast.success('Alert resolved');
     },
     onError: (error: Error) => {
@@ -120,7 +107,7 @@ export function useAcknowledgeAllAlerts() {
 // Get all configurations
 export function useAlertConfigurations(params?: { alert_type?: AlertType; is_active?: boolean }) {
   return useQuery({
-    queryKey: alertKeys.configurationsList(params),
+    queryKey: [...alertKeys.configurations(), 'list', params] as const,
     queryFn: () => alertsApi.getConfigurations(params),
     staleTime: 60 * 1000,
   });
@@ -161,7 +148,7 @@ export function useUpdateAlertConfiguration() {
       alertsApi.updateConfiguration(id, data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: alertKeys.configurationDetail(id) });
-      queryClient.invalidateQueries({ queryKey: alertKeys.configurationsList() });
+      queryClient.invalidateQueries({ queryKey: alertKeys.configurations() });
       toast.success({ title: 'Configuration updated', message: 'Alert configuration has been updated' });
     },
     onError: (error: Error) => {
@@ -185,3 +172,5 @@ export function useDeleteAlertConfiguration() {
     },
   });
 }
+
+

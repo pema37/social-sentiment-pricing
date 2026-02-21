@@ -2,7 +2,7 @@
 """Price scraping and history endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -65,7 +65,7 @@ async def scrape_competitor_price(
     
     competitor.consecutive_failures = 0
     competitor.last_error = None
-    competitor.last_scraped_at = datetime.utcnow()
+    competitor.last_scraped_at = datetime.now(UTC)
     
     history = competitor_scraper.create_price_history_record(cp, scrape_result)
     
@@ -74,7 +74,7 @@ async def scrape_competitor_price(
         cp.current_price = scrape_result.price
         cp.last_price_update = scrape_result.scraped_at
         cp.price_available = scrape_result.is_available
-        cp.updated_at = datetime.utcnow()
+        cp.updated_at = datetime.now(UTC)
         db.add(cp)
     
     db.add(competitor)
@@ -120,7 +120,7 @@ async def get_price_history(
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
     
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     
     hist_result = await db.execute(
         select(CompetitorPriceHistory)

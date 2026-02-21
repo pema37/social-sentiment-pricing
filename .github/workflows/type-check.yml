@@ -1,0 +1,132 @@
+# .github/workflows/type-check.yml
+name: Type Check & Lint
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  STAGING_API_URL: https://social-sentiment-pricing-staging-2ecd.up.railway.app
+
+jobs:
+  frontend-checks:
+    name: Frontend Type Check & Lint
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # NEW: Generate fresh types from staging backend
+      - name: Generate types from backend
+        run: npm run generate-types
+
+      # NEW: Check if generated types changed
+      - name: Check for type drift
+        run: |
+          if git diff --exit-code types/api-generated.ts; then
+            echo "✅ Generated types match committed version"
+          else
+            echo "::warning::Generated types differ from committed version!"
+            echo "The backend API may have changed. Review the diff:"
+            git diff types/api-generated.ts | head -100
+            echo ""
+            echo "If intentional, run 'npm run generate-types' locally and commit."
+          fi
+
+      - name: Run type check
+        run: npx tsc --noEmit
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test:run
+
+  backend-checks:
+    name: Backend Type Check & Lint
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run type check with mypy
+        run: |
+          pip install mypy
+          mypy . --ignore-missing-imports --no-error-summary || true
+
+      - name: Run linter
+        run: |
+          pip install ruff
+          ruff check .
+
+  # NEW: Build check to ensure everything compiles
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: [frontend-checks]
+    
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate types
+        run: npm run generate-types
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ env.STAGING_API_URL }}
+
+
+
+
+          

@@ -9,7 +9,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column
+from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 
@@ -84,8 +84,7 @@ class PricingSettings(SQLModel, table=True):
     
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     )
-    updated_at: Optional[datetime] = Field(default=None)
+    updated_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 

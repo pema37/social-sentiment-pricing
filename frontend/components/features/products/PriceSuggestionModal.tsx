@@ -8,6 +8,7 @@ import {
   TrendingDown,
   Sparkles,
   AlertTriangle,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import {
@@ -30,8 +31,21 @@ interface PriceSuggestionModalProps {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number | string): string {
-  return `$${Number(value).toFixed(2)}`;
+function formatCurrency(value: number | string | null | undefined): string {
+  if (value == null) return '$0.00';
+  const num = Number(value);
+  return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`;
+}
+
+function safeNumber(value: unknown, defaultValue = 0): number {
+  if (value == null) return defaultValue;
+  const num = Number(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
+// Fix mixed content: ensure HTTPS for external images
+function ensureHttps(url: string): string {
+  return url.replace(/^http:\/\//i, 'https://');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,12 +60,12 @@ function LoadingState() {
   );
 }
 
-function ErrorState() {
+function ErrorState({ message }: { message: string }) {
   return (
     <div className="text-center py-8">
-      <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-      <p className="text-gray-600">Unable to generate suggestion</p>
-      <p className="text-sm text-gray-500 mt-1">Not enough sentiment data available</p>
+      <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+      <p className="text-gray-700 font-medium">Unable to generate suggestion</p>
+      <p className="text-sm text-gray-500 mt-1">{message}</p>
     </div>
   );
 }
@@ -65,7 +79,7 @@ function ProductInfo({ product }: ProductInfoProps) {
     <div className="flex items-center gap-4">
       {product.image_url ? (
         <Image
-          src={product.image_url}
+          src={ensureHttps(product.image_url)}
           alt={product.name}
           width={64}
           height={64}
@@ -91,34 +105,44 @@ interface PriceComparisonProps {
 }
 
 function PriceComparison({ currentPrice, suggestedPrice, changePercent }: PriceComparisonProps) {
-  const isPositive = changePercent >= 0;
+  const isPositive = changePercent > 0;
+  const isNegative = changePercent < 0;
+  const noChange = Math.abs(changePercent) < 0.01;
+  const safeChangePercent = safeNumber(changePercent);
 
   return (
     <div className="grid grid-cols-2 gap-4">
       <div className="bg-gray-50 rounded-lg p-4">
-        <p className="text-sm text-gray-500 mb-1">Current Price</p>
+        <p className="text-sm text-gray-500 mb-1">SSP Price</p>
         <p className="text-2xl font-bold">{formatCurrency(currentPrice)}</p>
       </div>
-      <div className="bg-blue-50 rounded-lg p-4">
-        <p className="text-sm text-blue-600 mb-1">Suggested Price</p>
-        <p className="text-2xl font-bold text-blue-600">
+      <div className={`rounded-lg p-4 ${noChange ? 'bg-gray-50' : 'bg-blue-50'}`}>
+        <p className={`text-sm mb-1 ${noChange ? 'text-gray-500' : 'text-blue-600'}`}>
+          {noChange ? 'Recommended Price' : 'Suggested Price'}
+        </p>
+        <p className={`text-2xl font-bold ${noChange ? 'text-gray-700' : 'text-blue-600'}`}>
           {formatCurrency(suggestedPrice)}
         </p>
-        <div className="flex items-center gap-1 mt-1">
-          {isPositive ? (
-            <TrendingUp className="w-4 h-4 text-green-500" />
-          ) : (
-            <TrendingDown className="w-4 h-4 text-red-500" />
-          )}
-          <span
-            className={`text-sm font-medium ${
-              isPositive ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            {isPositive ? '+' : ''}
-            {changePercent.toFixed(1)}%
-          </span>
-        </div>
+        {!noChange && (
+          <div className="flex items-center gap-1 mt-1">
+            {isPositive ? (
+              <TrendingUp className="w-4 h-4 text-green-500" />
+            ) : isNegative ? (
+              <TrendingDown className="w-4 h-4 text-red-500" />
+            ) : null}
+            <span
+              className={`text-sm font-medium ${
+                isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-gray-500'
+              }`}
+            >
+              {isPositive ? '+' : ''}
+              {safeChangePercent.toFixed(1)}%
+            </span>
+          </div>
+        )}
+        {noChange && (
+          <p className="text-xs text-gray-500 mt-1">No change recommended</p>
+        )}
       </div>
     </div>
   );
@@ -129,18 +153,25 @@ interface ConfidenceBarProps {
 }
 
 function ConfidenceBar({ confidence }: ConfidenceBarProps) {
-  const percent = confidence * 100;
+  const safeConfidence = safeNumber(confidence);
+  const percent = safeConfidence * 100;
+  const isLow = safeConfidence < 0.3;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-gray-600">Confidence</span>
-        <span className="text-sm font-medium">{percent.toFixed(0)}%</span>
+        <span className={`text-sm font-medium ${isLow ? 'text-amber-600' : ''}`}>
+          {percent.toFixed(0)}%
+          {isLow && ' (Limited data)'}
+        </span>
       </div>
       <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
         <div
-          className="h-full bg-blue-600 rounded-full"
-          style={{ width: `${percent}%` }}
+          className={`h-full rounded-full ${
+            safeConfidence >= 0.5 ? 'bg-blue-600' : safeConfidence >= 0.3 ? 'bg-amber-400' : 'bg-gray-400'
+          }`}
+          style={{ width: `${Math.max(percent, 5)}%` }}
         />
       </div>
     </div>
@@ -148,22 +179,39 @@ function ConfidenceBar({ confidence }: ConfidenceBarProps) {
 }
 
 interface FactorsGridProps {
-  sentimentScore: number | null;
+  sentimentScore: number | string | null;
   mentionVolume: number;
 }
 
 function FactorsGrid({ sentimentScore, mentionVolume }: FactorsGridProps) {
+  const numericSentiment = safeNumber(sentimentScore);
+  const displaySentiment = sentimentScore != null 
+    ? `${(numericSentiment * 100).toFixed(0)}%`
+    : 'N/A';
+
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="text-center p-3 bg-gray-50 rounded-lg">
         <p className="text-xs text-gray-500">Sentiment</p>
-        <p className="font-semibold">
-          {sentimentScore !== null ? `${(sentimentScore * 100).toFixed(0)}%` : 'N/A'}
-        </p>
+        <p className="font-semibold">{displaySentiment}</p>
       </div>
       <div className="text-center p-3 bg-gray-50 rounded-lg">
         <p className="text-xs text-gray-500">Mentions</p>
-        <p className="font-semibold">{mentionVolume}</p>
+        <p className="font-semibold">{mentionVolume ?? 0}</p>
+      </div>
+    </div>
+  );
+}
+
+function LowDataWarning() {
+  return (
+    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+      <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+      <div className="text-sm text-amber-700">
+        <p className="font-medium">Limited data available</p>
+        <p className="mt-1">
+          Add sentiment keywords or link competitor products to improve accuracy.
+        </p>
       </div>
     </div>
   );
@@ -179,10 +227,13 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
 
   const handleApply = () => {
     if (suggestion) {
-      applyPrice.mutate(
-        { id: product.id, price: suggestion.suggested_price },
-        { onSuccess: onClose }
-      );
+      const price = safeNumber(suggestion.suggested_price);
+      if (price > 0) {
+        applyPrice.mutate(
+          { id: product.id, price },
+          { onSuccess: onClose }
+        );
+      }
     }
   };
 
@@ -191,6 +242,12 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
       onClose();
     }
   };
+
+  // Calculate if we have meaningful data
+  const confidence = suggestion ? safeNumber(suggestion.confidence) : 0;
+  const changePercent = suggestion ? safeNumber(suggestion.change_percent) : 0;
+  const isLowConfidence = confidence < 0.3;
+  const noChangeRecommended = Math.abs(changePercent) < 0.01;
 
   return (
     <div
@@ -219,18 +276,23 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
           {isLoading ? (
             <LoadingState />
           ) : error ? (
-            <ErrorState />
+            <ErrorState 
+              message={error instanceof Error ? error.message : 'Please try again later.'} 
+            />
           ) : suggestion ? (
             <div className="space-y-6">
               <ProductInfo product={product} />
 
               <PriceComparison
-                currentPrice={Number(product.current_price)}
-                suggestedPrice={Number(suggestion.suggested_price)}
-                changePercent={Number(suggestion.price_change_percent)}
+                currentPrice={safeNumber(product.current_price)}
+                suggestedPrice={safeNumber(suggestion.suggested_price)}
+                changePercent={safeNumber(suggestion.change_percent)}
               />
 
-              <ConfidenceBar confidence={Number(suggestion.confidence)} />
+              <ConfidenceBar confidence={confidence} />
+
+              {/* Show warning for low confidence */}
+              {isLowConfidence && <LowDataWarning />}
 
               {suggestion.reasoning && (
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -240,11 +302,13 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
               )}
 
               <FactorsGrid
-                sentimentScore={suggestion.sentiment_score}
-                mentionVolume={suggestion.mention_volume}
+                sentimentScore={suggestion.factors?.sentiment_score}
+                mentionVolume={suggestion.factors?.mention_volume ?? 0}
               />
             </div>
-          ) : null}
+          ) : (
+            <ErrorState message="No suggestion data returned. Please try again." />
+          )}
         </div>
 
         {/* Footer */}
@@ -254,11 +318,11 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
           </Button>
           <Button
             onClick={handleApply}
-            disabled={!suggestion || applyPrice.isPending}
+            disabled={!suggestion || applyPrice.isPending || noChangeRecommended}
             isLoading={applyPrice.isPending}
             className="flex-1"
           >
-            Apply Suggestion
+            {noChangeRecommended ? 'No Change Needed' : 'Apply Suggestion'}
           </Button>
         </div>
       </div>
@@ -267,3 +331,5 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
 }
 
 export default PriceSuggestionModal;
+
+

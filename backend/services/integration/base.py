@@ -8,12 +8,13 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Optional, List
 
-from .models import (
+from .schemas import (
     OAuthResult,
     ExternalProduct,
     ProductSyncResult,
     PriceUpdateRequest,
     PriceUpdateResponse,
+    PriceUpdateResult,  
     WebhookRegistration,
     ConnectionStatus,
 )

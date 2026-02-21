@@ -7,62 +7,52 @@
  * Guides user through generating and entering consumer key/secret.
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useConnectWooCommerce } from '@/lib/hooks/use-integrations';
 import { Button } from '@/components/ui';
+
+// Domain layer
+import {
+  validateAndConnectWooCommerce,
+  DEFAULT_WOOCOMMERCE_FORM,
+  type WooCommerceConnectFormData,
+  type WooCommerceConnectFormErrors,
+} from '@/lib/domain/integrations';
+
 
 interface WooCommerceConnectModalProps {
   onClose: () => void;
 }
 
 export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProps) {
-  const [formData, setFormData] = useState({
-    store_url: '',
-    store_name: '',
-    consumer_key: '',
-    consumer_secret: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState<WooCommerceConnectFormData>(DEFAULT_WOOCOMMERCE_FORM);
+  const [errors, setErrors] = useState<WooCommerceConnectFormErrors>({});
 
   const connectWoo = useConnectWooCommerce();
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.store_url.trim()) {
-      newErrors.store_url = 'Store URL is required';
-    }
-
-    if (!formData.consumer_key.trim()) {
-      newErrors.consumer_key = 'Consumer key is required';
-    } else if (!formData.consumer_key.startsWith('ck_')) {
-      newErrors.consumer_key = 'Consumer key must start with "ck_"';
-    }
-
-    if (!formData.consumer_secret.trim()) {
-      newErrors.consumer_secret = 'Consumer secret is required';
-    } else if (!formData.consumer_secret.startsWith('cs_')) {
-      newErrors.consumer_secret = 'Consumer secret must start with "cs_"';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const handleChange = useCallback((field: keyof WooCommerceConnectFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
+  }, [errors]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
 
-    connectWoo.mutate(formData, {
-      onSuccess: () => onClose(),
-    });
-  };
+    const result = validateAndConnectWooCommerce(formData);
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: '' }));
+    if (!result.success) {
+      setErrors(result.errors);
+      toast.error('Please fix the errors');
+      return;
     }
+
+    connectWoo.mutate(result.data, {
+      onSuccess: () => {
+        toast.success('WooCommerce connected!');
+        onClose();
+      },
+    });
   };
 
   return (
@@ -89,10 +79,7 @@ export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProp
           <div className="space-y-4">
             {/* Store URL */}
             <div>
-              <label
-                htmlFor="woo-store-url"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="woo-store-url" className="block text-sm font-medium text-gray-700">
                 Store URL
               </label>
               <input
@@ -114,10 +101,7 @@ export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProp
 
             {/* Store Name (optional) */}
             <div>
-              <label
-                htmlFor="woo-store-name"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="woo-store-name" className="block text-sm font-medium text-gray-700">
                 Store Name <span className="text-gray-400">(optional)</span>
               </label>
               <input
@@ -132,10 +116,7 @@ export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProp
 
             {/* Consumer Key */}
             <div>
-              <label
-                htmlFor="woo-consumer-key"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="woo-consumer-key" className="block text-sm font-medium text-gray-700">
                 Consumer Key
               </label>
               <input
@@ -157,10 +138,7 @@ export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProp
 
             {/* Consumer Secret */}
             <div>
-              <label
-                htmlFor="woo-consumer-secret"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="woo-consumer-secret" className="block text-sm font-medium text-gray-700">
                 Consumer Secret
               </label>
               <input
@@ -208,11 +186,7 @@ export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProp
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={connectWoo.isPending}
-            >
+            <Button type="submit" variant="primary" disabled={connectWoo.isPending}>
               {connectWoo.isPending ? 'Connecting...' : 'Connect Store'}
             </Button>
           </div>
@@ -221,3 +195,6 @@ export function WooCommerceConnectModal({ onClose }: WooCommerceConnectModalProp
     </div>
   );
 }
+
+
+

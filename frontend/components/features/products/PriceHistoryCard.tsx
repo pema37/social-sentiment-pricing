@@ -113,7 +113,7 @@ function PriceHistoryItem({ price, date, previousPrice, source }: PriceHistoryIt
         {previousPrice && (
           <p className={`text-sm font-medium ${changeColorClass}`}>
             {change >= 0 && '+'}
-            {change.toFixed(1)}%
+            {(Number(change ?? 0)).toFixed(1)}%
           </p>
         )}
         {source && (
@@ -167,3 +167,4 @@ export function PriceHistoryCard({ productId }: PriceHistoryCardProps) {
 }
 
 export default PriceHistoryCard;
+

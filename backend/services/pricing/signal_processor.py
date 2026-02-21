@@ -3,7 +3,7 @@
 Signal Processor - Gathers and processes market signals for pricing decisions.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -62,7 +62,7 @@ class SignalProcessor:
     async def _get_sentiment_signals(self, product_id: UUID) -> tuple[Optional[Decimal], Optional[Decimal]]:
         """Get current sentiment and 24h change."""
         
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         last_24h = now - timedelta(hours=24)
         last_48h = now - timedelta(hours=48)
         
@@ -124,7 +124,7 @@ class SignalProcessor:
     async def _get_volume_signals(self, product_id: UUID) -> tuple[int, int]:
         """Get mention count and baseline."""
         
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         last_24h = now - timedelta(hours=24)
         last_7d = now - timedelta(days=7)
         
@@ -151,7 +151,7 @@ class SignalProcessor:
     async def _get_viral_signals(self, product_id: UUID) -> tuple[bool, int, int, Optional[Decimal]]:
         """Detect viral content."""
         
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         last_24h = now - timedelta(hours=24)
         
         # Find high-engagement posts
@@ -253,7 +253,7 @@ class SignalProcessor:
     async def _get_daily_mention_counts(self, product_id: UUID, days: int = 7) -> list[int]:
         """Get mention counts for each of the last N days."""
         
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         counts = []
         
         for i in range(days):
@@ -275,7 +275,7 @@ class SignalProcessor:
     async def _get_daily_sentiment(self, product_id: UUID, days: int = 7) -> list[Optional[Decimal]]:
         """Get average sentiment for each of the last N days."""
         
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         sentiments = []
         
         for i in range(days):
@@ -409,3 +409,6 @@ class SignalProcessor:
         strength = min(strength, Decimal("1"))
         
         return direction, strength.quantize(Decimal("0.01"))
+
+
+

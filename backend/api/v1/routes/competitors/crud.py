@@ -2,7 +2,7 @@
 """Competitor CRUD endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -125,7 +125,7 @@ async def update_competitor(
     for field, value in update_data.items():
         setattr(competitor, field, value)
     
-    competitor.updated_at = datetime.utcnow()
+    competitor.updated_at = datetime.now(UTC)
     db.add(competitor)
     await db.commit()
     await db.refresh(competitor)

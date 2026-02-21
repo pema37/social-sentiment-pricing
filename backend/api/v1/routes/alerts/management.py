@@ -1,7 +1,7 @@
 # backend/api/v1/routes/alerts/management.py
 """Alert management endpoints (list, acknowledge, resolve)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from uuid import UUID
 
@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from db.session import get_session
-from core.security import get_current_user
+from core.deps import get_current_user
 from core.rate_limit import limiter, WRITE_RATE_LIMIT
 from models.user import User
 from models.alert import Alert, AlertType, AlertSeverity, AlertStatus
@@ -20,6 +20,10 @@ from schemas.common import PaginatedResponse, PaginationParams
 
 router = APIRouter()
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STATIC ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/", response_model=PaginatedResponse[AlertRead])
 async def list_alerts(
@@ -113,7 +117,7 @@ async def get_alert_stats(
         except Exception:
             continue
     
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
     recent_result = await session.execute(
         select(func.count(Alert.id)).where(
             Alert.user_id == current_user.id,
@@ -146,6 +150,45 @@ async def get_unread_count(
     count = result.scalar() or 0
     return {"unread_count": count}
 
+
+@router.post("/acknowledge-all", status_code=status.HTTP_200_OK)
+@limiter.limit(WRITE_RATE_LIMIT)
+async def acknowledge_all_alerts(
+    request: Request,
+    severity: Optional[AlertSeverity] = None,
+    alert_type: Optional[AlertType] = None,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Acknowledge all pending alerts (optionally filtered)."""
+    query = select(Alert).where(
+        Alert.user_id == current_user.id,
+        Alert.status == AlertStatus.PENDING,
+    )
+    
+    if severity:
+        query = query.where(Alert.severity == severity)
+    if alert_type:
+        query = query.where(Alert.alert_type == alert_type)
+    
+    result = await session.execute(query)
+    alerts = list(result.scalars().all())
+    now = datetime.now(UTC)
+    
+    for alert in alerts:
+        alert.status = AlertStatus.ACKNOWLEDGED
+        alert.acknowledged_at = now
+        alert.acknowledged_by = current_user.id
+        session.add(alert)
+    
+    await session.commit()
+    
+    return {"acknowledged_count": len(alerts)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DYNAMIC ROUTES (must come after all static routes)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/{alert_id}", response_model=AlertRead)
 async def get_alert(
@@ -195,7 +238,7 @@ async def acknowledge_alert(
         )
     
     alert.status = AlertStatus.ACKNOWLEDGED
-    alert.acknowledged_at = datetime.utcnow()
+    alert.acknowledged_at = datetime.now(UTC)
     alert.acknowledged_by = current_user.id
     
     session.add(alert)
@@ -228,10 +271,10 @@ async def resolve_alert(
         raise HTTPException(status_code=400, detail="Alert is already resolved")
     
     alert.status = AlertStatus.RESOLVED
-    alert.resolved_at = datetime.utcnow()
+    alert.resolved_at = datetime.now(UTC)
     
     if not alert.acknowledged_at:
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = datetime.now(UTC)
         alert.acknowledged_by = current_user.id
     
     session.add(alert)
@@ -239,37 +282,3 @@ async def resolve_alert(
     await session.refresh(alert)
     return alert
 
-
-@router.post("/acknowledge-all", status_code=status.HTTP_200_OK)
-@limiter.limit(WRITE_RATE_LIMIT)
-async def acknowledge_all_alerts(
-    request: Request,
-    severity: Optional[AlertSeverity] = None,
-    alert_type: Optional[AlertType] = None,
-    session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Acknowledge all pending alerts (optionally filtered)."""
-    query = select(Alert).where(
-        Alert.user_id == current_user.id,
-        Alert.status == AlertStatus.PENDING,
-    )
-    
-    if severity:
-        query = query.where(Alert.severity == severity)
-    if alert_type:
-        query = query.where(Alert.alert_type == alert_type)
-    
-    result = await session.execute(query)
-    alerts = list(result.scalars().all())
-    now = datetime.utcnow()
-    
-    for alert in alerts:
-        alert.status = AlertStatus.ACKNOWLEDGED
-        alert.acknowledged_at = now
-        alert.acknowledged_by = current_user.id
-        session.add(alert)
-    
-    await session.commit()
-    
-    return {"acknowledged_count": len(alerts)}

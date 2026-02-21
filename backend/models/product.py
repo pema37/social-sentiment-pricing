@@ -6,8 +6,8 @@ from decimal import Decimal
 from typing import Optional, List, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, DateTime, JSON, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
 if TYPE_CHECKING:
     from models.integration import ProductIntegrationLink
@@ -39,20 +39,26 @@ class Product(SQLModel, table=True):
     max_price: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
     cost: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2, description="Cost to acquire/produce")
 
-    sentiment_multiplier: Decimal = Field(default=Decimal("0.1"), max_digits=3, decimal_places=2)
+    # FIXED: Changed default from 0.1 to 0.2 (20% sentiment impact)
+    sentiment_multiplier: Decimal = Field(default=Decimal("0.2"), max_digits=3, decimal_places=2)
+    
+    # NOTE: Keeping auto_pricing_enabled default as False for safety
+    # Users should explicitly opt-in to automatic price changes
     auto_pricing_enabled: bool = Field(default=False)
 
-    keywords: List[str] = Field(default=[], sa_column=Column(JSON))
+    keywords: List[str] = Field(default=[], sa_column=Column(JSONB))
+
+
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 
     # Relationships
     integration_links: List["ProductIntegrationLink"] = Relationship(back_populates="product")
-
+    

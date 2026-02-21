@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
@@ -7,7 +6,6 @@ import { WagmiProvider } from 'wagmi'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { wagmiConfig } from '@/lib/web3/config'
 import { Toaster } from '@/components/ui/Toaster'
-
 import '@rainbow-me/rainbowkit/styles.css'
 
 interface ProvidersProps {
@@ -19,7 +17,8 @@ export function Providers({ children }: ProvidersProps) {
     defaultOptions: {
       queries: {
         staleTime: 60 * 1000, // 1 minute
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,  // ← CHANGED: Refetch when user returns to tab
+        refetchOnReconnect: true,    // ← ADDED: Refetch when network reconnects
         retry: 1,
       },
     },
@@ -50,3 +49,4 @@ export function Providers({ children }: ProvidersProps) {
 }
 
 export default Providers
+

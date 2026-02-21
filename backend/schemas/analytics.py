@@ -103,3 +103,5 @@ class AlertAnalytics(BaseModel):
     by_type: dict  # {"sentiment_change": 5, "price_recommendation": 12, ...}
     by_severity: dict  # {"low": 10, "medium": 5, "high": 2, "critical": 1}
     avg_resolution_time_hours: Optional[float] = None
+
+

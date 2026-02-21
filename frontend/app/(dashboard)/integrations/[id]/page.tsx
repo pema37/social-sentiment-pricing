@@ -247,8 +247,8 @@ export default function IntegrationDetailPage() {
                       +{log.products_created} / ~{log.products_updated} / -{log.products_deleted}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-600">
-                      {log.duration_seconds
-                        ? `${log.duration_seconds.toFixed(1)}s`
+                      {log.duration_seconds != null
+                        ? `${(Number(log.duration_seconds ?? 0)).toFixed(1)}s`
                         : '-'}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">
@@ -302,8 +302,8 @@ export default function IntegrationDetailPage() {
                       {link.external_product_id}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-600">
-                      {link.external_price
-                        ? `$${link.external_price.toFixed(2)}`
+                      {link.external_price != null
+                        ? `$${(Number(link.external_price ?? 0)).toFixed(2)}`
                         : '-'}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">
@@ -468,3 +468,5 @@ function LoadingSpinner() {
     </svg>
   );
 }
+
+

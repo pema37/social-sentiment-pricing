@@ -1,10 +1,30 @@
-# backend/services/pricing/recommendation_service.py
 """
 Recommendation Service - Generates price recommendations based on rules and signals.
+
+Refactored: Orchestration layer that delegates to focused sub-services.
+
+Dependencies:
+- PriceSyncService: Fetches live prices from stores (Priority 1)
+- SettingsService: Manages user settings with defaults (Priority 2)
+- CompetitorFallbackService: Generates competitor-only recommendations
+- PriceCalculator, BoundaryEnforcer, ReasoningGenerator: Calculation helpers
+- PipelineAdapter: Converts service outputs to typed agent contracts
+
+FIX (2026-01-28) Bug #1: Always refresh product from DB before generating
+recommendations to ensure current_price reflects actual database state.
+FIX (2026-02-17): Wired PipelineAdapter to produce typed ScoutOutput,
+AnalystOutput, StrategistOutput evidence chains on every recommendation.
+Evidence is stored in factors dict → extracted by record_merchant_decision()
+→ stored as JSONB on RecommendationOutcome for calibration & backward learning.
+FIX (2026-02-18): Phase 5 — Wired IE orchestrator (ExperimentManager →
+ScoringEngine → ContextInjector → Calibrator) as enhancement layer.
+If IE is enabled and succeeds, uses its suggested price + calibrated confidence.
+If IE fails or is disabled, falls back to existing PipelineAdapter flow unchanged.
 """
 
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+import logging
+from datetime import datetime, timedelta, UTC
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -12,12 +32,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.product import Product
-from models.pricing_rule import PricingRule, RuleAction
+from models.pricing_rule import PricingRule
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
-from models.pricing_settings import PricingSettings
-from .rule_evaluator import RuleEvaluator, MarketSignals
+
+from .rule_evaluator import RuleEvaluator
 from .signal_processor import SignalProcessor
 from .confidence_calculator import ConfidenceCalculator
+from .price_sync_service import PriceSyncService
+from .settings_service import SettingsService
+from .competitor_fallback import CompetitorFallbackService
+from .recommendation_helpers import (
+    PriceCalculator,
+    BoundaryEnforcer,
+    ReasoningGenerator,
+)
+from .pipeline_adapter import PipelineAdapter
+
+# --- Phase 5: Intelligence Environment ---
+from services.scoring.ie_orchestrator import (
+    create_ie_orchestrator,
+    IEStatus,
+    IERecommendation,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationService:
@@ -25,73 +63,350 @@ class RecommendationService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
+        
+        # Core evaluation services
         self.rule_evaluator = RuleEvaluator(db)
         self.signal_processor = SignalProcessor(db)
         self.confidence_calculator = ConfidenceCalculator()
+        
+        # Specialized sub-services
+        self.price_sync = PriceSyncService(db)
+        self.settings_service = SettingsService(db)
+        self.competitor_fallback = CompetitorFallbackService(db)
     
     async def generate_recommendation(
         self,
         product: Product,
         user_id: UUID
     ) -> Optional[PriceRecommendation]:
-        """Generate a price recommendation for a product."""
+        """
+        Generate a price recommendation for a product.
         
-        # Gather market signals
+        Flow:
+        1. Refresh product from DB to ensure fresh data
+        2. Sync live price from store (if connected)
+        3. Check for existing pending recommendations
+        4. Gather market signals
+        5. Find matching pricing rule
+        6. If no rule matches, try competitor fallback
+        7. Calculate price and create recommendation
+        8. Auto-apply if settings allow
+        """
+        # =============================================================
+        # BUGFIX (2026-01-28): Always refresh product from DB first
+        # =============================================================
+        await self.db.refresh(product)
+        logger.debug(
+            f"Refreshed product {product.id} from DB: current_price=${product.current_price}"
+        )
+        
+        # Step 2: Try to sync with live store price (may update DB + product object)
+        price_synced = await self.price_sync.sync_product_price(product, user_id)
+        if price_synced:
+            logger.info(
+                f"Product {product.id} price synced from store: ${product.current_price}"
+            )
+        
+        # Step 3: Check for existing pending recommendation
+        if await self._has_pending_recommendation(product.id, user_id):
+            logger.debug(f"Product {product.id} already has pending recommendation")
+            return None
+        
+        # Step 4: Gather market signals
         signals = await self.signal_processor.gather_signals(product)
         
-        # Find matching rule
-        result = await self.rule_evaluator.find_matching_rule(product, user_id, signals) 
-
-        if not result:
-            return None
+        # Step 5: Find matching rule
+        result = await self.rule_evaluator.find_matching_rule(product, user_id, signals)
         
-        # Use highest priority triggered rule
+        # Step 6: No rule matched - try competitor fallback
+        if not result or result[0] is None:
+            logger.info(f"No rule matched for product {product.id}, trying competitor fallback")
+            return await self.competitor_fallback.generate(product, user_id, signals)
+        
         rule, match_details = result
         
-        # Double-check rule is valid (in case tuple returned with None rule)
-        if rule is None:
+        # Step 7: Generate rule-based recommendation
+        return await self._create_rule_based_recommendation(
+            product, user_id, rule, match_details, signals
+        )
+    
+    async def _has_pending_recommendation(
+        self,
+        product_id: UUID,
+        user_id: UUID
+    ) -> bool:
+        """Check if pending recommendation already exists."""
+        stmt = (
+            select(PriceRecommendation)
+            .where(PriceRecommendation.product_id == product_id)
+            .where(PriceRecommendation.user_id == user_id)
+            .where(PriceRecommendation.status == RecommendationStatus.PENDING)
+            .where(PriceRecommendation.valid_until > datetime.now(UTC))
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first() is not None
+    
+    # =========================================================================
+    # Phase 5: Intelligence Environment Enhancement Layer
+    # =========================================================================
+    
+    async def _try_ie_recommendation(
+        self,
+        product: Product,
+        signals,
+        rule: Optional[PricingRule],
+    ) -> Optional[IERecommendation]:
+        """
+        Try to get an IE-enhanced recommendation.
+        
+        Returns IERecommendation if IE is enabled and succeeds,
+        None if IE is disabled or fails (caller falls back to existing flow).
+        
+        The IE orchestrator runs:
+          ExperimentManager → ScoringEngine → ContextInjector → Calibrator
+        
+        All components have circuit breakers — if any single component fails,
+        the others continue. If the overall pipeline fails, we return None
+        and the existing PipelineAdapter flow handles the recommendation.
+        """
+        try:
+            # Build product context for the IE orchestrator
+            competitor_prices = []
+            if hasattr(signals, "competitor_prices"):
+                competitor_prices = [
+                    float(p.price)
+                    for p in (signals.competitor_prices or [])
+                    if hasattr(p, "price")
+                ]
+            elif isinstance(signals, dict) and "competitor_prices" in signals:
+                competitor_prices = [
+                    float(p.price) if hasattr(p, "price") else float(p)
+                    for p in (signals.get("competitor_prices") or [])
+                ]
+            
+            product_context = {
+                "product_id": str(product.id),
+                "merchant_id": str(product.merchant_id) if hasattr(product, "merchant_id") else str(product.user_id),
+                "category_id": str(product.category_id) if getattr(product, "category_id", None) else None,
+                "current_price": float(product.current_price),
+                "cost": float(product.cost) if getattr(product, "cost", None) else None,
+                "competitor_prices": competitor_prices,
+                "historical_sales": getattr(signals, "historical_sales", []) if not isinstance(signals, dict) else signals.get("historical_sales", []),
+                "sentiment_score": getattr(signals, "sentiment_score", None) if not isinstance(signals, dict) else signals.get("sentiment_score"),
+                "review_count": getattr(signals, "review_count", None) if not isinstance(signals, dict) else signals.get("review_count"),
+                "search_volume_trend": getattr(signals, "search_volume_trend", None) if not isinstance(signals, dict) else signals.get("search_volume_trend"),
+            }
+            
+            # Create orchestrator with DB session factory
+            orchestrator = create_ie_orchestrator(
+                db_session_factory=lambda: self.db,
+            )
+            
+            # Generate IE recommendation
+            ie_result = orchestrator.generate_recommendation(product_context)
+            
+            if ie_result.status in (IEStatus.SUCCESS, IEStatus.PARTIAL):
+                logger.info(
+                    "IE recommendation for product %s: %s → %s "
+                    "(conf: %.3f, status: %s, duration: %dms)",
+                    product.id,
+                    ie_result.current_price,
+                    ie_result.suggested_price,
+                    ie_result.calibrated_confidence,
+                    ie_result.status.value,
+                    ie_result.total_duration_ms,
+                )
+                return ie_result
+            else:
+                logger.info(
+                    "IE returned %s for product %s, falling back to existing pipeline",
+                    ie_result.status.value,
+                    product.id,
+                )
+                return None
+        
+        except Exception as exc:
+            logger.warning(
+                "IE orchestrator failed for product %s: %s. "
+                "Falling back to existing pipeline.",
+                product.id,
+                exc,
+            )
             return None
-
+    
+    # =========================================================================
+    # Rule-Based Recommendation (with IE enhancement)
+    # =========================================================================
+    
+    async def _create_rule_based_recommendation(
+        self,
+        product: Product,
+        user_id: UUID,
+        rule: PricingRule,
+        match_details: dict,
+        signals
+    ) -> Optional[PriceRecommendation]:
+        """Create recommendation based on a matched pricing rule."""
         # Calculate new price
-        new_price = self._calculate_new_price(product, rule, signals)
+        new_price = PriceCalculator.calculate_new_price(product, rule, signals)
         
         if new_price is None or new_price == product.current_price:
+            logger.debug(
+                f"No price change needed for product {product.id}: "
+                f"current=${product.current_price}, calculated=${new_price}"
+            )
             return None
         
+        # ── Capture raw price before boundary enforcement ──
+        raw_price_before_boundaries = new_price
+        
         # Apply boundaries
-        new_price = self._apply_boundaries(new_price, product, rule)
+        new_price = BoundaryEnforcer.apply_boundaries(new_price, product, rule)
+        change_percent = BoundaryEnforcer.calculate_change_percent(
+            product.current_price, new_price
+        )
         
-        # Calculate change percent
-        change_percent = ((new_price - product.current_price) / product.current_price) * 100
-        change_percent = change_percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        
-        # Calculate price impacts and confidence
+        # Calculate confidence
         price_impacts = self.signal_processor.calculate_price_impact(signals, product)
         confidence = self.confidence_calculator.calculate(
             signals, price_impacts, rule.rule_type.value
         )
         
-        # Build factors
+        # Get confidence breakdown (feeds AnalystOutput)
+        confidence_breakdown = self.confidence_calculator.get_confidence_breakdown(
+            signals, price_impacts, rule.rule_type.value
+        )
+        
+        # ══════════════════════════════════════════════════════════════
+        # PHASE 5: Try IE-enhanced recommendation
+        # If IE succeeds, override price + confidence with IE values.
+        # If IE fails, continue with existing PipelineAdapter flow.
+        # ══════════════════════════════════════════════════════════════
+        
+        ie_result = await self._try_ie_recommendation(product, signals, rule)
+        ie_was_used = False
+        
+        if ie_result is not None:
+            # IE succeeded — use its suggested price and calibrated confidence
+            ie_suggested_price = Decimal(str(ie_result.suggested_price))
+            
+            # Still enforce boundaries for safety (merchant guardrails)
+            new_price = BoundaryEnforcer.apply_boundaries(
+                ie_suggested_price, product, rule
+            )
+            change_percent = BoundaryEnforcer.calculate_change_percent(
+                product.current_price, new_price
+            )
+            
+            # Override confidence with IE's calibrated confidence
+            confidence = ie_result.calibrated_confidence
+            ie_was_used = True
+            
+            logger.info(
+                "Using IE recommendation for product %s: %s → %s (IE conf: %.3f)",
+                product.id,
+                product.current_price,
+                new_price,
+                confidence,
+            )
+        
+        # ══════════════════════════════════════════════════════════════
+        # INTELLIGENCE ENVIRONMENT: Build typed agent evidence chains
+        # (runs regardless of IE — provides structured evidence for
+        #  record_merchant_decision → calibration → backward learning)
+        # ══════════════════════════════════════════════════════════════
+        
+        try:
+            scout_output = PipelineAdapter.build_scout_output(product, signals)
+            analyst_output = PipelineAdapter.build_analyst_output(
+                scout_output, confidence_breakdown, signals, rule
+            )
+        except Exception as e:
+            logger.warning(f"Failed to build Scout/Analyst outputs: {e}")
+            scout_output = None
+            analyst_output = None
+        
+        # Build factors dict (includes typed evidence when available)
         factors = {
             "match_details": match_details,
             "price_impacts": price_impacts,
-            "confidence_breakdown": self.confidence_calculator.get_confidence_breakdown(
-                signals, price_impacts, rule.rule_type.value
-            ),
+            "confidence_breakdown": confidence_breakdown,
         }
         
+        # ── Phase 5: Store IE metadata in factors ──
+        if ie_was_used and ie_result is not None:
+            factors["ie_status"] = ie_result.status.value
+            factors["ie_pipeline_version"] = ie_result.pipeline_version
+            factors["ie_calibrated_confidence"] = ie_result.calibrated_confidence
+            factors["ie_raw_confidence"] = ie_result.raw_confidence
+            factors["ie_total_duration_ms"] = ie_result.total_duration_ms
+            
+            if ie_result.experiment:
+                factors["ie_experiment"] = {
+                    "strategy_name": ie_result.experiment.strategy_name,
+                    "arm_index": ie_result.experiment.arm_index,
+                    "is_exploration": ie_result.experiment.is_exploration,
+                }
+            
+            if ie_result.calibration:
+                factors["ie_calibration"] = {
+                    "method": ie_result.calibration.calibration_method,
+                    "sample_count": ie_result.calibration.sample_count,
+                    "is_reliable": ie_result.calibration.is_reliable,
+                }
+            
+            if ie_result.warnings:
+                factors["ie_warnings"] = ie_result.warnings
+            
+            if ie_result.timings:
+                factors["ie_timings"] = {
+                    t.component: {
+                        "duration_ms": t.duration_ms,
+                        "success": t.success,
+                        "error": t.error,
+                    }
+                    for t in ie_result.timings
+                }
+        
         # Generate reasoning
-        reasoning = self._generate_reasoning(
+        reasoning = ReasoningGenerator.generate(
             product, rule, match_details, new_price, change_percent, signals
         )
         
-        # Get user settings for expiry
-        settings = await self._get_user_settings(user_id)
-        valid_hours = settings.recommendation_valid_hours if settings else 48
-        valid_until = datetime.utcnow() + timedelta(hours=valid_hours)
+        # Build StrategistOutput (needs reasoning + factors)
+        try:
+            if analyst_output is not None:
+                strategist_output = PipelineAdapter.build_strategist_output(
+                    analyst_output,
+                    product,
+                    new_price,
+                    change_percent,
+                    confidence,
+                    reasoning,
+                    factors,
+                    rule,
+                    raw_price_before_boundaries,
+                )
+                # Store typed evidence in factors for record_merchant_decision()
+                factors["scout_evidence"] = scout_output.to_evidence()
+                factors["analyst_evidence"] = analyst_output.to_evidence()
+                factors["strategist_evidence"] = strategist_output.to_evidence()
+            else:
+                strategist_output = None
+        except Exception as e:
+            logger.warning(f"Failed to build Strategist output: {e}")
+            strategist_output = None
         
-        # Determine if auto-approval applies
-        requires_approval = self._check_requires_approval(
+        # ══════════════════════════════════════════════════════════════
+        # END INTELLIGENCE ENVIRONMENT
+        # ══════════════════════════════════════════════════════════════
+        
+        # Get settings (Priority 2 fix ensures defaults exist)
+        settings = await self.settings_service.get_or_create(user_id)
+        valid_until = datetime.now(UTC) + timedelta(hours=settings.recommendation_valid_hours)
+        
+        # Check approval requirement
+        requires_approval = self.settings_service.check_requires_approval(
             product, change_percent, confidence, settings
         )
         
@@ -111,169 +426,47 @@ class RecommendationService:
             valid_until=valid_until,
         )
         
+        evidence_status = "ie+pipeline" if ie_was_used else (
+            "pipeline" if strategist_output else "partial"
+        )
+        logger.info(
+            f"Creating recommendation for product {product.id}: "
+            f"${product.current_price} → ${new_price} ({change_percent:+.1f}%), "
+            f"confidence={confidence:.2f}, requires_approval={requires_approval}, "
+            f"evidence_chain={evidence_status}"
+        )
+        
         # Update rule's last_triggered_at
-        rule.last_triggered_at = datetime.utcnow()
+        rule.last_triggered_at = datetime.now(UTC)
         self.db.add(rule)
         
         self.db.add(recommendation)
         await self.db.commit()
         await self.db.refresh(recommendation)
         
+        # Auto-apply if eligible
+        if not requires_approval and settings.auto_approve_enabled:
+            await self._try_auto_apply(recommendation, user_id)
+        
         return recommendation
     
-    def _calculate_new_price(
+    async def _try_auto_apply(
         self,
-        product: Product,
-        rule: PricingRule,
-        signals: MarketSignals
-    ) -> Optional[Decimal]:
-        """Calculate new price based on rule action."""
-        
-        current = product.current_price
-        
-        if rule.action == RuleAction.INCREASE_PERCENT:
-            return current * (1 + rule.action_value / 100)
-        
-        elif rule.action == RuleAction.DECREASE_PERCENT:
-            return current * (1 - rule.action_value / 100)
-        
-        elif rule.action == RuleAction.SET_ABSOLUTE:
-            return rule.action_value
-        
-        elif rule.action == RuleAction.MATCH_COMPETITOR:
-            if rule.competitor_id and rule.competitor_id in signals.competitor_prices:
-                return signals.competitor_prices[rule.competitor_id]
-            return None
-        
-        elif rule.action == RuleAction.UNDERCUT_COMPETITOR:
-            if rule.competitor_id and rule.competitor_id in signals.competitor_prices:
-                competitor_price = signals.competitor_prices[rule.competitor_id]
-                margin = rule.competitor_margin_percent or Decimal("5.0")
-                return competitor_price * (1 - margin / 100)
-            return None
-        
-        return None
+        recommendation: PriceRecommendation,
+        user_id: UUID
+    ) -> None:
+        """Attempt to auto-approve and apply recommendation."""
+        try:
+            from services.pricing.approval_service import ApprovalService
+            approval_service = ApprovalService(self.db)
+            await approval_service.auto_approve_and_apply(recommendation.id, user_id)
+            logger.info(f"Auto-applied recommendation {recommendation.id}")
+        except Exception as e:
+            logger.warning(f"Auto-apply failed for recommendation {recommendation.id}: {e}")
     
-    def _apply_boundaries(
-        self,
-        price: Decimal,
-        product: Product,
-        rule: PricingRule
-    ) -> Decimal:
-        """Apply min/max boundaries and margin floor from rule and product."""
-        
-        # Rule boundaries override product boundaries
-        min_price = rule.min_price or product.min_price
-        max_price = rule.max_price or product.max_price
-
-        # === MARGIN FLOOR VALIDATION ===
-        # Ensure we never price below cost + minimum margin
-        # Note: margin floor check is sync, settings lookup moved to generate_recommendation
-        # For simplicity here, use product min_price as floor
-        # === END MARGIN FLOOR ===
-        
-        if min_price and price < min_price:
-            price = min_price
-        if max_price and price > max_price:
-            price = max_price
-        
-        # Apply max change percent
-        max_change = rule.max_change_percent / 100
-        min_allowed = product.current_price * (1 - max_change)
-        max_allowed = product.current_price * (1 + max_change)
-        
-        price = max(min_allowed, min(max_allowed, price))
-
-        # Round to 2 decimal places
-        return price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    
-    def _generate_reasoning(
-        self,
-        product: Product,
-        rule: PricingRule,
-        match_details: dict,
-        new_price: Decimal,
-        change_percent: Decimal,
-        signals: MarketSignals
-    ) -> str:
-        """Generate human-readable reasoning."""
-        
-        direction = "increase" if change_percent > 0 else "decrease"
-        abs_change = abs(change_percent)
-        
-        base = f"Recommending {abs_change}% price {direction} for {product.name} "
-        base += f"(${product.current_price} → ${new_price}). "
-        
-        rule_type = match_details.get("rule_type", "")
-        
-        if rule_type == "sentiment_threshold":
-            sentiment = match_details.get("sentiment_score", 0)
-            threshold = match_details.get("threshold", 0)
-            dir_word = "above" if match_details.get("direction") == "above" else "below"
-            base += f"Sentiment score ({sentiment:.2f}) is {dir_word} threshold ({threshold})."
-        
-        elif rule_type == "competitor_relative":
-            comp_price = match_details.get("competitor_price", 0)
-            base += f"Adjusting relative to competitor price (${comp_price:.2f})."
-        
-        elif rule_type == "time_based":
-            days = match_details.get("allowed_days", [])
-            base += f"Time-based rule active ({', '.join(days)})."
-        
-        elif rule_type == "volume_surge":
-            count = match_details.get("mention_count", 0)
-            threshold = match_details.get("threshold", 0)
-            base += f"Volume surge detected ({count} mentions, threshold: {threshold})."
-        
-        elif rule_type == "viral_detection":
-            reach = match_details.get("reach", 0)
-            base += f"Viral content detected (reach: {reach:,})."
-        
-        else:
-            base += f"Rule '{rule.name}' triggered."
-        
-        return base
-    
-    async def _get_user_settings(self, user_id: UUID) -> Optional[PricingSettings]:
-        """Get user's pricing settings."""
-        stmt = select(PricingSettings).where(PricingSettings.user_id == user_id)
-        result = await self.db.execute(stmt)
-        return result.scalars().first()
-    
-    def _check_requires_approval(
-        self,
-        product: Product,
-        change_percent: Decimal,
-        confidence: Decimal,
-        settings: Optional[PricingSettings]
-    ) -> bool:
-        """Check if recommendation requires manual approval."""
-        
-        if settings is None or not settings.auto_approve_enabled:
-            return True
-        
-        # Check confidence threshold
-        if confidence < settings.auto_approve_min_confidence:
-            return True
-        
-        # Check change thresholds
-        if change_percent > 0 and change_percent > settings.auto_approve_max_increase:
-            return True
-        if change_percent < 0 and abs(change_percent) > settings.auto_approve_max_decrease:
-            return True
-        
-        # Check high-value product threshold
-        if settings.require_approval_above_price:
-            if product.current_price > settings.require_approval_above_price:
-                return True
-        
-        # Check blackout hours
-        if settings.blackout_hours_start is not None and settings.blackout_hours_end is not None:
-            current_hour = datetime.utcnow().hour
-            if settings.blackout_hours_start <= current_hour < settings.blackout_hours_end:
-                return True
-        
-        return False
+    # =========================================================================
+    # Query Methods
+    # =========================================================================
     
     async def get_pending_recommendations(
         self,
@@ -283,12 +476,11 @@ class RecommendationService:
         offset: int = 0
     ) -> list[PriceRecommendation]:
         """Get pending recommendations for a user."""
-        
         stmt = (
             select(PriceRecommendation)
             .where(PriceRecommendation.user_id == user_id)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.valid_until > datetime.utcnow())
+            .where(PriceRecommendation.valid_until > datetime.now(UTC))
         )
         
         if product_id:
@@ -302,11 +494,10 @@ class RecommendationService:
     
     async def expire_old_recommendations(self) -> int:
         """Mark expired recommendations. Returns count of expired."""
-        
         stmt = (
             select(PriceRecommendation)
             .where(PriceRecommendation.status == RecommendationStatus.PENDING)
-            .where(PriceRecommendation.valid_until <= datetime.utcnow())
+            .where(PriceRecommendation.valid_until <= datetime.now(UTC))
         )
         
         result = await self.db.execute(stmt)
@@ -318,5 +509,9 @@ class RecommendationService:
         
         await self.db.commit()
         
+        logger.info(f"Expired {len(expired)} old recommendations")
         return len(expired)
+    
+
+
     

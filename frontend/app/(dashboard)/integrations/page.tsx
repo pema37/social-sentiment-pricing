@@ -5,21 +5,42 @@
  * 
  * Connect and manage e-commerce platform integrations.
  * Handles OAuth callback params and displays connection status.
+ * NOW WITH SYNC PROGRESS TRACKING + DIAGNOSTIC PANEL
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIntegrations } from '@/lib/hooks/use-integrations';
+import { getAllSyncStatus } from '@/lib/api/integrations';
 import { SectionHeader } from '@/components/ui';
 import { IntegrationsList } from '@/components/features/integrations/IntegrationsList';
 import { ConnectPlatformCard } from '@/components/features/integrations/ConnectPlatformCard';
 import { IntegrationsEmptyState } from '@/components/features/integrations/IntegrationsEmptyState';
 import { ConnectionSuccessToast } from '@/components/features/integrations/ConnectionSuccessToast';
+import { SyncProgressBanner } from '@/components/features/integrations/sync-progress-banner';
+import { DiagnosticPanel } from '@/components/features/integrations/diagnostic-panel';  // NEW
 import { PLATFORM_CONFIGS, type EcommercePlatform } from '@/types/integration';
 
 export default function IntegrationsPage() {
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { data, isLoading, error } = useIntegrations();
+  
+  // ========== Sync status polling ==========
+  const { data: syncStatus } = useQuery({
+    queryKey: ['all-sync-status'],
+    queryFn: getAllSyncStatus,
+    refetchInterval: (query) => {
+      // Poll every 2s while syncing, every 30s otherwise
+      const data = query.state.data;
+      return data?.any_syncing ? 2000 : 30000;
+    },
+    refetchIntervalInBackground: true,
+  });
+  
+  // Track previous sync state to detect completion
+  const wasSyncingRef = useRef(false);
   
   // Handle OAuth callback params
   const [toast, setToast] = useState<{
@@ -30,6 +51,26 @@ export default function IntegrationsPage() {
 
   // Track if we've processed the OAuth callback params
   const hasProcessedCallback = useRef(false);
+
+  // Detect sync completion
+  useEffect(() => {
+    const isSyncing = syncStatus?.any_syncing ?? false;
+    
+    if (wasSyncingRef.current && !isSyncing) {
+      // Sync just completed - refresh data and show toast
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['integrations'] });
+      // Defer setState to avoid cascading render warning
+      queueMicrotask(() => {
+        setToast({
+          type: 'success',
+          message: 'Sync complete! Your products are up to date.',
+        });
+      });
+    }
+    
+    wasSyncingRef.current = isSyncing;
+  }, [syncStatus?.any_syncing, queryClient]);
 
   useEffect(() => {
     // Only process once
@@ -50,7 +91,6 @@ export default function IntegrationsPage() {
     window.history.replaceState({}, '', '/integrations');
 
     // Defer state update to avoid cascading render warning
-    // This is the correct pattern for one-time OAuth callbacks
     queueMicrotask(() => {
       if (connected === 'true' && platform) {
         setToast({
@@ -91,11 +131,17 @@ export default function IntegrationsPage() {
         />
       )}
 
+      {/* Sync Progress Banner */}
+      <SyncProgressBanner syncStatus={syncStatus} />
+
       {/* Header */}
       <SectionHeader
         title="Integrations"
         description="Connect your e-commerce stores to sync products and push price updates automatically."
       />
+
+      {/* NEW: Diagnostic Panel */}
+      <DiagnosticPanel />
 
       {/* Loading state */}
       {isLoading && (
@@ -158,3 +204,6 @@ export default function IntegrationsPage() {
     </div>
   );
 }
+
+
+

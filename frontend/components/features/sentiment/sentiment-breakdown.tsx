@@ -42,7 +42,7 @@ export function SentimentBreakdown({ mentions }: SentimentBreakdownProps) {
     );
   }
 
-  const total = mentions.length;
+  const total = mentions.length || 1; // Prevent division by zero
 
   return (
     <div className="flex items-center gap-6">
@@ -65,8 +65,9 @@ export function SentimentBreakdown({ mentions }: SentimentBreakdownProps) {
             <Tooltip
               formatter={((value: unknown) => {
                 const numValue = typeof value === 'number' ? value : 0;
+                const percentage = ((numValue / total) * 100).toFixed(0);
                 return [
-                  `${numValue} (${((numValue / total) * 100).toFixed(0)}%)`,
+                  `${numValue} (${percentage}%)`,
                   'Mentions',
                 ];
               }) as never}
@@ -75,19 +76,24 @@ export function SentimentBreakdown({ mentions }: SentimentBreakdownProps) {
         </ResponsiveContainer>
       </div>
       <div className="flex flex-col gap-3">
-        {breakdown.map((item) => (
-          <div key={item.name} className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
-            <span className="text-sm text-gray-600 w-16">{item.name}</span>
-            <span className="text-sm font-medium">
-              {item.value} ({((item.value / total) * 100).toFixed(0)}%)
-            </span>
-          </div>
-        ))}
+        {breakdown.map((item) => {
+          const percentage = (((item.value ?? 0) / total) * 100).toFixed(0);
+          return (
+            <div key={item.name} className="flex items-center gap-2">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-sm text-gray-600 w-16">{item.name}</span>
+              <span className="text-sm font-medium">
+                {item.value} ({percentage}%)
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+
+

@@ -4,15 +4,18 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useProduct } from '@/lib/hooks/use-products';
+import { productsApi } from '@/lib/api';
 import {
   ProductInfoCard,
   AutoPricingCard,
   PriceSuggestionCard,
   PriceHistoryCard,
   DeleteProductModal,
+  KeywordsManager,
+  GenerateDescriptionModal,
 } from '@/components/features/products';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,6 +33,9 @@ function PageSkeleton() {
       
       {/* Info card skeleton */}
       <div className="bg-white rounded-lg border p-6 h-48" />
+      
+      {/* Keywords skeleton */}
+      <div className="bg-white rounded-lg border p-6 h-32" />
       
       {/* Grid skeleton */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -79,9 +85,10 @@ interface PageHeaderProps {
   productId: string;
   productName: string;
   onDelete: () => void;
+  onGenerateDescription: () => void;
 }
 
-function PageHeader({ productId, productName, onDelete }: PageHeaderProps) {
+function PageHeader({ productId, productName, onDelete, onGenerateDescription }: PageHeaderProps) {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -95,6 +102,17 @@ function PageHeader({ productId, productName, onDelete }: PageHeaderProps) {
       </div>
       
       <div className="flex gap-2">
+        {/* NEW: Find Competitors Button */}
+        <Link href={`/competitors/match?productId=${productId}`}>
+          <Button variant="secondary">
+            <Search className="h-4 w-4 mr-2" />
+            Find Competitors
+          </Button>
+        </Link>
+        <Button variant="secondary" onClick={onGenerateDescription}>
+          <Sparkles className="h-4 w-4 mr-2" />
+          AI Description
+        </Button>
         <Link href={`/products/${productId}/edit`}>
           <Button variant="secondary">
             <Edit className="h-4 w-4 mr-2" />
@@ -120,6 +138,7 @@ export default function ProductDetailPage() {
   const productId = params.id as string;
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   const {
     data: product,
@@ -139,6 +158,30 @@ export default function ProductDetailPage() {
 
   const handleDeleteSuccess = () => {
     router.push('/products');
+  };
+
+  // NEW: Updated handler to accept individual fields object
+  const handleApplyGenerated = async (fields: {
+    description?: string;
+    seo_title?: string;
+    meta_description?: string;
+    keywords?: string[];
+  }) => {
+    try {
+      // Build update payload with only the fields that were applied
+      const updateData: Record<string, unknown> = {};
+      if (fields.description) updateData.description = fields.description;
+      if (fields.keywords) updateData.keywords = fields.keywords;
+      // Note: seo_title and meta_description would need backend fields
+      // For now, they're available in the modal for copy/paste
+      
+      if (Object.keys(updateData).length > 0) {
+        await productsApi.update(productId, updateData);
+        refetch();
+      }
+    } catch (err) {
+      console.error('Failed to update product:', err);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -168,9 +211,16 @@ export default function ProductDetailPage() {
         productId={productId}
         productName={product.name}
         onDelete={() => setShowDeleteModal(true)}
+        onGenerateDescription={() => setShowGenerateModal(true)}
       />
 
       <ProductInfoCard product={product} />
+
+      {/* Keywords Manager - for sentiment tracking */}
+      <KeywordsManager
+        productId={productId}
+        keywords={product.keywords || []}
+      />
 
       <div className="grid md:grid-cols-2 gap-6">
         <AutoPricingCard product={product} />
@@ -189,6 +239,18 @@ export default function ProductDetailPage() {
         onClose={() => setShowDeleteModal(false)}
         onSuccess={handleDeleteSuccess}
       />
+
+      {/* UPDATED: Now uses handleApplyGenerated instead of handleApplyDescription */}
+      <GenerateDescriptionModal
+        isOpen={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+        productId={productId}
+        productName={product.name}
+        onApply={handleApplyGenerated}
+      />
     </div>
   );
 }
+
+
+

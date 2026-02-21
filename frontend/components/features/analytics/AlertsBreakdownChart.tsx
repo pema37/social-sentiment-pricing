@@ -83,7 +83,7 @@ export function AlertsBreakdownChart({ days = 30 }: AlertsBreakdownChartProps) {
     );
   }
 
-  const hasData = data && data.total_alerts > 0;
+  const hasData = data && data.total_alerts_7d > 0;
 
   return (
     <Card>
@@ -91,7 +91,7 @@ export function AlertsBreakdownChart({ days = 30 }: AlertsBreakdownChartProps) {
         <div>
           <CardTitle>Alert Analytics</CardTitle>
           <p className="text-sm text-gray-500 mt-1">
-            {data?.total_alerts ?? 0} alerts in the last {days} days
+            {data?.total_alerts_7d ?? 0} alerts in the last {days} days
           </p>
         </div>
       </div>
