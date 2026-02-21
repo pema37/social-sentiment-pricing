@@ -1,13 +1,18 @@
 """
 Subscription Model
 Tracks user subscription tiers, billing periods, and limits.
+
+UPDATED (2026-02-20): Added shopify_charge_id and shopify_plan_name
+for Shopify Billing API integration. These fields are nullable —
+only populated for merchants who subscribe via Shopify App Store.
+MNEE subscribers continue using the existing flow without these fields.
 """
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 from enum import Enum
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, String
 
 
 class SubscriptionTier(str, Enum):
@@ -48,6 +53,20 @@ class SubscriptionBase(SQLModel):
     # Cancellation
     cancelled_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     cancel_at_period_end: bool = Field(default=False)
+    
+    # ========== Shopify Billing API Fields (2026-02-20) ==========
+    # Only populated for merchants who subscribe via Shopify App Store.
+    # Null for MNEE/standalone subscribers.
+    shopify_charge_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(255), nullable=True),
+        description="Shopify AppSubscription GID (e.g. gid://shopify/AppSubscription/12345)",
+    )
+    shopify_plan_name: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(100), nullable=True),
+        description="Shopify plan display name (e.g. 'ActualPrice Professional')",
+    )
 
 
 class Subscription(SubscriptionBase, table=True):
@@ -147,4 +166,4 @@ def get_tier_price(tier) -> str:
     return limits["price"]
 
 
-
+    

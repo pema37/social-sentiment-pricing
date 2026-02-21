@@ -1,5 +1,9 @@
-# backend/api/v1/routes/integrations/oauth.py
-"""OAuth flow and WooCommerce API key connection endpoints."""
+"""OAuth flow and WooCommerce API key connection endpoints.
+
+UPDATED (2026-02-20): After successful Shopify OAuth, redirect to billing
+plan selection instead of straight to dashboard. This ensures new installs
+are prompted to pick a paid plan (Shopify App Store compliance requirement).
+"""
 
 import logging
 import secrets
@@ -107,7 +111,16 @@ async def oauth_callback(
     timestamp: str = None,
     db: AsyncSession = Depends(get_session),
 ):
-    """OAuth callback - handles both authenticated flow and fresh Shopify installs."""
+    """
+    OAuth callback - handles both authenticated flow and fresh Shopify installs.
+    
+    UPDATED (2026-02-20): After successful Shopify OAuth, redirect to billing
+    plan selection page instead of dashboard. This is required for Shopify App
+    Store compliance — merchants must be able to select a plan after install.
+    
+    For reinstalls where a billing subscription already exists, Shopify
+    automatically reactivates it, so the billing page will show the active plan.
+    """
     
     integration = None
     
@@ -188,17 +201,32 @@ async def oauth_callback(
     except Exception as e:
         logger.warning(f"Auto webhook registration failed: {e}")
     
-    # Redirect back into Shopify Admin if host param present
-    if host:
-        success_url = (
-            f"{settings.FRONTEND_URL}/dashboard"
-            f"?shop={shop}&host={host}&connected=true&integration_id={integration.id}"
-        )
+    # =========================================================================
+    # REDIRECT LOGIC — Shopify goes to billing, WooCommerce goes to dashboard
+    # =========================================================================
+    
+    if integration.platform == EcommercePlatform.SHOPIFY:
+        # NEW: Redirect Shopify merchants to billing plan selection.
+        # This ensures they pick a plan after install (App Store requirement).
+        # If they already have an active subscription (reinstall), the billing
+        # page will detect it and show their current plan instead.
+        if host:
+            success_url = (
+                f"{settings.FRONTEND_URL}/settings/billing"
+                f"?shop={shop}&host={host}&installed=true&integration_id={integration.id}"
+            )
+        else:
+            success_url = (
+                f"{settings.FRONTEND_URL}/settings/billing"
+                f"?shop={shop}&installed=true&integration_id={integration.id}"
+            )
     else:
+        # WooCommerce and other platforms go straight to integrations/dashboard
         success_url = (
             f"{settings.FRONTEND_URL}/integrations"
             f"?connected=true&integration_id={integration.id}&platform={integration.platform.value}"
         )
+    
     return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
 
 

@@ -1,6 +1,6 @@
 // Payment and Subscription Types
 // AUTO-SYNCED with backend via openapi-typescript
-// Last synced: 2026-01-08
+// Last synced: 2026-02-20
 // Source: components["schemas"]["PaymentInfo"], SubscriptionInfo, etc.
 
 // ============================================
@@ -52,7 +52,6 @@ export interface WalletInfo {
  * Matches: components["schemas"]["WalletUpdateRequest"]
  */
 export interface WalletUpdateRequest {
-  // bsv_wallet_address: string;
   bsv_wallet_address: string | null;
 }
 
@@ -209,6 +208,100 @@ export interface WebhookResponse {
 }
 
 // ============================================
+// SHOPIFY BILLING TYPES (2026-02-20)
+// Matches: backend/schemas/shopify_billing.py
+// ============================================
+
+export type ShopifyBillingTier = 'starter' | 'professional' | 'enterprise';
+
+/**
+ * Shopify plan info for display
+ * Matches: components["schemas"]["ShopifyPlanInfo"]
+ */
+export interface ShopifyPlanInfo {
+  tier: string;
+  name: string;
+  price_monthly: number;
+  trial_days: number;
+  product_limit: number;
+  features: string[];
+}
+
+/**
+ * Shopify plans list response
+ * Matches: components["schemas"]["ShopifyPlansListResponse"]
+ */
+export interface ShopifyPlansListResponse {
+  plans: ShopifyPlanInfo[];
+}
+
+/**
+ * Shopify subscribe request
+ * Matches: components["schemas"]["ShopifySubscribeRequest"]
+ */
+export interface ShopifySubscribeRequest {
+  tier: ShopifyBillingTier;
+  shop_domain?: string | null;
+}
+
+/**
+ * Shopify subscribe response
+ * Matches: components["schemas"]["ShopifySubscribeResponse"]
+ */
+export interface ShopifySubscribeResponse {
+  success: boolean;
+  confirmation_url: string | null;
+  shopify_subscription_id: string | null;
+  tier: string;
+  message: string;
+}
+
+/**
+ * Shopify billing status response
+ * Matches: components["schemas"]["ShopifyBillingStatusResponse"]
+ */
+export interface ShopifyBillingStatusResponse {
+  has_active_subscription: boolean;
+  tier: string | null;
+  plan_name: string | null;
+  status: string | null;
+  shopify_subscription_id: string | null;
+  trial_days: number | null;
+  current_period_end: string | null;
+  test: boolean;
+  price: string | null;
+  currency: string | null;
+}
+
+/**
+ * Shopify plan change request
+ * Matches: components["schemas"]["ShopifyPlanChangeRequest"]
+ */
+export interface ShopifyPlanChangeRequest {
+  new_tier: ShopifyBillingTier;
+  shop_domain?: string | null;
+}
+
+/**
+ * Shopify cancel request
+ * Matches: components["schemas"]["ShopifyCancelRequest"]
+ */
+export interface ShopifyCancelRequest {
+  prorate?: boolean;
+  shop_domain?: string | null;
+}
+
+/**
+ * Shopify cancel response
+ * Matches: components["schemas"]["ShopifyCancelResponse"]
+ */
+export interface ShopifyCancelResponse {
+  success: boolean;
+  message: string;
+  status: string | null;
+}
+
+// ============================================
 // UI HELPERS (Frontend-only)
 // ============================================
 
@@ -239,3 +332,5 @@ export const SUBSCRIPTION_STATUS_COLORS: Record<SubscriptionStatus, string> = {
 export interface PlansResponse {
   plans: SubscriptionPlan[];
 }
+
+
