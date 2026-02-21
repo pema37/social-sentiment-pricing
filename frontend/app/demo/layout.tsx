@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { DemoEmbeddedGate } from './embedded-gate';
 
 export const metadata: Metadata = {
   title: 'ActualPrice Demo - AI-Powered Dynamic Pricing | Gemini API Developer Competition',
@@ -16,10 +17,9 @@ export default function DemoLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // No authentication wrapper - demos are public
   return (
     <div className="min-h-screen">
-      {children}
+      <DemoEmbeddedGate>{children}</DemoEmbeddedGate>
     </div>
   );
 }

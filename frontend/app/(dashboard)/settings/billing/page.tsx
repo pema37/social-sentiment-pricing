@@ -26,6 +26,7 @@ import { useSubscription, usePlans, paymentKeys } from '@/lib/hooks/use-payments
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import type { SubscriptionTier, PlansResponse } from '@/types/payment';
+import { useShopifyEmbedded } from '@/lib/context/shopify-embedded';
 
 // Shopify billing (new)
 import {
@@ -35,7 +36,7 @@ import {
   useShopifyChangePlan,
   useShopifyCancelSubscription,
 } from '@/lib/hooks/use-shopify-billing';
-import { getShopifyContext, verifyShopifyCharge } from '@/lib/api/shopify-billing';
+import { verifyShopifyCharge } from '@/lib/api/shopify-billing';
 import type { ShopifyPlanInfo } from '@/lib/api/shopify-billing';
 
 // =============================================================================
@@ -656,18 +657,10 @@ function MneeBillingPage() {
 // =============================================================================
 
 export default function BillingSettingsPage() {
-  const [billingState] = useState(() => {
-    if (typeof window === 'undefined') {
-      return { mode: 'loading' as const, shop: null };
-    }
-    const ctx = getShopifyContext();
-    if (ctx.isShopify) {
-      return { mode: 'shopify' as const, shop: ctx.shop };
-    }
-    return { mode: 'mnee' as const, shop: null };
-  });
+  const { isEmbedded, shopDomain, isSessionReady } = useShopifyEmbedded();
 
-  if (billingState.mode === 'loading') {
+  // Wait for embedded context to resolve
+  if (!isSessionReady) {
     return (
       <div className="space-y-6">
         <Card>
@@ -680,10 +673,11 @@ export default function BillingSettingsPage() {
     );
   }
 
-  if (billingState.mode === 'shopify') {
-    return <ShopifyBillingPage shop={billingState.shop} />;
+  if (isEmbedded) {
+    return <ShopifyBillingPage shop={shopDomain} />;
   }
 
   return <MneeBillingPage />;
 }
+
 
