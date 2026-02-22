@@ -14,7 +14,7 @@ import {
   DeleteProductModal,
   ImportCSVModal,
 } from '@/components/features/products';
-import type { SortField, SortOrder, SortConfig } from '@/components/features/products/ProductsTable';
+import type { SortField, SortConfig } from '@/components/features/products/ProductsTable';
 import { useProducts, useDeleteProduct, type Product } from '@/lib/hooks/use-products';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,7 +70,8 @@ export default function ProductsPage() {
   // Pagination & Search
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const pageSize = 10;
+  const pageSize = 20;
+
 
   // Sorting state (default: by name ascending, like WooCommerce)
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -85,7 +86,6 @@ export default function ProductsPage() {
 
   // Data fetching
   const { data, isLoading, error, refetch } = useProducts({ page, page_size: pageSize });
-  const deleteProductMutation = useDeleteProduct();
 
   // Filter products by search (client-side)
   const filteredProducts = useMemo(() => {
@@ -205,7 +205,7 @@ export default function ProductsPage() {
       {data && (
         <Pagination
           page={page}
-          totalPages={data.pages}
+          totalPages={data.total_pages ?? 1}
           total={data.total}
           pageSize={pageSize}
           onPageChange={setPage}

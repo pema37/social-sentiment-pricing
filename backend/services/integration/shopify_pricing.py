@@ -11,6 +11,12 @@ Uses from ShopifyService (via self):
   - retry_config, PRICE_VERIFICATION_TOLERANCE
 
 Place at: backend/services/integration/shopify_pricing.py
+
+FIXED (2026-02-22): Replaced deprecated `productVariantUpdate` mutation with
+`productVariantsBulkUpdate`. Shopify removed `productVariantUpdate` after
+sunsetting API version 2025-10. The new mutation requires `productId` as a
+top-level argument alongside a `variants` array.
+See: https://shopify.dev/docs/api/admin-graphql/latest/mutations/productVariantsBulkUpdate
 """
 
 import logging
@@ -63,15 +69,40 @@ class ShopifyPricingMixin:
             )
             old_price = current.price if current else None
 
-            # GraphQL mutation
+            # ══════════════════════════════════════════════════════════════
+            # FIX (2026-02-22): Use productVariantsBulkUpdate instead of
+            # the removed productVariantUpdate mutation.
+            #
+            # productVariantUpdate was deprecated when Shopify sunset
+            # API version 2025-10. The replacement requires:
+            #   - productId (GID) as a top-level argument
+            #   - variants array of ProductVariantsBulkInput objects
+            #
+            # Even for a single variant update, this bulk mutation is
+            # the correct approach per Shopify's documentation.
+            # ══════════════════════════════════════════════════════════════
             mutation = """
-                mutation VariantUpdate($input: ProductVariantInput!) {
-                    productVariantUpdate(input: $input) {
-                        productVariant { id price }
-                        userErrors { field message }
+                mutation ProductVariantsBulkUpdate(
+                    $productId: ID!,
+                    $variants: [ProductVariantsBulkInput!]!
+                ) {
+                    productVariantsBulkUpdate(
+                        productId: $productId,
+                        variants: $variants
+                    ) {
+                        productVariants {
+                            id
+                            price
+                        }
+                        userErrors {
+                            field
+                            message
+                        }
                     }
                 }
             """
+
+            # Build variant input
             variant_input: dict = {
                 "id": self._gid("ProductVariant", variant_id),
                 "price": str(request.new_price),
@@ -79,13 +110,19 @@ class ShopifyPricingMixin:
             if request.compare_at_price:
                 variant_input["compareAtPrice"] = str(request.compare_at_price)
 
+            variables = {
+                "productId": self._gid("Product", request.external_product_id),
+                "variants": [variant_input],
+            }
+
             async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as rc:
                 data = await self._graphql(
-                    rc, shop_domain, access_token, mutation, {"input": variant_input}
+                    rc, shop_domain, access_token, mutation, variables
                 )
 
             # Check userErrors from mutation
-            user_errors = (data.get("productVariantUpdate") or {}).get("userErrors", [])
+            mutation_result = data.get("productVariantsBulkUpdate") or {}
+            user_errors = mutation_result.get("userErrors", [])
             if user_errors:
                 msg = "; ".join(e.get("message", "") for e in user_errors)
                 return PriceUpdateResponse(
@@ -194,5 +231,6 @@ class ShopifyPricingMixin:
             logger.exception(f"Error verifying price update for product {external_product_id}")
             return {"success": False, "actual_price": None, "error": f"Verification error: {str(e)}"}
         
+
 
         

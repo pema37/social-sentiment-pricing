@@ -280,12 +280,12 @@ class TestPushToPlatform:
         assert result["error_code"] == "INTEGRATION_INACTIVE"
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token")
+    @patch("services.pricing.ecommerce_push_service.decrypt_token")
     async def test_token_decrypt_failure(self, mock_decrypt):
         mock_decrypt.side_effect = Exception("decryption failed")
 
         db = make_mock_db()
-        db.get.return_value = make_integration()
+        db.get.return_value = make_integration(platform="shopify")
 
         svc = EcommercePushService(db)
         result = await svc._push_to_platform(make_product(), make_link())

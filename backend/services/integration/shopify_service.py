@@ -68,7 +68,7 @@ class ShopifyService(
     - Webhooks:  register_webhooks, unregister_webhooks, verify_webhook_signature
     """
 
-    API_VERSION = "2024-01"
+    API_VERSION = "2025-10"
     REQUIRED_SCOPES = ["read_products", "write_products", "read_orders"]
     WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete"]
     WEBHOOK_TOPICS_GQL = ["PRODUCTS_CREATE", "PRODUCTS_UPDATE", "PRODUCTS_DELETE"]

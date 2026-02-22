@@ -85,13 +85,13 @@ export interface UpdateProductRequest {
  * Paginated products response
  * Matches: components["schemas"]["PaginatedResponse_ProductRead_"]
  */
+
 export interface PaginatedProducts {
   items: Product[];
   total: number;
   page: number;
   page_size: number;
-  pages: number;
-  total_pages?: number;  // Alias for pages
+  total_pages: number;
 }
 
 // ============================================
