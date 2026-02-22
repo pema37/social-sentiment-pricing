@@ -5,6 +5,10 @@ Product Repository
 
 Handles all database operations for Product model.
 Single Responsibility: Only Product CRUD operations.
+
+PATCHED (2026-02-21):
+- create(): Uses flush() instead of commit() for batch compatibility
+- update(): No longer commits — caller batches commits per page
 """
 
 import logging
@@ -29,11 +33,15 @@ class ProductRepository:
     """
     Repository for Product database operations.
     
+    Note on commits: create() and update() do NOT commit.
+    The caller (ProductSyncHandler) batches commits per page for performance.
+    Callers outside the sync flow (e.g., API routes) must commit themselves.
+    
     Methods:
     - find_by_id: Get product by UUID
     - find_by_sku: Get product by SKU for a user
-    - create: Create new product
-    - update: Update existing product
+    - create: Create new product (flush only — caller commits)
+    - update: Update existing product (no commit — caller commits)
     """
     
     def __init__(self, db: AsyncSession):
@@ -63,7 +71,11 @@ class ProductRepository:
         category: Optional[str] = None,
         image_url: Optional[str] = None,
     ) -> Product:
-        """Create a new product."""
+        """Create a new product.
+        
+        Uses flush() to get the generated ID without committing.
+        Caller is responsible for committing (batched per page).
+        """
         product = Product(
             user_id=user_id,
             name=name,
@@ -76,8 +88,7 @@ class ProductRepository:
             cost=None,
         )
         self.db.add(product)
-        await self.db.commit()
-        await self.db.refresh(product)
+        await self.db.flush()
         return product
     
     async def update(
@@ -87,7 +98,10 @@ class ProductRepository:
         sku: Optional[str] = None,
         current_price: Optional[float] = None,
     ) -> Product:
-        """Update an existing product."""
+        """Update an existing product.
+        
+        Does NOT commit — caller batches commits per page.
+        """
         if name is not None:
             product.name = name
         if sku is not None:
@@ -97,7 +111,7 @@ class ProductRepository:
         
         product.updated_at = utc_now()
         self.db.add(product)
-        await self.db.commit()
-        await self.db.refresh(product)
         return product
+    
 
+    

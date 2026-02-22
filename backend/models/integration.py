@@ -6,7 +6,10 @@ Stores encrypted credentials for Shopify/WooCommerce connections
 
 Aligned with architecture doc: Section 6.1 Shopify Integration
 
-to fix deprecation warnings and ensure timezone-aware datetimes.
+PATCHED (2026-02-21):
+- Added UniqueConstraint on ProductIntegrationLink for variant-level dedup
+- Added index on external_variant_id for query performance
+- Updated docstrings for variant-aware linking
 """
 
 import uuid as uuid_lib
@@ -15,14 +18,19 @@ from enum import Enum
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
-from sqlalchemy import Column as SAColumn, DateTime, Text, LargeBinary, ForeignKey
+from sqlalchemy import (
+    Column as SAColumn,
+    DateTime,
+    Text,
+    LargeBinary,
+    ForeignKey,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 if TYPE_CHECKING:
     from models.user import User
     from models.product import Product
-
-
 
 
 class EcommercePlatform(str, Enum):
@@ -147,13 +155,30 @@ class IntegrationSyncLog(SQLModel, table=True):
 
 class ProductIntegrationLink(SQLModel, table=True):
     """
-    Links our Product records to external platform product IDs.
+    Links our Product records to external platform product/variant IDs.
     Enables two-way sync between SSP and Shopify/WooCommerce.
     
-    One SSP product can be linked to multiple platforms.
+    One SSP Product can have multiple links (one per variant per platform).
+    Upsert key: (integration_id, external_product_id, external_variant_id)
+    
+    Example for a Shopify product with 3 color variants:
+        Product "T-Shirt" → 3 links (Red, Blue, Green), each with
+        the same external_product_id but different external_variant_id.
     """
     __tablename__ = "product_integration_links"
 
+    # FIX: Enforce one link per integration + product + variant at the DB level.
+    # This prevents duplicate links from race conditions or retry logic.
+    # The actual index is created by Alembic migration (fix8), but declaring
+    # it here ensures create_all() in tests also enforces it.
+    __table_args__ = (
+        UniqueConstraint(
+            "integration_id",
+            "external_product_id",
+            "external_variant_id",
+            name="uq_link_integration_product_variant",
+        ),
+    )
 
     id: uuid_lib.UUID = Field(
         default_factory=uuid_lib.uuid4,
@@ -170,7 +195,9 @@ class ProductIntegrationLink(SQLModel, table=True):
     
     # External platform identifiers
     external_product_id: str = Field(max_length=100, index=True)
-    external_variant_id: Optional[str] = Field(default=None, max_length=100)
+    # FIX: Added index for query performance — every upsert lookup filters on this.
+    # Stays nullable until migration backfills existing NULLs (fix8).
+    external_variant_id: Optional[str] = Field(default=None, max_length=100, index=True)
     
     # Sync state
     external_price: Optional[float] = Field(default=None)
@@ -188,3 +215,4 @@ class ProductIntegrationLink(SQLModel, table=True):
     product: Optional["Product"] = Relationship(back_populates="integration_links")
 
 
+    

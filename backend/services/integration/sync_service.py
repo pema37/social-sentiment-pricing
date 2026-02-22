@@ -9,12 +9,19 @@ Handles full syncs, incremental syncs, and webhook-triggered updates.
 PATCHED (2026-01-28): Bug #6 fix - Added recover_stuck_syncs() method to
 handle integrations stuck in 'syncing' status due to worker crashes or
 unexpected failures. See SSP_AUDIT_REPORT.md.
+
+PATCHED (2026-02-21): Performance + correctness fixes:
+- Batched commits per page instead of per product
+- Generic exceptions re-raised from run_sync for caller visibility
+- recover_stuck_syncs filters by cutoff in initial query
+- _count_linked_products uses COUNT() instead of loading all rows
+- Token decryption validated before setting status to 'syncing'
 """
 
 import asyncio
 import logging
 from datetime import datetime, timedelta, UTC
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,10 +76,7 @@ class SyncService:
     
     _services: dict[EcommercePlatform, EcommerceService] = {}
     SYNC_TIMEOUT_SECONDS = 300
-    
-    # ========== NEW: Stuck sync recovery constants ==========
     STUCK_SYNC_TIMEOUT_MINUTES = 15  # If syncing for longer than this, it's stuck
-    # ========== END NEW ==========
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -89,7 +93,8 @@ class SyncService:
                 raise ValueError(f"Unsupported platform: {platform}")
         return cls._services[platform]
     
-    # ========== NEW: Stuck sync recovery method (Bug #6 fix) ==========
+    # ─── Stuck sync recovery (Bug #6 fix) ────────────────────────
+    
     async def recover_stuck_syncs(self, user_id: Optional[UUID] = None) -> int:
         """
         Recover integrations stuck in 'syncing' status.
@@ -105,16 +110,14 @@ class SyncService:
         
         Returns:
             Number of integrations recovered
-        
-        Note (2026-01-28): Added to fix Bug #6 where syncs would get stuck
-        in 'syncing' status forever if the worker crashed. This method should
-        be called periodically by a Celery beat task (every 5 minutes).
         """
         cutoff = utc_now() - timedelta(minutes=self.STUCK_SYNC_TIMEOUT_MINUTES)
         
-        # Find integrations stuck in 'syncing' status
+        # FIX: Filter by cutoff in initial query to avoid loading integrations
+        # that just started syncing moments ago
         stmt = select(Integration).where(
             Integration.sync_status == "syncing",
+            Integration.updated_at < cutoff,
         )
         if user_id:
             stmt = stmt.where(Integration.user_id == user_id)
@@ -128,8 +131,8 @@ class SyncService:
             log_stmt = (
                 select(IntegrationSyncLog)
                 .where(IntegrationSyncLog.integration_id == integration.id)
-                .where(IntegrationSyncLog.completed_at.is_(None))  # Not completed
-                .where(IntegrationSyncLog.started_at < cutoff)     # Started too long ago
+                .where(IntegrationSyncLog.completed_at.is_(None))
+                .where(IntegrationSyncLog.started_at < cutoff)
                 .order_by(IntegrationSyncLog.started_at.desc())
                 .limit(1)
             )
@@ -137,7 +140,6 @@ class SyncService:
             stuck_log = log_result.scalars().first()
             
             if stuck_log:
-                # This sync has been running too long - mark as failed
                 now = utc_now()
                 
                 stuck_log.success = False
@@ -149,7 +151,6 @@ class SyncService:
                 stuck_log.duration_seconds = (now - stuck_log.started_at).total_seconds()
                 self.db.add(stuck_log)
                 
-                # Reset integration status so user can retry
                 integration.sync_status = "error"
                 integration.error_message = "Sync was interrupted. Please try again."
                 self.db.add(integration)
@@ -161,9 +162,8 @@ class SyncService:
                     f"{(now - stuck_log.started_at).total_seconds():.0f} seconds"
                 )
             else:
-                # No stuck log found, but integration is still 'syncing'
-                # This could be a race condition or a log that was never created
-                # Check if the integration has been 'syncing' without any recent log
+                # No stuck log found, but integration is still 'syncing' past cutoff.
+                # Could be a race condition or a log that was never created.
                 recent_log_stmt = (
                     select(IntegrationSyncLog)
                     .where(IntegrationSyncLog.integration_id == integration.id)
@@ -173,7 +173,6 @@ class SyncService:
                 recent_result = await self.db.execute(recent_log_stmt)
                 recent_log = recent_result.scalars().first()
                 
-                # If no recent log, or the most recent log is completed but status is still 'syncing'
                 if not recent_log or (recent_log.completed_at is not None):
                     integration.sync_status = "error"
                     integration.error_message = "Sync status was inconsistent. Please try again."
@@ -190,18 +189,19 @@ class SyncService:
         
         return recovered
     
-    async def get_stuck_syncs(self, user_id: Optional[UUID] = None) -> List[dict]:
+    async def get_stuck_syncs(self, user_id: Optional[UUID] = None) -> list[dict]:
         """
         Get list of integrations currently stuck in 'syncing' status.
         
         Useful for diagnostics and admin dashboards.
-        
-        Returns:
-            List of dicts with integration info and how long they've been stuck
         """
         cutoff = utc_now() - timedelta(minutes=self.STUCK_SYNC_TIMEOUT_MINUTES)
         
-        stmt = select(Integration).where(Integration.sync_status == "syncing")
+        # FIX: Filter by cutoff in initial query
+        stmt = select(Integration).where(
+            Integration.sync_status == "syncing",
+            Integration.updated_at < cutoff,
+        )
         if user_id:
             stmt = stmt.where(Integration.user_id == user_id)
         
@@ -210,7 +210,6 @@ class SyncService:
         
         stuck = []
         for integration in integrations:
-            # Get the in-progress sync log
             log_stmt = (
                 select(IntegrationSyncLog)
                 .where(IntegrationSyncLog.integration_id == integration.id)
@@ -232,7 +231,8 @@ class SyncService:
                 })
         
         return stuck
-    # ========== END NEW ==========
+    
+    # ─── Main sync orchestration ─────────────────────────────────
     
     async def run_sync(
         self,
@@ -242,6 +242,15 @@ class SyncService:
     ) -> IntegrationSyncLog:
         """Run a product sync with timeout protection."""
         integration = await self._get_integration(integration_id, user_id)
+        
+        # FIX: Validate token BEFORE setting status to 'syncing'.
+        # If decryption fails, we don't want the integration stuck in 'syncing'.
+        try:
+            decrypt_token(integration.access_token_encrypted)
+        except Exception as e:
+            logger.error(f"Token decryption failed for integration {integration_id}: {e}")
+            raise SyncError(f"Failed to decrypt store credentials: {e}")
+        
         sync_log = await self._create_sync_log(integration, sync_type)
         
         try:
@@ -263,8 +272,12 @@ class SyncService:
             raise SyncTemporarilyUnavailable(str(e))
             
         except Exception as e:
+            # FIX: Re-raise after finalizing so callers know the sync failed.
+            # Previously this was swallowed — callers got a sync_log with
+            # success=False but no exception, unlike timeout/circuit breaker.
             logger.exception(f"Sync failed for integration {integration_id}")
             await self._finalize_failure(integration, sync_log, str(e))
+            raise SyncError(str(e)) from e
         
         return sync_log
     
@@ -326,7 +339,10 @@ class SyncService:
         await self.db.commit()
         await self.db.refresh(sync_log)
         
-        logger.info(f"Sync completed for {integration.store_url}: created={created}, updated={updated}, deleted={deleted}")
+        logger.info(
+            f"Sync completed for {integration.store_url}: "
+            f"created={created}, updated={updated}, deleted={deleted}"
+        )
     
     async def _finalize_failure(
         self,
@@ -350,13 +366,22 @@ class SyncService:
         await self.db.commit()
         await self.db.refresh(sync_log)
     
-    async def _sync_products(self, integration: Integration, sync_type: str) -> Tuple[int, int, int]:
-        """Fetch products from platform and sync to database."""
+    # ─── Product sync logic ──────────────────────────────────────
+    
+    async def _sync_products(
+        self, integration: Integration, sync_type: str
+    ) -> Tuple[int, int, int]:
+        """Fetch products from platform and sync to database.
+        
+        Commits are batched per page (100 products) for performance,
+        not per individual product/variant.
+        """
         service = self.get_service(integration.platform)
+        # Token already validated in run_sync, safe to decrypt again
         access_token = decrypt_token(integration.access_token_encrypted)
         
         created, updated, deleted = 0, 0, 0
-        seen_external_ids = set()
+        seen_link_keys: set = set()  # (external_product_id, external_variant_id) tuples
         cursor = integration.sync_cursor if sync_type == "incremental" else None
         
         has_more = True
@@ -372,38 +397,113 @@ class SyncService:
                 raise SyncError(f"Failed to fetch products: {result.error}")
             
             for external_product in result.products:
-                seen_external_ids.add(external_product.id)
+                # Track all variant keys for deletion detection
+                if external_product.variants:
+                    for variant in external_product.variants:
+                        seen_link_keys.add((external_product.id, variant.id))
+                else:
+                    seen_link_keys.add((external_product.id, None))
+                
                 c, u = await self._upsert_product(integration, external_product)
                 created += c
                 updated += u
             
+            # FIX: Single commit per page — covers all upserts in this batch
+            # plus the cursor update. Previously committed per product.
             cursor = result.next_cursor
             has_more = result.has_more
-            
             integration.sync_cursor = cursor
             self.db.add(integration)
             await self.db.commit()
         
         if sync_type == "full":
-            deleted = await self._handle_deletions(integration, seen_external_ids)
+            deleted = await self._handle_deletions(integration, seen_link_keys)
         
         return created, updated, deleted
     
-    async def _upsert_product(self, integration: Integration, external_product: ExternalProduct) -> Tuple[int, int]:
-        """Create or update a product from external data."""
+    async def _upsert_product(
+        self, integration: Integration, external_product: ExternalProduct
+    ) -> Tuple[int, int]:
+        """Create or update product + variant links from external data.
+        
+        One link per variant. Does NOT commit — caller batches commits.
+        """
+        created, updated = 0, 0
+        
+        variants = external_product.variants or []
+        if not variants:
+            c, u = await self._upsert_single_link(
+                integration, external_product,
+                variant_id=None,
+                variant_sku=external_product.sku,
+                variant_price=external_product.price,
+                variant_compare_at_price=external_product.compare_at_price,
+            )
+            return c, u
+        
+        for variant in variants:
+            c, u = await self._upsert_single_link(
+                integration, external_product,
+                variant_id=variant.id,
+                variant_sku=variant.sku,
+                variant_price=variant.price,
+                variant_compare_at_price=getattr(variant, 'compare_at_price', None),
+            )
+            created += c
+            updated += u
+        
+        return created, updated
+    
+    async def _upsert_single_link(
+        self,
+        integration: Integration,
+        external_product: ExternalProduct,
+        variant_id: Optional[str],
+        variant_sku: Optional[str],
+        variant_price: Optional[float],
+        variant_compare_at_price: Optional[float],
+    ) -> Tuple[int, int]:
+        """Upsert a single product-variant link.
+        
+        Lookup key: integration_id + external_product_id + external_variant_id
+        No SKU fallback. No name fallback.
+        Does NOT commit — caller batches commits per page.
+        """
         stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.integration_id == integration.id,
             ProductIntegrationLink.external_product_id == external_product.id,
         )
+        if variant_id:
+            stmt = stmt.where(ProductIntegrationLink.external_variant_id == variant_id)
+        else:
+            stmt = stmt.where(ProductIntegrationLink.external_variant_id.is_(None))
+        
         result = await self.db.execute(stmt)
         existing_link = result.scalars().first()
         
         if existing_link:
             return await self._update_existing(existing_link, external_product)
-        return await self._create_new(integration, external_product)
+        
+        return await self._create_new(
+            integration, external_product,
+            variant_id=variant_id,
+            variant_sku=variant_sku,
+            variant_price=variant_price,
+            variant_compare_at_price=variant_compare_at_price,
+        )
     
-    async def _update_existing(self, link: ProductIntegrationLink, external_product: ExternalProduct) -> Tuple[int, int]:
-        """Update existing product and link."""
+    async def _update_existing(
+        self, link: ProductIntegrationLink, external_product: ExternalProduct
+    ) -> Tuple[int, int]:
+        """Update existing product link with latest platform data.
+        
+        RULES (per Iqbal's Layer 2):
+        - Only update platform-owned fields (name, sku)
+        - NEVER overwrite current_price (owned by pricing engine)
+        - Only write Product if something actually changed
+        
+        Does NOT commit — caller batches commits per page.
+        """
         stmt = select(Product).where(Product.id == link.product_id)
         result = await self.db.execute(stmt)
         product = result.scalars().first()
@@ -412,78 +512,112 @@ class SyncService:
             return 0, 0
         
         now = utc_now()
-        product.name = external_product.title
-        product.sku = external_product.sku or product.sku
-        product.current_price = external_product.price or product.current_price
-        product.updated_at = now
-        self.db.add(product)
+        changed = False
         
+        # Platform-owned fields on Product (safe to update)
+        if external_product.title and external_product.title != product.name:
+            product.name = external_product.title
+            changed = True
+        
+        if external_product.sku and external_product.sku != product.sku:
+            product.sku = external_product.sku
+            changed = True
+        
+        # NEVER overwrite current_price — owned by pricing engine.
+        # Platform's price lives on link.external_price.
+        
+        if changed:
+            product.updated_at = now
+            self.db.add(product)
+        
+        # Platform-owned fields on the Link (always update)
         link.external_price = external_product.price
         link.external_compare_at_price = external_product.compare_at_price
         link.last_price_pull_at = now
         link.updated_at = now
         self.db.add(link)
         
-        await self.db.commit()
+        # FIX: Removed per-product commit. Caller commits per page.
         return 0, 1
     
-    async def _create_new(self, integration: Integration, external_product: ExternalProduct) -> Tuple[int, int]:
-        """Create new product and link."""
-        sku = external_product.sku or f"{integration.platform.value.upper()}-{external_product.id}"
+    async def _create_new(
+        self,
+        integration: Integration,
+        external_product: ExternalProduct,
+        variant_id: Optional[str],
+        variant_sku: Optional[str],
+        variant_price: Optional[float],
+        variant_compare_at_price: Optional[float],
+    ) -> Tuple[int, int]:
+        """Create new product and link. No fallback matching.
         
-        existing_stmt = select(Product).where(
-            Product.user_id == integration.user_id,
-            Product.sku == sku,
-        )
-        result = await self.db.execute(existing_stmt)
-        existing_product = result.scalars().first()
+        Uses flush() instead of commit() for the Product insert so we can
+        get the generated ID without ending the transaction. The page-level
+        commit in _sync_products will persist everything.
+        """
+        sku = variant_sku or f"{integration.platform.value.upper()}-{external_product.id}"
+        if variant_id and not variant_sku:
+            sku = f"{integration.platform.value.upper()}-{variant_id}"
         
-        if existing_product:
-            logger.info(f"Product with SKU {sku} already exists, creating link only")
-            variant_id = external_product.variants[0].id if external_product.variants else None
-            
+        # Check if another variant of the same product already created a Product
+        sibling_stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration.id,
+            ProductIntegrationLink.external_product_id == external_product.id,
+        ).limit(1)
+        result = await self.db.execute(sibling_stmt)
+        sibling_link = result.scalars().first()
+        
+        if sibling_link:
+            # Product exists — just add the variant link
             link = ProductIntegrationLink(
-                product_id=existing_product.id,
+                product_id=sibling_link.product_id,
                 integration_id=integration.id,
                 external_product_id=external_product.id,
                 external_variant_id=variant_id,
-                external_price=external_product.price,
-                external_compare_at_price=external_product.compare_at_price,
+                external_price=variant_price,
+                external_compare_at_price=variant_compare_at_price,
                 last_price_pull_at=utc_now(),
             )
             self.db.add(link)
-            await self.db.commit()
+            # FIX: Removed per-product commit. Caller commits per page.
             return 0, 1
         
+        # No product exists — create Product + first variant link
         product = Product(
             user_id=integration.user_id,
             name=external_product.title,
             sku=sku,
-            base_price=external_product.price or 0.0,
-            current_price=external_product.price or 0.0,
+            base_price=variant_price or 0.0,
+            current_price=variant_price or 0.0,
             cost=None,
         )
         self.db.add(product)
-        await self.db.commit()
-        await self.db.refresh(product)
+        # FIX: flush() to get the generated ID without committing the transaction.
+        # The page-level commit in _sync_products persists everything.
+        await self.db.flush()
         
-        variant_id = external_product.variants[0].id if external_product.variants else None
         link = ProductIntegrationLink(
             product_id=product.id,
             integration_id=integration.id,
             external_product_id=external_product.id,
             external_variant_id=variant_id,
-            external_price=external_product.price,
-            external_compare_at_price=external_product.compare_at_price,
+            external_price=variant_price,
+            external_compare_at_price=variant_compare_at_price,
             last_price_pull_at=utc_now(),
         )
         self.db.add(link)
-        await self.db.commit()
+        # FIX: Removed per-product commit. Caller commits per page.
         
         return 1, 0
     
-    async def _handle_deletions(self, integration: Integration, seen_external_ids: set) -> int:
-        """Handle products deleted from external platform."""
+    async def _handle_deletions(
+        self, integration: Integration, seen_link_keys: set
+    ) -> int:
+        """Handle products/variants deleted from external platform.
+        
+        Disables sync for links whose (external_product_id, external_variant_id)
+        tuple was not seen during this full sync.
+        """
         stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.integration_id == integration.id,
             ProductIntegrationLink.sync_enabled == True,
@@ -493,7 +627,8 @@ class SyncService:
         
         deleted = 0
         for link in links:
-            if link.external_product_id not in seen_external_ids:
+            key = (link.external_product_id, link.external_variant_id)
+            if key not in seen_link_keys:
                 link.sync_enabled = False
                 link.updated_at = utc_now()
                 self.db.add(link)
@@ -501,28 +636,36 @@ class SyncService:
         
         if deleted > 0:
             await self.db.commit()
-            logger.info(f"Disabled sync for {deleted} deleted products")
+            logger.info(f"Disabled sync for {deleted} deleted products/variants")
         
         return deleted
     
     async def _count_linked_products(self, integration_id: UUID) -> int:
-        """Count linked products for an integration."""
-        stmt = select(ProductIntegrationLink).where(
+        """Count active linked products for an integration.
+        
+        FIX: Uses COUNT() query instead of loading all rows into memory.
+        """
+        stmt = select(func.count(ProductIntegrationLink.id)).where(
             ProductIntegrationLink.integration_id == integration_id,
             ProductIntegrationLink.sync_enabled == True,
         )
         result = await self.db.execute(stmt)
-        return len(result.scalars().all())
+        return result.scalar() or 0
 
 
-# Background task function
-async def run_product_sync(db: AsyncSession, integration_id: UUID, sync_type: str = "full") -> IntegrationSyncLog:
+# ─── Background task functions ───────────────────────────────
+
+
+async def run_product_sync(
+    db: AsyncSession, integration_id: UUID, sync_type: str = "full"
+) -> IntegrationSyncLog:
     """Background task function for running product sync."""
     sync_service = SyncService(db)
-    return await sync_service.run_sync(integration_id=integration_id, sync_type=sync_type)
+    return await sync_service.run_sync(
+        integration_id=integration_id, sync_type=sync_type
+    )
 
 
-# ========== NEW: Background task function for stuck sync recovery ==========
 async def recover_stuck_syncs_async(db: AsyncSession) -> int:
     """
     Background task function for recovering stuck syncs.
@@ -534,7 +677,6 @@ async def recover_stuck_syncs_async(db: AsyncSession) -> int:
     """
     sync_service = SyncService(db)
     return await sync_service.recover_stuck_syncs()
-# ========== END NEW ==========
 
 
-
+    

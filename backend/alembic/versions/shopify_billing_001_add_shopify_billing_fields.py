@@ -1,7 +1,7 @@
 """Add Shopify billing fields to subscriptions
 
 Revision ID: shopify_billing_001
-Revises: REPLACE_WITH_YOUR_LATEST_REVISION
+Revises: 3ee400620558
 Create Date: 2026-02-20
 
 Adds shopify_charge_id and shopify_plan_name columns to the subscriptions table
@@ -12,11 +12,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-# IMPORTANT: Replace this with your actual latest revision ID.
-# Run: alembic heads
-# to find it.
 revision = "shopify_billing_001"
-down_revision = None  # <-- REPLACE with output of `alembic heads`
+down_revision = '3ee400620558'
 branch_labels = None
 depends_on = None
 
@@ -35,5 +32,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("subscriptions", "shopify_plan_name")
     op.drop_column("subscriptions", "shopify_charge_id")
+
 
     

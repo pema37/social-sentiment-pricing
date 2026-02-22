@@ -10,12 +10,16 @@ Handles:
 3. Auto-creating ProductIntegrationLink after sync
 
 This ensures every product has a proper link for price updates.
+
+PATCHED (2026-02-21):
+- _get_existing_link: Added external_variant_id param for variant-level lookups
+- _create_integration_link: Fixed Decimal→float type mismatch, removed nonexistent field
+- link_existing_product: Variant-aware — won't overwrite wrong variant's link
 """
 
 import logging
 from datetime import datetime, UTC
-from decimal import Decimal
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,12 +57,12 @@ class ProductSyncService:
     async def get_user_active_integration(
         self,
         user_id: UUID,
-        platform: Optional[EcommercePlatform] = None
+        platform: Optional[EcommercePlatform] = None,
     ) -> Optional[Integration]:
         """Get user's active integration, optionally filtered by platform."""
         stmt = select(Integration).where(
             Integration.user_id == user_id,
-            Integration.status == IntegrationStatus.ACTIVE
+            Integration.status == IntegrationStatus.ACTIVE,
         )
         if platform:
             stmt = stmt.where(Integration.platform == platform)
@@ -66,11 +70,11 @@ class ProductSyncService:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    async def get_all_user_integrations(self, user_id: UUID) -> List[Integration]:
+    async def get_all_user_integrations(self, user_id: UUID) -> list[Integration]:
         """Get all active integrations for a user."""
         stmt = select(Integration).where(
             Integration.user_id == user_id,
-            Integration.status == IntegrationStatus.ACTIVE
+            Integration.status == IntegrationStatus.ACTIVE,
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -93,8 +97,9 @@ class ProductSyncService:
                 return {
                     "success": True,
                     "external_product_id": existing_link.external_product_id,
+                    "external_variant_id": existing_link.external_variant_id,
                     "link_id": str(existing_link.id),
-                    "message": "Product already linked"
+                    "message": "Product already linked",
                 }
 
             if integration.platform == EcommercePlatform.WOOCOMMERCE:
@@ -104,7 +109,7 @@ class ProductSyncService:
             else:
                 return {
                     "success": False,
-                    "error": f"Unsupported platform: {integration.platform.value}"
+                    "error": f"Unsupported platform: {integration.platform.value}",
                 }
 
             if not result["success"]:
@@ -132,7 +137,7 @@ class ProductSyncService:
     async def _push_to_woocommerce(
         self,
         product: Product,
-        integration: Integration
+        integration: Integration,
     ) -> Dict[str, Any]:
         """Push product to WooCommerce via REST API (WooCommerce still uses REST)."""
         import httpx
@@ -170,7 +175,7 @@ class ProductSyncService:
                     api_url,
                     json=wc_product,
                     auth=(consumer_key, consumer_secret),
-                    headers={"Content-Type": "application/json"}
+                    headers={"Content-Type": "application/json"},
                 )
 
                 if response.status_code == 201:
@@ -179,21 +184,37 @@ class ProductSyncService:
                         "success": True,
                         "external_product_id": str(data["id"]),
                         "external_url": data.get("permalink"),
-                        "platform": "woocommerce"
+                        "platform": "woocommerce",
                     }
                 elif response.status_code == 401:
-                    return {"success": False, "error": "Invalid WooCommerce credentials", "error_code": "INVALID_CREDENTIALS"}
+                    return {
+                        "success": False,
+                        "error": "Invalid WooCommerce credentials",
+                        "error_code": "INVALID_CREDENTIALS",
+                    }
                 elif response.status_code == 400:
                     error_data = response.json()
                     error_msg = error_data.get("message", "Bad request")
                     if "sku" in error_msg.lower() and "duplicate" in error_msg.lower():
-                        return {"success": False, "error": f"A product with SKU '{product.sku}' already exists in WooCommerce", "error_code": "DUPLICATE_SKU"}
+                        return {
+                            "success": False,
+                            "error": f"A product with SKU '{product.sku}' already exists in WooCommerce",
+                            "error_code": "DUPLICATE_SKU",
+                        }
                     return {"success": False, "error": error_msg, "error_code": "BAD_REQUEST"}
                 else:
-                    return {"success": False, "error": f"WooCommerce API error: {response.status_code}", "error_code": "API_ERROR"}
+                    return {
+                        "success": False,
+                        "error": f"WooCommerce API error: {response.status_code}",
+                        "error_code": "API_ERROR",
+                    }
 
         except httpx.TimeoutException:
-            return {"success": False, "error": "WooCommerce store not responding (timeout)", "error_code": "TIMEOUT"}
+            return {
+                "success": False,
+                "error": "WooCommerce store not responding (timeout)",
+                "error_code": "TIMEOUT",
+            }
         except Exception as e:
             logger.error(f"WooCommerce push error: {e}")
             return {"success": False, "error": str(e), "error_code": "UNKNOWN_ERROR"}
@@ -201,7 +222,7 @@ class ProductSyncService:
     async def _push_to_shopify(
         self,
         product: Product,
-        integration: Integration
+        integration: Integration,
     ) -> Dict[str, Any]:
         """
         Push product to Shopify via GraphQL Admin API.
@@ -216,11 +237,15 @@ class ProductSyncService:
             store_url = integration.store_url.rstrip("/")
 
             # Normalize domain
-            shop_domain = store_url.lower().replace("https://", "").replace("http://", "").rstrip("/")
+            shop_domain = (
+                store_url.lower()
+                .replace("https://", "")
+                .replace("http://", "")
+                .rstrip("/")
+            )
             if not shop_domain.endswith(".myshopify.com") and "." not in shop_domain:
                 shop_domain = f"{shop_domain}.myshopify.com"
 
-            # Single GraphQL endpoint
             graphql_url = f"https://{shop_domain}/admin/api/{self.SHOPIFY_API_VERSION}/graphql.json"
 
             mutation = """
@@ -263,11 +288,15 @@ class ProductSyncService:
                     headers={
                         "Content-Type": "application/json",
                         "X-Shopify-Access-Token": access_token,
-                    }
+                    },
                 )
 
                 if response.status_code == 401:
-                    return {"success": False, "error": "Invalid Shopify credentials", "error_code": "INVALID_CREDENTIALS"}
+                    return {
+                        "success": False,
+                        "error": "Invalid Shopify credentials",
+                        "error_code": "INVALID_CREDENTIALS",
+                    }
 
                 response.raise_for_status()
                 body = response.json()
@@ -275,7 +304,11 @@ class ProductSyncService:
                 # Top-level GraphQL errors
                 if body.get("errors"):
                     msgs = "; ".join(e.get("message", "") for e in body["errors"])
-                    return {"success": False, "error": f"Shopify GraphQL error: {msgs}", "error_code": "API_ERROR"}
+                    return {
+                        "success": False,
+                        "error": f"Shopify GraphQL error: {msgs}",
+                        "error_code": "API_ERROR",
+                    }
 
                 data = body.get("data", {}).get("productCreate", {})
 
@@ -287,7 +320,11 @@ class ProductSyncService:
 
                 product_data = data.get("product")
                 if not product_data:
-                    return {"success": False, "error": "Shopify returned no product data", "error_code": "API_ERROR"}
+                    return {
+                        "success": False,
+                        "error": "Shopify returned no product data",
+                        "error_code": "API_ERROR",
+                    }
 
                 # Extract numeric IDs from GIDs (gid://shopify/Product/123 → 123)
                 product_numeric_id = product_data["id"].rsplit("/", 1)[-1]
@@ -301,22 +338,42 @@ class ProductSyncService:
                     "success": True,
                     "external_product_id": product_numeric_id,
                     "external_variant_id": variant_id,
-                    "platform": "shopify"
+                    "platform": "shopify",
                 }
 
         except httpx.TimeoutException:
-            return {"success": False, "error": "Shopify store not responding (timeout)", "error_code": "TIMEOUT"}
+            return {
+                "success": False,
+                "error": "Shopify store not responding (timeout)",
+                "error_code": "TIMEOUT",
+            }
         except Exception as e:
             logger.error(f"Shopify push error: {e}")
             return {"success": False, "error": str(e), "error_code": "UNKNOWN_ERROR"}
 
+    # ─── Internal helpers ────────────────────────────────────────
+
     async def _get_existing_link(
-        self, product_id: UUID, integration_id: UUID
+        self,
+        product_id: UUID,
+        integration_id: UUID,
+        external_variant_id: Optional[str] = None,
     ) -> Optional[ProductIntegrationLink]:
+        """Find existing link, optionally for a specific variant.
+        
+        FIX: Added external_variant_id param. Without it, for a product with
+        3 variant links, this returns an arbitrary one — which could cause
+        link_existing_product to overwrite the wrong variant's link.
+        """
         stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.product_id == product_id,
-            ProductIntegrationLink.integration_id == integration_id
+            ProductIntegrationLink.integration_id == integration_id,
         )
+        if external_variant_id is not None:
+            stmt = stmt.where(
+                ProductIntegrationLink.external_variant_id == external_variant_id
+            )
+        
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -328,14 +385,23 @@ class ProductSyncService:
         external_variant_id: Optional[str] = None,
         external_price: Optional[float] = None,
     ) -> ProductIntegrationLink:
+        """Create a new integration link.
+        
+        FIX: external_price uses float (matching model field), not Decimal.
+        FIX: Removed last_synced_at — field doesn't exist on model.
+              Model has last_price_pull_at instead.
+        """
         link = ProductIntegrationLink(
             product_id=product_id,
             integration_id=integration_id,
             external_product_id=external_product_id,
             external_variant_id=external_variant_id,
-            external_price=Decimal(str(external_price)) if external_price else None,
+            # FIX: Model field is Optional[float], not Decimal
+            external_price=external_price,
             sync_enabled=True,
-            last_synced_at=datetime.now(UTC),
+            # FIX: Was last_synced_at which doesn't exist on model.
+            # Correct field is last_price_pull_at.
+            last_price_pull_at=datetime.now(UTC),
         )
         self.db.add(link)
         await self.db.commit()
@@ -345,6 +411,7 @@ class ProductSyncService:
     async def sync_product_on_create(
         self, product: Product, user_id: UUID, auto_push: bool = True
     ) -> Dict[str, Any]:
+        """Auto-push product to all active integrations on creation."""
         if not auto_push:
             return {"synced": False, "reason": "auto_push disabled"}
 
@@ -359,10 +426,14 @@ class ProductSyncService:
                 "integration_id": str(integration.id),
                 "platform": integration.platform.value,
                 "store_url": integration.store_url,
-                **result
+                **result,
             })
 
-        return {"synced": True, "integrations_count": len(integrations), "results": results}
+        return {
+            "synced": True,
+            "integrations_count": len(integrations),
+            "results": results,
+        }
 
     async def link_existing_product(
         self,
@@ -371,6 +442,11 @@ class ProductSyncService:
         external_product_id: str,
         external_variant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Manually link an SSP product to an external product/variant.
+        
+        FIX: Passes external_variant_id to _get_existing_link so it won't
+        accidentally overwrite a different variant's link.
+        """
         stmt = select(Product).where(Product.id == product_id)
         result = await self.db.execute(stmt)
         product = result.scalars().first()
@@ -383,15 +459,23 @@ class ProductSyncService:
         if not integration:
             return {"success": False, "error": "Integration not found"}
 
-        existing = await self._get_existing_link(product_id, integration_id)
+        # FIX: Pass variant_id to avoid overwriting a different variant's link
+        existing = await self._get_existing_link(
+            product_id, integration_id, external_variant_id=external_variant_id
+        )
         if existing:
             existing.external_product_id = external_product_id
             existing.external_variant_id = external_variant_id
             existing.sync_enabled = True
-            existing.last_synced_at = datetime.now(UTC)
+            existing.last_price_pull_at = datetime.now(UTC)
+            existing.updated_at = datetime.now(UTC)
             self.db.add(existing)
             await self.db.commit()
-            return {"success": True, "link_id": str(existing.id), "message": "Updated existing link"}
+            return {
+                "success": True,
+                "link_id": str(existing.id),
+                "message": "Updated existing link",
+            }
 
         link = await self._create_integration_link(
             product_id=product_id,
@@ -400,20 +484,31 @@ class ProductSyncService:
             external_variant_id=external_variant_id,
             external_price=float(product.current_price) if product.current_price else None,
         )
-        return {"success": True, "link_id": str(link.id), "message": "Created new link"}
+        return {
+            "success": True,
+            "link_id": str(link.id),
+            "message": "Created new link",
+        }
 
     async def bulk_push_products(
-        self, user_id: UUID, product_ids: Optional[List[UUID]] = None
+        self, user_id: UUID, product_ids: Optional[list[UUID]] = None
     ) -> Dict[str, Any]:
+        """Push multiple products to all active integrations."""
         integrations = await self.get_all_user_integrations(user_id)
         if not integrations:
             return {"success": False, "error": "No active integrations"}
 
         if product_ids:
-            stmt = select(Product).where(Product.id.in_(product_ids), Product.user_id == user_id)
+            stmt = select(Product).where(
+                Product.id.in_(product_ids),
+                Product.user_id == user_id,
+            )
         else:
             subquery = select(ProductIntegrationLink.product_id).distinct()
-            stmt = select(Product).where(Product.user_id == user_id, Product.id.notin_(subquery))
+            stmt = select(Product).where(
+                Product.user_id == user_id,
+                Product.id.notin_(subquery),
+            )
 
         result = await self.db.execute(stmt)
         products = list(result.scalars().all())
@@ -426,7 +521,7 @@ class ProductSyncService:
             "total_integrations": len(integrations),
             "pushed": 0,
             "failed": 0,
-            "details": []
+            "details": [],
         }
 
         for product in products:
@@ -441,10 +536,11 @@ class ProductSyncService:
                     "product_name": product.name,
                     "integration_id": str(integration.id),
                     "platform": integration.platform.value,
-                    **push_result
+                    **push_result,
                 })
 
         return results
+
 
 
         
