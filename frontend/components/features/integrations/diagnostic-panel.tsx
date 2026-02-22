@@ -21,6 +21,7 @@ interface PlatformLink {
   sync_enabled: boolean;
   external_product_id: string;
   external_price: number | null;
+  last_price_push_at: string | null;
   would_push: boolean;
 }
 
@@ -56,6 +57,15 @@ interface DiagnosticResponse {
   issues: Issue[];
 }
 
+/** Capitalize platform name */
+function displayPlatform(platform: string): string {
+  const names: Record<string, string> = {
+    shopify: "Shopify",
+    woocommerce: "WooCommerce",
+  };
+  return names[platform] || platform.charAt(0).toUpperCase() + platform.slice(1);
+}
+
 export function DiagnosticPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -67,13 +77,10 @@ export function DiagnosticPanel() {
     setError(null);
 
     try {
-      // FIX (2026-01-27): Use api client instead of raw fetch
-      // This ensures proper authentication header is included
       const result = await api.get<DiagnosticResponse>("/api/v1/diagnostic/integration-health");
       setData(result);
       setIsOpen(true);
     } catch (err) {
-      // Handle structured error from api client
       if (err && typeof err === 'object' && 'detail' in err) {
         const detail = (err as { detail: string | object }).detail;
         setError(typeof detail === 'string' ? detail : JSON.stringify(detail));
@@ -296,21 +303,21 @@ export function DiagnosticPanel() {
           {/* Product Details (collapsible) */}
           <details className="group">
             <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
-              Product Link Details ({Object.keys(data.products).length} products)
+              ▼ Product Link Details ({Object.keys(data.products).length} products)
             </summary>
-            <div className="mt-2 max-h-64 overflow-y-auto border rounded-lg">
+            <div className="mt-2 max-h-96 overflow-y-auto border rounded-lg">
               <table className="min-w-full text-xs">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Product</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">Price</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">Platforms</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-600">DB Price</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-600">Platform Prices</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {Object.entries(data.products).map(([productId, product]) => (
-                    <tr key={productId} className="hover:bg-gray-50">
+                    <tr key={productId} className="hover:bg-gray-50 align-top">
                       <td className="px-3 py-2">
                         <div className="font-medium truncate max-w-37.5">
                           {product.product_name}
@@ -319,35 +326,72 @@ export function DiagnosticPanel() {
                           <div className="text-gray-400">SKU: {product.sku}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 font-medium text-gray-900">
                         ${product.current_price?.toFixed(2) || "N/A"}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex gap-1">
-                          {product.platforms_linked.map((link, i) => (
-                            <span
-                              key={i}
-                              className={`px-1.5 py-0.5 rounded text-xs ${
-                                link.would_push
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-100 text-red-700"
-                              }`}
-                              title={link.would_push ? "Will push" : "Won't push"}
-                            >
-                              {link.platform}
-                            </span>
-                          ))}
-                          {product.total_platforms === 0 && (
-                            <span className="text-gray-400">No links</span>
-                          )}
-                        </div>
+                        {product.platforms_linked.length === 0 ? (
+                          <span className="text-gray-400">No links</span>
+                        ) : (
+                          <div className="space-y-1">
+                            {product.platforms_linked.map((link, i) => {
+                              const drift =
+                                link.external_price != null && product.current_price != null
+                                  ? Math.abs(link.external_price - product.current_price)
+                                  : null;
+                              const hasDrift = drift != null && drift > 0.01;
+
+                              return (
+                                <div key={i} className="flex items-center gap-1.5">
+                                  <span
+                                    className={`inline-block w-20.5 px-1.5 py-0.5 rounded text-center text-[10px] font-medium ${
+                                      link.would_push
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-red-100 text-red-700"
+                                    }`}
+                                  >
+                                    {displayPlatform(link.platform)}
+                                  </span>
+                                  <span className="font-medium text-gray-700">
+                                    {link.external_price != null
+                                      ? `$${link.external_price.toFixed(2)}`
+                                      : "—"}
+                                  </span>
+                                  {hasDrift && (
+                                    <span className="text-[10px] font-medium text-red-600 bg-red-50 px-1 py-0.5 rounded">
+                                      {link.external_price! > product.current_price!
+                                        ? "+"
+                                        : "−"}
+                                      ${drift!.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {!hasDrift && link.external_price != null && (
+                                    <span className="text-[10px] text-green-600">✓</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2">
-                        {product.active_push_targets === product.total_platforms &&
-                        product.total_platforms > 0 ? (
-                          <span className="text-green-600">✓ OK</span>
-                        ) : product.total_platforms === 0 ? (
+                        {product.platforms_linked.length === 0 ? (
                           <span className="text-gray-400">Unlinked</span>
+                        ) : product.platforms_linked.every(
+                            (l) =>
+                              l.would_push &&
+                              l.external_price != null &&
+                              product.current_price != null &&
+                              Math.abs(l.external_price - product.current_price) <= 0.01
+                          ) ? (
+                          <span className="text-green-600">✓ Synced</span>
+                        ) : product.platforms_linked.some(
+                            (l) =>
+                              l.external_price != null &&
+                              product.current_price != null &&
+                              Math.abs(l.external_price - product.current_price) > 0.01
+                          ) ? (
+                          <span className="text-red-600 font-medium">Drift</span>
                         ) : (
                           <span className="text-yellow-600">
                             {product.active_push_targets}/{product.total_platforms}

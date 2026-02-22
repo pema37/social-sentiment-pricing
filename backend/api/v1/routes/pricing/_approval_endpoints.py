@@ -144,6 +144,7 @@ async def apply_recommendation(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+
 @router.post("/recommendations/process-auto-approvals")
 @limiter.limit(ANALYSIS_RATE_LIMIT)
 async def process_auto_approvals(
@@ -189,5 +190,3 @@ async def process_auto_approvals(
         raise HTTPException(status_code=500, detail=str(e))
     
 
-
-    

@@ -14,6 +14,8 @@ import type { PricingRule, RuleType } from '@/types';
 // ============================================
 
 interface RulesListProps {
+  /** Competitor ID to name mapping */
+  competitorNames?: Record<string, string>;
   rules: PricingRule[];
   /** Product ID to name mapping */
   productNames?: Record<string, string>;
@@ -200,10 +202,10 @@ function FilterTabs<T extends string>({
 // ============================================
 // MAIN COMPONENT
 // ============================================
-
 export function RulesList({
   rules,
   productNames = {},
+  competitorNames = {},
   filterType = 'all',
   filterActive = 'all',
   onFilterTypeChange,
@@ -295,8 +297,10 @@ export function RulesList({
       ) : (
         <div className="space-y-4">
           {filteredRules.map((rule) => (
+
             <RuleCard
               productNames={productNames}
+              competitorNames={competitorNames}
               key={rule.id}
               rule={rule}
               onToggle={onToggle}

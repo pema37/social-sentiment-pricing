@@ -1,4 +1,6 @@
 // components/features/products/ProductRow.tsx
+// FIX (2026-02-21): Added platform badges showing Shopify/WooCommerce
+// connections per product. See BUG-005 in audit report.
 'use client';
 
 import { useState, useRef } from 'react';
@@ -51,6 +53,31 @@ function calculatePriceChange(current: number, base: number) {
   return { 
     change: isNaN(change) ? 0 : change, 
     percent: isNaN(percent) ? 0 : percent 
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform Badge Config
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PLATFORM_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  shopify: {
+    bg: 'bg-green-100',
+    text: 'text-green-700',
+    label: 'Shopify',
+  },
+  woocommerce: {
+    bg: 'bg-purple-100',
+    text: 'text-purple-700',
+    label: 'Woo',
+  },
+};
+
+function getPlatformStyle(platform: string) {
+  return PLATFORM_STYLES[platform.toLowerCase()] ?? {
+    bg: 'bg-gray-100',
+    text: 'text-gray-700',
+    label: platform,
   };
 }
 
@@ -112,7 +139,26 @@ function ProductInfoCell({ product }: ProductInfoCellProps) {
       )}
       <div>
         <p className="font-medium text-gray-900">{product.name}</p>
-        <p className="text-sm text-gray-500">{product.sku || 'No SKU'}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-gray-500">{product.sku || 'No SKU'}</p>
+          {/* FIX BUG-005: Platform badges */}
+          {product.platforms_linked && product.platforms_linked.length > 0 && (
+            <div className="flex gap-1">
+              {product.platforms_linked.map((pl) => {
+                const style = getPlatformStyle(pl.platform);
+                return (
+                  <span
+                    key={pl.platform}
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${style.bg} ${style.text}`}
+                    title={`Connected to ${style.label}${pl.store_url ? ` (${pl.store_url})` : ''}${pl.sync_enabled ? '' : ' — sync disabled'}`}
+                  >
+                    {style.label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -333,5 +379,6 @@ export function ProductRow({ product, onPriceSuggestion, onDelete }: ProductRowP
 }
 
 export default ProductRow;
+
 
 

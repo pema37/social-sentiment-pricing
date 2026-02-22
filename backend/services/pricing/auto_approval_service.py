@@ -1,4 +1,3 @@
-# backend/services/pricing/auto_approval_service.py
 """
 Auto-Approval Service - Handles automatic approval processing.
 
@@ -199,6 +198,5 @@ class AutoApprovalService:
         else:
             return start <= current_hour < end
         
-
 
         

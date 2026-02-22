@@ -1,9 +1,14 @@
 // Pricing Rules Page
 // Lists all pricing rules with filtering and management actions
+//
+// FIX (2026-02-21): Added useProducts() fetch and productNames map.
+// Previously only competitorNames was passed to RulesList, causing
+// rules scoped to specific products to show "Unknown" instead of
+// the product name. See BUG-008 in audit report.
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sliders, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,6 +20,8 @@ import {
   useTogglePricingRule,
   useDeletePricingRule,
 } from '@/lib/hooks/use-pricing';
+import { useCompetitors } from '@/lib/hooks/use-competitors';
+import { useProducts } from '@/lib/hooks/use-products';  // FIX BUG-008
 import type { RuleType } from '@/types';
 
 // ============================================
@@ -34,6 +41,30 @@ export default function PricingRulesPage() {
     isError,
     refetch,
   } = usePricingRules();
+
+  // Fetch competitors for name resolution
+  const { data: competitorsData } = useCompetitors({ page_size: 100 });
+
+  // FIX BUG-008: Fetch products for name resolution
+  const { data: productsData } = useProducts({ page_size: 200 });
+
+  // Build competitor ID → name map
+  const competitorNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    competitorsData?.items?.forEach((c) => {
+      map[c.id] = c.name;
+    });
+    return map;
+  }, [competitorsData]);
+
+  // FIX BUG-008: Build product ID → name map
+  const productNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    (productsData?.items ?? []).forEach((p) => {
+      map[p.id] = p.name;
+    });
+    return map;
+  }, [productsData]);
 
   // Mutations
   const toggleMutation = useTogglePricingRule();
@@ -190,6 +221,8 @@ export default function PricingRulesPage() {
       ) : (
         <RulesList
           rules={rulesData?.items ?? []}
+          productNames={productNames}        /* FIX BUG-008 */
+          competitorNames={competitorNames}
           filterType={filterType}
           filterActive={filterActive}
           onFilterTypeChange={handleFilterTypeChange}
@@ -205,3 +238,5 @@ export default function PricingRulesPage() {
     </div>
   );
 }
+
+

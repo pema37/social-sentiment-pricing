@@ -15,7 +15,7 @@ import {
   ImportCSVModal,
 } from '@/components/features/products';
 import type { SortField, SortConfig } from '@/components/features/products/ProductsTable';
-import { useProducts, useDeleteProduct, type Product } from '@/lib/hooks/use-products';
+import { useProducts, type Product } from '@/lib/hooks/use-products';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sorting Helper

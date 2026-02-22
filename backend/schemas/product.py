@@ -1,4 +1,10 @@
 # backend/schemas/product.py
+"""
+Product schemas for API request/response validation.
+
+FIX (2026-02-21): Added PlatformLink and platforms_linked to ProductRead
+to support multi-platform badges in the product list UI. See BUG-005.
+"""
 
 from datetime import datetime
 from decimal import Decimal
@@ -45,6 +51,14 @@ class ProductUpdate(BaseModel):
 
 # ============== Response Schemas ==============
 
+class PlatformLink(BaseModel):
+    """Platform connection info for a product."""
+    platform: str              # "shopify" or "woocommerce"
+    store_url: Optional[str] = None
+    external_price: Optional[float] = None
+    sync_enabled: bool = False
+
+
 class ProductRead(BaseModel):
     id: UUID
     user_id: UUID
@@ -56,7 +70,7 @@ class ProductRead(BaseModel):
     is_active: bool          
     base_price: Decimal
     current_price: Decimal
-    cost: Optional[Decimal]  # NEW
+    cost: Optional[Decimal]
     min_price: Optional[Decimal]
     max_price: Optional[Decimal]
     sentiment_multiplier: Decimal
@@ -64,6 +78,8 @@ class ProductRead(BaseModel):
     keywords: List[str]
     created_at: datetime
     updated_at: datetime
+    # FIX BUG-005: Platform connection info
+    platforms_linked: List[PlatformLink] = []
 
     class Config:
         from_attributes = True
@@ -80,3 +96,6 @@ class PriceSuggestion(BaseModel):
     confidence: Decimal = Field(ge=0, le=1)
     factors: dict
 
+
+
+    

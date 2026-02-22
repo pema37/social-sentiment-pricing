@@ -77,6 +77,25 @@ const statusConfig: { [key in RecommendationStatus]: StatusInfo } = {
 };
 
 // ============================================
+// HELPERS
+// ============================================
+
+/** Parse "woocommerce, shopify" into ["woocommerce", "shopify"] */
+function parsePlatforms(raw?: string | null): string[] {
+  if (!raw) return [];
+  return raw.split(',').map((p) => p.trim().toLowerCase()).filter(Boolean);
+}
+
+/** Capitalize platform name for display */
+function displayPlatform(platform: string): string {
+  const names: Record<string, string> = {
+    shopify: 'Shopify',
+    woocommerce: 'WooCommerce',
+  };
+  return names[platform] || platform.charAt(0).toUpperCase() + platform.slice(1);
+}
+
+// ============================================
 // COMPONENT
 // ============================================
 
@@ -97,14 +116,19 @@ export function RecommendationCard({
     confidence_score,
     reasoning,
     status,
+    applied_to_platform,
     expires_at,
     created_at,
   } = recommendation;
 
   const isPending = status === 'pending';
+  const isApplied = status === 'applied';
   const isIncrease = change_percent > 0;
   const statusInfo = statusConfig[status];
   const StatusIcon = statusInfo.icon;
+
+  // Parse which platforms received the push
+  const appliedPlatforms = parsePlatforms(applied_to_platform);
 
   // Check if expiring soon (within 24 hours)
   // eslint-disable-next-line
@@ -120,15 +144,39 @@ export function RecommendationCard({
             <p className="text-sm text-gray-500">SKU: {productSku}</p>
           )}
         </div>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
-            statusInfo.color
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
+              statusInfo.color
+            )}
+          >
+            <StatusIcon className="h-3 w-3" />
+            {statusInfo.label}
+          </span>
+
+          {/* Platform badges — only shown for applied recommendations */}
+          {isApplied && appliedPlatforms.length > 0 && (
+            <div className="flex flex-wrap gap-1 justify-end">
+              {appliedPlatforms.map((platform) => (
+                <span
+                  key={platform}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                >
+                  {displayPlatform(platform)}
+                </span>
+              ))}
+            </div>
           )}
-        >
-          <StatusIcon className="h-3 w-3" />
-          {statusInfo.label}
-        </span>
+
+          {/* Warning if applied but no platform recorded */}
+          {isApplied && appliedPlatforms.length === 0 && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-600 border border-orange-200">
+              <AlertCircle className="h-2.5 w-2.5" />
+              Platform unknown
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Price Change */}
@@ -231,3 +279,5 @@ export function RecommendationCard({
     </Card>
   );
 }
+
+

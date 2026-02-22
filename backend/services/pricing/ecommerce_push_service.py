@@ -92,9 +92,13 @@ class EcommercePushService:
                 single_result = await self._push_to_platform(product, link)
                 push_results.append(single_result)
             
-            # FIX: Commit link metadata updates (last_price_push_at, external_price)
-            # after all pushes. Previously these were never committed.
-            await self.db.commit()
+            # FIX: Flush link metadata updates (last_price_push_at, external_price)
+            # after all pushes. Using flush() instead of commit() so the caller
+            # (auto_approve_and_apply) controls the transaction boundary.
+            # This keeps product price change + link metadata + approval status
+            # in a single atomic commit.
+            await self.db.flush()
+
             
             # Aggregate results
             successful = [r for r in push_results if r["success"]]

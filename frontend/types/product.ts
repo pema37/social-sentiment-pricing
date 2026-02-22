@@ -15,21 +15,28 @@ export interface Product {
   id: string;
   user_id: string;
   name: string;
-  sku: string | null;
-  description: string | null;
-  category: string | null;
-  image_url: string | null;
+  sku?: string;
+  description?: string;
+  category?: string;
+  image_url?: string;
   is_active: boolean;
-  base_price: string;        // Decimal returned as string
-  current_price: string;     // Decimal returned as string
-  cost: string | null;       // Decimal returned as string
-  min_price: string | null;  // Decimal returned as string
-  max_price: string | null;  // Decimal returned as string
-  sentiment_multiplier: string; // Decimal returned as string
+  base_price: number;
+  current_price: number;
+  cost?: number;
+  min_price?: number;
+  max_price?: number;
+  sentiment_multiplier: number;
   auto_pricing_enabled: boolean;
   keywords: string[];
-  created_at: string;        // ISO 8601 datetime
-  updated_at: string;        // ISO 8601 datetime
+  created_at: string;
+  updated_at: string;
+  // FIX BUG-005: Platform connection badges
+  platforms_linked?: Array<{
+    platform: string;
+    store_url?: string;
+    external_price?: number;
+    sync_enabled: boolean;
+  }>;
 }
 
 /**

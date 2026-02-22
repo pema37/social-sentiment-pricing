@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { Upload, X, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, X, FileText, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useImportProducts } from '@/lib/hooks/use-products';
 
@@ -31,6 +31,7 @@ interface PreviewData {
   rows: string[][];
   mappedRows: ParsedRow[];
   errors: string[];
+  unmappedColumns: string[];  // FIX BUG-007: Track columns we can't map
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +187,14 @@ function mapRowToProduct(
   };
 }
 
+// FIX BUG-007: Detect columns that don't match any known mapping
+function detectUnmappedColumns(headers: string[]): string[] {
+  return headers.filter((header) => {
+    const normalized = header.toLowerCase().trim();
+    return !COLUMN_MAPPINGS[normalized] && normalized.length > 0;
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,12 +224,16 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
         errors.push(`Row ${index + 2}: ${error}`);
       }
     });
+
+    // FIX BUG-007: Detect and surface unmapped columns
+    const unmappedColumns = detectUnmappedColumns(headers);
     
     setPreview({
       headers,
       rows: rows.slice(0, 5),
       mappedRows,
       errors,
+      unmappedColumns,
     });
   }, []);
 
@@ -261,6 +274,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
       { products: preview.mappedRows },
       {
         onSuccess: (result) => {
+          // FIX BUG-001: Only trigger parent refresh if products were actually created
           if (result.created > 0) {
             onSuccess();
           }
@@ -279,6 +293,14 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
   };
 
   if (!isOpen) return null;
+
+  // FIX BUG-001: Determine if the import "succeeded" but created nothing
+  const importDone = importProducts.isSuccess;
+  const createdCount = importProducts.data?.created ?? 0;
+  const skippedCount = importProducts.data?.skipped ?? 0;
+  const failedCount = importProducts.data?.failed ?? 0;
+  const hasRealSuccess = importDone && createdCount > 0;
+  const hasZeroCreated = importDone && createdCount === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -301,20 +323,40 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
 
         {/* Content */}
         <div className="p-4 overflow-y-auto flex-1">
-          {/* Success State */}
-          {importProducts.isSuccess && (
+
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* FIX BUG-001: Separate success vs zero-created states          */}
+          {/* ═══════════════════════════════════════════════════════════════ */}
+
+          {/* Success State — products were actually created */}
+          {hasRealSuccess && (
             <div className="text-center py-8">
               <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">Import Complete!</h3>
-              <p className="text-gray-600 mb-4">
-                Successfully imported {importProducts.data?.created} products.
-                {importProducts.data?.failed > 0 && (
-                  <span className="text-amber-600">
-                    {' '}{importProducts.data.failed} failed.
-                  </span>
-                )}
+              <p className="text-gray-600 mb-1">
+                Successfully imported {createdCount} product{createdCount !== 1 ? 's' : ''}.
               </p>
-              <div className="flex gap-2 justify-center">
+              {skippedCount > 0 && (
+                <p className="text-amber-600 text-sm mb-1">
+                  {skippedCount} skipped — SKU{skippedCount !== 1 ? 's' : ''} already exist in your catalog.
+                </p>
+              )}
+              {failedCount > 0 && (
+                <p className="text-red-600 text-sm mb-1">
+                  {failedCount} failed to import.
+                </p>
+              )}
+              {/* Show individual errors if any */}
+              {(importProducts.data?.errors?.length ?? 0) > 0 && (
+                <div className="mt-3 text-left bg-red-50 rounded-lg p-3 max-h-32 overflow-y-auto">
+                  <ul className="text-sm text-red-700 space-y-0.5">
+                    {importProducts.data!.errors.slice(0, 5).map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex gap-2 justify-center mt-4">
                 <Button variant="secondary" onClick={handleReset}>
                   Import More
                 </Button>
@@ -325,8 +367,50 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
             </div>
           )}
 
+          {/* Zero Created State — import ran but nothing was added */}
+          {hasZeroCreated && (
+            <div className="text-center py-8">
+              <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No New Products Imported</h3>
+              {skippedCount > 0 ? (
+                <p className="text-amber-600 mb-1">
+                  {skippedCount} product{skippedCount !== 1 ? 's' : ''} skipped — SKU{skippedCount !== 1 ? 's' : ''} already exist in your catalog.
+                </p>
+              ) : failedCount > 0 ? (
+                <p className="text-red-600 mb-1">
+                  {failedCount} product{failedCount !== 1 ? 's' : ''} failed to import.
+                </p>
+              ) : (
+                <p className="text-gray-600 mb-1">
+                  No products were added. The file may be empty or all rows were invalid.
+                </p>
+              )}
+              {/* Show individual errors if any */}
+              {(importProducts.data?.errors?.length ?? 0) > 0 && (
+                <div className="mt-3 text-left bg-red-50 rounded-lg p-3 max-h-32 overflow-y-auto">
+                  <ul className="text-sm text-red-700 space-y-0.5">
+                    {importProducts.data!.errors.slice(0, 5).map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-gray-500 text-sm mt-3">
+                To update existing products, re-import with different SKUs or edit them from the Products page.
+              </p>
+              <div className="flex gap-2 justify-center mt-4">
+                <Button variant="secondary" onClick={handleReset}>
+                  Try Again
+                </Button>
+                <Button onClick={onClose}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Upload State */}
-          {!importProducts.isSuccess && !preview && (
+          {!importDone && !preview && (
             <div
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                 isDragging
@@ -367,7 +451,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
           )}
 
           {/* Preview State */}
-          {!importProducts.isSuccess && preview && (
+          {!importDone && preview && (
             <div className="space-y-4">
               {/* File Info */}
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
@@ -383,7 +467,29 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
                 </Button>
               </div>
 
-              {/* Errors */}
+              {/* ═══════════════════════════════════════════════════════════ */}
+              {/* FIX BUG-007: Show unmapped columns warning                */}
+              {/* ═══════════════════════════════════════════════════════════ */}
+              {preview.unmappedColumns.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-blue-800">
+                        {preview.unmappedColumns.length} column{preview.unmappedColumns.length !== 1 ? 's' : ''} will be ignored
+                      </p>
+                      <p className="text-sm text-blue-700 mt-1">
+                        {preview.unmappedColumns.join(', ')}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        These columns don&apos;t match any supported product fields and will not be imported.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Row Errors */}
               {preview.errors.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <div className="flex items-start gap-2">
@@ -443,7 +549,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
         </div>
 
         {/* Footer */}
-        {!importProducts.isSuccess && preview && preview.mappedRows.length > 0 && (
+        {!importDone && preview && preview.mappedRows.length > 0 && (
           <div className="flex justify-end gap-2 p-4 border-t bg-gray-50">
             <Button variant="secondary" onClick={onClose}>
               Cancel
@@ -463,5 +569,6 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
 }
 
 export default ImportCSVModal;
+
 
 

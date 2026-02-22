@@ -31,6 +31,8 @@ export interface ImportProductsRequest {
 
 export interface ImportProductsResponse {
   created: number;
+  updated: number;
+  skipped: number;
   failed: number;
   errors: string[];
 }

@@ -27,6 +27,7 @@ import type { PricingRule, RuleType, RuleAction } from '@/types';
 interface RuleCardProps {
   rule: PricingRule;
   productNames?: Record<string, string>;
+  competitorNames?: Record<string, string>;
   onToggle?: (id: string, isActive: boolean) => void;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -87,6 +88,7 @@ const actionLabels: { [key in RuleAction]: string } = {
 export function RuleCard({
   rule,
   productNames = {},
+  competitorNames = {},
   onToggle,
   onEdit,
   onDelete,
@@ -106,20 +108,32 @@ export function RuleCard({
     applies_to_all_products,
     applies_to_products,
     applies_to_categories,
+    competitor_id,
+    competitor_margin_percent,
+    sentiment_threshold,
+    sentiment_direction,
+    volume_threshold,
+    volume_window_hours,
+    viral_threshold_reach,
+    viral_threshold_engagement,
+    viral_sentiment_min,
+    min_price,
+    max_price,
+    max_change_percent,
   } = rule;
 
   const typeInfo = ruleTypeConfig[rule_type];
   const TypeIcon = typeInfo.icon;
   const actionLabel = actionLabels[action];
 
-  // Build scope text
+  // Build scope text — now shows actual names
   const getScopeText = () => {
     if (applies_to_all_products) {
       return 'All products';
     }
     if (applies_to_products?.length) {
       const names = applies_to_products
-        .map((id) => productNames[id] || 'Unknown')
+        .map((pid) => productNames[pid] || 'Unknown')
         .slice(0, 3);
       const remaining = applies_to_products.length - 3;
       if (remaining > 0) {
@@ -128,10 +142,70 @@ export function RuleCard({
       return names.join(', ');
     }
     if (applies_to_categories?.length) {
-      return `${applies_to_categories.length} categor${applies_to_categories.length > 1 ? 'ies' : 'y'}`;
+      return applies_to_categories.join(', ');
     }
     return 'All products';
   };
+
+  // Build condition details based on rule type
+  const getConditionDetails = (): string[] => {
+    const details: string[] = [];
+
+    switch (rule_type) {
+      case 'sentiment_threshold':
+        if (sentiment_threshold) {
+          const dir = sentiment_direction === 'above' ? '>' : sentiment_direction === 'below' ? '<' : '';
+          details.push(`Sentiment ${dir} ${sentiment_threshold}`);
+        }
+        break;
+
+      case 'competitor_relative':
+        if (competitor_id) {
+          const compName = competitorNames[competitor_id];
+          details.push(`Competitor: ${compName || competitor_id.slice(0, 8) + '…'}`);
+        }
+        if (competitor_margin_percent) {
+          details.push(`Margin: ${competitor_margin_percent}%`);
+        }
+        break;
+
+      case 'volume_surge':
+        if (volume_threshold) {
+          details.push(`Threshold: ${volume_threshold} mentions`);
+        }
+        if (volume_window_hours) {
+          details.push(`Window: ${volume_window_hours}h`);
+        }
+        break;
+
+      case 'viral_detection':
+        if (viral_threshold_reach) {
+          details.push(`Reach: ${viral_threshold_reach.toLocaleString()}`);
+        }
+        if (viral_threshold_engagement) {
+          details.push(`Engagement: ${viral_threshold_engagement.toLocaleString()}`);
+        }
+        if (viral_sentiment_min) {
+          details.push(`Min sentiment: ${viral_sentiment_min}`);
+        }
+        break;
+
+      case 'time_based':
+        // time_days, time_start, time_end are available
+        break;
+    }
+
+    // Guardrails — show if set
+    if (min_price) details.push(`Floor: $${min_price}`);
+    if (max_price) details.push(`Ceiling: $${max_price}`);
+    if (max_change_percent && max_change_percent !== '15.0') {
+      details.push(`Max change: ${max_change_percent}%`);
+    }
+
+    return details;
+  };
+
+  const conditionDetails = getConditionDetails();
 
   return (
     <Card
@@ -170,7 +244,7 @@ export function RuleCard({
       </div>
 
       {/* Rule Details */}
-      <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+      <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
         <div>
           <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Action</p>
           <p className="text-gray-900 font-medium">
@@ -190,6 +264,20 @@ export function RuleCard({
           <p className="text-gray-900 font-medium">{cooldown_hours}h</p>
         </div>
       </div>
+
+      {/* Condition Details — NEW */}
+      {conditionDetails.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {conditionDetails.map((detail, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
+            >
+              {detail}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Footer: Actions */}
       <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -248,3 +336,5 @@ export function RuleCard({
     </Card>
   );
 }
+
+

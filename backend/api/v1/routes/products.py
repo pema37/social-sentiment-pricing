@@ -11,6 +11,10 @@ Best Practices Applied:
 - Separation of Concerns: No business logic in route handlers
 - Consistent Responses: All list endpoints return PaginatedResponse
 - Proper HTTP Status Codes: 201 create, 204 delete, 404 not found
+
+FIX (2026-02-21): Added platform link enrichment to list_products endpoint.
+Products now include `platforms_linked` array showing which e-commerce
+platforms each product is connected to. See BUG-005 in audit report.
 """
 
 from typing import List, Optional
@@ -18,10 +22,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from db.session import get_session
 from models.user import User
-from schemas.product import ProductCreate, ProductUpdate, ProductRead, PriceSuggestion
+from models.integration import Integration, ProductIntegrationLink, IntegrationStatus
+from schemas.product import ProductCreate, ProductUpdate, ProductRead, PriceSuggestion, PlatformLink
 from schemas.common import PaginatedResponse
 from api.v1.routes.auth import get_current_user
 from core.rate_limit import limiter, WRITE_RATE_LIMIT, ANALYSIS_RATE_LIMIT, BULK_RATE_LIMIT
@@ -54,6 +60,64 @@ def get_import_service(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# HELPER - Platform Link Enrichment
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _enrich_with_platform_links(
+    products: list,
+    user_id: UUID,
+    session: AsyncSession,
+) -> dict[UUID, list[PlatformLink]]:
+    """
+    Batch-fetch platform links for a list of products.
+    
+    Single query for all products — avoids N+1.
+    Returns: { product_id: [PlatformLink, ...] }
+    """
+    if not products:
+        return {}
+
+    product_ids = [p.id for p in products]
+
+    # Get all integrations for this user
+    int_stmt = select(Integration).where(Integration.user_id == user_id)
+    int_result = await session.execute(int_stmt)
+    integrations = {i.id: i for i in int_result.scalars().all()}
+
+    if not integrations:
+        return {}
+
+    # Get all links for these products in one query
+    link_stmt = (
+        select(ProductIntegrationLink)
+        .where(ProductIntegrationLink.product_id.in_(product_ids))
+        .where(ProductIntegrationLink.integration_id.in_(integrations.keys()))
+    )
+    link_result = await session.execute(link_stmt)
+    links = list(link_result.scalars().all())
+
+    # Build mapping
+    platform_map: dict[UUID, list[PlatformLink]] = {pid: [] for pid in product_ids}
+    for link in links:
+        integration = integrations.get(link.integration_id)
+        if not integration:
+            continue
+        platform_name = (
+            integration.platform.value
+            if hasattr(integration.platform, 'value')
+            else str(integration.platform)
+        )
+        platform_map[link.product_id].append(PlatformLink(
+            platform=platform_name,
+            store_url=integration.store_url,
+            external_price=float(link.external_price) if link.external_price else None,
+            sync_enabled=link.sync_enabled,
+        ))
+
+    return platform_map
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CREATE
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -83,6 +147,7 @@ async def list_products(
     category: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     service: ProductService = Depends(get_product_service),
+    session: AsyncSession = Depends(get_session),
 ):
     """List all products for the current user with pagination."""
     products, total = await service.list(
@@ -94,9 +159,25 @@ async def list_products(
     )
     
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1
-    
+
+    # ─────────────────────────────────────────────────────────────────────
+    # FIX BUG-005: Enrich products with platform links (single batch query)
+    # ─────────────────────────────────────────────────────────────────────
+    platform_map = await _enrich_with_platform_links(
+        products, current_user.id, session
+    )
+
+    # Convert ORM objects to response dicts with platform data
+    items = []
+    for product in products:
+        product_dict = ProductRead.model_validate(product).model_dump()
+        product_dict["platforms_linked"] = [
+            pl.model_dump() for pl in platform_map.get(product.id, [])
+        ]
+        items.append(product_dict)
+
     return PaginatedResponse(
-        items=products,
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
@@ -360,4 +441,7 @@ async def generate_description(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+    
+
+
     
