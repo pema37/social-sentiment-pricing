@@ -25,7 +25,6 @@ for mod in [
     "db.session",
     "models.product",
     "models.integration",
-    "models.product_link",
     "services.integration.shopify_service",
     "services.integration.woocommerce_service",
 ]:
@@ -40,7 +39,7 @@ class _FakeIntegration:
     status = MagicMock()
 
 
-class _FakeProductLink:
+class _FakeProductIntegrationLink:
     integration_id = MagicMock()
     product_id = MagicMock()
     sync_enabled = MagicMock()
@@ -48,7 +47,7 @@ class _FakeProductLink:
 
 # Force-set UNCONDITIONALLY — even if another test already loaded the module
 sys.modules["models.integration"].Integration = _FakeIntegration
-sys.modules["models.product_link"].ProductLink = _FakeProductLink
+sys.modules["models.integration"].ProductIntegrationLink = _FakeProductIntegrationLink
 
 import pytest
 
@@ -271,12 +270,10 @@ class TestGetActiveLink:
         import types
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
-        _plm = types.ModuleType("models.product_link")
-        _plm.ProductLink = _FakeProductLink
+        _im.ProductIntegrationLink = _FakeProductIntegrationLink
 
         with patch.dict(sys.modules, {
             "models.integration": _im,
-            "models.product_link": _plm,
         }):
             mock_chain = MagicMock()
             mock_chain.join.return_value = mock_chain
@@ -300,12 +297,10 @@ class TestGetActiveLink:
         import types
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
-        _plm = types.ModuleType("models.product_link")
-        _plm.ProductLink = _FakeProductLink
+        _im.ProductIntegrationLink = _FakeProductIntegrationLink
 
         with patch.dict(sys.modules, {
             "models.integration": _im,
-            "models.product_link": _plm,
         }):
             mock_chain = MagicMock()
             mock_chain.join.return_value = mock_chain

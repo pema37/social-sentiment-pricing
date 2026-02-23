@@ -265,7 +265,7 @@ class TestInit:
         assert svc.platform_name == "shopify"
 
     def test_api_version(self):
-        assert ShopifyService.API_VERSION == "2024-01"
+        assert ShopifyService.API_VERSION == "2025-10"
 
     def test_default_retry_config(self):
         svc = ShopifyService()
@@ -376,7 +376,7 @@ class TestGraphqlUrl:
     def test_builds_correct_url(self):
         svc = ShopifyService()
         url = svc._graphql_url("myshop.myshopify.com")
-        assert url == "https://myshop.myshopify.com/admin/api/2024-01/graphql.json"
+        assert url == "https://myshop.myshopify.com/admin/api/2025-10/graphql.json"
 
 
 class TestParseGraphqlProduct:

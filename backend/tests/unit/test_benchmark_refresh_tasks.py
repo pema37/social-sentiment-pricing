@@ -132,7 +132,7 @@ class TestRefreshSuccess:
         mock_factory, mock_db = _mock_session_maker()
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory.return_value,
         ):
             # get_task_session_maker returns session_maker
@@ -142,7 +142,7 @@ class TestRefreshSuccess:
 
         # Direct approach: patch at module level
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             result = await _refresh_benchmark_views()
@@ -157,7 +157,7 @@ class TestRefreshSuccess:
         mock_factory, mock_db = _mock_session_maker()
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             await _refresh_benchmark_views()
@@ -170,7 +170,7 @@ class TestRefreshSuccess:
         mock_factory, mock_db = _mock_session_maker()
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             await _refresh_benchmark_views()
@@ -201,7 +201,7 @@ class TestConcurrentFallback:
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             result = await _refresh_benchmark_views()
@@ -219,7 +219,7 @@ class TestConcurrentFallback:
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             await _refresh_benchmark_views()
@@ -242,7 +242,7 @@ class TestTotalFailure:
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             result = await _refresh_benchmark_views()
@@ -266,7 +266,7 @@ class TestViewStats:
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             result = await _get_view_stats()
@@ -283,7 +283,7 @@ class TestViewStats:
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
+            "workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
             return_value=mock_factory,
         ):
             result = await _get_view_stats()

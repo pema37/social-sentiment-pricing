@@ -91,6 +91,7 @@ class _FakeIntegration:
     status = MagicMock()
     platform = MagicMock()
     sync_status = MagicMock()
+    updated_at = _ColumnMock()
 
     def __init__(self, **kw):
         self.id = kw.get("id", uuid4())
@@ -134,6 +135,7 @@ class _FakeLink:
     integration_id = MagicMock()
     product_id = MagicMock()
     external_product_id = MagicMock()
+    external_variant_id = MagicMock()
     sync_enabled = MagicMock()
 
     def __init__(self, **kw):
@@ -463,7 +465,7 @@ class TestHandleDeletions:
         result_mock.scalars.return_value = scalars
         db.execute = AsyncMock(return_value=result_mock)
 
-        deleted = await svc._handle_deletions(integ, {"ext-1"})
+        deleted = await svc._handle_deletions(integ, {("ext-1", None)})
         assert deleted == 2
         assert link_a.sync_enabled is True
         assert link_b.sync_enabled is False
@@ -481,7 +483,7 @@ class TestHandleDeletions:
         result_mock.scalars.return_value = scalars
         db.execute = AsyncMock(return_value=result_mock)
 
-        deleted = await svc._handle_deletions(integ, {"ext-1"})
+        deleted = await svc._handle_deletions(integ, {("ext-1", None)})
         assert deleted == 0
 
 
@@ -489,11 +491,8 @@ class TestCountLinkedProducts:
     @pytest.mark.asyncio
     async def test_counts(self):
         svc, db = _make_service()
-        links = [_FakeLink(), _FakeLink()]
-        scalars = MagicMock()
-        scalars.all.return_value = links
         result_mock = MagicMock()
-        result_mock.scalars.return_value = scalars
+        result_mock.scalar.return_value = 2
         db.execute = AsyncMock(return_value=result_mock)
 
         count = await svc._count_linked_products(uuid4())

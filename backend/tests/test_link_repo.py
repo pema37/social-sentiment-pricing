@@ -33,8 +33,10 @@ _async_mod.AsyncSession = MagicMock()
 
 class _FakeLink:
     # Class-level attrs for SQLAlchemy-style column comparisons
+    id = MagicMock()
     integration_id = MagicMock()
     external_product_id = MagicMock()
+    external_variant_id = MagicMock()
     sync_enabled = MagicMock()
 
     def __init__(self, **kw):
@@ -136,11 +138,8 @@ class TestCountActive:
     @pytest.mark.asyncio
     async def test_counts_active_links(self):
         repo, db = _make_repo()
-        links = [_FakeLink(id=uuid4()), _FakeLink(id=uuid4()), _FakeLink(id=uuid4())]
-        scalars = MagicMock()
-        scalars.all.return_value = links
         result_mock = MagicMock()
-        result_mock.scalars.return_value = scalars
+        result_mock.scalar.return_value = 3
         db.execute = AsyncMock(return_value=result_mock)
 
         result = await repo.count_active(uuid4())
@@ -149,10 +148,8 @@ class TestCountActive:
     @pytest.mark.asyncio
     async def test_zero_when_none(self):
         repo, db = _make_repo()
-        scalars = MagicMock()
-        scalars.all.return_value = []
         result_mock = MagicMock()
-        result_mock.scalars.return_value = scalars
+        result_mock.scalar.return_value = 0
         db.execute = AsyncMock(return_value=result_mock)
 
         result = await repo.count_active(uuid4())
@@ -174,8 +171,8 @@ class TestCreate:
         )
 
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
-        db.refresh.assert_awaited_once()
+        db.commit.assert_not_awaited()
+        db.refresh.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_creates_with_none_variant(self):
@@ -210,8 +207,8 @@ class TestUpdatePrices:
         assert link.last_price_pull_at is not None
         assert link.updated_at is not None
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
-        db.refresh.assert_awaited_once()
+        db.commit.assert_not_awaited()
+        db.refresh.assert_not_awaited()
 
 
 class TestDisableSync:
@@ -233,9 +230,9 @@ class TestDisableMissing:
         repo, db = _make_repo()
         int_id = uuid4()
 
-        link_a = _FakeLink(id=uuid4(), external_product_id="ext-1", sync_enabled=True, updated_at=None)
-        link_b = _FakeLink(id=uuid4(), external_product_id="ext-2", sync_enabled=True, updated_at=None)
-        link_c = _FakeLink(id=uuid4(), external_product_id="ext-3", sync_enabled=True, updated_at=None)
+        link_a = _FakeLink(id=uuid4(), external_product_id="ext-1", external_variant_id=None, sync_enabled=True, updated_at=None)
+        link_b = _FakeLink(id=uuid4(), external_product_id="ext-2", external_variant_id=None, sync_enabled=True, updated_at=None)
+        link_c = _FakeLink(id=uuid4(), external_product_id="ext-3", external_variant_id=None, sync_enabled=True, updated_at=None)
 
         scalars = MagicMock()
         scalars.all.return_value = [link_a, link_b, link_c]
@@ -244,7 +241,8 @@ class TestDisableMissing:
         db.execute = AsyncMock(return_value=result_mock)
 
         # Only ext-1 was seen — ext-2 and ext-3 should be disabled
-        count = await repo.disable_missing(int_id, {"ext-1"})
+        # Now uses (external_product_id, external_variant_id) tuples
+        count = await repo.disable_missing(int_id, {("ext-1", None)})
         assert count == 2
         assert link_a.sync_enabled is True
         assert link_b.sync_enabled is False
@@ -254,7 +252,7 @@ class TestDisableMissing:
     @pytest.mark.asyncio
     async def test_zero_when_all_seen(self):
         repo, db = _make_repo()
-        link = _FakeLink(id=uuid4(), external_product_id="ext-1", sync_enabled=True, updated_at=None)
+        link = _FakeLink(id=uuid4(), external_product_id="ext-1", external_variant_id=None, sync_enabled=True, updated_at=None)
 
         scalars = MagicMock()
         scalars.all.return_value = [link]
@@ -262,7 +260,7 @@ class TestDisableMissing:
         result_mock.scalars.return_value = scalars
         db.execute = AsyncMock(return_value=result_mock)
 
-        count = await repo.disable_missing(uuid4(), {"ext-1"})
+        count = await repo.disable_missing(uuid4(), {("ext-1", None)})
         assert count == 0
         # No commit needed when nothing changed
         db.commit.assert_not_awaited()
