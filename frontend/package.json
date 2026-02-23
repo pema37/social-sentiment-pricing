@@ -40,6 +40,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.5",
+    "msw": "^2.12.10",
     "openapi-typescript": "^7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5",
