@@ -36,16 +36,16 @@ const mockRule: PricingRule = {
   sentiment_threshold: '0.7',
   sentiment_direction: 'above',
   competitor_id: null,
-  competitor_margin_percent: null,   // ← add
+  competitor_margin_percent: null,
   price_position: null,
   time_days: null,
-  time_start: null,                  // ← add
-  time_end: null,                    // ← add
+  time_start: null,
+  time_end: null,
   volume_threshold: null,
-  volume_window_hours: null,         // ← add
+  volume_window_hours: null,
   viral_threshold_reach: null,
-  viral_threshold_engagement: null,  // ← add
-  viral_sentiment_min: null,         // ← add
+  viral_threshold_engagement: null,
+  viral_sentiment_min: null,
   action: 'increase_percent',
   action_value: '5',
   max_change_percent: '10',
@@ -73,6 +73,7 @@ const mockRecommendation: PriceRecommendation = {
   reviewed_at: null,
   rejection_reason: null,
   applied_at: null,
+  applied_to_platform: null,
   expires_at: '2026-01-20T10:00:00Z',
   created_at: '2026-01-15T10:00:00Z',
 };
@@ -305,6 +306,7 @@ describe('validateRuleForm', () => {
       name: 'Test Rule',
       sentiment_threshold: '0.7',
       action_value: '5',
+      scope_type: 'all' as const,
     };
     expect(validateRuleForm(validForm)).toEqual({});
   });
@@ -354,6 +356,7 @@ describe('validateAndTransform', () => {
       name: 'Test Rule',
       sentiment_threshold: '0.7',
       action_value: '5',
+      scope_type: 'all' as const,
     });
 
     expect(result.success).toBe(true);
@@ -383,6 +386,7 @@ describe('isFormValid', () => {
       name: 'Test',
       sentiment_threshold: '0.7',
       action_value: '5',
+      scope_type: 'all' as const,
     })).toBe(true);
   });
 
@@ -491,7 +495,7 @@ describe('Label maps', () => {
   });
 
   it('covers all recommendation statuses', () => {
-    expect(Object.keys(RECOMMENDATION_STATUS_LABELS)).toHaveLength(5);
+    expect(Object.keys(RECOMMENDATION_STATUS_LABELS)).toHaveLength(6);
     expect(RECOMMENDATION_STATUS_LABELS.pending).toBe('Pending Review');
   });
 });

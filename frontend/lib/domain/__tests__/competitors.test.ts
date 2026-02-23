@@ -1,13 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  competitorFormSchema,
-  competitorProductFormSchema,
   competitorToFormData,
   formDataToCreateCompetitor,
   formDataToUpdateCompetitor,
   competitorProductToFormData,
   formDataToCreateCompetitorProduct,
-  formDataToUpdateCompetitorProduct,
   validateCompetitorForm,
   validateCompetitorProductForm,
   validateAndCreateCompetitor,
@@ -29,7 +26,7 @@ describe('validateCompetitorForm', () => {
   });
 
   it('validates website URL format', () => {
-    const form = { ...DEFAULT_COMPETITOR_FORM, name: 'Test', website: 'not-a-url' };
+    const form = { ...DEFAULT_COMPETITOR_FORM, name: 'Test', website: '://invalid' };
     const errors = validateCompetitorForm(form);
     expect(errors.website).toBeDefined();
   });
