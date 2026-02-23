@@ -28,9 +28,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Lazily initialize client only when needed
+client = None
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+def get_client():
+    """Get or create the Genai client (lazy initialization)."""
+    global client
+    if client is None:
+        try:
+            client = genai.Client()
+        except ValueError as e:
+            logger.warning(f"Failed to initialize Genai client: {e}")
+            raise
+    return client
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +361,7 @@ class AutonomousOrchestrator:
     """
 
     def __init__(self):
-        self.client = client
+        self.client = get_client()
         self.model = GEMINI_MODEL
         self._reasoning_log: list[AgentStreamEvent] = []
 

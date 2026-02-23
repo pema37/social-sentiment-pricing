@@ -25,9 +25,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/autonomous", tags=["Autonomous Pipeline"])
 
-# Singleton orchestrator and trigger
-_orchestrator = AutonomousOrchestrator()
-_trigger = AutonomousTrigger()
+# Lazy-loaded singleton orchestrator and trigger
+_orchestrator = None
+_trigger = None
+
+def get_orchestrator() -> AutonomousOrchestrator:
+    """Lazy-load the orchestrator (avoid creating it if not needed)."""
+    global _orchestrator
+    if _orchestrator is None:
+        try:
+            _orchestrator = AutonomousOrchestrator()
+        except Exception as e:
+            logger.error(f"Failed to initialize AutonomousOrchestrator: {e}")
+            raise
+    return _orchestrator
+
+def get_trigger() -> "AutonomousTrigger":
+    """Lazy-load the trigger (avoid creating it if not needed)."""
+    global _trigger
+    if _trigger is None:
+        try:
+            _trigger = AutonomousTrigger()
+        except Exception as e:
+            logger.error(f"Failed to initialize AutonomousTrigger: {e}")
+            raise
+    return _trigger
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +98,7 @@ async def trigger_pipeline(request: PipelineTriggerRequest):
     start = time.monotonic()
 
     try:
-        decision = await _orchestrator.run_pipeline(
+        decision = await get_orchestrator().run_pipeline(
             product_id=request.product_id,
             current_price=request.current_price,
             product_category=request.product_category,
@@ -116,7 +138,7 @@ async def stream_pipeline(
     Connect with EventSource in the browser or curl -N.
     """
     return StreamingResponse(
-        _orchestrator.run_pipeline_streaming(
+        get_orchestrator().run_pipeline_streaming(
             product_id=product_id,
             current_price=current_price,
             product_category=product_category,
@@ -145,7 +167,7 @@ async def start_monitoring(
     This runs in the background — no human oversight needed.
     """
     background_tasks.add_task(
-        _trigger.start_monitoring,
+        get_trigger().start_monitoring,
         product_id=request.product_id,
         check_interval_seconds=request.check_interval_seconds,
         current_price=request.current_price,
@@ -161,7 +183,7 @@ async def start_monitoring(
 @router.post("/monitor/stop")
 async def stop_monitoring():
     """⏹️ Stop the autonomous monitoring loop."""
-    _trigger.stop_monitoring()
+    get_trigger().stop_monitoring()
     return {"status": "monitoring_stopped"}
 
 
