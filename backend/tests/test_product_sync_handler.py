@@ -1,5 +1,11 @@
 """
 Tests for services.integration.handlers.product_sync_handler
+
+PATCHED (2026-02-22): Updated to match handler changes:
+  - _create_or_link now uses sibling variant check (find_any_by_external_product)
+    instead of SKU fallback matching (find_by_sku removed)
+  - Tests that create new products must mock find_any_by_external_product → None
+  - test_links_to_existing_product_by_sku → rewritten as sibling variant test
 """
 
 import sys
@@ -217,7 +223,7 @@ class TestUpsertProduct:
         existing_link = MagicMock(product_id=uuid4())
         link_repo.find_by_external_id = AsyncMock(return_value=existing_link)
         
-        product = MagicMock()
+        product = MagicMock(name="Old", base_price=19.99, sku="S")
         prod_repo.find_by_id = AsyncMock(return_value=product)
         prod_repo.update = AsyncMock(return_value=product)
         link_repo.update_prices = AsyncMock()
@@ -233,7 +239,7 @@ class TestUpsertProduct:
     async def test_creates_when_no_link(self):
         handler, db, prod_repo, link_repo = _make_handler()
         link_repo.find_by_external_id = AsyncMock(return_value=None)
-        prod_repo.find_by_sku = AsyncMock(return_value=None)
+        link_repo.find_any_by_external_product = AsyncMock(return_value=None)
         new_product = MagicMock(id=uuid4())
         prod_repo.create = AsyncMock(return_value=new_product)
         link_repo.create = AsyncMock()
@@ -250,7 +256,7 @@ class TestUpdateExisting:
     @pytest.mark.asyncio
     async def test_updates_product_and_link(self):
         handler, db, prod_repo, link_repo = _make_handler()
-        product = MagicMock(sku="OLD", current_price=10.0)
+        product = MagicMock(name="Old", sku="OLD", base_price=10.0, current_price=10.0)
         prod_repo.find_by_id = AsyncMock(return_value=product)
         prod_repo.update = AsyncMock(return_value=product)
         link_repo.update_prices = AsyncMock()
@@ -258,7 +264,7 @@ class TestUpdateExisting:
         link = MagicMock(product_id=uuid4())
         ext = _FakeExternalProduct(title="New Name", price=25.0)
 
-        c, u = await handler._update_existing(link, ext)
+        c, u = await handler._update_existing(link, ext, variant_price=25.0)
         assert c == 0
         assert u == 1
         prod_repo.update.assert_awaited_once()
@@ -279,16 +285,22 @@ class TestUpdateExisting:
 
 class TestCreateOrLink:
     @pytest.mark.asyncio
-    async def test_links_to_existing_product_by_sku(self):
+    async def test_links_sibling_variant_to_existing_product(self):
+        """When another variant of the same product already exists, link to it."""
         handler, db, prod_repo, link_repo = _make_handler()
-        existing = MagicMock(id=uuid4())
-        prod_repo.find_by_sku = AsyncMock(return_value=existing)
+        sibling = MagicMock(product_id=uuid4())
+        link_repo.find_any_by_external_product = AsyncMock(return_value=sibling)
         link_repo.create = AsyncMock()
 
         integration = _make_integration()
-        ext = _FakeExternalProduct(sku="EXISTING-SKU")
+        ext = _FakeExternalProduct(id="ext-1")
 
-        c, u = await handler._create_or_link(integration, ext)
+        c, u = await handler._create_or_link(
+            integration, ext,
+            variant_id="var-2",
+            variant_sku="SKU-2",
+            variant_price=30.0,
+        )
         assert c == 0
         assert u == 1  # counted as update since product existed
         link_repo.create.assert_awaited_once()
@@ -297,7 +309,7 @@ class TestCreateOrLink:
     @pytest.mark.asyncio
     async def test_creates_new_product_and_link(self):
         handler, db, prod_repo, link_repo = _make_handler()
-        prod_repo.find_by_sku = AsyncMock(return_value=None)
+        link_repo.find_any_by_external_product = AsyncMock(return_value=None)
         new_product = MagicMock(id=uuid4())
         prod_repo.create = AsyncMock(return_value=new_product)
         link_repo.create = AsyncMock()
@@ -305,7 +317,12 @@ class TestCreateOrLink:
         integration = _make_integration()
         ext = _FakeExternalProduct(price=30.0)
 
-        c, u = await handler._create_or_link(integration, ext)
+        c, u = await handler._create_or_link(
+            integration, ext,
+            variant_id=None,
+            variant_sku=None,
+            variant_price=30.0,
+        )
         assert c == 1
         assert u == 0
         prod_repo.create.assert_awaited_once()
@@ -314,7 +331,7 @@ class TestCreateOrLink:
     @pytest.mark.asyncio
     async def test_uses_variant_id_when_available(self):
         handler, db, prod_repo, link_repo = _make_handler()
-        prod_repo.find_by_sku = AsyncMock(return_value=None)
+        link_repo.find_any_by_external_product = AsyncMock(return_value=None)
         new_product = MagicMock(id=uuid4())
         prod_repo.create = AsyncMock(return_value=new_product)
         link_repo.create = AsyncMock()
@@ -323,7 +340,12 @@ class TestCreateOrLink:
         variant = MagicMock(id="var-1")
         ext = _FakeExternalProduct(variants=[variant])
 
-        await handler._create_or_link(integration, ext)
+        await handler._create_or_link(
+            integration, ext,
+            variant_id="var-1",
+            variant_sku=None,
+            variant_price=19.99,
+        )
         call_kw = link_repo.create.call_args[1]
         assert call_kw["external_variant_id"] == "var-1"
 

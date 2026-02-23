@@ -1,5 +1,10 @@
 """
 Tests for services.integration.repositories.product_repo
+
+PATCHED (2026-02-22): Updated assertions to match repo changes:
+  - create(): now uses flush() instead of commit()/refresh()
+  - update(): no longer commits (caller batches)
+  - update(): added base_price parameter test
 """
 
 import sys
@@ -148,9 +153,12 @@ class TestCreate:
             image_url="https://img.png",
         )
 
+        # create() uses flush() (not commit) so caller can batch
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
-        db.refresh.assert_awaited_once()
+        db.flush.assert_awaited_once()
+        # commit and refresh are NOT called — caller commits
+        db.commit.assert_not_awaited()
+        db.refresh.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_creates_with_defaults(self):
@@ -163,9 +171,8 @@ class TestCreate:
             base_price=5.0,
             current_price=5.0,
         )
-        # Should still call add/commit/refresh
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
+        db.flush.assert_awaited_once()
 
 
 class TestUpdate:
@@ -178,7 +185,8 @@ class TestUpdate:
         assert product.name == "New"
         assert product.sku == "S"  # unchanged
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
+        # update() does NOT commit — caller batches
+        db.commit.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_updates_sku(self):
@@ -195,6 +203,19 @@ class TestUpdate:
 
         await repo.update(product, current_price=20.0)
         assert product.current_price == 20.0
+
+    @pytest.mark.asyncio
+    async def test_updates_base_price(self):
+        """base_price is platform-owned — synced from Shopify."""
+        repo, db = _make_repo()
+        product = _FakeProduct(
+            id=uuid4(), name="W", sku="S",
+            current_price=10.0, base_price=8.0, updated_at=None,
+        )
+
+        await repo.update(product, base_price=12.0)
+        assert product.base_price == 12.0
+        db.add.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_sets_updated_at(self):
@@ -214,6 +235,7 @@ class TestUpdate:
         assert product.name == "W"
         assert product.sku == "S"
         assert product.current_price == 10.0
+
 
 
         

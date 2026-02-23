@@ -9,6 +9,13 @@ Tests cover:
 - _push_to_platform (single platform push logic)
 
 Total: ~30 tests
+
+PATCHED (2026-02-22): Fixed mock patching bugs:
+  - decrypt_token: patch at SERVICE_PATH (where imported), not source module.
+  - ShopifyService/WooCommerceService: mock via _get_service instead of
+    patching the class, because sys.modules stubs make EcommercePlatform
+    a MagicMock, breaking enum comparisons inside _get_service.
+  - Added setup_method to clear class-level _services cache between tests.
 """
 
 import sys
@@ -51,6 +58,7 @@ def make_mock_db():
     db.get = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
+    db.flush = AsyncMock()
     return db
 
 
@@ -109,6 +117,16 @@ def make_failure_response(error="API rate limited"):
     resp.old_price = None
     resp.error = error
     return resp
+
+
+def make_mock_service(success=True, old_price=95.0, error="API rate limited"):
+    """Build a mock e-commerce service (Shopify/WooCommerce)."""
+    svc = AsyncMock()
+    if success:
+        svc.update_price.return_value = make_success_response(old_price=old_price)
+    else:
+        svc.update_price.return_value = make_failure_response(error=error)
+    return svc
 
 
 # ============================================================
@@ -253,9 +271,20 @@ class TestPushPrice:
 
 # ============================================================
 # 3. _push_to_platform
+#
+# NOTE: Tests that need a mock ShopifyService/WooCommerceService use
+# patch.object(EcommercePushService, '_get_service') instead of patching
+# the class directly. This is necessary because sys.modules stubs make
+# EcommercePlatform a MagicMock, so the enum comparisons inside
+# _get_service never match. Mocking _get_service bypasses the cache
+# and the enum comparison entirely.
 # ============================================================
 
 class TestPushToPlatform:
+
+    def setup_method(self):
+        """Clear class-level service cache before each test."""
+        EcommercePushService._services = {}
 
     @pytest.mark.asyncio
     async def test_integration_not_found(self):
@@ -280,7 +309,7 @@ class TestPushToPlatform:
         assert result["error_code"] == "INTEGRATION_INACTIVE"
 
     @pytest.mark.asyncio
-    @patch("services.pricing.ecommerce_push_service.decrypt_token")
+    @patch(f"{SERVICE_PATH}.decrypt_token")
     async def test_token_decrypt_failure(self, mock_decrypt):
         mock_decrypt.side_effect = Exception("decryption failed")
 
@@ -294,106 +323,101 @@ class TestPushToPlatform:
         assert result["error_code"] == "TOKEN_DECRYPT_FAILED"
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="decrypted_token")
-    @patch("services.integration.shopify_service.ShopifyService")
-    async def test_shopify_success(self, MockShopify, mock_decrypt):
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="decrypted_token")
+    async def test_shopify_success(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="shopify")
 
-        mock_service = AsyncMock()
-        mock_service.update_price.return_value = make_success_response(old_price=95.0)
-        MockShopify.return_value = mock_service
+        mock_service = make_mock_service(success=True, old_price=95.0)
 
-        svc = EcommercePushService(db)
-        product = make_product(current_price=Decimal("99.99"))
-        result = await svc._push_to_platform(product, make_link())
+        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+            svc = EcommercePushService(db)
+            product = make_product(current_price=Decimal("99.99"))
+            result = await svc._push_to_platform(product, make_link())
 
         assert result["success"] is True
         assert result["platform"] == "shopify"
         assert result["new_price"] == float(Decimal("99.99"))
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="decrypted_token")
-    @patch("services.integration.woocommerce_service.WooCommerceService")
-    async def test_woocommerce_success(self, MockWoo, mock_decrypt):
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="decrypted_token")
+    async def test_woocommerce_success(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="woocommerce")
 
-        mock_service = AsyncMock()
-        mock_service.update_price.return_value = make_success_response()
-        MockWoo.return_value = mock_service
+        mock_service = make_mock_service(success=True)
 
-        svc = EcommercePushService(db)
-        result = await svc._push_to_platform(make_product(), make_link())
+        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+            svc = EcommercePushService(db)
+            result = await svc._push_to_platform(make_product(), make_link())
 
         assert result["success"] is True
         assert result["platform"] == "woocommerce"
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="decrypted_token")
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="decrypted_token")
     async def test_unsupported_platform(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="bigcommerce")
 
-        svc = EcommercePushService(db)
-        result = await svc._push_to_platform(make_product(), make_link())
+        with patch.object(
+            EcommercePushService, '_get_service',
+            side_effect=ValueError("Unsupported platform: bigcommerce"),
+        ):
+            svc = EcommercePushService(db)
+            result = await svc._push_to_platform(make_product(), make_link())
 
         assert result["success"] is False
         assert result["error_code"] == "UNSUPPORTED_PLATFORM"
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="decrypted_token")
-    @patch("services.integration.shopify_service.ShopifyService")
-    async def test_api_error_response(self, MockShopify, mock_decrypt):
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="decrypted_token")
+    async def test_api_error_response(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="shopify")
 
-        mock_service = AsyncMock()
-        mock_service.update_price.return_value = make_failure_response("rate limited")
-        MockShopify.return_value = mock_service
+        mock_service = make_mock_service(success=False, error="rate limited")
 
-        svc = EcommercePushService(db)
-        result = await svc._push_to_platform(make_product(), make_link())
+        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+            svc = EcommercePushService(db)
+            result = await svc._push_to_platform(make_product(), make_link())
 
         assert result["success"] is False
         assert result["error_code"] == "API_ERROR"
         assert result["error"] == "rate limited"
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="decrypted_token")
-    @patch("services.integration.shopify_service.ShopifyService")
-    async def test_success_updates_link_metadata(self, MockShopify, mock_decrypt):
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="decrypted_token")
+    async def test_success_updates_link_metadata(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="shopify")
 
-        mock_service = AsyncMock()
-        mock_service.update_price.return_value = make_success_response()
-        MockShopify.return_value = mock_service
+        mock_service = make_mock_service(success=True)
 
         link = make_link()
         product = make_product(current_price=Decimal("99.99"))
 
-        svc = EcommercePushService(db)
-        await svc._push_to_platform(product, link)
+        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+            svc = EcommercePushService(db)
+            await svc._push_to_platform(product, link)
 
-        assert link.external_price == Decimal("99.99")
+        # Service converts to float before assigning to link.external_price
+        assert link.external_price == float(Decimal("99.99"))
         assert link.last_price_push_at is not None
         assert link.updated_at is not None
         db.add.assert_called_with(link)
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="token")
-    @patch("services.integration.shopify_service.ShopifyService")
-    async def test_passes_correct_args_to_service(self, MockShopify, mock_decrypt):
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="token")
+    async def test_passes_correct_args_to_service(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="shopify")
 
-        mock_service = AsyncMock()
-        mock_service.update_price.return_value = make_success_response()
-        MockShopify.return_value = mock_service
+        mock_service = make_mock_service(success=True)
 
-        svc = EcommercePushService(db)
-        await svc._push_to_platform(make_product(), make_link())
+        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+            svc = EcommercePushService(db)
+            await svc._push_to_platform(make_product(), make_link())
 
         mock_service.update_price.assert_awaited_once()
         call_kwargs = mock_service.update_price.call_args
@@ -401,18 +425,16 @@ class TestPushToPlatform:
         assert call_kwargs.kwargs["access_token"] == "token"
 
     @pytest.mark.asyncio
-    @patch("core.encryption.decrypt_token", return_value="token")
-    @patch("services.integration.shopify_service.ShopifyService")
-    async def test_success_returns_old_price(self, MockShopify, mock_decrypt):
+    @patch(f"{SERVICE_PATH}.decrypt_token", return_value="token")
+    async def test_success_returns_old_price(self, mock_decrypt):
         db = make_mock_db()
         db.get.return_value = make_integration(platform="shopify")
 
-        mock_service = AsyncMock()
-        mock_service.update_price.return_value = make_success_response(old_price=85.0)
-        MockShopify.return_value = mock_service
+        mock_service = make_mock_service(success=True, old_price=85.0)
 
-        svc = EcommercePushService(db)
-        result = await svc._push_to_platform(make_product(), make_link())
+        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+            svc = EcommercePushService(db)
+            result = await svc._push_to_platform(make_product(), make_link())
 
         assert result["old_price"] == 85.0
 
@@ -426,6 +448,5 @@ class TestPushToPlatform:
 
         assert result["success"] is False
         assert result["error_code"] == "EXCEPTION"
-
 
         

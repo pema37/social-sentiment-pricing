@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Optional, List, TYPE_CHECKING
 
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
 if TYPE_CHECKING:
@@ -15,6 +15,13 @@ if TYPE_CHECKING:
 
 class Product(SQLModel, table=True):
     __tablename__ = "products"
+
+    # SKU uniqueness is now per-user, not global.
+    # Enforced by composite unique constraint (user_id, sku) via Alembic migration
+    # sku_per_user_001. This allows different merchants to have the same SKU.
+    __table_args__ = (
+        UniqueConstraint("user_id", "sku", name="uq_products_user_id_sku"),
+    )
 
     id: uuid_lib.UUID = Field(
         default_factory=uuid_lib.uuid4,
@@ -26,7 +33,8 @@ class Product(SQLModel, table=True):
     )
 
     name: str = Field(max_length=255, index=True)
-    sku: Optional[str] = Field(default=None, max_length=100, unique=True)
+    # FIX: Removed unique=True — now enforced as (user_id, sku) via __table_args__
+    sku: Optional[str] = Field(default=None, max_length=100)
     description: Optional[str] = Field(default=None)
 
     category: Optional[str] = Field(default=None, max_length=100) 
@@ -61,4 +69,8 @@ class Product(SQLModel, table=True):
 
     # Relationships
     integration_links: List["ProductIntegrationLink"] = Relationship(back_populates="product")
+
+
+
+
     

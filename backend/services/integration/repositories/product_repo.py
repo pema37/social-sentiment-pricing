@@ -9,6 +9,9 @@ Single Responsibility: Only Product CRUD operations.
 PATCHED (2026-02-21):
 - create(): Uses flush() instead of commit() for batch compatibility
 - update(): No longer commits — caller batches commits per page
+
+PATCHED (2026-02-22):
+- update(): Added base_price param (Shopify-owned, synced from platform)
 """
 
 import logging
@@ -97,10 +100,18 @@ class ProductRepository:
         name: Optional[str] = None,
         sku: Optional[str] = None,
         current_price: Optional[float] = None,
+        base_price: Optional[float] = None,
     ) -> Product:
         """Update an existing product.
         
+        Only updates fields that are explicitly passed (not None).
         Does NOT commit — caller batches commits per page.
+        
+        Field ownership (enforced by caller, not here):
+        - name: platform-owned (Shopify sync updates this)
+        - sku: set-once (only filled if empty)
+        - base_price: platform-owned (Shopify sync updates this)
+        - current_price: SSP-owned (pricing engine only)
         """
         if name is not None:
             product.name = name
@@ -108,10 +119,13 @@ class ProductRepository:
             product.sku = sku
         if current_price is not None:
             product.current_price = current_price
+        if base_price is not None:
+            product.base_price = base_price
         
         product.updated_at = utc_now()
         self.db.add(product)
         return product
     
+
 
     
