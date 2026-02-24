@@ -1,5 +1,9 @@
 import pytest
-pytestmark = pytest.mark.skip(reason="phase4.contracts_v2 not yet implemented")
+import sys
+import time
+import unittest
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 """
 Tests for Phase 4: Semantic Contracts
@@ -14,12 +18,6 @@ Pattern: sys.modules isolation, MagicMock(), frozen dataclasses
 Location: backend/tests/unit/test_semantic_contracts.py
 """
 
-import sys
-import time
-import unittest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
 # Save/restore
 _saved_modules = dict(sys.modules)
 
@@ -32,7 +30,7 @@ def teardown_module():
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
-from phase4.contracts_v2 import (
+from schemas.agent_contracts.contracts_v2 import (
     AnalystOutput,
     CompetitorPrice,
     ContractViolation,
@@ -46,12 +44,12 @@ from phase4.contracts_v2 import (
     UrgencyScore,
     compute_provenance_hash,
 )
-from phase4.conflict_resolution import (
+from schemas.agent_contracts.conflict_resolution import (
     ConflictResolution,
     ConflictResolver,
     ConflictType,
 )
-from phase4.tracing import PipelineTrace, PipelineTracer, TraceSpan
+from schemas.agent_contracts.tracing import PipelineTrace, PipelineTracer, TraceSpan
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +465,6 @@ class TestPipelineTracing(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
 
     

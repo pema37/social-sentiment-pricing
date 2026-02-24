@@ -5,6 +5,9 @@
  * Handles storing/retrieving JWT tokens from browser localStorage
  * 
  * PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
+ * PATCHED (2026-02-23): Added ssp_auth cookie flag so middleware.ts can detect
+ *   auth state server-side. The cookie is just a boolean hint (no sensitive data).
+ *   Actual JWT validation still happens client-side in the Zustand auth store.
  */
 
 const ACCESS_TOKEN_KEY = 'ssp_access_token';
@@ -24,12 +27,14 @@ export function getToken(): string | null {
 export function setToken(token: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  document.cookie = 'ssp_auth=1; path=/; max-age=604800; SameSite=Lax';
 }
 
 /** Remove the access token from localStorage */
 export function removeToken(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(ACCESS_TOKEN_KEY);
+  document.cookie = 'ssp_auth=; path=/; max-age=0';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,4 +86,5 @@ export function isAuthenticated(): boolean {
 export function canRefresh(): boolean {
   return !!getRefreshToken();
 }
+
 

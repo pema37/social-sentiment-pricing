@@ -1,5 +1,9 @@
 import pytest
-pytestmark = pytest.mark.skip(reason="phase5.ie_orchestrator not yet implemented")
+import sys
+import time
+import unittest
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 """
 Tests for IE Orchestrator (Phase 5)
@@ -18,12 +22,6 @@ Pattern: sys.modules isolation, MagicMock() (not spec=), frozen dataclasses
 Location: backend/tests/unit/test_ie_orchestrator.py
 """
 
-import sys
-import time
-import unittest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
-
 # ---------------------------------------------------------------------------
 # Save/restore module state to prevent pollution
 # ---------------------------------------------------------------------------
@@ -38,9 +36,9 @@ def teardown_module():
 
 
 # ---------------------------------------------------------------------------
-# Import the module under test (no external deps needed)
+# Import the module under test
 # ---------------------------------------------------------------------------
-from phase5.ie_orchestrator import (
+from services.scoring.ie_orchestrator import (
     CalibrationAdjustment,
     ComponentTiming,
     ExperimentContext,
@@ -487,6 +485,8 @@ class TestIEOrchestratorEdgeCases(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
 
 
     

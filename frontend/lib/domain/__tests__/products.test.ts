@@ -237,10 +237,10 @@ describe('productToFormData', () => {
     const product = {
       name: 'iPhone 15',
       sku: 'IP15-128',
-      base_price: '999.00',
-      current_price: '899.00',
-      min_price: '799.00',
-      max_price: '1099.00',
+      base_price: 999.00,
+      current_price: 899.00,
+      min_price: 799.00,
+      max_price: 1099.00,
       is_active: true,
       auto_pricing_enabled: true,
       keywords: ['apple', 'phone'],
@@ -248,17 +248,17 @@ describe('productToFormData', () => {
     const form = productToFormData(product);
     expect(form.name).toBe('iPhone 15');
     expect(form.sku).toBe('IP15-128');
-    expect(form.base_price).toBe('999.00');
-    expect(form.min_price).toBe('799.00');
-    expect(form.max_price).toBe('1099.00');
+    expect(form.base_price).toBe('999');
+    expect(form.min_price).toBe('799');
+    expect(form.max_price).toBe('1099');
     expect(form.keywords).toEqual(['apple', 'phone']);
   });
 
-  it('converts null values to empty strings', () => {
+  it('converts undefined values to empty strings', () => {
     const product = {
       name: 'Test',
-      sku: null,
-      description: null,
+      sku: undefined,
+      description: undefined,
     };
     const form = productToFormData(product);
     expect(form.sku).toBe('');
@@ -299,6 +299,5 @@ describe('validateAndCreate', () => {
     }
   });
 });
-
 
 

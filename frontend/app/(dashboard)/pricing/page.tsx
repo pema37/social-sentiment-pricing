@@ -85,7 +85,7 @@ export default function PricingPage() {
   if (productsData?.items) {
     productsData.items.forEach((product) => {
       productNames[product.id] = product.name;
-      productSkus[product.id] = product.sku;
+      productSkus[product.id] = product.sku ?? null;
     });
   }
 
