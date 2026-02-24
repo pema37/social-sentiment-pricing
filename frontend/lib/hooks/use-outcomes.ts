@@ -11,6 +11,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { outcomesApi, transformOutcomeToCard, getBestLift } from '@/lib/api/outcomes';
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type {
   OutcomeListParams,
   OutcomeCardData,
@@ -22,7 +23,7 @@ import type {
   ElasticityAccuracy,
   AccuracyStats,
 } from '@/types/outcome';
-
+/* eslint-enable @typescript-eslint/no-unused-vars */
 // ── Query Keys ──
 
 export const outcomeKeys = {

@@ -174,7 +174,7 @@ export function CategoryPerformanceTable({ categories, isLoading }: CategoryPerf
                   <td className="py-3 px-3 text-right">
                     <span className={
                       cat.avg_revenue_lift_7d === null ? 'text-gray-400' :
-                      cat.avg_revenue_lift_7d >= 0 ? 'text-green-700 font-medium' : 'text-red-700'
+                      (cat.avg_revenue_lift_7d ?? 0) > 0 ? 'text-green-700 font-medium' : 'text-red-700'
                     }>
                       {formatLift(cat.avg_revenue_lift_7d)}
                     </span>

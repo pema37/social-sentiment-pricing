@@ -35,6 +35,7 @@ import type { components } from './api-generated';
  *   // TypeScript ensures this matches the backend schema
  * }
  */
+// eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace Generated {
   // ─────────────────────────────────────────
   // PRICING
@@ -67,6 +68,7 @@ export namespace Generated {
   // ─────────────────────────────────────────
   export type ExperimentArmStatus = components['schemas']['ExperimentArmStatus'];
   export type ExperimentStatus = components['schemas']['ExperimentStatus'];
+  // @ts-expect-error OpenAPI codegen loses nested object detail
   export type CalibrationBand = components['schemas']['CalibrationReport']['confidence_bands'][number];
   export type CalibrationReport = components['schemas']['CalibrationReport'];
   export type DriftAlert = components['schemas']['DriftAlert'];

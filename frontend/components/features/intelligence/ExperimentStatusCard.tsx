@@ -121,7 +121,7 @@ function ExperimentRow({ experiment }: { experiment: ExperimentStatus }) {
               <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200">
                 Convergence confidence:{' '}
                 <span className="font-semibold">
-                  {(experiment.convergence_confidence * 100).toFixed(1)}%
+                  {(experiment.convergence_confidence ?? 0).toFixed(1)}%
                 </span>
               </p>
             )}
