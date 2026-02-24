@@ -63,6 +63,18 @@ export namespace Generated {
   export type MockSignals = components['schemas']['MockSignals'];
 
   // ─────────────────────────────────────────
+  // INTELLIGENCE ENVIRONMENT
+  // ─────────────────────────────────────────
+  export type ExperimentArmStatus = components['schemas']['ExperimentArmStatus'];
+  export type ExperimentStatus = components['schemas']['ExperimentStatus'];
+  export type CalibrationBand = components['schemas']['CalibrationReport']['confidence_bands'][number];
+  export type CalibrationReport = components['schemas']['CalibrationReport'];
+  export type DriftAlert = components['schemas']['DriftAlert'];
+  export type CategoryPerformance = components['schemas']['CategoryPerformance'];
+  export type IEHealthStatus = components['schemas']['IEHealthStatus'];
+  export type IEDashboard = components['schemas']['IEDashboard'];
+  
+  // ─────────────────────────────────────────
   // PRODUCTS
   // ─────────────────────────────────────────
   export type ProductCreate = components['schemas']['ProductCreate'];

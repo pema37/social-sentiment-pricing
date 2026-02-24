@@ -21,4 +21,5 @@ export * from './pricing';
 export * from './integrations';
 export * from './payments';
 export * from './trust-scoring';  
+export * from './intelligence';
 

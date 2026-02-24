@@ -12,4 +12,5 @@ export * from './use-integrations';
 export * from './use-payments';
 export * from './use-trust-scoring';  
 export * from './use-outcomes';
+export * from './use-intelligence';
 

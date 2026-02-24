@@ -682,51 +682,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/pricing/recommendations/generate-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Generate All Recommendations
-         * @description Generate recommendations for all products with active rules.
-         *
-         *     Useful for:
-         *     - Initial setup/testing
-         *     - Manual trigger instead of waiting for scheduled task
-         *     - Demo purposes
-         */
-        post: operations["generate_all_recommendations_api_v1_pricing_recommendations_generate_all_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/recommendations/process-auto-approvals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Process Auto Approvals
-         * @description Process all existing PENDING recommendations for auto-approval.
-         */
-        post: operations["process_auto_approvals_api_v1_pricing_recommendations_process_auto_approvals_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/pricing/recommendations/generate/{product_id}": {
         parameters: {
             query?: never;
@@ -741,6 +696,41 @@ export interface paths {
          * @description Manually trigger recommendation generation for a product.
          */
         post: operations["generate_recommendation_api_v1_pricing_recommendations_generate__product_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pricing/recommendations/generate-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate All Recommendations
+         * @description Generate recommendations for all eligible products.
+         *
+         *     Eligible products:
+         *     - Products with active pricing rules, OR
+         *     - Products with linked competitor products (for competitor fallback)
+         *
+         *     This enables:
+         *     - Rule-based recommendations for products with explicit pricing rules
+         *     - Competitor-based fallback recommendations for products with only competitor data
+         *
+         *     FIX (2026-01-27): Now includes products with competitor links, not just
+         *     products with active rules. This enables WooCommerce products (and any
+         *     products without explicit rules) to get competitor-based recommendations.
+         *
+         *     Previous behavior: Only products with active pricing rules were processed,
+         *     which excluded WooCommerce products that had competitors linked but no rules.
+         */
+        post: operations["generate_all_recommendations_api_v1_pricing_recommendations_generate_all_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -838,7 +828,18 @@ export interface paths {
         put?: never;
         /**
          * Approve Recommendation
-         * @description Approve a pending recommendation.
+         * @description Approve a pending recommendation AND apply the price change.
+         *
+         *     This is an atomic operation - either both approval and price push succeed,
+         *     or everything is rolled back.
+         *
+         *     Possible error codes:
+         *     - DAILY_LIMIT_REACHED: User hit their daily approval limit
+         *     - NO_ACTIVE_INTEGRATION_LINK: Product not linked to any store
+         *     - PLATFORM_PUSH_FAILED: Store API returned an error
+         *     - RECOMMENDATION_EXPIRED: Recommendation is past its valid_until date
+         *     - INVALID_STATUS: Recommendation is not in PENDING status
+         *     - NOT_FOUND: Recommendation doesn't exist or belongs to another user
          */
         post: operations["approve_recommendation_api_v1_pricing_recommendations__recommendation_id__approve_post"];
         delete?: never;
@@ -859,6 +860,8 @@ export interface paths {
         /**
          * Reject Recommendation
          * @description Reject a pending recommendation.
+         *
+         *     Requires a reason for rejection which is stored for analytics.
          */
         post: operations["reject_recommendation_api_v1_pricing_recommendations__recommendation_id__reject_post"];
         delete?: never;
@@ -878,9 +881,36 @@ export interface paths {
         put?: never;
         /**
          * Apply Recommendation
-         * @description Apply an approved recommendation (push price to e-commerce).
+         * @description Apply an already-approved recommendation (push price to e-commerce).
+         *
+         *     Note: The /approve endpoint now auto-applies, so this endpoint is mainly
+         *     for edge cases where a recommendation was approved but not applied.
          */
         post: operations["apply_recommendation_api_v1_pricing_recommendations__recommendation_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pricing/recommendations/process-auto-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Process Auto Approvals
+         * @description Process all existing PENDING recommendations for auto-approval.
+         *
+         *     This checks each pending recommendation against the user's auto-approval
+         *     settings (confidence threshold, max change percent) and auto-applies
+         *     those that qualify.
+         */
+        post: operations["process_auto_approvals_api_v1_pricing_recommendations_process_auto_approvals_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -907,6 +937,10 @@ export interface paths {
         /**
          * Update Settings
          * @description Update pricing settings.
+         *
+         *     FIX: After saving new settings, automatically re-process any PENDING
+         *     recommendations to check if they now qualify for auto-approval under
+         *     the updated thresholds.
          */
         patch: operations["update_settings_api_v1_pricing_settings_patch"];
         trace?: never;
@@ -965,86 +999,6 @@ export interface paths {
          * @description Simulate pricing for a product - evaluate all rules without creating recommendations.
          */
         post: operations["simulate_pricing_api_v1_pricing_simulate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/outcomes/{recommendation_id}/record": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Record Outcome
-         * @description Record the outcome/performance of an applied recommendation.
-         */
-        post: operations["record_outcome_api_v1_pricing_outcomes__recommendation_id__record_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/outcomes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Outcomes
-         * @description List recommendation outcomes.
-         */
-        get: operations["list_outcomes_api_v1_pricing_outcomes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/outcomes/accuracy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Accuracy Stats
-         * @description Get overall accuracy statistics for recommendations.
-         */
-        get: operations["get_accuracy_stats_api_v1_pricing_outcomes_accuracy_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/rules/{rule_id}/performance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Rule Performance
-         * @description Get performance statistics for a specific pricing rule.
-         */
-        get: operations["get_rule_performance_api_v1_pricing_rules__rule_id__performance_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1281,6 +1235,106 @@ export interface paths {
         get: operations["get_task_status_api_v1_sentiment_tasks__task_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/competitors/match/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search for competitor products
+         * @description Search multiple providers for competitor products matching the given product name.
+         */
+        post: operations["search_competitors_api_v1_competitors_match_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/competitors/match/product": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find competitors for a product
+         * @description Find competitor products for a specific product in your catalog.
+         */
+        post: operations["match_product_api_v1_competitors_match_product_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/competitors/match/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk match multiple products
+         * @description Find competitors for multiple products at once.
+         */
+        post: operations["bulk_match_products_api_v1_competitors_match_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/competitors/match/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List search providers
+         * @description Get information about available search providers.
+         */
+        get: operations["list_providers_api_v1_competitors_match_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/competitors/match/clear-cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear search cache
+         * @description Clear the competitor search cache.
+         */
+        post: operations["clear_cache_api_v1_competitors_match_clear_cache_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1740,7 +1794,14 @@ export interface paths {
         };
         /**
          * Oauth Callback
-         * @description OAuth callback endpoint. Redirects to frontend with success/error status.
+         * @description OAuth callback - handles both authenticated flow and fresh Shopify installs.
+         *
+         *     UPDATED (2026-02-20): After successful Shopify OAuth, redirect to billing
+         *     plan selection page instead of dashboard. This is required for Shopify App
+         *     Store compliance — merchants must be able to select a plan after install.
+         *
+         *     For reinstalls where a billing subscription already exists, Shopify
+         *     automatically reactivates it, so the billing page will show the active plan.
          */
         get: operations["oauth_callback_api_v1_integrations_oauth_callback_get"];
         put?: never;
@@ -1807,7 +1868,23 @@ export interface paths {
         post?: never;
         /**
          * Disconnect Integration
-         * @description Disconnect an integration (soft delete with webhook cleanup).
+         * @description Disconnect or delete an integration.
+         *
+         *     Behavior:
+         *     - ACTIVE/PAUSED integrations: Soft delete (status → DISCONNECTED)
+         *       - Unregisters webhooks from the platform
+         *       - Keeps the record for potential reconnection
+         *
+         *     - DISCONNECTED integrations: Hard delete (removed from database)
+         *       - Deletes all associated sync logs
+         *       - Deletes all associated product links
+         *       - Permanently removes the integration record
+         *
+         *     FIX (2026-01-24): Previously this only did soft delete, so clicking "Delete"
+         *     on an already-disconnected integration did nothing. Now it actually removes it.
+         *
+         *     FIX (2026-01-27): Now also deletes IntegrationSyncLog records to avoid
+         *     foreign key constraint violations.
          */
         delete: operations["disconnect_integration_api_v1_integrations__integration_id__delete"];
         options?: never;
@@ -1815,6 +1892,13 @@ export interface paths {
         /**
          * Update Integration
          * @description Update integration settings.
+         *
+         *     FIX (2026-01-27): Now supports credential updates for WooCommerce.
+         *     If consumer_key and consumer_secret are provided, will:
+         *     1. Verify the new credentials against the store
+         *     2. Update the encrypted credentials
+         *     3. Clear any error messages
+         *     4. Set status to ACTIVE
          */
         patch: operations["update_integration_api_v1_integrations__integration_id__patch"];
         trace?: never;
@@ -1831,8 +1915,62 @@ export interface paths {
         /**
          * Trigger Sync
          * @description Trigger a product sync from the e-commerce platform.
+         *
+         *     The sync runs in the background - it's safe to refresh or navigate away.
+         *     Poll GET /{integration_id}/sync/progress for real-time updates.
          */
         post: operations["trigger_sync_api_v1_integrations__integration_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/{integration_id}/sync/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Sync Progress
+         * @description Get detailed sync progress with user-friendly messaging.
+         *
+         *     Frontend should poll this every 2-3 seconds while is_syncing == true.
+         *
+         *     Key response fields:
+         *     - is_syncing: Whether to show progress UI
+         *     - progress_percent: For progress bar (null if unknown)
+         *     - status_message: Human-readable status to display
+         *     - can_refresh_safely: ALWAYS true - reassures users!
+         */
+        get: operations["get_sync_progress_api_v1_integrations__integration_id__sync_progress_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/sync/status/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get All Sync Status
+         * @description Get sync status for ALL user's integrations.
+         *
+         *     Use on dashboard or integrations list to show which stores are syncing.
+         *     Frontend should poll this every 3 seconds if any_syncing is true.
+         */
+        get: operations["get_all_sync_status_api_v1_integrations_sync_status_all_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1851,16 +1989,6 @@ export interface paths {
         /**
          * Push Prices To Platform
          * @description Push all pending price changes to the e-commerce platform.
-         *
-         *     Compares local prices with external prices and pushes any differences.
-         *     Skips products where prices match (within $0.01 tolerance).
-         *
-         *     Returns:
-         *         - total: Total linked products
-         *         - pushed: Successfully pushed
-         *         - failed: Failed to push
-         *         - skipped: Prices already match
-         *         - errors: Details of first 10 failures
          */
         post: operations["push_prices_to_platform_api_v1_integrations__integration_id__push_prices_post"];
         delete?: never;
@@ -1878,7 +2006,7 @@ export interface paths {
         };
         /**
          * Get Sync Status
-         * @description Get current sync status.
+         * @description Get current sync status (basic version - use /sync/progress for detailed).
          */
         get: operations["get_sync_status_api_v1_integrations__integration_id__sync_status_get"];
         put?: never;
@@ -1924,7 +2052,7 @@ export interface paths {
         put?: never;
         /**
          * Create Product Link
-         * @description Link an SSP product to an external platform product.
+         * @description Link an SSP product to an external platform product/variant.
          */
         post: operations["create_product_link_api_v1_integrations__integration_id__links_post"];
         delete?: never;
@@ -1987,6 +2115,258 @@ export interface paths {
         get: operations["check_integration_health_api_v1_integrations__integration_id__health_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/gdpr/customers/data_request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Customers Data Request
+         * @description Handle customer data request (GDPR).
+         */
+        post: operations["customers_data_request_api_v1_integrations_shopify_gdpr_customers_data_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/gdpr/customers/redact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Customers Redact
+         * @description Handle customer data deletion request (GDPR).
+         */
+        post: operations["customers_redact_api_v1_integrations_shopify_gdpr_customers_redact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/gdpr/shop/redact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shop Redact
+         * @description Handle shop data deletion (48 hours after uninstall).
+         *
+         *     TODO: Implement full cleanup before going live:
+         *     - Delete Integration record for this shop
+         *     - Delete ProductIntegrationLinks
+         *     - Delete cached Shopify product data
+         *     - Audit log the deletion
+         */
+        post: operations["shop_redact_api_v1_integrations_shopify_gdpr_shop_redact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shopify Install
+         * @description Entry point for Shopify App Store installs.
+         *     No auth required — this is the first thing Shopify hits.
+         *     Redirects merchant to Shopify's OAuth permission screen.
+         */
+        get: operations["shopify_install_api_v1_integrations_shopify_install_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Shopify Plans
+         * @description List available Shopify billing plans.
+         *
+         *     No auth required — this can be called from the embedded app
+         *     before the merchant has logged in, to display pricing.
+         */
+        get: operations["list_shopify_plans_api_v1_integrations_shopify_billing_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Shopify Subscription
+         * @description Create a Shopify recurring subscription.
+         *
+         *     Returns a confirmation_url to redirect the merchant to Shopify's
+         *     billing approval page. After approval, Shopify redirects back to
+         *     the frontend with a charge_id param.
+         */
+        post: operations["create_shopify_subscription_api_v1_integrations_shopify_billing_subscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Shopify Charge
+         * @description Verify a Shopify charge after the merchant approves it.
+         *
+         *     Called by the frontend when the billing page loads with a charge_id
+         *     query param (Shopify redirects back to the app URL after approval).
+         *     Confirms the subscription is ACTIVE via GraphQL and updates
+         *     the local Subscription record.
+         */
+        post: operations["verify_shopify_charge_api_v1_integrations_shopify_billing_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shopify Billing Callback
+         * @description Legacy billing callback (GET redirect).
+         *
+         *     For embedded apps, Shopify redirects to the app URL (frontend) instead
+         *     of this endpoint. This is a fallback that forwards to the frontend.
+         */
+        get: operations["shopify_billing_callback_api_v1_integrations_shopify_billing_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Shopify Billing Status
+         * @description Check the current Shopify billing status.
+         *
+         *     Queries Shopify's activeSubscriptions for the authoritative
+         *     subscription state (not our local DB copy).
+         */
+        get: operations["get_shopify_billing_status_api_v1_integrations_shopify_billing_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/change-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Shopify Plan
+         * @description Change Shopify plan (upgrade or downgrade).
+         *
+         *     Creates a new subscription with APPLY_IMMEDIATELY replacement
+         *     behavior. Merchant must approve the new charge via Shopify.
+         */
+        post: operations["change_shopify_plan_api_v1_integrations_shopify_billing_change_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/shopify/billing/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Shopify Subscription
+         * @description Cancel the active Shopify subscription.
+         *
+         *     Calls Shopify's appSubscriptionCancel mutation and downgrades
+         *     the local subscription to free tier.
+         */
+        post: operations["cancel_shopify_subscription_api_v1_integrations_shopify_billing_cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2185,6 +2565,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/webhooks/shopify/gdpr/customers-data-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shopify Customers Data Request
+         * @description Shopify GDPR: Customer data request.
+         *     Called when a customer requests their data from a store that has your app installed.
+         *     Required by Shopify even if you don't store customer data.
+         */
+        post: operations["shopify_customers_data_request_api_v1_webhooks_shopify_gdpr_customers_data_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/shopify/gdpr/customers-redact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shopify Customers Redact
+         * @description Shopify GDPR: Customer data erasure.
+         *     Called when a store owner requests deletion of customer data.
+         *     Required by Shopify even if you don't store customer data.
+         */
+        post: operations["shopify_customers_redact_api_v1_webhooks_shopify_gdpr_customers_redact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/shopify/gdpr/shop-redact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shopify Shop Redact
+         * @description Shopify GDPR: Shop data erasure.
+         *     Called 48 hours after a store uninstalls your app.
+         *     Delete all data associated with this store.
+         */
+        post: operations["shopify_shop_redact_api_v1_webhooks_shopify_gdpr_shop_redact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/webhooks/status": {
         parameters: {
             query?: never;
@@ -2287,6 +2733,29 @@ export interface paths {
         get: operations["get_subscription_api_v1_payments_subscription_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/downgrade-to-free": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Downgrade To Free
+         * @description Downgrade the current user's subscription to the free tier.
+         *
+         *     This cancels any active paid subscription and moves them to free.
+         *     No payment required.
+         */
+        post: operations["downgrade_to_free_api_v1_payments_downgrade_to_free_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2582,6 +3051,1353 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trend-analysis/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Trend Analysis
+         * @description Run comprehensive AI trend analysis.
+         *
+         *     Analyzes sentiment data, social mentions, and competitor prices
+         *     to generate predictions, opportunities, and risk alerts.
+         *
+         *     - **days**: Number of days to analyze (7-90, default 30)
+         *     - **product_ids**: Optional list of specific products (None = all)
+         *     - **use_model**: AI model to use ('openai' or 'gemini')
+         */
+        post: operations["run_trend_analysis_api_v1_trend_analysis_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trend-analysis/opportunity/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Product Opportunity
+         * @description Analyze a specific product for pricing opportunities.
+         *
+         *     Returns AI-generated pricing recommendation with confidence score,
+         *     expected impact, and reasoning.
+         *
+         *     - **product_id**: The product to analyze
+         *     - **use_model**: AI model to use ('openai' or 'gemini')
+         */
+        post: operations["analyze_product_opportunity_api_v1_trend_analysis_opportunity__product_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trend-analysis/risks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detect Risks
+         * @description Detect potential risks across all products.
+         *
+         *     Analyzes negative mentions, sentiment drops, and competitor activities
+         *     to identify risks that require attention.
+         *
+         *     - **use_model**: AI model to use ('openai' or 'gemini')
+         */
+        post: operations["detect_risks_api_v1_trend_analysis_risks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trend-analysis/insight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Insight
+         * @description Generate a market insight report.
+         *
+         *     Creates an AI-generated narrative analysis of market conditions,
+         *     trends, and actionable takeaways.
+         *
+         *     - **days**: Number of days to analyze (7-90)
+         *     - **use_model**: AI model to use ('openai' or 'gemini')
+         */
+        post: operations["generate_insight_api_v1_trend_analysis_insight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trend-analysis/quick-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Quick Stats
+         * @description Get quick stats for the trends dashboard.
+         *
+         *     Returns real-time metrics without making AI calls.
+         *     Fast endpoint for dashboard loading.
+         */
+        get: operations["get_quick_stats_api_v1_trend_analysis_quick_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/author/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score author trustworthiness
+         * @description Calculate trust score for a social media author based on account metrics.
+         */
+        post: operations["score_author_api_v1_trust_author_score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/author/score/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score multiple authors
+         * @description Calculate trust scores for multiple authors in one request.
+         */
+        post: operations["score_authors_batch_api_v1_trust_author_score_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/content/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze content quality
+         * @description Analyze content for spam, duplicates, and manipulation patterns.
+         */
+        post: operations["analyze_content_api_v1_trust_content_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/content/analyze/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze multiple content pieces
+         * @description Analyze multiple content pieces for spam and quality.
+         */
+        post: operations["analyze_content_batch_api_v1_trust_content_analyze_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/campaign/detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detect coordinated campaigns
+         * @description Analyze mentions for coordinated manipulation campaigns.
+         */
+        post: operations["detect_campaign_api_v1_trust_campaign_detect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/sentiment/weighted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calculate trust-adjusted sentiment
+         * @description Calculate sentiment with bot/manipulation filtering applied.
+         */
+        post: operations["calculate_weighted_sentiment_api_v1_trust_sentiment_weighted_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/check/spam": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quick spam check
+         * @description Quickly check if content is likely spam.
+         */
+        post: operations["quick_spam_check_api_v1_trust_check_spam_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/check/trust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quick trust check
+         * @description Quickly check if an author is trustworthy.
+         */
+        post: operations["quick_trust_check_api_v1_trust_check_trust_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get service statistics
+         * @description Get trust scoring service statistics and cache info.
+         */
+        get: operations["get_stats_api_v1_trust_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trust/cache/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear caches
+         * @description Clear all trust scoring caches.
+         */
+        post: operations["clear_caches_api_v1_trust_cache_clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostic/integration-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Integration Health
+         * @description Returns complete integration health status for current user.
+         *
+         *     Use this to identify:
+         *     - Which integrations are active/inactive
+         *     - Which products are linked to which platforms
+         *     - Missing or disabled links
+         *
+         *     Returns:
+         *         - summary: Quick stats
+         *         - integrations: All integrations with status
+         *         - products: Product-to-platform mapping
+         *         - issues: Identified problems
+         */
+        get: operations["check_integration_health_api_v1_diagnostic_integration_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostic/product/{product_id}/push-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Product Push Status
+         * @description Check exactly what would happen if we pushed a price for this product.
+         *
+         *     Simulates the exact query from EcommercePushService.push_price() to show:
+         *     - Which platforms it WOULD push to
+         *     - Which platforms are SKIPPED and why
+         */
+        get: operations["check_product_push_status_api_v1_diagnostic_product__product_id__push_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/{recommendation_id}/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Outcome
+         * @description Record the outcome/performance of an applied recommendation.
+         */
+        post: operations["record_outcome_api_v1_outcomes__recommendation_id__record_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Outcomes
+         * @description List recommendation outcomes.
+         */
+        get: operations["list_outcomes_api_v1_outcomes__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/accuracy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Accuracy Stats
+         * @description Get overall accuracy statistics for recommendations.
+         */
+        get: operations["get_accuracy_stats_api_v1_outcomes_accuracy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/rules/{rule_id}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Rule Performance
+         * @description Get performance statistics for a specific pricing rule.
+         */
+        get: operations["get_rule_performance_api_v1_outcomes_rules__rule_id__performance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Confidence Calibration
+         * @description Confidence calibration: predicted confidence vs actual outcome lift.
+         *
+         *     Target: Pearson r > 0.7 by Month 12.
+         */
+        get: operations["get_confidence_calibration_api_v1_outcomes_calibration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/elasticity-accuracy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Elasticity Accuracy
+         * @description Compare predicted elasticity estimates with observed demand changes.
+         *
+         *     When the Analyst consistently overestimates demand sensitivity,
+         *     the category prior is updated via Bayesian posterior.
+         */
+        get: operations["get_elasticity_accuracy_api_v1_outcomes_elasticity_accuracy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/merchant-patterns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Merchant Patterns
+         * @description Merchant modification patterns.
+         *
+         *     If merchants consistently reduce 10% suggestions to 5%, the
+         *     Strategist learns to recommend smaller changes (preference prior).
+         */
+        get: operations["get_merchant_patterns_api_v1_outcomes_merchant_patterns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/benchmarks/{category}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Category Benchmarks
+         * @description Cross-merchant category benchmarks (k-anonymity >= 5).
+         *
+         *     Returns optimal price change ranges and success rates
+         *     for a product category, aggregated across merchants.
+         */
+        get: operations["get_category_benchmarks_api_v1_outcomes_benchmarks__category__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/data-gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Data Gaps
+         * @description Data gap failure rates by category.
+         *
+         *     Categories where low data_completeness correlates with failures.
+         *     Tells Scout where to prioritize broader competitor coverage.
+         */
+        get: operations["get_data_gaps_api_v1_outcomes_data_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outcomes/{outcome_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Outcome Detail
+         * @description Get a single outcome by ID.
+         */
+        get: operations["get_outcome_detail_api_v1_outcomes__outcome_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ie Health
+         * @description Get overall health status of the Intelligence Environment.
+         *
+         *     Checks:
+         *     - Scoring engine importability
+         *     - Last Celery task run times
+         *     - Active experiment count
+         *     - Drift alert count
+         */
+        get: operations["get_ie_health_api_v1_intelligence_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ie Dashboard
+         * @description Combined dashboard payload — single call for the frontend.
+         *
+         *     Returns health, top categories by recommendation volume,
+         *     active drift alerts, and latest calibration report.
+         */
+        get: operations["get_ie_dashboard_api_v1_intelligence_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Experiment Statuses
+         * @description Get Thompson Sampling experiment status for all (or specific) categories.
+         *
+         *     Returns per-arm statistics including expected reward, pull counts,
+         *     and convergence detection.
+         */
+        get: operations["get_experiment_statuses_api_v1_intelligence_experiments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/experiments/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Experiment Status
+         * @description Get experiment status for a specific category.
+         */
+        get: operations["get_experiment_status_api_v1_intelligence_experiments__category_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Calibration Reports
+         * @description Get calibration accuracy reports.
+         *
+         *     Shows how well predicted confidence correlates with actual outcomes,
+         *     broken down by confidence bands.
+         */
+        get: operations["get_calibration_reports_api_v1_intelligence_calibration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/drift-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Drift Alerts
+         * @description Get drift detection alerts.
+         *
+         *     Types:
+         *     - correlation_drop: confidence-outcome correlation below threshold
+         *     - distribution_shift: KS statistic detected scoring distribution change
+         *     - acceptance_change: merchant acceptance rate shifted significantly
+         *     - lift_decline: revenue lift trending downward
+         */
+        get: operations["get_drift_alerts_api_v1_intelligence_drift_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Category Performance
+         * @description Get performance metrics for all product categories.
+         *
+         *     Reads from mv_category_benchmarks materialized view for fast lookups.
+         */
+        get: operations["get_category_performance_api_v1_intelligence_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intelligence/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Category Detail
+         * @description Get detailed performance for a specific category.
+         */
+        get: operations["get_category_detail_api_v1_intelligence_categories__category_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/visual-pricing/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demo Health Check
+         * @description Health check for the Visual Pricing demo.
+         *
+         *     Verifies that Gemini 3 is available and the demo is ready.
+         */
+        get: operations["demo_health_check_api_v1_visual_pricing_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/visual-pricing/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Competitor Streaming
+         * @description Analyze competitor screenshot with streaming multi-agent response.
+         *
+         *     This is the main demo endpoint. It:
+         *     1. Accepts a competitor product screenshot
+         *     2. Runs Scout → Analyst → Strategist agents
+         *     3. Streams their "thinking" in real-time via SSE
+         *
+         *     Returns Server-Sent Events (SSE) stream.
+         */
+        post: operations["analyze_competitor_streaming_api_v1_visual_pricing_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/visual-pricing/analyze-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Competitor Sync
+         * @description Analyze competitor screenshot (non-streaming version).
+         *
+         *     Same as /analyze but waits for complete response.
+         *     Useful for integrations that don't support SSE.
+         */
+        post: operations["analyze_competitor_sync_api_v1_visual_pricing_analyze_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crisis/analyze/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Crisis Analysis
+         * @description Stream crisis detection analysis via SSE.
+         *
+         *     Returns Server-Sent Events with agent thinking in real-time.
+         */
+        get: operations["stream_crisis_analysis_api_v1_crisis_analyze_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crisis/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Health check for crisis detection service.
+         */
+        get: operations["health_api_v1_crisis_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launch/analyze/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Launch Analysis Get
+         * @description GET version for simple testing without image upload.
+         */
+        get: operations["stream_launch_analysis_get_api_v1_launch_analyze_stream_get"];
+        put?: never;
+        /**
+         * Stream Launch Analysis
+         * @description Stream launch detection analysis via SSE.
+         *
+         *     Accepts optional image upload for multimodal analysis.
+         */
+        post: operations["stream_launch_analysis_api_v1_launch_analyze_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/launch/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Health check for launch detection service.
+         */
+        get: operations["health_api_v1_launch_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trends-visual/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Trends
+         * @description Analyze market trends for a product (non-streaming).
+         *
+         *     Runs all three agents (Observer → Analyst → Forecaster) and returns
+         *     a summary of the analysis.
+         */
+        post: operations["analyze_trends_api_v1_trends_visual_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trends-visual/analyze/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Trends Stream
+         * @description Analyze market trends with streaming response.
+         *
+         *     Returns Server-Sent Events (SSE) with real-time analysis updates
+         *     from each agent as they process.
+         *
+         *     Event format:
+         *     ```
+         *     data: {"agent": "observer", "thought_type": "observation", "content": "...", "is_final": false}
+         *     ```
+         */
+        post: operations["analyze_trends_stream_api_v1_trends_visual_analyze_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trends-visual/analyze/with-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Trends With Image
+         * @description Analyze market trends including visual chart analysis.
+         *
+         *     Accepts an image file (chart/graph) for multimodal analysis.
+         *     The Observer agent will analyze the chart patterns in addition
+         *     to the numerical market data.
+         *
+         *     Returns streaming SSE response.
+         */
+        post: operations["analyze_trends_with_image_api_v1_trends_visual_analyze_with_image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trends-visual/analyze/image-only": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Image Only
+         * @description Analyze just a chart image without additional market data.
+         *
+         *     Useful for quick visual pattern recognition on uploaded charts.
+         *     Returns the visual analysis as plain text.
+         */
+        post: operations["analyze_image_only_api_v1_trends_visual_analyze_image_only_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trends-visual/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trends Visual Health
+         * @description Health check for trends visual analyzer.
+         *
+         *     Returns service status, model info, and available agents.
+         */
+        get: operations["trends_visual_health_api_v1_trends_visual_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trends-visual/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agents
+         * @description List available analysis agents and their roles.
+         */
+        get: operations["list_agents_api_v1_trends_visual_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/market-intelligence/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Intelligence Health Check
+         * @description Health check for the Market Intelligence demo.
+         *
+         *     Verifies that You.com and Gemini APIs are configured.
+         */
+        get: operations["intelligence_health_check_api_v1_market_intelligence_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/market-intelligence/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analyze Market Streaming Get
+         * @description GET version of /analyze for easy browser and curl testing.
+         *
+         *     Example:
+         *         curl -N "http://localhost:8000/api/v1/market-intelligence/analyze?product_name=Nike+Air+Max+90&current_price=130"
+         */
+        get: operations["analyze_market_streaming_get_api_v1_market_intelligence_analyze_get"];
+        put?: never;
+        /**
+         * Analyze Market Streaming
+         * @description Analyze a product's market position with streaming multi-agent response.
+         *
+         *     Runs Scout → Analyst → Strategist pipeline:
+         *     1. Scout searches live web via You.com APIs (parallel searches)
+         *     2. Analyst synthesizes market position via Gemini
+         *     3. Strategist recommends optimal price with confidence score
+         *
+         *     Returns Server-Sent Events (SSE) stream.
+         */
+        post: operations["analyze_market_streaming_api_v1_market_intelligence_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Health
+         * @description Free endpoint — lets agents discover ActualPrice capabilities.
+         */
+        get: operations["agent_health_api_v1_agent_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/pricing-intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pricing Intelligence
+         * @description Agent-consumable pricing intelligence.
+         *     Pay $0.01 USDC via x402 to get real-time competitive pricing data.
+         *
+         *     The Scout agent monitors competitors, the Analyst processes sentiment,
+         *     and the Strategist generates the recommendation — all in one query.
+         */
+        get: operations["get_pricing_intelligence_api_v1_agent_pricing_intelligence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/crisis-detection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detect Crisis
+         * @description Real-time crisis detection for any brand.
+         *     Pay $0.01 USDC via x402 to check if a brand is experiencing a social media crisis
+         *     that could impact pricing decisions.
+         *
+         *     The Analyst agent monitors social sentiment across platforms and flags
+         *     significant negative shifts that require immediate pricing action.
+         */
+        get: operations["detect_crisis_api_v1_agent_crisis_detection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/market-trends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Market Trends
+         * @description Market trend analysis for a product category.
+         *     Pay $0.01 USDC via x402 to get AI-generated market insights.
+         *
+         *     The Scout agent collects market data, and the Strategist generates
+         *     actionable trend analysis for pricing decisions.
+         */
+        get: operations["get_market_trends_api_v1_agent_market_trends_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autonomous/trigger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Pipeline
+         * @description 🚀 Trigger the full autonomous pricing pipeline.
+         *
+         *     Executes: Scout → Analyst → Strategist → On-Chain
+         *     No human intervention required.
+         *
+         *     This is the core demonstration for VETROX AGENTIC 3.0 Track 3 "The Hand."
+         */
+        post: operations["trigger_pipeline_api_v1_autonomous_trigger_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autonomous/stream/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Pipeline
+         * @description 📡 Stream the autonomous pipeline execution via Server-Sent Events.
+         *
+         *     Watch each agent's reasoning in real-time:
+         *     - Scout: Market signal detection
+         *     - Analyst: Sentiment + risk assessment
+         *     - Strategist: Price calculation + on-chain execution
+         *
+         *     Connect with EventSource in the browser or curl -N.
+         */
+        get: operations["stream_pipeline_api_v1_autonomous_stream__product_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autonomous/monitor/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Monitoring
+         * @description 🔄 Start autonomous monitoring loop.
+         *
+         *     The system will continuously scan for market changes and
+         *     automatically trigger the pricing pipeline when signals are detected.
+         *     This runs in the background — no human oversight needed.
+         */
+        post: operations["start_monitoring_api_v1_autonomous_monitor_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autonomous/monitor/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Monitoring
+         * @description ⏹️ Stop the autonomous monitoring loop.
+         */
+        post: operations["stop_monitoring_api_v1_autonomous_monitor_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autonomous/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Autonomous Health
+         * @description Health check for the autonomous pipeline.
+         *     Verifies Gemini API connectivity and agent readiness.
+         */
+        get: operations["autonomous_health_api_v1_autonomous_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -2633,6 +4449,32 @@ export interface components {
             ai_powered: boolean;
         };
         /**
+         * AIInsightResponse
+         * @description An AI-generated insight.
+         */
+        AIInsightResponse: {
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Detailed Analysis */
+            detailed_analysis: string;
+            /**
+             * Key Factors
+             * @default []
+             */
+            key_factors: string[];
+            /** Data Points Analyzed */
+            data_points_analyzed: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Model Used */
+            model_used: string;
+        };
+        /**
          * AccuracyStatsResponse
          * @description Overall accuracy statistics.
          */
@@ -2669,6 +4511,16 @@ export interface components {
             worst_performing_rules: {
                 [key: string]: unknown;
             }[];
+        };
+        /**
+         * AdjustedSentimentStats
+         * @description Adjusted sentiment statistics.
+         */
+        AdjustedSentimentStats: {
+            /** Sentiment */
+            sentiment: number;
+            /** Effective Mentions */
+            effective_mentions: number;
         };
         /**
          * AlertAnalytics
@@ -2905,6 +4757,135 @@ export interface components {
          */
         AlertType: "sentiment_drop" | "sentiment_spike" | "volume_surge" | "viral_mention" | "competitor_price_change" | "price_recommendation" | "price_applied" | "trend_detected" | "anomaly_detected";
         /**
+         * AnalyzeResponse
+         * @description Final response from analysis.
+         */
+        AnalyzeResponse: {
+            /** Success */
+            success: boolean;
+            /** Competitor Data */
+            competitor_data?: {
+                [key: string]: unknown;
+            } | null;
+            /** Analysis */
+            analysis?: {
+                [key: string]: unknown;
+            } | null;
+            /** Recommendation */
+            recommendation?: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * AuthorScoreRequest
+         * @description Request to score an author's trustworthiness.
+         * @example {
+         *       "account_created_at": "2021-03-15T10:30:00Z",
+         *       "author_id": "user_12345",
+         *       "follower_count": 5420,
+         *       "following_count": 312,
+         *       "is_verified": false,
+         *       "source": "twitter",
+         *       "username": "techreviewer"
+         *     }
+         */
+        AuthorScoreRequest: {
+            /**
+             * Author Id
+             * @description Unique author identifier
+             */
+            author_id: string;
+            /**
+             * Username
+             * @description Author's username
+             */
+            username: string;
+            /**
+             * Source
+             * @description Platform source (twitter, reddit, etc.)
+             */
+            source: string;
+            /**
+             * Follower Count
+             * @description Number of followers
+             */
+            follower_count?: number | null;
+            /**
+             * Following Count
+             * @description Number following
+             */
+            following_count?: number | null;
+            /**
+             * Post Count
+             * @description Total posts by author
+             */
+            post_count?: number | null;
+            /**
+             * Account Created At
+             * @description Account creation date
+             */
+            account_created_at?: string | null;
+            /**
+             * Is Verified
+             * @description Whether account is verified
+             * @default false
+             */
+            is_verified: boolean;
+        };
+        /**
+         * AuthorScoreResponse
+         * @description Response with author trust assessment.
+         * @example {
+         *       "author_id": "user_12345",
+         *       "calculated_at": "2026-01-16T12:00:00Z",
+         *       "component_scores": {
+         *         "account_age": 0.85,
+         *         "engagement": 0.7,
+         *         "followers": 0.65,
+         *         "history": 0.5,
+         *         "verification_bonus": 0
+         *       },
+         *       "confidence": 0.75,
+         *       "risk_flags": [],
+         *       "risk_score": 0.1,
+         *       "source": "twitter",
+         *       "trust_level": "high",
+         *       "trust_score": 0.72
+         *     }
+         */
+        AuthorScoreResponse: {
+            /** Author Id */
+            author_id: string;
+            /** Source */
+            source: string;
+            /**
+             * Trust Score
+             * @description Overall trust score
+             */
+            trust_score: number;
+            trust_level: components["schemas"]["TrustLevelEnum"];
+            /** Risk Flags */
+            risk_flags?: components["schemas"]["RiskFlagEnum"][];
+            /**
+             * Risk Score
+             * @description Risk assessment score
+             */
+            risk_score: number;
+            component_scores: components["schemas"]["ComponentScores"];
+            /**
+             * Confidence
+             * @description Confidence in assessment
+             */
+            confidence: number;
+            /**
+             * Calculated At
+             * Format: date-time
+             */
+            calculated_at: string;
+        };
+        /**
          * BalanceInfo
          * @description Response schema for balance check.
          */
@@ -2915,6 +4896,196 @@ export interface components {
             balance: string;
             /** Balance Raw */
             balance_raw: number;
+        };
+        /**
+         * BatchAuthorScoreRequest
+         * @description Request to score multiple authors.
+         */
+        BatchAuthorScoreRequest: {
+            /** Authors */
+            authors: components["schemas"]["AuthorScoreRequest"][];
+        };
+        /**
+         * BatchAuthorScoreResponse
+         * @description Response with multiple author scores.
+         */
+        BatchAuthorScoreResponse: {
+            /** Scores */
+            scores: components["schemas"]["AuthorScoreResponse"][];
+            /** Total */
+            total: number;
+            /** Avg Trust Score */
+            avg_trust_score: number;
+        };
+        /**
+         * BatchContentAnalysisRequest
+         * @description Request to analyze multiple content pieces.
+         */
+        BatchContentAnalysisRequest: {
+            /** Contents */
+            contents: components["schemas"]["ContentAnalysisRequest"][];
+        };
+        /**
+         * BatchContentAnalysisResponse
+         * @description Response with multiple content analyses.
+         */
+        BatchContentAnalysisResponse: {
+            /** Analyses */
+            analyses: components["schemas"]["ContentAnalysisResponse"][];
+            /** Total */
+            total: number;
+            /** Spam Count */
+            spam_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+        };
+        /** Body_analyze_competitor_streaming_api_v1_visual_pricing_analyze_post */
+        Body_analyze_competitor_streaming_api_v1_visual_pricing_analyze_post: {
+            /**
+             * Screenshot
+             * Format: binary
+             * @description Competitor product screenshot
+             */
+            screenshot: string;
+            /**
+             * Product Name
+             * @description Your product name
+             */
+            product_name: string;
+            /**
+             * Product Price
+             * @description Your current price
+             */
+            product_price: number;
+            /**
+             * Product Currency
+             * @description Currency code
+             * @default USD
+             */
+            product_currency: string;
+            /**
+             * Product Features
+             * @description Comma-separated list of features
+             * @default
+             */
+            product_features: string;
+        };
+        /** Body_analyze_competitor_sync_api_v1_visual_pricing_analyze_sync_post */
+        Body_analyze_competitor_sync_api_v1_visual_pricing_analyze_sync_post: {
+            /**
+             * Screenshot
+             * Format: binary
+             * @description Competitor product screenshot
+             */
+            screenshot: string;
+            /**
+             * Product Name
+             * @description Your product name
+             */
+            product_name: string;
+            /**
+             * Product Price
+             * @description Your current price
+             */
+            product_price: number;
+            /**
+             * Product Currency
+             * @description Currency code
+             * @default USD
+             */
+            product_currency: string;
+            /**
+             * Product Features
+             * @description Comma-separated list of features
+             * @default
+             */
+            product_features: string;
+        };
+        /** Body_analyze_image_only_api_v1_trends_visual_analyze_image_only_post */
+        Body_analyze_image_only_api_v1_trends_visual_analyze_image_only_post: {
+            /** Product */
+            product: string;
+            /** Category */
+            category: string;
+            /**
+             * Image
+             * Format: binary
+             */
+            image: string;
+        };
+        /** Body_analyze_trends_with_image_api_v1_trends_visual_analyze_with_image_post */
+        Body_analyze_trends_with_image_api_v1_trends_visual_analyze_with_image_post: {
+            /**
+             * Product
+             * @description Product name
+             */
+            product: string;
+            /**
+             * Category
+             * @description Product category
+             */
+            category: string;
+            /**
+             * Sentiment Score
+             * @default 0
+             */
+            sentiment_score: number;
+            /**
+             * Sentiment Trend
+             * @default stable
+             */
+            sentiment_trend: string;
+            /**
+             * Volume 24H
+             * @default 0
+             */
+            volume_24h: number;
+            /**
+             * Volume Trend
+             * @default stable
+             */
+            volume_trend: string;
+            /**
+             * Price Change 7D
+             * @default 0
+             */
+            price_change_7d: number;
+            /**
+             * Price Change 30D
+             * @default 0
+             */
+            price_change_30d: number;
+            /**
+             * Social Mentions
+             * @default 0
+             */
+            social_mentions: number;
+            /**
+             * Social Trend
+             * @default stable
+             */
+            social_trend: string;
+            /**
+             * Competitor Activity
+             * @default normal
+             */
+            competitor_activity: string;
+            /**
+             * Market Position
+             * @default mid
+             */
+            market_position: string;
+            /**
+             * Seasonality
+             * @default normal
+             */
+            seasonality: string;
+            /**
+             * Image
+             * Format: binary
+             * @description Chart/graph image for visual analysis
+             */
+            image: string;
         };
         /** Body_login_oauth_api_v1_auth_login_oauth_post */
         Body_login_oauth_api_v1_auth_login_oauth_post: {
@@ -2939,6 +5110,225 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
+        };
+        /** Body_stream_launch_analysis_api_v1_launch_analyze_stream_post */
+        Body_stream_launch_analysis_api_v1_launch_analyze_stream_post: {
+            /**
+             * Competitor
+             * @description Competitor name
+             */
+            competitor: string;
+            /**
+             * Your Product
+             * @description Your product name
+             */
+            your_product: string;
+            /**
+             * Simulate Launch
+             * @description Simulate launch for demo
+             * @default false
+             */
+            simulate_launch: boolean;
+            /**
+             * Image
+             * @description Product screenshot
+             */
+            image?: string | null;
+        };
+        /**
+         * BulkMatchRequest
+         * @description Request schema for bulk matching.
+         */
+        BulkMatchRequest: {
+            /**
+             * Product Ids
+             * @description Product IDs to match
+             */
+            product_ids: string[];
+            /**
+             * Max Results Per Product
+             * @default 5
+             */
+            max_results_per_product: number;
+            /**
+             * Auto Link
+             * @default false
+             */
+            auto_link: boolean;
+            /**
+             * Auto Link Threshold
+             * @default 0.8
+             */
+            auto_link_threshold: number;
+        };
+        /**
+         * CalibrationReport
+         * @description Calibration accuracy for a category or global.
+         */
+        CalibrationReport: {
+            /** Category Id */
+            category_id?: string | null;
+            /** Sample Count */
+            sample_count: number;
+            /**
+             * Pearson R
+             * @description Correlation between confidence and outcomes
+             */
+            pearson_r?: number | null;
+            /** Calibration Method */
+            calibration_method: string;
+            /**
+             * Confidence Bands
+             * @description Per-band accuracy: [{band: '0.7-0.8', predicted: 0.75, actual: 0.68, count: 42}]
+             */
+            confidence_bands?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Is Reliable
+             * @description True if sample_count >= 30
+             */
+            is_reliable: boolean;
+            /**
+             * Overconfidence Score
+             * @description Positive = overconfident, negative = underconfident
+             */
+            overconfidence_score?: number | null;
+            /** Last Calibrated */
+            last_calibrated?: string | null;
+        };
+        /**
+         * CampaignDetectionRequest
+         * @description Request to detect coordinated campaigns.
+         * @example {
+         *       "mentions": [
+         *         {
+         *           "author_id": "a1",
+         *           "content": "Great product!",
+         *           "mention_id": "m1",
+         *           "published_at": "2026-01-16T10:00:00Z",
+         *           "sentiment_score": 0.8,
+         *           "source": "twitter"
+         *         }
+         *       ],
+         *       "product_id": "prod_123",
+         *       "time_window_hours": 24
+         *     }
+         */
+        CampaignDetectionRequest: {
+            /** Mentions */
+            mentions: components["schemas"]["MentionInput"][];
+            /** Product Id */
+            product_id?: string | null;
+            /**
+             * Time Window Hours
+             * @default 24
+             */
+            time_window_hours: number;
+        };
+        /**
+         * CampaignDetectionResponse
+         * @description Response with campaign detection results.
+         * @example {
+         *       "analyzed_at": "2026-01-16T12:00:00Z",
+         *       "campaign_confidence": 0.78,
+         *       "is_campaign_detected": true,
+         *       "metrics": {
+         *         "posts_analyzed": 50,
+         *         "unique_authors": 25
+         *       },
+         *       "product_id": "prod_123",
+         *       "signals": [
+         *         {
+         *           "description": "Detected synchronized posting: 15 posts in tight clusters",
+         *           "signal_type": "timing_cluster",
+         *           "strength": 0.85
+         *         },
+         *         {
+         *           "description": "Found 8 pairs of highly similar content from different authors",
+         *           "signal_type": "content_similarity",
+         *           "strength": 0.72
+         *         }
+         *       ],
+         *       "suspicious_author_count": 8,
+         *       "suspicious_content_count": 12,
+         *       "time_window_hours": 24
+         *     }
+         */
+        CampaignDetectionResponse: {
+            /** Product Id */
+            product_id: string | null;
+            /** Time Window Hours */
+            time_window_hours: number;
+            /** Is Campaign Detected */
+            is_campaign_detected: boolean;
+            /** Campaign Confidence */
+            campaign_confidence: number;
+            /** Signals */
+            signals: components["schemas"]["CampaignSignalResponse"][];
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Suspicious Author Count */
+            suspicious_author_count: number;
+            /** Suspicious Content Count */
+            suspicious_content_count: number;
+            /**
+             * Analyzed At
+             * Format: date-time
+             */
+            analyzed_at: string;
+        };
+        /**
+         * CampaignSignalResponse
+         * @description A detected campaign signal.
+         */
+        CampaignSignalResponse: {
+            /** Signal Type */
+            signal_type: string;
+            /** Strength */
+            strength: number;
+            /** Description */
+            description: string;
+        };
+        /**
+         * CategoryPerformance
+         * @description Performance summary for a product category.
+         */
+        CategoryPerformance: {
+            /** Category Id */
+            category_id: string;
+            /** Category Name */
+            category_name?: string | null;
+            /** Total Recommendations */
+            total_recommendations: number;
+            /** Acceptance Rate */
+            acceptance_rate: number;
+            /** Avg Confidence */
+            avg_confidence: number;
+            /** Avg Revenue Lift 7D */
+            avg_revenue_lift_7d?: number | null;
+            /** Avg Revenue Lift 14D */
+            avg_revenue_lift_14d?: number | null;
+            /** Avg Revenue Lift 30D */
+            avg_revenue_lift_30d?: number | null;
+            /** Confidence Accuracy Corr */
+            confidence_accuracy_corr?: number | null;
+            /** Active Experiment */
+            active_experiment: boolean;
+            /** Converged Strategy */
+            converged_strategy?: string | null;
+            /**
+             * Data Quality Score
+             * @description 0-1 score based on data completeness
+             */
+            data_quality_score: number;
+            /**
+             * Merchant Count
+             * @description Merchants with outcomes in this category
+             */
+            merchant_count: number;
         };
         /**
          * CategorySchema
@@ -3363,6 +5753,94 @@ export interface components {
             updated_at: string;
         };
         /**
+         * CompetitorSearchRequest
+         * @description Request schema for competitor search.
+         * @example {
+         *       "keywords": [
+         *         "apple",
+         *         "smartphone",
+         *         "unlocked"
+         *       ],
+         *       "max_results": 10,
+         *       "min_confidence": 0.3,
+         *       "our_price": "999.99",
+         *       "preferred_merchants": [
+         *         "Amazon",
+         *         "Best Buy"
+         *       ],
+         *       "product_name": "iPhone 15 Pro 256GB"
+         *     }
+         */
+        CompetitorSearchRequest: {
+            /**
+             * Product Name
+             * @description Product name to search
+             */
+            product_name: string;
+            /**
+             * Keywords
+             * @description Additional keywords
+             */
+            keywords?: string[] | null;
+            /**
+             * Our Price
+             * @description Our product price for comparison
+             */
+            our_price?: number | string | null;
+            /**
+             * Max Results
+             * @description Maximum results to return
+             * @default 10
+             */
+            max_results: number;
+            /**
+             * Exclude Domains
+             * @description Domains to exclude
+             */
+            exclude_domains?: string[] | null;
+            /**
+             * Preferred Merchants
+             * @description Preferred merchants
+             */
+            preferred_merchants?: string[] | null;
+            /**
+             * Min Confidence
+             * @description Minimum confidence score
+             * @default 0.3
+             */
+            min_confidence: number | null;
+            /**
+             * Use Cache
+             * @description Use cached results if available
+             * @default true
+             */
+            use_cache: boolean;
+        };
+        /**
+         * CompetitorSearchResponse
+         * @description Response schema for competitor search.
+         */
+        CompetitorSearchResponse: {
+            /** Success */
+            success: boolean;
+            /** Status */
+            status: string;
+            /** Query Used */
+            query_used: string;
+            /** Total Found */
+            total_found: number;
+            /** Products */
+            products: components["schemas"]["MatchedProductResponse"][];
+            /** Providers Used */
+            providers_used: string[];
+            /** Providers Failed */
+            providers_failed: string[];
+            /** Search Time Ms */
+            search_time_ms: number;
+            /** Cached */
+            cached: boolean;
+        };
+        /**
          * CompetitorUpdate
          * @description Schema for updating a competitor. All fields optional.
          */
@@ -3382,6 +5860,27 @@ export interface components {
             /** Scrape Frequency Minutes */
             scrape_frequency_minutes?: number | null;
         };
+        /**
+         * ComponentScores
+         * @description Breakdown of trust score components.
+         */
+        ComponentScores: {
+            /** Account Age */
+            account_age: number;
+            /** Followers */
+            followers: number;
+            /** Engagement */
+            engagement: number;
+            /** History */
+            history: number;
+            /** Verification Bonus */
+            verification_bonus: number;
+        };
+        /**
+         * ConfidenceLevel
+         * @enum {string}
+         */
+        ConfidenceLevel: "low" | "medium" | "high" | "very_high";
         /**
          * ConfirmPaymentRequest
          * @description Request to confirm a payment with transaction details.
@@ -3426,6 +5925,75 @@ export interface components {
              * @default false
              */
             verified_on_chain: boolean;
+        };
+        /**
+         * ContentAnalysisRequest
+         * @description Request to analyze content for spam/manipulation.
+         * @example {
+         *       "author_username": "happycustomer",
+         *       "content_id": "post_abc123",
+         *       "text": "Just tried this product and it's amazing! Highly recommend to everyone."
+         *     }
+         */
+        ContentAnalysisRequest: {
+            /**
+             * Content Id
+             * @description Unique content identifier
+             */
+            content_id: string;
+            /**
+             * Text
+             * @description Content text
+             */
+            text: string;
+            /**
+             * Author Username
+             * @description Author's username
+             */
+            author_username?: string | null;
+        };
+        /**
+         * ContentAnalysisResponse
+         * @description Response with content analysis results.
+         * @example {
+         *       "content_id": "post_abc123",
+         *       "content_quality_score": 0.75,
+         *       "duplicate_count": 0,
+         *       "is_duplicate": false,
+         *       "is_spam": false,
+         *       "originality_score": 1,
+         *       "risk_flags": [],
+         *       "spam_indicators": {
+         *         "all_caps": false,
+         *         "excessive_hashtags": false,
+         *         "excessive_links": false,
+         *         "keyword_stuffing": false,
+         *         "spam_phrases": false
+         *       },
+         *       "word_count": 12
+         *     }
+         */
+        ContentAnalysisResponse: {
+            /** Content Id */
+            content_id: string;
+            /** Word Count */
+            word_count: number;
+            /** Is Duplicate */
+            is_duplicate: boolean;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Content Quality Score */
+            content_quality_score: number;
+            /** Originality Score */
+            originality_score: number;
+            /** Risk Flags */
+            risk_flags: components["schemas"]["RiskFlagEnum"][];
+            spam_indicators: components["schemas"]["SpamIndicators"];
+            /**
+             * Is Spam
+             * @description Whether content is likely spam
+             */
+            is_spam: boolean;
         };
         /**
          * CrisisAlert
@@ -3510,10 +6078,123 @@ export interface components {
             total_mentions_24h: number;
         };
         /**
+         * DemoHealthResponse
+         * @description Health check response for demo.
+         */
+        DemoHealthResponse: {
+            /** Status */
+            status: string;
+            /** Gemini Available */
+            gemini_available: boolean;
+            /** Demo Ready */
+            demo_ready: boolean;
+            /** Message */
+            message: string;
+        };
+        /**
+         * DriftAlert
+         * @description Drift detection alert.
+         */
+        DriftAlert: {
+            /** Alert Id */
+            alert_id: string;
+            /** Category Id */
+            category_id: string;
+            /**
+             * Drift Type
+             * @description correlation_drop | distribution_shift | acceptance_change | lift_decline
+             */
+            drift_type: string;
+            /**
+             * Severity
+             * @description info | warning | critical
+             */
+            severity: string;
+            /** Metric Name */
+            metric_name: string;
+            /** Current Value */
+            current_value: number;
+            /** Threshold */
+            threshold: number;
+            /** Message */
+            message: string;
+            /**
+             * Detected At
+             * Format: date-time
+             */
+            detected_at: string;
+            /** Requires Action */
+            requires_action: boolean;
+        };
+        /**
          * EcommercePlatform
          * @enum {string}
          */
         EcommercePlatform: "shopify" | "woocommerce";
+        /**
+         * ExperimentArmStatus
+         * @description Status of a single Thompson Sampling arm.
+         */
+        ExperimentArmStatus: {
+            /** Arm Name */
+            arm_name: string;
+            /**
+             * Alpha
+             * @description Beta distribution alpha (successes + prior)
+             */
+            alpha: number;
+            /**
+             * Beta
+             * @description Beta distribution beta (failures + prior)
+             */
+            beta: number;
+            /**
+             * Pulls
+             * @description Total assignments to this arm
+             */
+            pulls: number;
+            /**
+             * Wins
+             * @description Total successful outcomes
+             */
+            wins: number;
+            /**
+             * Expected Reward
+             * @description alpha / (alpha + beta)
+             */
+            expected_reward: number;
+            /**
+             * Is Leader
+             * @description Currently the best-performing arm
+             */
+            is_leader: boolean;
+        };
+        /**
+         * ExperimentStatus
+         * @description Experiment status for a product category.
+         */
+        ExperimentStatus: {
+            /** Category Id */
+            category_id: string;
+            /** Total Pulls */
+            total_pulls: number;
+            /** Converged */
+            converged: boolean;
+            /** Converged Arm */
+            converged_arm?: string | null;
+            /** Convergence Confidence */
+            convergence_confidence?: number | null;
+            /** Arms */
+            arms: components["schemas"]["ExperimentArmStatus"][];
+            /** Last Updated */
+            last_updated?: string | null;
+            /**
+             * Exploration Rate
+             * @description % of pulls reserved for exploration
+             * @default 0.05
+             */
+            exploration_rate: number;
+        };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /**
@@ -3563,6 +6244,55 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * IEDashboard
+         * @description Combined dashboard payload — single API call for the frontend.
+         */
+        IEDashboard: {
+            health: components["schemas"]["IEHealthStatus"];
+            /** Top Categories */
+            top_categories: components["schemas"]["CategoryPerformance"][];
+            /** Active Drift Alerts */
+            active_drift_alerts: components["schemas"]["DriftAlert"][];
+            recent_calibration?: components["schemas"]["CalibrationReport"] | null;
+        };
+        /**
+         * IEHealthStatus
+         * @description Overall health of the Intelligence Environment pipeline.
+         */
+        IEHealthStatus: {
+            /**
+             * Status
+             * @description healthy | degraded | unhealthy
+             */
+            status: string;
+            /** Scoring Engine Healthy */
+            scoring_engine_healthy: boolean;
+            /** Experiment Manager Healthy */
+            experiment_manager_healthy: boolean;
+            /** Calibrator Healthy */
+            calibrator_healthy: boolean;
+            /** Context Injector Healthy */
+            context_injector_healthy: boolean;
+            /** Last Measurement Run */
+            last_measurement_run?: string | null;
+            /** Last Learning Cycle */
+            last_learning_cycle?: string | null;
+            /** Last Bandit Update */
+            last_bandit_update?: string | null;
+            /** Last Calibration */
+            last_calibration?: string | null;
+            /** Active Experiments */
+            active_experiments: number;
+            /** Converged Categories */
+            converged_categories: number;
+            /** Total Categories */
+            total_categories: number;
+            /** Drift Alerts Active */
+            drift_alerts_active: number;
+            /** Pipeline Version */
+            pipeline_version: string;
         };
         /**
          * ImportProductRow
@@ -3694,7 +6424,10 @@ export interface components {
         IntegrationStatus: "active" | "error" | "paused" | "disconnected";
         /**
          * IntegrationUpdate
-         * @description Update integration settings
+         * @description Update integration settings.
+         *
+         *     FIX (2026-01-27): Added consumer_key and consumer_secret fields to allow
+         *     updating WooCommerce credentials without deleting/reconnecting the integration.
          */
         IntegrationUpdate: {
             /** Store Name */
@@ -3704,6 +6437,57 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             } | null;
+            /** Consumer Key */
+            consumer_key?: string | null;
+            /** Consumer Secret */
+            consumer_secret?: string | null;
+        };
+        /**
+         * IntelligenceHealthResponse
+         * @description Health check response.
+         */
+        IntelligenceHealthResponse: {
+            /** Status */
+            status: string;
+            /** Youcom Configured */
+            youcom_configured: boolean;
+            /** Gemini Configured */
+            gemini_configured: boolean;
+            /** Demo Ready */
+            demo_ready: boolean;
+            /** Message */
+            message: string;
+        };
+        /**
+         * IntelligenceQueryRequest
+         * @description Request body for market intelligence analysis.
+         */
+        IntelligenceQueryRequest: {
+            /**
+             * Product Name
+             * @description Product name to analyze
+             */
+            product_name: string;
+            /**
+             * Current Price
+             * @description Your current price
+             */
+            current_price?: number | null;
+            /**
+             * Brand
+             * @description Brand name
+             */
+            brand?: string | null;
+            /**
+             * Category
+             * @description Product category
+             */
+            category?: string | null;
+            /**
+             * Features
+             * @description List of product features
+             */
+            features?: string[] | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -3714,6 +6498,88 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * MarketDataInput
+         * @description Input model for market data - API request body.
+         */
+        MarketDataInput: {
+            /**
+             * Product
+             * @description Product name being analyzed
+             */
+            product: string;
+            /**
+             * Category
+             * @description Product category
+             */
+            category: string;
+            /**
+             * Sentiment Score
+             * @description Sentiment score (-1 to 1)
+             * @default 0
+             */
+            sentiment_score: number;
+            /**
+             * Sentiment Trend
+             * @description Sentiment trend direction
+             * @default stable
+             */
+            sentiment_trend: string;
+            /**
+             * Volume 24H
+             * @description 24-hour volume
+             * @default 0
+             */
+            volume_24h: number;
+            /**
+             * Volume Trend
+             * @description Volume trend direction
+             * @default stable
+             */
+            volume_trend: string;
+            /**
+             * Price Change 7D
+             * @description 7-day price change percentage
+             * @default 0
+             */
+            price_change_7d: number;
+            /**
+             * Price Change 30D
+             * @description 30-day price change percentage
+             * @default 0
+             */
+            price_change_30d: number;
+            /**
+             * Social Mentions
+             * @description Number of social mentions
+             * @default 0
+             */
+            social_mentions: number;
+            /**
+             * Social Trend
+             * @description Social mention trend
+             * @default stable
+             */
+            social_trend: string;
+            /**
+             * Competitor Activity
+             * @description Competitor activity level
+             * @default normal
+             */
+            competitor_activity: string;
+            /**
+             * Market Position
+             * @description Market position
+             * @default mid
+             */
+            market_position: string;
+            /**
+             * Seasonality
+             * @description Seasonality factor
+             * @default normal
+             */
+            seasonality: string;
         };
         /**
          * MarketTrendsRequest
@@ -3766,6 +6632,62 @@ export interface components {
             source?: string | null;
         };
         /**
+         * MatchedProductResponse
+         * @description Response schema for a matched product.
+         */
+        MatchedProductResponse: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /** Price */
+            price: string | null;
+            /** Currency */
+            currency: string;
+            /** Merchant */
+            merchant: string;
+            /** Merchant Domain */
+            merchant_domain: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Rating */
+            rating: number | null;
+            /** Reviews Count */
+            reviews_count: number | null;
+            /** Confidence Score */
+            confidence_score: number;
+            /** Confidence Percent */
+            confidence_percent: number;
+            /** Source */
+            source: string;
+            /** In Stock */
+            in_stock: boolean;
+        };
+        /**
+         * MentionInput
+         * @description Input mention for campaign detection.
+         */
+        MentionInput: {
+            /** Mention Id */
+            mention_id: string;
+            /** Author Id */
+            author_id: string;
+            /** Content */
+            content: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Sentiment Score */
+            sentiment_score?: number | null;
+            /**
+             * Source
+             * @default unknown
+             */
+            source: string;
+        };
+        /**
          * MockSignals
          * @description Optional mock signals for rule testing.
          */
@@ -3792,6 +6714,27 @@ export interface components {
             } | null;
         };
         /**
+         * MonitoringStartRequest
+         * @description Request to start autonomous monitoring.
+         */
+        MonitoringStartRequest: {
+            /**
+             * Product Id
+             * @default demo-product-001
+             */
+            product_id: string;
+            /**
+             * Current Price
+             * @default 99.99
+             */
+            current_price: number;
+            /**
+             * Check Interval Seconds
+             * @default 300
+             */
+            check_interval_seconds: number;
+        };
+        /**
          * OAuthInitRequest
          * @description Request to start OAuth flow
          */
@@ -3810,6 +6753,11 @@ export interface components {
             /** State */
             state: string;
         };
+        /**
+         * OpportunityType
+         * @enum {string}
+         */
+        OpportunityType: "price_increase" | "price_decrease" | "hold" | "promotional" | "premium_positioning";
         /**
          * OutcomeLabel
          * @enum {string}
@@ -4129,6 +7077,62 @@ export interface components {
             network_options: string[];
         };
         /**
+         * PipelineResponse
+         * @description Full pipeline execution result.
+         */
+        PipelineResponse: {
+            /** Success */
+            success: boolean;
+            decision: components["schemas"]["PricingDecision"];
+            /** Pipeline Duration Ms */
+            pipeline_duration_ms: number;
+            /**
+             * Agents Executed
+             * @default [
+             *       "Scout",
+             *       "Analyst",
+             *       "Strategist"
+             *     ]
+             */
+            agents_executed: string[];
+        };
+        /**
+         * PipelineTriggerRequest
+         * @description Request to trigger the autonomous pipeline.
+         */
+        PipelineTriggerRequest: {
+            /**
+             * Product Id
+             * @description Product to analyze
+             * @default demo-product-001
+             */
+            product_id: string;
+            /**
+             * Current Price
+             * @description Current product price in USD
+             * @default 99.99
+             */
+            current_price: number;
+            /**
+             * Product Category
+             * @description Product category
+             * @default electronics
+             */
+            product_category: string;
+            /**
+             * Cost Basis
+             * @description Cost to produce/source
+             * @default 45
+             */
+            cost_basis: number;
+            /**
+             * Margin Floor Pct
+             * @description Minimum margin percentage
+             * @default 20
+             */
+            margin_floor_pct: number;
+        };
+        /**
          * PlanInfo
          * @description Subscription plan information.
          */
@@ -4145,6 +7149,23 @@ export interface components {
             product_limit: number;
             /** Features */
             features: string[];
+        };
+        /**
+         * PlatformLink
+         * @description Platform connection info for a product.
+         */
+        PlatformLink: {
+            /** Platform */
+            platform: string;
+            /** Store Url */
+            store_url?: string | null;
+            /** External Price */
+            external_price?: number | null;
+            /**
+             * Sync Enabled
+             * @default false
+             */
+            sync_enabled: boolean;
         };
         /**
          * PricePushRequest
@@ -4273,6 +7294,94 @@ export interface components {
             factors: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * PricingDecision
+         * @description Strategist Agent output — the final autonomous pricing action.
+         */
+        PricingDecision: {
+            /**
+             * Recommended Price
+             * @description Optimal price in USD
+             */
+            recommended_price: number;
+            /**
+             * Current Price
+             * @description Current price before change
+             */
+            current_price: number;
+            /**
+             * Change Pct
+             * @description Price change percentage
+             */
+            change_pct: number;
+            /**
+             * Confidence Score
+             * @description Decision confidence
+             */
+            confidence_score: number;
+            /**
+             * Reasoning
+             * @description Full chain-of-thought reasoning
+             */
+            reasoning: string;
+            /**
+             * Action
+             * @description execute, hold, escalate
+             */
+            action: string;
+            /**
+             * Risk Acknowledgment
+             * @description Known risks of this decision
+             */
+            risk_acknowledgment: string;
+            /**
+             * Expected Revenue Impact
+             * @description Projected impact on revenue
+             */
+            expected_revenue_impact: string;
+            /**
+             * Tx Hash
+             * @description BNB Chain transaction hash if executed
+             */
+            tx_hash?: string | null;
+            /**
+             * Executed At
+             * @description ISO timestamp of on-chain execution
+             */
+            executed_at?: string | null;
+        };
+        /**
+         * PricingOpportunityResponse
+         * @description A pricing opportunity.
+         */
+        PricingOpportunityResponse: {
+            opportunity_type: components["schemas"]["OpportunityType"];
+            /** Product Id */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /** Current Price */
+            current_price: string;
+            /** Suggested Price */
+            suggested_price: string;
+            /** Expected Impact */
+            expected_impact: string;
+            confidence: components["schemas"]["ConfidenceLevel"];
+            /** Confidence Score */
+            confidence_score: number;
+            /** Reasoning */
+            reasoning: string;
+            /**
+             * Valid Until
+             * Format: date-time
+             */
+            valid_until: string;
+            /**
+             * Triggers
+             * @default []
+             */
+            triggers: string[];
         };
         /** PricingRuleCreate */
         PricingRuleCreate: {
@@ -4669,6 +7778,45 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * ProductMatchRequest
+         * @description Request schema for matching a specific product.
+         * @example {
+         *       "auto_link": true,
+         *       "auto_link_threshold": 0.8,
+         *       "max_results": 10,
+         *       "product_id": "123e4567-e89b-12d3-a456-426614174000"
+         *     }
+         */
+        ProductMatchRequest: {
+            /**
+             * Product Id
+             * Format: uuid
+             * @description Product ID to find competitors for
+             */
+            product_id: string;
+            /**
+             * Max Results
+             * @default 10
+             */
+            max_results: number;
+            /** Exclude Domains */
+            exclude_domains?: string[] | null;
+            /** Preferred Merchants */
+            preferred_merchants?: string[] | null;
+            /**
+             * Auto Link
+             * @description Automatically link high-confidence matches
+             * @default false
+             */
+            auto_link: boolean;
+            /**
+             * Auto Link Threshold
+             * @description Confidence threshold for auto-linking
+             * @default 0.8
+             */
+            auto_link_threshold: number;
+        };
         /** ProductRead */
         ProductRead: {
             /**
@@ -4719,6 +7867,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Platforms Linked
+             * @default []
+             */
+            platforms_linked: components["schemas"]["PlatformLink"][];
         };
         /**
          * ProductSummary
@@ -4787,6 +7940,138 @@ export interface components {
             keywords?: string[] | null;
         };
         /**
+         * ProviderInfo
+         * @description Information about a search provider.
+         */
+        ProviderInfo: {
+            /** Name */
+            name: string;
+            /** Available */
+            available: boolean;
+            /** Requires Api Key */
+            requires_api_key: boolean;
+            /** Cost Per Request */
+            cost_per_request: number;
+        };
+        /**
+         * ProvidersResponse
+         * @description Response schema for providers list.
+         */
+        ProvidersResponse: {
+            /** Providers */
+            providers: components["schemas"]["ProviderInfo"][];
+            /** Available Count */
+            available_count: number;
+            /** Total Count */
+            total_count: number;
+        };
+        /**
+         * QualityMetrics
+         * @description Quality metrics for sentiment analysis.
+         */
+        QualityMetrics: {
+            /** High Trust Ratio */
+            high_trust_ratio: number;
+            /** Filtered Count */
+            filtered_count: number;
+            /** Confidence */
+            confidence: number;
+        };
+        /**
+         * QuickSpamCheckRequest
+         * @description Quick spam check request.
+         */
+        QuickSpamCheckRequest: {
+            /** Text */
+            text: string;
+            /** Username */
+            username?: string | null;
+        };
+        /**
+         * QuickSpamCheckResponse
+         * @description Quick spam check response.
+         */
+        QuickSpamCheckResponse: {
+            /** Is Spam */
+            is_spam: boolean;
+            /** Spam Score */
+            spam_score: number;
+            /** Reasons */
+            reasons: string[];
+        };
+        /**
+         * QuickStatsResponse
+         * @description Quick stats for the trends dashboard.
+         */
+        QuickStatsResponse: {
+            /** Current Sentiment */
+            current_sentiment: number;
+            sentiment_trend: components["schemas"]["TrendDirection"];
+            /** Sentiment Change 7D */
+            sentiment_change_7d: number;
+            /** Mentions Today */
+            mentions_today: number;
+            /** Mentions 7D */
+            mentions_7d: number;
+            /** Volume Change Percent */
+            volume_change_percent: number;
+            /** Active Opportunities */
+            active_opportunities: number;
+            /** Potential Revenue Impact */
+            potential_revenue_impact: string;
+            /** Active Risks */
+            active_risks: number;
+            highest_risk_level: components["schemas"]["RiskLevel"];
+            /** Trending Up */
+            trending_up: string[];
+            /** Trending Down */
+            trending_down: string[];
+            /**
+             * Last Updated
+             * Format: date-time
+             */
+            last_updated: string;
+        };
+        /**
+         * QuickTrustCheckRequest
+         * @description Quick author trust check request.
+         */
+        QuickTrustCheckRequest: {
+            /** Author Id */
+            author_id: string;
+            /** Username */
+            username: string;
+            /** Source */
+            source: string;
+            /** Follower Count */
+            follower_count?: number | null;
+            /** Account Age Days */
+            account_age_days?: number | null;
+        };
+        /**
+         * QuickTrustCheckResponse
+         * @description Quick author trust check response.
+         */
+        QuickTrustCheckResponse: {
+            /** Is Trustworthy */
+            is_trustworthy: boolean;
+            /** Trust Score */
+            trust_score: number;
+            trust_level: components["schemas"]["TrustLevelEnum"];
+            /** Risk Flags */
+            risk_flags: string[];
+        };
+        /**
+         * RawSentimentStats
+         * @description Raw sentiment statistics.
+         */
+        RawSentimentStats: {
+            /** Sentiment */
+            sentiment: number;
+            /** Mention Count */
+            mention_count: number;
+        };
+        /**
          * RecommendationApprove
          * @description Approve a pending recommendation.
          */
@@ -4853,6 +8138,65 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /**
+         * RiskAlertResponse
+         * @description A risk alert.
+         */
+        RiskAlertResponse: {
+            risk_level: components["schemas"]["RiskLevel"];
+            /** Risk Type */
+            risk_type: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /**
+             * Affected Products
+             * @default []
+             */
+            affected_products: string[];
+            /**
+             * Recommended Actions
+             * @default []
+             */
+            recommended_actions: string[];
+            /**
+             * Detected At
+             * Format: date-time
+             */
+            detected_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+        };
+        /**
+         * RiskDetectionResponse
+         * @description Risk detection result.
+         */
+        RiskDetectionResponse: {
+            /**
+             * Risks
+             * @default []
+             */
+            risks: components["schemas"]["RiskAlertResponse"][];
+            overall_risk_level: components["schemas"]["RiskLevel"];
+            /** Summary */
+            summary: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+        };
+        /**
+         * RiskFlagEnum
+         * @enum {string}
+         */
+        RiskFlagEnum: "new_account" | "low_followers" | "high_post_frequency" | "repetitive_content" | "coordinated_timing" | "suspicious_engagement" | "keyword_stuffing" | "link_spam" | "copy_paste" | "sentiment_extreme" | "bot_pattern" | "fake_engagement";
+        /**
+         * RiskLevel
+         * @enum {string}
+         */
+        RiskLevel: "low" | "medium" | "high" | "critical";
         /**
          * RuleAction
          * @enum {string}
@@ -5094,6 +8438,170 @@ export interface components {
             period_end?: string | null;
         };
         /**
+         * ShopifyBillingCallbackResponse
+         * @description Response after Shopify billing callback (merchant approved/declined).
+         */
+        ShopifyBillingCallbackResponse: {
+            /** Success */
+            success: boolean;
+            /** Status */
+            status: string;
+            /** Tier */
+            tier?: string | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ShopifyBillingStatusResponse
+         * @description Current Shopify billing status for a merchant.
+         */
+        ShopifyBillingStatusResponse: {
+            /** Has Active Subscription */
+            has_active_subscription: boolean;
+            /** Tier */
+            tier?: string | null;
+            /** Plan Name */
+            plan_name?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Shopify Subscription Id */
+            shopify_subscription_id?: string | null;
+            /** Trial Days */
+            trial_days?: number | null;
+            /** Current Period End */
+            current_period_end?: string | null;
+            /**
+             * Test
+             * @default false
+             */
+            test: boolean;
+            /** Price */
+            price?: string | null;
+            /** Currency */
+            currency?: string | null;
+        };
+        /**
+         * ShopifyCancelRequest
+         * @description Request to cancel a Shopify subscription.
+         */
+        ShopifyCancelRequest: {
+            /**
+             * Prorate
+             * @description Issue prorated credit for unused portion of billing cycle
+             * @default true
+             */
+            prorate: boolean;
+            /**
+             * Shop Domain
+             * @description Shop domain (auto-detected from integration if not provided)
+             */
+            shop_domain?: string | null;
+        };
+        /**
+         * ShopifyCancelResponse
+         * @description Response after cancelling a Shopify subscription.
+         */
+        ShopifyCancelResponse: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+            /** Status */
+            status?: string | null;
+        };
+        /**
+         * ShopifyPlanChangeRequest
+         * @description Request to upgrade or downgrade a Shopify plan.
+         */
+        ShopifyPlanChangeRequest: {
+            /**
+             * New Tier
+             * @description New plan tier to switch to
+             * @enum {string}
+             */
+            new_tier: "starter" | "professional" | "enterprise";
+            /**
+             * Shop Domain
+             * @description Shop domain (auto-detected from integration if not provided)
+             */
+            shop_domain?: string | null;
+        };
+        /**
+         * ShopifyPlanInfo
+         * @description Plan info for frontend display.
+         */
+        ShopifyPlanInfo: {
+            /** Tier */
+            tier: string;
+            /** Name */
+            name: string;
+            /** Price Monthly */
+            price_monthly: number;
+            /** Trial Days */
+            trial_days: number;
+            /** Product Limit */
+            product_limit: number;
+            /** Features */
+            features: string[];
+        };
+        /**
+         * ShopifyPlansListResponse
+         * @description All available Shopify plans.
+         */
+        ShopifyPlansListResponse: {
+            /** Plans */
+            plans: components["schemas"]["ShopifyPlanInfo"][];
+        };
+        /**
+         * ShopifySubscribeRequest
+         * @description Request to create a Shopify billing subscription.
+         */
+        ShopifySubscribeRequest: {
+            /**
+             * Tier
+             * @description Plan tier: starter ($49), professional ($149), enterprise ($499)
+             * @enum {string}
+             */
+            tier: "starter" | "professional" | "enterprise";
+            /**
+             * Shop Domain
+             * @description Shop domain (auto-detected from integration if not provided)
+             */
+            shop_domain?: string | null;
+        };
+        /**
+         * ShopifySubscribeResponse
+         * @description Response after creating a Shopify billing subscription.
+         */
+        ShopifySubscribeResponse: {
+            /** Success */
+            success: boolean;
+            /** Confirmation Url */
+            confirmation_url?: string | null;
+            /** Shopify Subscription Id */
+            shopify_subscription_id?: string | null;
+            /** Tier */
+            tier: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ShopifyVerifyRequest
+         * @description Request to verify a charge after Shopify approval redirect.
+         */
+        ShopifyVerifyRequest: {
+            /**
+             * Charge Id
+             * @description Numeric charge ID from Shopify callback URL
+             */
+            charge_id: string;
+            /**
+             * Shop Domain
+             * @description Shop domain (auto-detected if not provided)
+             */
+            shop_domain?: string | null;
+        };
+        /**
          * SimulationRequest
          * @description Request body for price simulation.
          */
@@ -5171,6 +8679,22 @@ export interface components {
              * @default false
              */
             processed: boolean;
+        };
+        /**
+         * SpamIndicators
+         * @description Spam detection indicators.
+         */
+        SpamIndicators: {
+            /** Excessive Hashtags */
+            excessive_hashtags: boolean;
+            /** Excessive Links */
+            excessive_links: boolean;
+            /** Keyword Stuffing */
+            keyword_stuffing: boolean;
+            /** All Caps */
+            all_caps: boolean;
+            /** Spam Phrases */
+            spam_phrases: boolean;
         };
         /**
          * SubscribeRequest
@@ -5364,12 +8888,116 @@ export interface components {
             description: string;
         };
         /**
+         * TrendAnalysisRequest
+         * @description Request to run AI trend analysis.
+         */
+        TrendAnalysisRequest: {
+            /**
+             * Days
+             * @description Number of days to analyze (7-90)
+             * @default 30
+             */
+            days: number;
+            /**
+             * Product Ids
+             * @description Specific product IDs to analyze (None = all products)
+             */
+            product_ids?: string[] | null;
+            /**
+             * Use Model
+             * @description AI model to use: 'openai' or 'gemini'
+             * @default openai
+             */
+            use_model: string;
+        };
+        /**
+         * TrendAnalysisResponse
+         * @description Response model for non-streaming trend analysis.
+         */
+        TrendAnalysisResponse: {
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Product */
+            product?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Message Count */
+            message_count?: number | null;
+        };
+        /**
          * TrendCategoriesResponse
          * @description Available categories for trend filtering.
          */
         TrendCategoriesResponse: {
             /** Categories */
             categories: components["schemas"]["CategorySchema"][];
+        };
+        /**
+         * TrendCategory
+         * @enum {string}
+         */
+        TrendCategory: "viral_positive" | "viral_negative" | "competitor_launch" | "seasonal" | "news_event" | "market_shift" | "organic_growth" | "organic_decline";
+        /**
+         * TrendDirection
+         * @enum {string}
+         */
+        TrendDirection: "rising" | "falling" | "stable" | "volatile";
+        /**
+         * TrendHealthResponse
+         * @description Response model for health check.
+         */
+        TrendHealthResponse: {
+            /** Status */
+            status: string;
+            /** Service */
+            service: string;
+            /** Model */
+            model: string;
+            /** Agents */
+            agents: string[];
+        };
+        /**
+         * TrendPredictionResponse
+         * @description A trend prediction.
+         */
+        TrendPredictionResponse: {
+            direction: components["schemas"]["TrendDirection"];
+            category: components["schemas"]["TrendCategory"];
+            confidence: components["schemas"]["ConfidenceLevel"];
+            /** Confidence Score */
+            confidence_score: number;
+            /** Predicted Change */
+            predicted_change: number;
+            /** Timeframe Days */
+            timeframe_days: number;
+            /** Reasoning */
+            reasoning: string;
+            /**
+             * Supporting Signals
+             * @default []
+             */
+            supporting_signals: components["schemas"]["TrendSignalResponse"][];
+        };
+        /**
+         * TrendSignalResponse
+         * @description A single trend signal.
+         */
+        TrendSignalResponse: {
+            /** Signal Type */
+            signal_type: string;
+            /** Value */
+            value: number;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+            /** Source */
+            source: string;
+            /** Description */
+            description: string;
         };
         /**
          * TrendSourcesResponse
@@ -5429,6 +9057,29 @@ export interface components {
              * @description Product image URL
              */
             image_url?: string | null;
+        };
+        /**
+         * TrustLevelEnum
+         * @enum {string}
+         */
+        TrustLevelEnum: "verified" | "high" | "medium" | "low" | "untrusted" | "blocked";
+        /**
+         * TrustScoringStatsResponse
+         * @description Trust scoring service statistics.
+         */
+        TrustScoringStatsResponse: {
+            /** Content Analyzer */
+            content_analyzer: {
+                [key: string]: number;
+            };
+            /** Config */
+            config: {
+                [key: string]: unknown;
+            };
+            /** Cache Stats */
+            cache_stats: {
+                [key: string]: number;
+            };
         };
         /** UserDetailResponse */
         UserDetailResponse: {
@@ -5543,6 +9194,107 @@ export interface components {
             message: string;
         };
         /**
+         * WeightedSentimentRequest
+         * @description Request for trust-adjusted sentiment calculation.
+         * @example {
+         *       "check_campaign": true,
+         *       "mentions": [
+         *         {
+         *           "author_id": "a1",
+         *           "content": "Love this product!",
+         *           "mention_id": "m1",
+         *           "published_at": "2026-01-16T10:00:00Z",
+         *           "sentiment_score": 0.9,
+         *           "source": "twitter"
+         *         },
+         *         {
+         *           "author_id": "a2",
+         *           "content": "Terrible experience, avoid!",
+         *           "mention_id": "m2",
+         *           "published_at": "2026-01-16T11:00:00Z",
+         *           "sentiment_score": -0.8,
+         *           "source": "reddit"
+         *         }
+         *       ],
+         *       "period_hours": 24,
+         *       "product_id": "prod_123"
+         *     }
+         */
+        WeightedSentimentRequest: {
+            /** Mentions */
+            mentions: components["schemas"]["MentionInput"][];
+            /** Product Id */
+            product_id?: string | null;
+            /**
+             * Period Hours
+             * @default 24
+             */
+            period_hours: number;
+            /**
+             * Check Campaign
+             * @description Whether to check for campaigns
+             * @default true
+             */
+            check_campaign: boolean;
+            /**
+             * Author Metadata
+             * @description Map of author_id to metadata (follower_count, account_created_at, etc.)
+             */
+            author_metadata?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            } | null;
+        };
+        /**
+         * WeightedSentimentResponse
+         * @description Response with trust-adjusted sentiment.
+         * @example {
+         *       "adjusted": {
+         *         "effective_mentions": 67.5,
+         *         "sentiment": 0.32
+         *       },
+         *       "campaign_detected": false,
+         *       "period_hours": 24,
+         *       "product_id": "prod_123",
+         *       "quality": {
+         *         "confidence": 0.72,
+         *         "filtered_count": 15,
+         *         "high_trust_ratio": 0.35
+         *       },
+         *       "raw": {
+         *         "mention_count": 100,
+         *         "sentiment": 0.45
+         *       },
+         *       "trust_breakdown": {
+         *         "blocked": 0,
+         *         "high": 30,
+         *         "low": 15,
+         *         "medium": 40,
+         *         "untrusted": 10,
+         *         "verified": 5
+         *       }
+         *     }
+         */
+        WeightedSentimentResponse: {
+            /** Product Id */
+            product_id: string;
+            /** Period Hours */
+            period_hours: number;
+            raw: components["schemas"]["RawSentimentStats"];
+            adjusted: components["schemas"]["AdjustedSentimentStats"];
+            quality: components["schemas"]["QualityMetrics"];
+            /** Trust Breakdown */
+            trust_breakdown: {
+                [key: string]: number;
+            };
+            /**
+             * Campaign Detected
+             * @default false
+             */
+            campaign_detected: boolean;
+        };
+        /**
          * WooCommerceConnectRequest
          * @description Connect WooCommerce store with API keys
          */
@@ -5555,6 +9307,55 @@ export interface components {
             consumer_key: string;
             /** Consumer Secret */
             consumer_secret: string;
+        };
+        /**
+         * TrendAnalysisResponse
+         * @description Complete trend analysis result.
+         */
+        schemas__trend_analysis__TrendAnalysisResponse: {
+            /** Analysis Id */
+            analysis_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            market_sentiment: components["schemas"]["TrendDirection"];
+            /** Market Sentiment Score */
+            market_sentiment_score: number;
+            /**
+             * Predictions
+             * @default []
+             */
+            predictions: components["schemas"]["TrendPredictionResponse"][];
+            /**
+             * Opportunities
+             * @default []
+             */
+            opportunities: components["schemas"]["PricingOpportunityResponse"][];
+            /**
+             * Risks
+             * @default []
+             */
+            risks: components["schemas"]["RiskAlertResponse"][];
+            /**
+             * Insights
+             * @default []
+             */
+            insights: components["schemas"]["AIInsightResponse"][];
+            /** Executive Summary */
+            executive_summary: string;
+            /**
+             * Recommended Actions
+             * @default []
+             */
+            recommended_actions: string[];
+            /** Products Analyzed */
+            products_analyzed: number;
+            /** Mentions Analyzed */
+            mentions_analyzed: number;
+            /** Time Range Days */
+            time_range_days: number;
         };
     };
     responses: never;
@@ -6701,46 +10502,6 @@ export interface operations {
             };
         };
     };
-    generate_all_recommendations_api_v1_pricing_recommendations_generate_all_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    process_auto_approvals_api_v1_pricing_recommendations_process_auto_approvals_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
     generate_recommendation_api_v1_pricing_recommendations_generate__product_id__post: {
         parameters: {
             query?: never;
@@ -6768,6 +10529,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_all_recommendations_api_v1_pricing_recommendations_generate_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -7006,6 +10787,26 @@ export interface operations {
             };
         };
     };
+    process_auto_approvals_api_v1_pricing_recommendations_process_auto_approvals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_settings_api_v1_pricing_settings_get: {
         parameters: {
             query?: never;
@@ -7145,143 +10946,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimulationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    record_outcome_api_v1_pricing_outcomes__recommendation_id__record_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                recommendation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OutcomeRecordRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OutcomeResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_outcomes_api_v1_pricing_outcomes_get: {
-        parameters: {
-            query?: {
-                product_id?: string | null;
-                rule_id?: string | null;
-                outcome_label?: components["schemas"]["OutcomeLabel"] | null;
-                days?: number;
-                /** @description Page number */
-                page?: number;
-                /** @description Items per page */
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginatedResponse_OutcomeResponse_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_accuracy_stats_api_v1_pricing_outcomes_accuracy_get: {
-        parameters: {
-            query?: {
-                days?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccuracyStatsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_rule_performance_api_v1_pricing_rules__rule_id__performance_get: {
-        parameters: {
-            query?: {
-                days?: number;
-            };
-            header?: never;
-            path: {
-                rule_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RulePerformanceResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7682,6 +11346,149 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_competitors_api_v1_competitors_match_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompetitorSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompetitorSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_product_api_v1_competitors_match_product_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompetitorSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_match_products_api_v1_competitors_match_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_api_v1_competitors_match_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvidersResponse"];
+                };
+            };
+        };
+    };
+    clear_cache_api_v1_competitors_match_clear_cache_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -8605,8 +12412,11 @@ export interface operations {
         parameters: {
             query: {
                 code: string;
-                state: string;
-                shop?: string;
+                shop: string;
+                state?: string;
+                hmac?: string;
+                host?: string;
+                timestamp?: string;
             };
             header?: never;
             path?: never;
@@ -8813,6 +12623,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sync_progress_api_v1_integrations__integration_id__sync_progress_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                integration_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_all_sync_status_api_v1_integrations_sync_status_all_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -9064,6 +12925,346 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationHealthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customers_data_request_api_v1_integrations_shopify_gdpr_customers_data_request_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Shopify-Hmac-Sha256"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customers_redact_api_v1_integrations_shopify_gdpr_customers_redact_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Shopify-Hmac-Sha256"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shop_redact_api_v1_integrations_shopify_gdpr_shop_redact_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Shopify-Hmac-Sha256"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shopify_install_api_v1_integrations_shopify_install_get: {
+        parameters: {
+            query: {
+                /** @description The shop domain from Shopify */
+                shop: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shopify_plans_api_v1_integrations_shopify_billing_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopifyPlansListResponse"];
+                };
+            };
+        };
+    };
+    create_shopify_subscription_api_v1_integrations_shopify_billing_subscribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopifySubscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopifySubscribeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_shopify_charge_api_v1_integrations_shopify_billing_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopifyVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopifyBillingCallbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shopify_billing_callback_api_v1_integrations_shopify_billing_callback_get: {
+        parameters: {
+            query: {
+                charge_id: string;
+                shop?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_shopify_billing_status_api_v1_integrations_shopify_billing_status_get: {
+        parameters: {
+            query?: {
+                shop_domain?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopifyBillingStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_shopify_plan_api_v1_integrations_shopify_billing_change_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopifyPlanChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopifySubscribeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_shopify_subscription_api_v1_integrations_shopify_billing_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopifyCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopifyCancelResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9358,6 +13559,66 @@ export interface operations {
             };
         };
     };
+    shopify_customers_data_request_api_v1_webhooks_shopify_gdpr_customers_data_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    shopify_customers_redact_api_v1_webhooks_shopify_gdpr_customers_redact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    shopify_shop_redact_api_v1_webhooks_shopify_gdpr_shop_redact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     webhook_status_api_v1_webhooks_status_get: {
         parameters: {
             query?: never;
@@ -9501,6 +13762,26 @@ export interface operations {
         };
     };
     get_subscription_api_v1_payments_subscription_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionInfo"];
+                };
+            };
+        };
+    };
+    downgrade_to_free_api_v1_payments_downgrade_to_free_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -9871,6 +14152,1832 @@ export interface operations {
         };
     };
     market_trends_health_api_v1_market_trends_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    run_trend_analysis_api_v1_trend_analysis_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrendAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas__trend_analysis__TrendAnalysisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_product_opportunity_api_v1_trend_analysis_opportunity__product_id__post: {
+        parameters: {
+            query?: {
+                use_model?: string;
+            };
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingOpportunityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detect_risks_api_v1_trend_analysis_risks_post: {
+        parameters: {
+            query?: {
+                use_model?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskDetectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_insight_api_v1_trend_analysis_insight_post: {
+        parameters: {
+            query?: {
+                days?: number;
+                use_model?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIInsightResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quick_stats_api_v1_trend_analysis_quick_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuickStatsResponse"];
+                };
+            };
+        };
+    };
+    score_author_api_v1_trust_author_score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorScoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorScoreResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_authors_batch_api_v1_trust_author_score_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchAuthorScoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchAuthorScoreResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_content_api_v1_trust_content_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentAnalysisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_content_batch_api_v1_trust_content_analyze_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchContentAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchContentAnalysisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detect_campaign_api_v1_trust_campaign_detect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignDetectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignDetectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculate_weighted_sentiment_api_v1_trust_sentiment_weighted_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WeightedSentimentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeightedSentimentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quick_spam_check_api_v1_trust_check_spam_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuickSpamCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuickSpamCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quick_trust_check_api_v1_trust_check_trust_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuickTrustCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuickTrustCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stats_api_v1_trust_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustScoringStatsResponse"];
+                };
+            };
+        };
+    };
+    clear_caches_api_v1_trust_cache_clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    check_integration_health_api_v1_diagnostic_integration_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    check_product_push_status_api_v1_diagnostic_product__product_id__push_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_outcome_api_v1_outcomes__recommendation_id__record_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutcomeRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_outcomes_api_v1_outcomes__get: {
+        parameters: {
+            query?: {
+                product_id?: string | null;
+                rule_id?: string | null;
+                outcome_label?: components["schemas"]["OutcomeLabel"] | null;
+                days?: number;
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedResponse_OutcomeResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_accuracy_stats_api_v1_outcomes_accuracy_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccuracyStatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rule_performance_api_v1_outcomes_rules__rule_id__performance_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulePerformanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_confidence_calibration_api_v1_outcomes_calibration_get: {
+        parameters: {
+            query?: {
+                product_category?: string | null;
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_elasticity_accuracy_api_v1_outcomes_elasticity_accuracy_get: {
+        parameters: {
+            query?: {
+                product_category?: string | null;
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_merchant_patterns_api_v1_outcomes_merchant_patterns_get: {
+        parameters: {
+            query?: {
+                product_category?: string | null;
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_category_benchmarks_api_v1_outcomes_benchmarks__category__get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                category: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_data_gaps_api_v1_outcomes_data_gaps_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_outcome_detail_api_v1_outcomes__outcome_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                outcome_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ie_health_api_v1_intelligence_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IEHealthStatus"];
+                };
+            };
+        };
+    };
+    get_ie_dashboard_api_v1_intelligence_dashboard_get: {
+        parameters: {
+            query?: {
+                /** @description Number of top categories to return */
+                top_n?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IEDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_experiment_statuses_api_v1_intelligence_experiments_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by category */
+                category_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentStatus"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_experiment_status_api_v1_intelligence_experiments__category_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_calibration_reports_api_v1_intelligence_calibration_get: {
+        parameters: {
+            query?: {
+                category_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationReport"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_drift_alerts_api_v1_intelligence_drift_alerts_get: {
+        parameters: {
+            query?: {
+                /** @description Filter: info | warning | critical */
+                severity?: string | null;
+                /** @description Only show unresolved alerts */
+                active_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftAlert"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_category_performance_api_v1_intelligence_categories_get: {
+        parameters: {
+            query?: {
+                /** @description Minimum recommendations to include */
+                min_recommendations?: number;
+                /** @description Sort field */
+                sort_by?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryPerformance"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_category_detail_api_v1_intelligence_categories__category_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryPerformance"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    demo_health_check_api_v1_visual_pricing_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoHealthResponse"];
+                };
+            };
+        };
+    };
+    analyze_competitor_streaming_api_v1_visual_pricing_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_analyze_competitor_streaming_api_v1_visual_pricing_analyze_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_competitor_sync_api_v1_visual_pricing_analyze_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_analyze_competitor_sync_api_v1_visual_pricing_analyze_sync_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyzeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_crisis_analysis_api_v1_crisis_analyze_stream_get: {
+        parameters: {
+            query: {
+                /** @description Product name to monitor */
+                product: string;
+                /** @description Simulate crisis for demo */
+                simulate_crisis?: boolean;
+                /** @description Baseline sentiment score */
+                baseline?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_api_v1_crisis_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    stream_launch_analysis_get_api_v1_launch_analyze_stream_get: {
+        parameters: {
+            query: {
+                /** @description Competitor name */
+                competitor: string;
+                /** @description Your product name */
+                your_product: string;
+                /** @description Simulate launch for demo */
+                simulate_launch?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_launch_analysis_api_v1_launch_analyze_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_stream_launch_analysis_api_v1_launch_analyze_stream_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_api_v1_launch_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    analyze_trends_api_v1_trends_visual_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketDataInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrendAnalysisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_trends_stream_api_v1_trends_visual_analyze_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketDataInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_trends_with_image_api_v1_trends_visual_analyze_with_image_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_analyze_trends_with_image_api_v1_trends_visual_analyze_with_image_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_image_only_api_v1_trends_visual_analyze_image_only_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_analyze_image_only_api_v1_trends_visual_analyze_image_only_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trends_visual_health_api_v1_trends_visual_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrendHealthResponse"];
+                };
+            };
+        };
+    };
+    list_agents_api_v1_trends_visual_agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    intelligence_health_check_api_v1_market_intelligence_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligenceHealthResponse"];
+                };
+            };
+        };
+    };
+    analyze_market_streaming_get_api_v1_market_intelligence_analyze_get: {
+        parameters: {
+            query: {
+                /** @description Product name */
+                product_name: string;
+                /** @description Your current price */
+                current_price?: number | null;
+                /** @description Brand name */
+                brand?: string | null;
+                /** @description Product category */
+                category?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_market_streaming_api_v1_market_intelligence_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntelligenceQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_health_api_v1_agent_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_pricing_intelligence_api_v1_agent_pricing_intelligence_get: {
+        parameters: {
+            query?: {
+                product?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detect_crisis_api_v1_agent_crisis_detection_get: {
+        parameters: {
+            query?: {
+                brand?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_market_trends_api_v1_agent_market_trends_get: {
+        parameters: {
+            query?: {
+                category?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_pipeline_api_v1_autonomous_trigger_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineTriggerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_pipeline_api_v1_autonomous_stream__product_id__get: {
+        parameters: {
+            query?: {
+                current_price?: number;
+                product_category?: string;
+                cost_basis?: number;
+                margin_floor_pct?: number;
+            };
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_monitoring_api_v1_autonomous_monitor_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitoringStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_monitoring_api_v1_autonomous_monitor_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    autonomous_health_api_v1_autonomous_health_get: {
         parameters: {
             query?: never;
             header?: never;
