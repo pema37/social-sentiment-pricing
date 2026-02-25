@@ -1,7 +1,8 @@
 # backend/core/config.py
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from typing import Optional, List
+from pydantic import ConfigDict
 
 BACKEND_DIR = Path(__file__).parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     # ===================
     # Application
     # ===================
+    model_config = SettingsConfigDict(env_file = str(ENV_FILE), extra = "ignore")
     APP_NAME: str = "Social Sentiment Pricing API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
@@ -105,11 +107,6 @@ class Settings(BaseSettings):
     MNEE_ENVIRONMENT: str = "sandbox"  # sandbox or production
     MNEE_WEBHOOK_SECRET: str = ""
     SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address 
-    
-    
-    class Config:
-        env_file = str(ENV_FILE)
-        extra = "ignore"
 
 
 settings = Settings()

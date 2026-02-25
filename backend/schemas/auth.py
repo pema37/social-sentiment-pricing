@@ -8,7 +8,7 @@ PATCHED (2025-01-07): Added RefreshRequest and refresh_token to TokenResponse.
 
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 
 class RegisterRequest(BaseModel):
@@ -28,6 +28,7 @@ class RefreshRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     email: EmailStr
     username: str | None = None
@@ -36,9 +37,6 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class TokenResponse(BaseModel):

@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ============== Request Schemas ==============
@@ -40,6 +40,7 @@ class SentimentScores(BaseModel):
 
 
 class SentimentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     product_id: UUID
     source: str
@@ -51,9 +52,6 @@ class SentimentRead(BaseModel):
     author: Optional[str]
     url: Optional[str]
     analyzed_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class SentimentAnalyzeResponse(BaseModel):
@@ -83,6 +81,7 @@ class SentimentSummary(BaseModel):
 
 class SentimentResponse(BaseModel):
     """Response matching route expectations"""
+    model_config = ConfigDict(from_attributes=True)
     sentiment_id: Optional[UUID] = None
     text: Optional[str] = None
     sentiment_score: float = Field(ge=-1, le=1)
@@ -94,12 +93,10 @@ class SentimentResponse(BaseModel):
     is_sarcastic: Optional[bool] = None
     ai_powered: bool = False
 
-    class Config:
-        from_attributes = True
-
 
 class SocialMentionResponse(BaseModel):
     """Response for social mention data"""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     product_id: UUID
     source: str
@@ -112,9 +109,6 @@ class SocialMentionResponse(BaseModel):
     published_at: Optional[datetime] = None
     collected_at: datetime
     processed: bool = False
-
-    class Config:
-        from_attributes = True
 
 
 class AIStatusResponse(BaseModel):

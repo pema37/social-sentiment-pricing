@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ============== Request Schemas ==============
@@ -60,6 +60,7 @@ class PlatformLink(BaseModel):
 
 
 class ProductRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     name: str
@@ -80,9 +81,6 @@ class ProductRead(BaseModel):
     updated_at: datetime
     # FIX BUG-005: Platform connection info
     platforms_linked: List[PlatformLink] = []
-
-    class Config:
-        from_attributes = True
 
 
 # ============== Price Suggestion Schema ==============

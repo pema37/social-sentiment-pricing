@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 
 
 # ============================================================
@@ -39,6 +39,7 @@ class CompetitorUpdate(BaseModel):
 
 class CompetitorResponse(CompetitorBase):
     """Schema for competitor response."""
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     user_id: uuid.UUID
     last_scraped_at: Optional[datetime] = None
@@ -46,9 +47,6 @@ class CompetitorResponse(CompetitorBase):
     last_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CompetitorListResponse(BaseModel):
@@ -95,6 +93,7 @@ class CompetitorProductUpdate(BaseModel):
 
 class CompetitorProductResponse(CompetitorProductBase):
     """Schema for competitor product response."""
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     product_id: uuid.UUID
     competitor_id: uuid.UUID
@@ -103,9 +102,6 @@ class CompetitorProductResponse(CompetitorProductBase):
     price_available: bool = True
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CompetitorProductWithDetails(CompetitorProductResponse):
@@ -131,6 +127,7 @@ class CompetitorProductListResponse(BaseModel):
 
 class CompetitorPriceHistoryResponse(BaseModel):
     """Schema for price history response."""
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     competitor_product_id: uuid.UUID
     old_price: Optional[Decimal] = None
@@ -144,9 +141,6 @@ class CompetitorPriceHistoryResponse(BaseModel):
     was_available: bool
     is_available: bool
     observed_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CompetitorPriceHistoryListResponse(BaseModel):

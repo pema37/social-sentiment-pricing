@@ -15,7 +15,7 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 # ==================== Enums ====================
@@ -142,6 +142,7 @@ class IntegrationUpdate(BaseModel):
 
 class IntegrationResponse(BaseModel):
     """Integration response (public fields only - no secrets)"""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     platform: EcommercePlatform
     store_url: str
@@ -155,9 +156,6 @@ class IntegrationResponse(BaseModel):
     settings: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class IntegrationListResponse(BaseModel):
@@ -184,6 +182,7 @@ class SyncStatusResponse(BaseModel):
 
 class SyncLogResponse(BaseModel):
     """Sync log entry"""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     sync_type: str
     started_at: datetime
@@ -194,9 +193,6 @@ class SyncLogResponse(BaseModel):
     products_updated: int
     products_deleted: int
     error_details: Optional[str]
-    
-    class Config:
-        from_attributes = True
 
 
 class SyncLogsListResponse(BaseModel):
@@ -216,6 +212,7 @@ class ProductLinkCreate(BaseModel):
 
 class ProductLinkResponse(BaseModel):
     """Product link response"""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     product_id: UUID
     integration_id: UUID
@@ -227,10 +224,6 @@ class ProductLinkResponse(BaseModel):
     last_price_pull_at: Optional[datetime]
     sync_enabled: bool
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
-
 
 class ProductLinkListResponse(BaseModel):
     """List of product links"""

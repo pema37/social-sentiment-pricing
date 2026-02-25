@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from models.pricing_rule import RuleType, RuleAction
 from models.price_recommendation import RecommendationStatus
@@ -99,6 +99,7 @@ class PricingRuleUpdate(BaseModel):
 
 
 class PricingRuleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     product_id: Optional[UUID]  # Now optional
@@ -144,15 +145,13 @@ class PricingRuleResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
-
 
 # ═══════════════════════════════════════════════════════════════
 # PRICE RECOMMENDATION SCHEMAS
 # ═══════════════════════════════════════════════════════════════
 
 class PriceRecommendationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     product_id: UUID
@@ -179,9 +178,6 @@ class PriceRecommendationResponse(BaseModel):
     applied_to_platform: Optional[str]
     
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class RecommendationApprove(BaseModel):
@@ -229,6 +225,7 @@ class PricingSettingsUpdate(BaseModel):
 
 
 class PricingSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     
@@ -254,9 +251,6 @@ class PricingSettingsResponse(BaseModel):
     
     created_at: datetime
     updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -331,6 +325,7 @@ class OutcomeRecordRequest(BaseModel):
 
 class OutcomeResponse(BaseModel):
     """Response for a recorded outcome."""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     recommendation_id: UUID
@@ -363,10 +358,6 @@ class OutcomeResponse(BaseModel):
     measurement_window_hours: int
     measured_at: datetime
     created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class RulePerformanceResponse(BaseModel):
     """Performance stats for a single rule."""

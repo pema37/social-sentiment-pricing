@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ============================================
@@ -186,7 +186,7 @@ class AIInsightResponse(BaseModel):
 
 class TrendAnalysisResponse(BaseModel):
     """Complete trend analysis result."""
-    
+    model_config = ConfigDict(from_attributes=True)
     analysis_id: str
     generated_at: datetime
     
@@ -208,9 +208,6 @@ class TrendAnalysisResponse(BaseModel):
     products_analyzed: int
     mentions_analyzed: int
     time_range_days: int
-    
-    class Config:
-        from_attributes = True
 
 
 class RiskDetectionResponse(BaseModel):

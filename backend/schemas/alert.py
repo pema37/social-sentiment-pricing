@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from models.alert import AlertType, AlertSeverity, AlertChannel, AlertStatus
 
@@ -40,6 +40,7 @@ class AlertConfigurationUpdate(BaseModel):
 
 class AlertConfigurationRead(BaseModel):
     """Alert configuration response."""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     name: str
@@ -55,9 +56,6 @@ class AlertConfigurationRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_triggered_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 # ============== Alert Schemas ==============
@@ -77,6 +75,7 @@ class AlertCreate(BaseModel):
 
 class AlertRead(BaseModel):
     """Alert response."""
+    model_config = ConfigDict(from_attributes=True)
     id: UUID
     user_id: UUID
     configuration_id: Optional[UUID]
@@ -96,9 +95,6 @@ class AlertRead(BaseModel):
     acknowledged_at: Optional[datetime]
     acknowledged_by: Optional[UUID]
     resolved_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 class AlertAcknowledge(BaseModel):
