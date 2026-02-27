@@ -3,10 +3,11 @@ import path from 'path';
 
 export default defineConfig({
   test: {
-    environment: 'node',
+    environment: 'happy-dom',
     globals: true,
     include: ['**/*.test.ts', '**/*.test.tsx'],
     setupFiles: ['./lib/testing/setup.ts'],
+    pool: 'threads',
   },
   resolve: {
     alias: {
@@ -14,5 +15,4 @@ export default defineConfig({
     },
   },
 });
-
 
