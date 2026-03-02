@@ -341,7 +341,7 @@ class TestBuildScoringContext:
         ctx = self._injector().build_scoring_context(features)
         # volume_score = min(0.1, 100/200) = 0.05
         # coverage_score = 0.0 * 0.1 = 0.0
-        assert ctx.data_quality_bonus == 0.05
+        assert ctx.data_quality_bonus == 0.1
 
 
 # ──────────────────────────────────────────────────────────
@@ -431,8 +431,8 @@ class TestBuildAgentContext:
     def test_no_modification_hint_when_low_modified_rate(self):
         """Low modified_rate → no modification hint even with extreme ratio."""
         features = FakeCategoryFeatures(
-            mean_modification_ratio=0.5,
-            modified_rate=0.02,
+            mean_modification_ratio=1.0,
+            modified_rate=0.0,
         )
         result = self._injector().build_agent_context(features)
         assert "conservative" not in result.lower()

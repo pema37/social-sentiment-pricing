@@ -1,11 +1,10 @@
 # Ruff configuration for ActualPrice backend
 # https://docs.astral.sh/ruff/
 
-[tool.ruff]
 target-version = "py313"
 line-length = 120
 
-[tool.ruff.lint]
+[lint]
 select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
@@ -26,14 +25,13 @@ ignore = [
     "RUF012",  # mutable class variables — SQLModel pattern
 ]
 
-[tool.ruff.lint.per-file-ignores]
+[lint.per-file-ignores]
 "tests/*" = ["B", "SIM", "N"]  # Relax rules in test files
 "alembic/*" = ["E", "F"]       # Auto-generated migration files
 
-[tool.ruff.lint.isort]
+[lint.isort]
 known-first-party = ["core", "db", "models", "routes", "schemas", "services"]
 
-[tool.ruff.format]
+[format]
 quote-style = "double"
 indent-style = "space"
-

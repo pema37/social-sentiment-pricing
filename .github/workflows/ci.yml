@@ -94,13 +94,7 @@ jobs:
         run: |
           cd backend
           pytest \
-            --tb=short \
-            -q \
-            --cov=. \
-            --cov-report=term-missing:skip-covered \
-            --junitxml=test-results.xml \
-            -x \
-            2>&1 | tail -100
+           pytest --cov=. --cov-report=term-missing:skip-covered --junitxml=test-results.xml 2>&1 | tail -100
         # -x = stop on first failure (fast feedback on PRs)
         # tail -100 = keep GHA log readable
 

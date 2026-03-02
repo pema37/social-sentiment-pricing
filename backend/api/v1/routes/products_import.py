@@ -108,20 +108,24 @@ async def import_products(
         try:
             logger.info(f"🔍 IMPORT DEBUG: Processing row {idx + 1}: {row.name}")
             
-            product = Product(
-                user_id=current_user.id,
-                name=row.name.strip(),
-                sku=row.sku.strip() if row.sku else None,
-                description=row.description.strip() if row.description else None,
-                category=row.category.strip() if row.category else None,
-                image_url=row.image_url.strip() if row.image_url else None,
-                base_price=row.base_price,
-                current_price=row.base_price,
-                is_active=True,
-                auto_pricing_enabled=False,
-                keywords=[],
-            )
+            product_data = {
+                "user_id": current_user.id,
+                "name": row.name.strip(),
+                "sku": row.sku.strip() if row.sku else None,
+                "description": row.description.strip() if row.description else None,
+                "category": row.category.strip() if row.category else None,
+                "image_url": row.image_url.strip() if row.image_url else None,
+                "base_price": row.base_price,
+                "current_price": row.base_price,
+                "is_active": True,
+                "auto_pricing_enabled": False,
+                "keywords": [],
+            }
+
+            product = Product(**product_data)
             session.add(product)
+            await session.flush() # Flush to catch DB errors early (e.g. unique constraint)
+
             created += 1
             logger.info(f"🔍 IMPORT DEBUG: Row {idx + 1} added to session (created={created})")
             
@@ -129,7 +133,7 @@ async def import_products(
             failed += 1
             error_msg = f"Row {idx + 1} ({row.name}): {str(e)}"
             errors.append(error_msg)
-            logger.error(f"🔍 IMPORT DEBUG: Row {idx + 1} FAILED: {e}")
+            logger.error(f"🔍 IMPORT DEBUG: Row {idx + 1} FAILED: {error_msg}")
 
     logger.info(f"🔍 IMPORT DEBUG: Loop complete. created={created}, failed={failed}")
 
