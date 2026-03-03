@@ -22,4 +22,5 @@ export * from './integrations';
 export * from './payments';
 export * from './trust-scoring';  
 export * from './intelligence';
+export { retrospectiveAuditApi } from './retrospective-audit';
 

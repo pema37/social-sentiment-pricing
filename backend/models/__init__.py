@@ -13,6 +13,7 @@ from models.pricing_settings import PricingSettings
 from models.price_history import PriceHistory, ChangeReason
 from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
 from models.alert import Alert, AlertConfiguration, AlertType, AlertSeverity, AlertChannel, AlertStatus
+from models.retrospective_audit import RetrospectiveAudit
 
 # Payment models
 from models.payment import Payment, PaymentStatus, PaymentType
@@ -44,6 +45,7 @@ __all__ = [
     "AlertSeverity",
     "AlertChannel",
     "AlertStatus",
+    "RetrospectiveAudit",
     # Payment models
     "Payment",
     "PaymentStatus",

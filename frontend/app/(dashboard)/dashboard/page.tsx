@@ -4,7 +4,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Package, DollarSign, Users, Bell, RefreshCw, Eye } from 'lucide-react';
+import { Package, DollarSign, Users, Bell, RefreshCw, Eye, SearchX, ArrowRight } from 'lucide-react';
 import { Card, CardTitle, SectionHeader } from '@/components/ui';
 import { Button } from '@/components/ui/Button';
 import {
@@ -23,6 +23,65 @@ import {
 } from '@/lib/hooks/use-analytics';
 import { useAlerts } from '@/lib/hooks/use-alerts';
 import { useRecommendations } from '@/lib/hooks/use-pricing';
+import { useLatestAudit } from '@/lib/hooks/use-retrospective-audit';
+
+// =============================================================================
+// PRICING AUDIT TEASER CARD
+// =============================================================================
+
+function PricingAuditTeaser() {
+  const { data: audit, isLoading, error } = useLatestAudit(90);
+
+  // Don't render if no data or no products analyzed
+  if (error || (!isLoading && (!audit || audit.summary.total_products_analyzed === 0))) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-28 bg-linear-to-r from-red-50 to-orange-50 rounded-xl animate-pulse border border-red-100" />
+    );
+  }
+
+  const { summary } = audit;
+  const totalImpact = parseFloat(summary.total_estimated_impact);
+  const monthlyLoss = parseFloat(summary.monthly_projected_loss);
+
+  // Only show if there's a meaningful impact to report
+  if (totalImpact < 1) return null;
+
+  const fmtCurrency = (n: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+
+  return (
+    <Link href="/analytics/audit">
+      <Card className="bg-linear-to-r from-red-50 to-orange-50 border-red-200 hover:border-red-300 hover:shadow-md transition-all cursor-pointer">
+        <div className="flex items-center justify-between p-5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+              <SearchX className="w-6 h-6 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-red-600 uppercase tracking-wider">
+                Pricing Audit — Last 90 Days
+              </p>
+              <p className="text-2xl font-black text-red-700">
+                {fmtCurrency(totalImpact)} left on the table
+              </p>
+              <p className="text-sm text-gray-600">
+                {summary.total_products_analyzed} products · Projected {fmtCurrency(monthlyLoss)}/mo at current patterns
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-red-600">
+            <span className="text-sm font-medium hidden sm:block">View Full Audit</span>
+            <ArrowRight className="w-5 h-5" />
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
+}
 
 // =============================================================================
 // MAIN PAGE
@@ -129,6 +188,9 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Pricing Audit Teaser — the "you're losing money" banner */}
+      <PricingAuditTeaser />
+
       {/* AI Features Showcase */}
       <AIFeaturesCard />
 
@@ -213,4 +275,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
 

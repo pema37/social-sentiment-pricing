@@ -19,7 +19,8 @@ export * from './integration';
 export * from './pricing';
 export * from './user';
 export * from './payment';
-export * from './trust-scoring';  // NEW: Bot/Manipulation detection types
+export * from './trust-scoring';  
+export * from './retrospective-audit';
 
 // Re-export generated types for direct access if needed
 // Usage: import type { components } from '@/types/api-generated';

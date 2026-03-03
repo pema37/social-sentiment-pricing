@@ -1,6 +1,7 @@
 // frontend/components/layout/Sidebar.tsx
 // Main navigation for the dashboard - always visible on the left
 // Updated Feb 21, 2026 — Shopify embedded context awareness
+// Updated Mar 02, 2026 — Added Pricing Audit link
 
 'use client';
 
@@ -28,6 +29,7 @@ import {
   LogOut,
   ShieldCheck,
   CreditCard,
+  SearchX,
 } from 'lucide-react';
 
 // ─── Nav item type ───────────────────────────────────────────────────
@@ -47,6 +49,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { label: 'Pricing Audit', href: '/analytics/audit', icon: SearchX },
   { label: 'Products', href: '/products', icon: Package },
   { label: 'Integrations', href: '/integrations', icon: Plug },
   { label: 'Competitors', href: '/competitors', icon: Users },
@@ -100,6 +103,13 @@ export function Sidebar({ onLogout }: SidebarProps) {
     }
     if (href === '/sentiment') {
       return pathname === '/sentiment';
+    }
+    // Pricing Audit: exact match so it doesn't conflict with /analytics
+    if (href === '/analytics/audit') {
+      return pathname === '/analytics/audit';
+    }
+    if (href === '/analytics') {
+      return pathname === '/analytics';
     }
     return pathname === href || pathname?.startsWith(`${href}/`);
   };
@@ -180,5 +190,6 @@ export function Sidebar({ onLogout }: SidebarProps) {
     </aside>
   );
 }
+
 
 

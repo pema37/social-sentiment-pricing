@@ -13,4 +13,6 @@ export * from './use-payments';
 export * from './use-trust-scoring';  
 export * from './use-outcomes';
 export * from './use-intelligence';
+export { useLatestAudit, useGenerateAudit, useRefreshAudit } from './use-retrospective-audit';
+
 

@@ -66,6 +66,12 @@ from api.v1.routes.support import router as support_router
 from api.v1.routes.market_trends import router as market_trends_router
 from api.v1.routes.trend_analysis import router as trend_analysis_router
 from api.v1.routes.diagnostic import router as diagnostic_router
+from api.v1.routes.retrospective_audit import router as retrospective_audit_router
+from api.v1.routes.prospect_audit import router as prospect_audit_router
+from api.v1.routes.audit_email import router as audit_email_router
+from api.v1.routes.prospect_analytics import router as prospect_analytics_router
+
+
 
 # Intelligence Environment — standalone at /api/v1/outcomes
 from api.v1.routes.pricing.outcomes import router as outcomes_router
@@ -172,6 +178,11 @@ app.include_router(market_trends_router, prefix="/api/v1")
 app.include_router(trend_analysis_router, prefix="/api/v1")
 app.include_router(trust_scoring_router, prefix="/api/v1")
 app.include_router(diagnostic_router, prefix="/api/v1")
+app.include_router(retrospective_audit_router, prefix="/api/v1")
+app.include_router(prospect_audit_router, prefix="/api/v1")
+app.include_router(audit_email_router, prefix="/api/v1")
+app.include_router(prospect_analytics_router, prefix="/api/v1")
+
 
 # Intelligence Environment — outcomes served at /api/v1/outcomes/*
 app.include_router(outcomes_router, prefix="/api/v1/outcomes", tags=["outcomes"])

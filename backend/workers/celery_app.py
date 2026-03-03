@@ -29,7 +29,8 @@ celery_app = Celery(
         "workers.tasks.sync_verification_tasks",
         "workers.tasks.outcome_measurement_tasks",
         "workers.tasks.benchmark_refresh_tasks",
-        "workers.tasks.intelligence_tasks",
+        "workers.tasks.intelligence_tasks",    
+        "workers.tasks.audit_tasks",  
     ]
 )
 
@@ -128,6 +129,15 @@ celery_app.conf.beat_schedule = {
     "refresh-benchmark-views": {
         "task": "workers.tasks.benchmark_refresh_tasks.refresh_benchmark_views",
         "schedule": crontab(hour=4, minute=30),
+        "options": {"queue": "celery"},
+    },
+
+    # === Retrospective Audit tasks ===
+
+    # Generate 90-day pricing audits for all users every Sunday at 5 AM
+    "generate-weekly-audits": {
+        "task": "workers.tasks.audit_tasks.generate_weekly_audits",
+        "schedule": crontab(hour=5, minute=0, day_of_week="sunday"),
         "options": {"queue": "celery"},
     },
 }
