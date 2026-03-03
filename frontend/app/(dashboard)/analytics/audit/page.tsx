@@ -10,13 +10,13 @@
  */
 
 import { useState } from 'react';
-import { useLatestAudit, useGenerateAudit } from '@/lib/hooks/use-retrospective-audit';
+import { useLatestAudit } from '@/lib/hooks/use-retrospective-audit';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Download, Loader2, Mail, X, Send, CheckCircle } from 'lucide-react';
-import type { SKUAuditResult, PricingGapDay } from '@/types/retrospective-audit';
+import type { SKUAuditResult } from '@/types/retrospective-audit';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -121,8 +121,8 @@ function useEmailAudit() {
       }
 
       setSent(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send email');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to send email');
     } finally {
       setLoading(false);
     }
@@ -459,12 +459,11 @@ export default function RetrospectiveAuditPage() {
   const { exportPdf, loading: pdfLoading } = useExportPdf();
 
   const { data: audit, isLoading, error } = useLatestAudit(lookbackDays);
-  const generateMutation = useGenerateAudit();
 
   if (isLoading) {
     return (
       <div className="space-y-4 p-6">
-        <SectionHeader title="Pricing Audit" subtitle="Analyzing your pricing history..." />
+        <SectionHeader title="Pricing Audit" description="Analyzing your pricing history..." />
         <div className="animate-pulse space-y-4">
           <div className="h-48 bg-gray-100 rounded-xl" />
           <div className="h-64 bg-gray-100 rounded-xl" />
@@ -489,7 +488,7 @@ export default function RetrospectiveAuditPage() {
       <div className="p-6">
         <SectionHeader
           title="Pricing Audit"
-          subtitle="See how much money you're leaving on the table"
+          description="See how much money you're leaving on the table"
         />
         <Card className="p-8 mt-4 text-center">
           <p className="text-gray-600 text-lg">No products with competitor data found.</p>
@@ -508,7 +507,7 @@ export default function RetrospectiveAuditPage() {
       <div className="flex justify-between items-start">
         <SectionHeader
           title="Retrospective Pricing Audit"
-          subtitle={`${formatDate(summary.analysis_period_start)} — ${formatDate(summary.analysis_period_end)}`}
+          description={`${formatDate(summary.analysis_period_start)} — ${formatDate(summary.analysis_period_end)}`}
         />
         <div className="flex items-center gap-3">
           {/* Lookback toggles */}
@@ -516,7 +515,7 @@ export default function RetrospectiveAuditPage() {
             {[30, 60, 90, 180].map((d) => (
               <Button
                 key={d}
-                variant={lookbackDays === d ? 'primary' : 'outline'}
+                variant={lookbackDays === d ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => {
                   setLookbackDays(d);

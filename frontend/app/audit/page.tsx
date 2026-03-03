@@ -80,42 +80,6 @@ function fmtPct(val: string | number | null): string {
 
 type InputMode = 'url' | 'csv';
 
-// ── Loading Skeleton ─────────────────────────────────────────
-
-function AnalysisSkeleton() {
-  return (
-    <div className="max-w-3xl mx-auto px-6 mt-10 space-y-6 pb-16 animate-pulse">
-      {/* Headline skeleton */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center">
-        <div className="h-4 w-48 bg-gray-200 rounded mx-auto" />
-        <div className="h-14 w-56 bg-gray-200 rounded mx-auto mt-4" />
-        <div className="h-4 w-72 bg-gray-200 rounded mx-auto mt-4" />
-      </div>
-
-      {/* Table skeleton */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="h-5 w-40 bg-gray-200 rounded" />
-        </div>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 px-6 py-3 border-b border-gray-50">
-            <div className="h-4 w-40 bg-gray-200 rounded" />
-            <div className="h-4 w-16 bg-gray-200 rounded ml-auto" />
-            <div className="h-4 w-16 bg-gray-200 rounded" />
-            <div className="h-6 w-14 bg-gray-200 rounded-full" />
-          </div>
-        ))}
-      </div>
-
-      {/* CTA skeleton */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-8">
-        <div className="h-6 w-48 bg-gray-200 rounded mx-auto" />
-        <div className="h-10 w-full bg-gray-200 rounded-lg mt-6" />
-        <div className="h-10 w-full bg-gray-200 rounded-lg mt-3" />
-      </div>
-    </div>
-  );
-}
 
 // ── Loading Progress Steps ───────────────────────────────────
 
@@ -210,7 +174,7 @@ function ErrorState({
           </svg>
         </div>
 
-        <h3 className="text-lg font-semibold text-gray-900">Couldn't complete the analysis</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Couldn&apos;t complete the analysis</h3>
         <p className="text-sm text-gray-500 mt-2">{message}</p>
 
         {isStoreError && (
@@ -346,8 +310,8 @@ export default function FreeAuditPage() {
         products_found: data.total_products_found,
         estimated_impact: data.estimated_monthly_impact,
       });
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -375,7 +339,7 @@ export default function FreeAuditPage() {
     });
 
     try {
-      let body: Record<string, unknown> = {
+      const body: Record<string, unknown> = {
         email: email.trim(),
         company_name: companyName.trim() || undefined,
       };
@@ -415,8 +379,8 @@ export default function FreeAuditPage() {
       });
 
       setPdfDone(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate PDF. Please try again.');
+    } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to generate PDF. Please try again.');
     } finally {
       setPdfLoading(false);
     }
@@ -457,7 +421,7 @@ export default function FreeAuditPage() {
           </h1>
           <p className="text-lg text-blue-200 mt-4 max-w-2xl mx-auto">
             Enter your Shopify store URL or paste your product list.
-            We'll analyze your pricing in under 30 seconds.
+            We&apos;ll analyze your pricing in under 30 seconds.
           </p>
         </div>
       </div>
@@ -692,7 +656,7 @@ export default function FreeAuditPage() {
                 >
                   {pdfLoading ? 'Generating PDF...' : 'Download Full PDF Report'}
                 </button>
-                <p className="text-xs text-gray-400 text-center">No spam. We'll send you the report and follow up once.</p>
+                <p className="text-xs text-gray-400 text-center">No spam. We&apos;ll send you the report and follow up once.</p>
               </form>
             )}
           </div>

@@ -43,7 +43,7 @@ function PricingAuditTeaser() {
     );
   }
 
-  const { summary } = audit;
+  const { summary } = audit!;
   const totalImpact = parseFloat(summary.total_estimated_impact);
   const monthlyLoss = parseFloat(summary.monthly_projected_loss);
 
