@@ -22,6 +22,7 @@ Total: ~65 tests
 """
 
 import sys
+from unittest.mock import AsyncMock
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 
@@ -347,63 +348,110 @@ class TestAnalyzeVader:
 
 # ============================================================
 # 9. _analyze_gemini
-#
-# Production now uses:
-#   response = await self.gemini_client.aio.models.generate_content(...)
-# Instead of the old:
-#   loop.run_in_executor(None, model.generate_content, ...)
 # ============================================================
 
 class TestAnalyzeGemini:
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     @pytest.mark.asyncio
     async def test_parses_json_response(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
-        svc.gemini_client = MagicMock()
-        svc.gemini_model = MagicMock()
+        svc.gemini_model = "gemini-2.0-flash"
+        # svc.gemini_client = MagicMock()
 
         mock_response = MagicMock()
         mock_response.text = '{"sentiment_score": 0.7, "sentiment_label": "positive", "confidence": 0.9, "positive_score": 0.8, "negative_score": 0.1, "neutral_score": 0.1, "emotions": {}, "topics": ["quality"], "is_sarcastic": false}'
 
+        svc.gemini_client = MagicMock()
+        svc.gemini_client.aio = MagicMock()
+        svc.gemini_client.aio.models = MagicMock()
         svc.gemini_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
         result = await svc._analyze_gemini("great product")
         assert result["compound"] == 0.7
         assert result["topics"] == ["quality"]
 
+        #import asyncio
+        #loop = asyncio.get_event_loop()
+        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, return_value=mock_response):
+            #result = await svc._analyze_gemini("great product")
+            #assert result["compound"] == 0.7
+            #assert result["topics"] == ["quality"]
+
+
     @pytest.mark.asyncio
     async def test_raises_rate_limit_on_429(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+        svc.gemini_model = "gemini-2.0-flash"
+        
         svc.gemini_client = MagicMock()
-        svc.gemini_model = MagicMock()
+        svc.gemini_client.aio = MagicMock()
+        svc.gemini_client.aio.models = MagicMock()
+        svc.gemini_client.aio.models.generate_content = AsyncMock(side_effect=Exception("429 Resource exhausted"))
 
-        svc.gemini_client.aio.models.generate_content = AsyncMock(
-            side_effect=Exception("429 Resource exhausted")
-        )
         with pytest.raises(RateLimitError) as exc_info:
             await svc._analyze_gemini("test")
         assert exc_info.value.api_name == "gemini"
 
+    #@pytest.mark.asyncio
+    #async def test_raises_rate_limit_on_429(self):
+        #svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+        #svc.gemini_client = MagicMock()
+
+        #import asyncio
+        #loop = asyncio.get_event_loop()
+        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=Exception("429 Resource exhausted")):
+            #with pytest.raises(RateLimitError) as exc_info:
+                #await svc._analyze_gemini("test")
+            #assert exc_info.value.api_name == "gemini"
+
     @pytest.mark.asyncio
     async def test_raises_rate_limit_on_quota(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+        svc.gemini_model = "gemini-2.0-flash"
+        
         svc.gemini_client = MagicMock()
-        svc.gemini_model = MagicMock()
+        svc.gemini_client.aio = MagicMock()
+        svc.gemini_client.aio.models = MagicMock()
+        svc.gemini_client.aio.models.generate_content = AsyncMock(side_effect=Exception("quota exceeded"))
 
-        svc.gemini_client.aio.models.generate_content = AsyncMock(
-            side_effect=Exception("quota exceeded")
-        )
         with pytest.raises(RateLimitError):
             await svc._analyze_gemini("test")
+    
+    #@pytest.mark.asyncio
+    #async def test_raises_rate_limit_on_quota(self):
+        #svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+        #svc.gemini_client = MagicMock()
+
+        #import asyncio
+        #loop = asyncio.get_event_loop()
+        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=Exception("quota exceeded")):
+            #with pytest.raises(RateLimitError):
+                #await svc._analyze_gemini("test")
+
+    #@pytest.mark.asyncio
+    #async def test_reraises_non_rate_limit_errors(self):
+        #svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+        #svc.gemini_client = MagicMock()
+
+        #import asyncio
+        #loop = asyncio.get_event_loop()
+        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=ValueError("parse error")):
+            #with pytest.raises(ValueError):
+                #await svc._analyze_gemini("test")
+
 
     @pytest.mark.asyncio
     async def test_reraises_non_rate_limit_errors(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+        svc.gemini_model = "gemini-2.0-flash"
+        
         svc.gemini_client = MagicMock()
-        svc.gemini_model = MagicMock()
+        svc.gemini_client.aio = MagicMock()
+        svc.gemini_client.aio.models = MagicMock()
+        
+        svc.gemini_client.aio.models.generate_content = AsyncMock(side_effect=ValueError("parse error"))
 
-        svc.gemini_client.aio.models.generate_content = AsyncMock(
-            side_effect=ValueError("parse error")
-        )
         with pytest.raises(ValueError):
             await svc._analyze_gemini("test")
 
@@ -668,6 +716,5 @@ class TestAnalyzeBatch:
         svc.analyze = AsyncMock()
         results = await svc.analyze_batch([])
         assert results == []
-
 
         

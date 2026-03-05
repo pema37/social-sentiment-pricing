@@ -25,6 +25,7 @@ for mod in [
     "db.session",
     "models.product",
     "models.integration",
+    "models.product_link",
     "services.integration.shopify_service",
     "services.integration.woocommerce_service",
 ]:
@@ -39,7 +40,7 @@ class _FakeIntegration:
     status = MagicMock()
 
 
-class _FakeProductIntegrationLink:
+class _FakeProductLink:
     integration_id = MagicMock()
     product_id = MagicMock()
     sync_enabled = MagicMock()
@@ -47,7 +48,8 @@ class _FakeProductIntegrationLink:
 
 # Force-set UNCONDITIONALLY — even if another test already loaded the module
 sys.modules["models.integration"].Integration = _FakeIntegration
-sys.modules["models.integration"].ProductIntegrationLink = _FakeProductIntegrationLink
+sys.modules["models.integration"].ProductIntegrationLink = _FakeProductLink
+sys.modules["models.product_link"].ProductLink = _FakeProductLink
 
 import pytest
 
@@ -270,10 +272,13 @@ class TestGetActiveLink:
         import types
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
-        _im.ProductIntegrationLink = _FakeProductIntegrationLink
+        _im.ProductIntegrationLink = _FakeProductLink
+        _plm = types.ModuleType("models.product_link")
+        _plm.ProductLink = _FakeProductLink
 
         with patch.dict(sys.modules, {
             "models.integration": _im,
+            "models.product_link": _plm,
         }):
             mock_chain = MagicMock()
             mock_chain.join.return_value = mock_chain
@@ -297,10 +302,13 @@ class TestGetActiveLink:
         import types
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
-        _im.ProductIntegrationLink = _FakeProductIntegrationLink
+        _im.ProductIntegrationLink = _FakeProductLink
+        _plm = types.ModuleType("models.product_link")
+        _plm.ProductLink = _FakeProductLink
 
         with patch.dict(sys.modules, {
             "models.integration": _im,
+            "models.product_link": _plm,
         }):
             mock_chain = MagicMock()
             mock_chain.join.return_value = mock_chain
@@ -315,6 +323,7 @@ class TestGetActiveLink:
             svc = PriceSyncService(db)
             result = await svc._get_active_link(PRODUCT_ID, USER_ID)
             assert result == (None, None)
+
 
 # ============================================================
 # 5. _fetch_from_platform
@@ -524,3 +533,6 @@ class TestFetchWooCommercePrice:
         await svc._fetch_woocommerce_price(link, integ)
         mock_service.get_product_price.assert_awaited_once_with("woo-999")
 
+
+
+        

@@ -339,7 +339,7 @@ class TestBuildScoringContext:
             n_outcomes=100, pct_with_impact_data=0.0
         )
         ctx = self._injector().build_scoring_context(features)
-        # volume_score = min(0.1, 100/200) = min(0.1, 0.5) = 0.1
+        # volume_score = min(0.1, 100/200) = 0.05
         # coverage_score = 0.0 * 0.1 = 0.0
         assert ctx.data_quality_bonus == 0.1
 
@@ -428,10 +428,10 @@ class TestBuildAgentContext:
         result = self._injector().build_agent_context(features)
         assert "aggressive" in result.lower()
 
-    def test_no_modification_hint_when_zero_modified_rate(self):
-        """Zero modified_rate → no modification hint even with extreme ratio."""
+    def test_no_modification_hint_when_low_modified_rate(self):
+        """Low modified_rate → no modification hint even with extreme ratio."""
         features = FakeCategoryFeatures(
-            mean_modification_ratio=0.5,
+            mean_modification_ratio=1.0,
             modified_rate=0.0,
         )
         result = self._injector().build_agent_context(features)
