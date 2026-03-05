@@ -26,8 +26,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit", tags=["price-check"])
 
+# ── CORS allowlist ────────────────────────────────────────────────────
+
+AUDIT_ALLOWED_ORIGINS = {
+    "https://getactualprice.com",
+    "https://www.getactualprice.com",
+    "https://ssp-staging.vercel.app",
+    "https://ssp-staging-f3zwnp7el-msakou-bcitcas-projects.vercel.app",
+    "http://localhost:4321",   # Astro dev
+    "http://localhost:3000",   # Next.js dev
+}
+
+
+def _cors_origin(request: Request) -> str:
+    """
+    Return the correct Access-Control-Allow-Origin value.
+    If the request origin is in the allowlist, echo it back.
+    Otherwise return the primary production origin.
+    """
+    origin = request.headers.get("origin", "")
+    if origin in AUDIT_ALLOWED_ORIGINS:
+        return origin
+    return "https://getactualprice.com"
+
+
 # ── Simple in-memory rate limiter ─────────────────────────────────────
-# For production, replace with Redis-backed rate limiting from core/rate_limit.py
 
 _rate_limit_store: dict[str, list[float]] = {}
 RATE_LIMIT_MAX = 10  # max requests
@@ -44,7 +67,6 @@ def _check_rate_limit(ip: str) -> bool:
     if ip not in _rate_limit_store:
         _rate_limit_store[ip] = []
 
-    # Prune old entries
     _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if t > window_start]
 
     if len(_rate_limit_store[ip]) >= RATE_LIMIT_MAX:
@@ -65,7 +87,6 @@ async def _store_lead(
 ) -> None:
     """
     Store the Price Check lead in the audit_requests table.
-
     Best-effort — failures are logged but don't break the scan.
     """
     try:
@@ -101,8 +122,6 @@ async def _update_lead_report(
 ) -> None:
     """
     Update the audit_requests row with the completed report data.
-
-    Called after the pipeline completes so we capture full results.
     Best-effort — failures are logged but don't break anything.
     """
     try:
@@ -112,13 +131,13 @@ async def _update_lead_report(
                     """
                     UPDATE audit_requests
                     SET
-                        store_name              = :store_name,
-                        products_scanned        = :products_scanned,
-                        competitors_found       = :competitors_found,
+                        store_name               = :store_name,
+                        products_scanned         = :products_scanned,
+                        competitors_found        = :competitors_found,
                         estimated_monthly_impact = :monthly_impact,
                         estimated_annual_impact  = :annual_impact,
-                        confidence              = :confidence,
-                        report_data             = :report_data
+                        confidence               = :confidence,
+                        report_data              = :report_data
                     WHERE email = :email
                       AND store_url = :store_url
                       AND report_data IS NULL
@@ -153,10 +172,19 @@ async def price_check_stream(
 ):
     """
     Stream a Price Check scan via Server-Sent Events.
-
     The frontend connects with EventSource and receives JSON events
     as each agent completes its work.
     """
+    allowed_origin = _cors_origin(request)
+
+    sse_headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": allowed_origin,
+        "Vary": "Origin",
+    }
+
     # Rate limiting
     client_ip = request.client.host if request.client else "unknown"
     if not _check_rate_limit(client_ip):
@@ -172,11 +200,7 @@ async def price_check_stream(
         return StreamingResponse(
             rate_limited(),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+            headers=sse_headers,
         )
 
     # Input validation
@@ -193,7 +217,7 @@ async def price_check_stream(
         return StreamingResponse(
             missing_url(),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+            headers=sse_headers,
         )
 
     if not email or not email.strip():
@@ -209,7 +233,7 @@ async def price_check_stream(
         return StreamingResponse(
             missing_email(),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+            headers=sse_headers,
         )
 
     # Store lead on scan start (best-effort)
@@ -231,12 +255,11 @@ async def price_check_stream(
                 email=email.strip(),
                 category=category.strip() if category else None,
             ):
-                # Check if client disconnected
                 if await request.is_disconnected():
                     logger.info("Client disconnected during price check")
                     return
 
-                # On completion, update the row with full report data
+                # On completion, backfill full report data
                 if (
                     event.get("agent") == "complete"
                     and event.get("status") == "done"
@@ -266,12 +289,8 @@ async def price_check_stream(
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-            "Access-Control-Allow-Origin": "*",
-        },
+        headers=sse_headers,
     )
+
 
 
