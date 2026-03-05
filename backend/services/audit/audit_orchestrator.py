@@ -18,13 +18,13 @@ from __future__ import annotations
 import logging
 from typing import AsyncGenerator
 
-from backend.schemas.price_check import (
+from schemas.price_check import (
     CompetitorMatch,
     PriceCheckOpportunity,
     PriceCheckReport,
 )
-from backend.services.audit.store_scanner import scan_store, ScannedProduct
-from backend.services.audit.report_generator import (
+from services.audit.store_scanner import scan_store, ScannedProduct
+from services.audit.report_generator import (
     CompetitorData,
     SentimentData,
     RecommendationData,
@@ -91,11 +91,9 @@ async def run_price_check(
     yield _sse("scout", "progress", "Discovering competitors...")
 
     try:
-        # Take the top 5 products by price (most impactful to compare)
         top_products = sorted(products, key=lambda p: p.price, reverse=True)[:5]
 
-        # Try to import and use the existing competitor matching service
-        from backend.services.competitor_matching.service import CompetitorMatchingService
+        from services.competitor_matching.service import CompetitorMatchingService
 
         matcher = CompetitorMatchingService()
         all_matches: list[CompetitorMatch] = []
@@ -106,7 +104,6 @@ async def run_price_check(
                 results = await matcher.search(query=search_query, max_results=3)
 
                 for r in results:
-                    # Extract price if available from the match
                     comp_price = getattr(r, "price", None) or 0.0
                     if comp_price > 0:
                         gap = ((product.price - comp_price) / comp_price) * 100
@@ -142,7 +139,7 @@ async def run_price_check(
     yield _sse("scout", "progress", "Scraping competitor prices...")
 
     try:
-        from backend.services.competitor_scraper import scrape_competitor_price
+        from services.competitor_scraper import scrape_competitor_price
 
         for match in competitor_data.matches:
             if match.competitor_price <= 0 and match.competitor_url:
@@ -161,7 +158,6 @@ async def run_price_check(
     except Exception as e:
         logger.warning("Scout: price scraping failed: %s", e)
 
-    # Filter out matches without valid prices
     competitor_data.matches = [m for m in competitor_data.matches if m.competitor_price > 0]
 
     unique_competitors = len(set(m.competitor_name for m in competitor_data.matches))
@@ -174,9 +170,10 @@ async def run_price_check(
 
     yield _sse("analyst", "started", "Searching social mentions...")
 
-    # Step 4: Reddit sentiment scan
+    scores = []
+
     try:
-        from backend.services.ingestion.reddit_service import RedditService
+        from services.ingestion.reddit_service import RedditService
 
         reddit = RedditService()
         search_terms = [store_name] + [p.title for p in products[:3]]
@@ -196,15 +193,13 @@ async def run_price_check(
             f"Found {len(all_mentions)} social mentions",
         )
 
-        # Step 5: Analyse sentiment
         yield _sse("analyst", "progress", "Analyzing sentiment signals...")
 
         if all_mentions:
             try:
-                from backend.services.sentiment_analyzer import SentimentAnalyzer
+                from services.sentiment_analyzer import SentimentAnalyzer
 
                 analyzer = SentimentAnalyzer()
-                scores = []
 
                 for mention in all_mentions:
                     text = getattr(mention, "text", None) or getattr(mention, "title", str(mention))
@@ -213,7 +208,6 @@ async def run_price_check(
                         score = getattr(result, "score", None) or getattr(result, "compound", 0.0)
                         scores.append(score)
 
-                        # Collect top mention texts
                         if len(sentiment_data.top_mentions) < 5:
                             snippet = str(text)[:150]
                             if snippet:
@@ -235,15 +229,12 @@ async def run_price_check(
             except Exception as e:
                 logger.warning("Analyst: sentiment analysis failed: %s", e)
 
-        # Step 6: Detect trend
         yield _sse("analyst", "progress", "Detecting sentiment trends...")
 
         try:
-            from backend.services.analysis.trend_detector import TrendDetector
+            from services.analysis.trend_detector import TrendDetector  # noqa: F401
 
-            detector = TrendDetector()
             if scores:
-                # Simple trend: compare first half to second half
                 mid = len(scores) // 2
                 if mid > 0:
                     first_half = sum(scores[:mid]) / mid
@@ -282,22 +273,18 @@ async def run_price_check(
 
     yield _sse("strategist", "started", "Processing pricing signals...")
 
-    # Step 7: Generate recommendations
     try:
         yield _sse("strategist", "progress", "Calculating optimal prices...")
 
         opportunities: list[PriceCheckOpportunity] = []
 
-        # Use competitor data to generate opportunities
         for match in competitor_data.matches:
             gap = match.gap_percent
 
-            # Skip small gaps (less than 5%)
             if abs(gap) < 5:
                 continue
 
             if gap > 0:
-                # Overpriced — suggest lowering toward competitor
                 suggested = round(match.your_price * (1 - min(gap, 30) / 200), 2)
                 reason = (
                     f"Priced {abs(gap):.0f}% above {match.competitor_name}. "
@@ -305,7 +292,6 @@ async def run_price_check(
                 )
                 confidence = min(80, 50 + abs(gap) * 0.5)
             else:
-                # Underpriced — suggest raising if sentiment supports it
                 sentiment_boost = max(0, sentiment_data.avg_score * 10)
                 suggested = round(match.your_price * (1 + min(abs(gap), 20) / 200), 2)
                 reason = (
@@ -317,7 +303,6 @@ async def run_price_check(
                 )
                 confidence = min(75, 40 + abs(gap) * 0.3 + sentiment_boost)
 
-            # Avoid duplicate product entries
             if not any(o.product_name == match.product_name for o in opportunities):
                 opportunities.append(
                     PriceCheckOpportunity(
@@ -329,7 +314,6 @@ async def run_price_check(
                     )
                 )
 
-        # Sort by impact (largest price difference first)
         opportunities.sort(
             key=lambda o: abs(o.suggested_price - o.current_price),
             reverse=True,
@@ -339,10 +323,8 @@ async def run_price_check(
 
         yield _sse("strategist", "progress", "Estimating revenue impact...")
 
-        # Calculate overall confidence
         if opportunities:
             avg_conf = sum(o.confidence for o in opportunities) / len(opportunities)
-            # Boost confidence if we have both competitor AND sentiment data
             if competitor_data.matches and sentiment_data.total_mentions > 0:
                 avg_conf = min(95, avg_conf + 10)
             recommendation_data.overall_confidence = round(avg_conf, 1)
@@ -353,13 +335,8 @@ async def run_price_check(
         logger.warning("Strategist: recommendation generation failed: %s", e)
         yield _sse("strategist", "progress", "Recommendation engine encountered an issue — continuing")
 
-    # Also try the full pricing engine for more sophisticated recs
     try:
-        from backend.services.pricing_engine import PricingEngine
-
-        engine = PricingEngine()
-        # If the engine provides additional insights, merge them
-        # This is a best-effort enhancement
+        from services.pricing_engine import PricingEngine  # noqa: F401
         logger.info("Strategist: PricingEngine available for enhanced analysis")
     except ImportError:
         logger.info("Strategist: PricingEngine not available, using built-in logic")
@@ -387,7 +364,6 @@ async def run_price_check(
     )
 
     yield _sse("complete", "done", "Report ready", data=report.model_dump())
-
 
 
 

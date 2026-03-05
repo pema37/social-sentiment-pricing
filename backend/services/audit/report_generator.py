@@ -16,13 +16,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from backend.schemas.price_check import (
+from schemas.price_check import (
     CompetitorMatch,
     PriceCheckOpportunity,
     PriceCheckReport,
     SentimentSummary,
 )
-from backend.services.audit.store_scanner import ScannedProduct
+from services.audit.store_scanner import ScannedProduct
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,6 @@ def _estimate_monthly_impact(opportunities: list[PriceCheckOpportunity]) -> floa
     total = 0.0
     for opp in opportunities:
         price_diff = abs(opp.suggested_price - opp.current_price)
-        # Conservative: 30 units/month baseline, scaled by confidence
         est_units = 30 * (opp.confidence / 100)
         total += price_diff * est_units
 
@@ -121,7 +120,7 @@ def _estimate_monthly_impact(opportunities: list[PriceCheckOpportunity]) -> floa
 
 def _build_sentiment_summary(data: SentimentData) -> SentimentSummary:
     """Convert raw sentiment data into the schema-friendly summary."""
-    total = data.total_mentions or 1  # avoid division by zero
+    total = data.total_mentions or 1
 
     return SentimentSummary(
         total_mentions=data.total_mentions,
@@ -152,18 +151,14 @@ def generate_report(
     This is called after all three agents (Scout, Analyst, Strategist)
     have completed their work.
     """
-    # Unique competitors
     competitor_names = set()
     for m in competitor_data.matches:
         competitor_names.add(m.competitor_name)
 
-    # Price position
     avg_pos, pos_label = _calc_price_position(products, competitor_data.matches)
 
-    # Sentiment summary
     sentiment = _build_sentiment_summary(sentiment_data)
 
-    # Revenue impact
     monthly_impact = _estimate_monthly_impact(recommendation_data.opportunities)
     annual_impact = round(monthly_impact * 12, 2)
 
@@ -174,9 +169,9 @@ def generate_report(
         competitors_found=len(competitor_names),
         avg_price_position=avg_pos,
         price_position_label=pos_label,
-        competitor_matches=competitor_data.matches[:10],  # top 10
+        competitor_matches=competitor_data.matches[:10],
         sentiment=sentiment,
-        opportunities=recommendation_data.opportunities[:10],  # top 10
+        opportunities=recommendation_data.opportunities[:10],
         estimated_monthly_impact=monthly_impact,
         estimated_annual_impact=annual_impact,
         confidence=recommendation_data.overall_confidence,

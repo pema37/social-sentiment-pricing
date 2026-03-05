@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_session
 from core.security import decode_access_token
+from db.session import get_session
 from models.user import User
 
 # OAuth2 scheme for token extraction - points to OAuth form endpoint

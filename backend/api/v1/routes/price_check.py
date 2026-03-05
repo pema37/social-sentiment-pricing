@@ -19,8 +19,8 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
-from backend.core.deps import get_db_session
-from backend.services.audit.audit_orchestrator import run_price_check
+from db.session import get_session
+from services.audit.audit_orchestrator import run_price_check
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ async def _store_lead(email: str, store_url: str, store_name: str = "") -> None:
     Best-effort — failures are logged but don't break the scan.
     """
     try:
-        async for db in get_db_session():
+        async for db in get_session():
             await db.execute(
                 text(
                     """
