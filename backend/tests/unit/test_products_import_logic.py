@@ -1,118 +1,310 @@
-import os
-import sys
+# backend/tests/unit/test_products_import_logic.py
+"""
+Unit tests for ProductImportService and ImportProductRow.
+
+Covers:
+  - ImportProductRow validation (price parsing, field normalization)
+  - parse_csv_row platform field mappings (Shopify, WooCommerce)
+  - import_products: created / skipped / updated / failed counts
+  - Duplicate SKU detection within same import batch
+  - Batch size limit enforcement
+  - _create_product_from_row field mapping
+"""
+
 import pytest
-import pytest_asyncio
-import uuid
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID, uuid4
 
-# ──────────────────────────────────────────────────────────
-# 核心黑科技：在导入业务代码前，拦截并净化所有引擎参数
-# ──────────────────────────────────────────────────────────
-import sqlalchemy
-import sqlalchemy.ext.asyncio
-from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
+from services.products.import_service import (
+    ImportProductRow,
+    ImportResult,
+    ProductImportService,
+)
 
-# 备份原始方法
-orig_create_engine = sqlalchemy.create_engine
-orig_create_async_engine = sqlalchemy.ext.asyncio.create_async_engine
 
-def filter_sqlite_args(args, kwargs):
-    """剔除 SQLite 不支持的连接池参数"""
-    if args and isinstance(args[0], str) and "sqlite" in args[0]:
-        kwargs.pop("pool_size", None)
-        kwargs.pop("max_overflow", None)
-        kwargs.pop("pool_pre_ping", None)
-    return args, kwargs
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-# 同时强行替换同步和异步方法，彻底堵死参数报错的源头
-sqlalchemy.create_engine = lambda *a, **k: orig_create_engine(*filter_sqlite_args(a, k)[0], **filter_sqlite_args(a, k)[1])
-sqlalchemy.ext.asyncio.create_async_engine = lambda *a, **k: orig_create_async_engine(*filter_sqlite_args(a, k)[0], **filter_sqlite_args(a, k)[1])
+TEST_USER_ID = UUID("123e4567-e89b-12d3-a456-426614174000")
 
-# 教会 SQLite 认识 Postgres 专有类型
-SQLiteTypeCompiler.visit_JSONB = lambda self, type_, **kw: self.visit_JSON(type_, **kw)
-SQLiteTypeCompiler.visit_ARRAY = lambda self, type_, **kw: "TEXT"
 
-# ──────────────────────────────────────────────────────────
-# 环境与依赖配置
-# ──────────────────────────────────────────────────────────
-os.environ["GEMINI_API_KEY"] = "fake"
-os.environ["OPENAI_API_KEY"] = "fake"
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:" 
+def make_row(**kwargs) -> ImportProductRow:
+    defaults = {"name": "Test Product", "base_price": Decimal("29.99"), "sku": "TEST-001"}
+    defaults.update(kwargs)
+    return ImportProductRow(**defaults)
 
-# 关键：必须在上面的补丁逻辑之后再导入 app
-from httpx import AsyncClient, ASGITransport 
-from sqlalchemy import select
-from main import app
-from db.session import get_session
-from models import Product, User 
-from api.v1.routes.auth import get_current_user
-from core.rate_limit import limiter
 
-# 创建内存数据库工厂
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-test_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-test_session_factory = async_sessionmaker(test_engine, expire_on_commit=False)
+def make_service(existing_skus: set = None) -> ProductImportService:
+    """Create a ProductImportService with a mocked async session."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    service = ProductImportService(session)
+    # Patch _get_existing_skus to avoid DB calls
+    service._get_existing_skus = AsyncMock(return_value=existing_skus or set())
+    return service
 
-async def mock_get_session():
-    async with test_session_factory() as session:
-        yield session
 
-async def mock_get_current_user():
-    # 修复 'str' object has no attribute 'hex'：提供真实的 UUID
-    test_uuid = uuid.UUID("123e4567-e89b-12d3-a456-426614174000")
-    return User(id=test_uuid, email="test@example.com")
+# ── ImportProductRow Validation ────────────────────────────────────────────────
 
-@pytest_asyncio.fixture(autouse=True)
-async def setup_database():
-    """在内存中生成所有表结构"""
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Product.metadata.create_all) 
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Product.metadata.drop_all)
+class TestImportProductRow:
 
-@pytest_asyncio.fixture
-async def client():
-    # 彻底关闭干扰项
-    limiter.enabled = False 
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-    app.dependency_overrides[get_session] = mock_get_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-    app.dependency_overrides.clear()
+    def test_basic_creation(self):
+        row = ImportProductRow(name="Widget", base_price=Decimal("19.99"))
+        assert row.name == "Widget"
+        assert row.base_price == Decimal("19.99")
 
-@pytest_asyncio.fixture
-async def db_session():
-    async with test_session_factory() as session:
-        yield session
+    def test_price_from_float(self):
+        row = ImportProductRow(name="Widget", base_price=19.99)
+        assert row.base_price == Decimal("19.99")
 
-@pytest.fixture
-def normal_user_token_headers():
-    return {"Authorization": "Bearer hackathon-token"}
+    def test_price_from_string(self):
+        row = ImportProductRow(name="Widget", base_price="29.99")
+        assert row.base_price == Decimal("29.99")
 
-# ──────────────────────────────────────────────────────────
-# TEST: 核心逻辑检查
-# ──────────────────────────────────────────────────────────
-@pytest.mark.asyncio
-async def test_import_products_success(client, db_session, normal_user_token_headers):
-    payload = {
-        "products": [
-            {"name": "Final Victory A", "base_price": 10.0, "sku": "VIC-001"},
-            {"name": "Final Victory B", "base_price": 20.0, "sku": "VIC-002"}
+    def test_price_strips_dollar_sign(self):
+        row = ImportProductRow(name="Widget", base_price="$49.99")
+        assert row.base_price == Decimal("49.99")
+
+    def test_price_strips_euro_sign(self):
+        row = ImportProductRow(name="Widget", base_price="€49.99")
+        assert row.base_price == Decimal("49.99")
+
+    def test_price_strips_pound_sign(self):
+        row = ImportProductRow(name="Widget", base_price="£49.99")
+        assert row.base_price == Decimal("49.99")
+
+    def test_price_handles_comma_separator(self):
+        row = ImportProductRow(name="Widget", base_price="1,299.99")
+        assert row.base_price == Decimal("1299.99")
+
+    def test_invalid_price_raises(self):
+        with pytest.raises(Exception):
+            ImportProductRow(name="Widget", base_price="not-a-price")
+
+    def test_zero_price_raises(self):
+        with pytest.raises(Exception):
+            ImportProductRow(name="Widget", base_price=0)
+
+    def test_negative_price_raises(self):
+        with pytest.raises(Exception):
+            ImportProductRow(name="Widget", base_price=-5.00)
+
+    def test_empty_name_raises(self):
+        with pytest.raises(Exception):
+            ImportProductRow(name="", base_price=10.00)
+
+    def test_optional_fields_default_none(self):
+        row = ImportProductRow(name="Widget", base_price=10.00)
+        assert row.sku is None
+        assert row.description is None
+        assert row.category is None
+        assert row.image_url is None
+
+    def test_sku_max_length(self):
+        with pytest.raises(Exception):
+            ImportProductRow(name="Widget", base_price=10.00, sku="X" * 101)
+
+    def test_stock_quantity_non_negative(self):
+        with pytest.raises(Exception):
+            ImportProductRow(name="Widget", base_price=10.00, stock_quantity=-1)
+
+
+# ── parse_csv_row ──────────────────────────────────────────────────────────────
+
+class TestParseCsvRow:
+
+    def test_standard_fields(self):
+        row = ProductImportService.parse_csv_row({
+            "name": "Standard Widget",
+            "base_price": "19.99",
+            "sku": "STD-001",
+        })
+        assert row.name == "Standard Widget"
+        assert row.base_price == Decimal("19.99")
+        assert row.sku == "STD-001"
+
+    def test_shopify_field_names(self):
+        row = ProductImportService.parse_csv_row({
+            "Title": "Shopify Product",
+            "Variant Price": "39.99",
+            "Variant SKU": "SHOP-001",
+            "Body (HTML)": "<p>Description</p>",
+            "Type": "Apparel",
+            "Image Src": "https://cdn.shopify.com/img.jpg",
+        })
+        assert row.name == "Shopify Product"
+        assert row.base_price == Decimal("39.99")
+        assert row.sku == "SHOP-001"
+        assert row.description == "<p>Description</p>"
+        assert row.category == "Apparel"
+        assert row.image_url == "https://cdn.shopify.com/img.jpg"
+
+    def test_woocommerce_field_names(self):
+        row = ProductImportService.parse_csv_row({
+            "Name": "WooCommerce Product",
+            "regular_price": "24.99",
+            "SKU": "WOO-001",
+            "Description": "A great product",
+            "Category": "Electronics",
+        })
+        assert row.name == "WooCommerce Product"
+        assert row.base_price == Decimal("24.99")
+        assert row.sku == "WOO-001"
+
+    def test_missing_optional_fields_are_none(self):
+        row = ProductImportService.parse_csv_row({
+            "name": "Minimal Product",
+            "price": "9.99",
+        })
+        assert row.sku is None
+        assert row.description is None
+        assert row.category is None
+        assert row.image_url is None
+
+
+# ── _create_product_from_row ───────────────────────────────────────────────────
+
+class TestCreateProductFromRow:
+
+    def test_basic_product_creation(self):
+        service = make_service()
+        row = make_row(name="  Widget  ", sku="  W-001  ")
+        product = service._create_product_from_row(TEST_USER_ID, row)
+
+        assert product.name == "Widget"
+        assert product.sku == "W-001"
+        assert product.user_id == TEST_USER_ID
+        assert product.base_price == row.base_price
+        assert product.current_price == row.base_price
+        assert product.is_active is True
+        assert product.auto_pricing_enabled is False
+        assert product.keywords == []
+
+    def test_none_sku_stays_none(self):
+        service = make_service()
+        row = make_row(sku=None)
+        product = service._create_product_from_row(TEST_USER_ID, row)
+        assert product.sku is None
+
+    def test_optional_fields_stripped(self):
+        service = make_service()
+        row = make_row(
+            description="  A great product  ",
+            category="  Electronics  ",
+            image_url="  https://example.com/img.jpg  ",
+        )
+        product = service._create_product_from_row(TEST_USER_ID, row)
+        assert product.description == "A great product"
+        assert product.category == "Electronics"
+        assert product.image_url == "https://example.com/img.jpg"
+
+
+# ── import_products ────────────────────────────────────────────────────────────
+
+class TestImportProducts:
+
+    @pytest.mark.asyncio
+    async def test_creates_new_products(self):
+        service = make_service()
+        rows = [
+            make_row(name="Product A", sku="A-001"),
+            make_row(name="Product B", sku="B-001"),
         ]
-    }
+        result = await service.import_products(TEST_USER_ID, rows)
 
-    # 执行导入
-    response = await client.post("/api/v1/products/import", json=payload, headers=normal_user_token_headers)
-    
-    # 如果还是 500，这里会捕获详情
-    if response.status_code != 201:
-        print(f"\n❌ FAILED AGAIN: {response.json()}")
+        assert result.created == 2
+        assert result.skipped == 0
+        assert result.failed == 0
+        assert service.session.commit.called
 
-    assert response.status_code == 201
-    data = response.json()
-    assert data["created"] == 2
-    
-    # 验证数据持久化
-    query = select(Product).where(Product.sku.in_(["VIC-001", "VIC-002"]))
-    result = await db_session.execute(query)
-    assert len(result.scalars().all()) == 2
+    @pytest.mark.asyncio
+    async def test_skips_duplicate_skus_by_default(self):
+        service = make_service(existing_skus={"EXISTING-001"})
+        rows = [
+            make_row(name="New Product", sku="NEW-001"),
+            make_row(name="Duplicate", sku="EXISTING-001"),
+        ]
+        result = await service.import_products(TEST_USER_ID, rows)
+
+        assert result.created == 1
+        assert result.skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_no_duplicates_within_same_batch(self):
+        service = make_service()
+        rows = [
+            make_row(name="Product A", sku="SAME-SKU"),
+            make_row(name="Product B", sku="SAME-SKU"),
+        ]
+        result = await service.import_products(TEST_USER_ID, rows)
+
+        assert result.created == 1
+        assert result.skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_empty_import_returns_zero_counts(self):
+        service = make_service()
+        result = await service.import_products(TEST_USER_ID, [])
+
+        assert result.created == 0
+        assert result.skipped == 0
+        assert result.failed == 0
+        assert not service.session.commit.called
+
+    @pytest.mark.asyncio
+    async def test_batch_size_limit_raises(self):
+        service = make_service()
+        rows = [make_row(name=f"Product {i}", sku=f"SKU-{i}") for i in range(1001)]
+
+        with pytest.raises(ValueError, match="Maximum"):
+            await service.import_products(TEST_USER_ID, rows)
+
+    @pytest.mark.asyncio
+    async def test_exact_batch_size_limit_passes(self):
+        service = make_service()
+        rows = [make_row(name=f"Product {i}", sku=f"SKU-{i}") for i in range(1000)]
+        result = await service.import_products(TEST_USER_ID, rows)
+        assert result.created == 1000
+
+    @pytest.mark.asyncio
+    async def test_commit_failure_rolls_back(self):
+        service = make_service()
+        service.session.commit = AsyncMock(side_effect=Exception("DB error"))
+        rows = [make_row()]
+
+        with pytest.raises(Exception, match="DB error"):
+            await service.import_products(TEST_USER_ID, rows)
+
+        assert service.session.rollback.called
+
+    @pytest.mark.asyncio
+    async def test_products_without_sku_always_created(self):
+        service = make_service()
+        rows = [
+            make_row(name="No SKU A", sku=None),
+            make_row(name="No SKU B", sku=None),
+        ]
+        result = await service.import_products(TEST_USER_ID, rows)
+        assert result.created == 2
+
+    @pytest.mark.asyncio
+    async def test_total_processed_property(self):
+        result = ImportResult(created=3, skipped=1, failed=1)
+        assert result.total_processed == 5
+
+    @pytest.mark.asyncio
+    async def test_errors_capped_at_max(self):
+        service = make_service()
+        # Patch _create_product_from_row to always raise
+        service._create_product_from_row = MagicMock(side_effect=Exception("bad row"))
+        rows = [make_row(name=f"Product {i}", sku=f"SKU-{i}") for i in range(100)]
+
+        result = await service.import_products(TEST_USER_ID, rows)
+
+        assert result.failed == 100
+        assert len(result.errors) <= ProductImportService.MAX_ERRORS
+
+
+        

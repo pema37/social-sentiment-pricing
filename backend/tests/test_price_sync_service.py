@@ -48,6 +48,7 @@ class _FakeProductLink:
 
 # Force-set UNCONDITIONALLY — even if another test already loaded the module
 sys.modules["models.integration"].Integration = _FakeIntegration
+sys.modules["models.integration"].ProductIntegrationLink = _FakeProductLink
 sys.modules["models.product_link"].ProductLink = _FakeProductLink
 
 import pytest
@@ -271,6 +272,7 @@ class TestGetActiveLink:
         import types
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
+        _im.ProductIntegrationLink = _FakeProductLink
         _plm = types.ModuleType("models.product_link")
         _plm.ProductLink = _FakeProductLink
 
@@ -300,6 +302,7 @@ class TestGetActiveLink:
         import types
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
+        _im.ProductIntegrationLink = _FakeProductLink
         _plm = types.ModuleType("models.product_link")
         _plm.ProductLink = _FakeProductLink
 
@@ -320,6 +323,7 @@ class TestGetActiveLink:
             svc = PriceSyncService(db)
             result = await svc._get_active_link(PRODUCT_ID, USER_ID)
             assert result == (None, None)
+
 
 # ============================================================
 # 5. _fetch_from_platform
@@ -529,3 +533,6 @@ class TestFetchWooCommercePrice:
         await svc._fetch_woocommerce_price(link, integ)
         mock_service.get_product_price.assert_awaited_once_with("woo-999")
 
+
+
+        

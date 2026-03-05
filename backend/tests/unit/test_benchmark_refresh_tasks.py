@@ -47,11 +47,10 @@ sys.modules.setdefault("core.db.session", _mock_core_db)
 if "workers.celery_app" not in sys.modules:
     _mock_celery_mod = types.ModuleType("workers.celery_app")
     _mock_celery_app = MagicMock()
-    # celery_app.task() should return a decorator that returns the function as-is
     _mock_celery_app.task = lambda *args, **kwargs: lambda fn: fn
     _mock_celery_mod.celery_app = _mock_celery_app
     sys.modules["workers.celery_app"] = _mock_celery_mod
-    _saved["workers.celery_app"] = None  # Mark for cleanup
+    _saved["workers.celery_app"] = None
 
 # Mock core.config
 if "core.config" not in sys.modules:
@@ -78,6 +77,12 @@ from workers.tasks.benchmark_refresh_tasks import (
     MATERIALIZED_VIEWS,
 )
 
+# ══════════════════════════════════════════════════════════════════
+# PATCH PATH (no "backend." prefix — pytest runs from inside backend/)
+# ══════════════════════════════════════════════════════════════════
+
+PATCH_PATH = "workers.tasks.benchmark_refresh_tasks.get_task_session_maker"
+
 
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
@@ -96,7 +101,6 @@ def _mock_session_maker(execute_side_effect=None):
     mock_db.commit = AsyncMock()
     mock_db.rollback = AsyncMock()
 
-    # session_maker() returns an async context manager
     mock_factory = MagicMock()
     mock_ctx = AsyncMock()
     mock_ctx.__aenter__ = AsyncMock(return_value=mock_db)
@@ -131,20 +135,7 @@ class TestRefreshSuccess:
     async def test_refreshes_all_views_concurrently(self):
         mock_factory, mock_db = _mock_session_maker()
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory.return_value,
-        ):
-            # get_task_session_maker returns session_maker
-            # session_maker() returns async context manager
-            # We need to patch so that get_task_session_maker() returns our factory
-            pass
-
-        # Direct approach: patch at module level
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             result = await _refresh_benchmark_views()
 
         assert len(result) == 3
@@ -156,23 +147,16 @@ class TestRefreshSuccess:
     async def test_execute_called_for_each_view(self):
         mock_factory, mock_db = _mock_session_maker()
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             await _refresh_benchmark_views()
 
-        # 3 views = 3 execute calls (one REFRESH CONCURRENTLY each)
         assert mock_db.execute.call_count == 3
 
     @pytest.mark.asyncio
     async def test_commits_after_each_view(self):
         mock_factory, mock_db = _mock_session_maker()
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             await _refresh_benchmark_views()
 
         assert mock_db.commit.call_count == 3
@@ -187,23 +171,15 @@ class TestConcurrentFallback:
     @pytest.mark.asyncio
     async def test_falls_back_to_regular_refresh(self):
         """When CONCURRENTLY fails, falls back to regular REFRESH."""
-        call_count = 0
-
         async def _execute(stmt, *args, **kwargs):
-            nonlocal call_count
-            call_count += 1
             stmt_str = str(stmt)
             if "CONCURRENTLY" in stmt_str:
                 raise Exception("cannot refresh concurrently: no unique index")
-            # Regular refresh succeeds
             return MagicMock()
 
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             result = await _refresh_benchmark_views()
 
         for view_name in MATERIALIZED_VIEWS:
@@ -218,13 +194,9 @@ class TestConcurrentFallback:
 
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             await _refresh_benchmark_views()
 
-        # Rollback called once per view (3 views, each concurrent fails)
         assert mock_db.rollback.call_count == 3
 
 
@@ -241,10 +213,7 @@ class TestTotalFailure:
 
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             result = await _refresh_benchmark_views()
 
         for view_name in MATERIALIZED_VIEWS:
@@ -265,10 +234,7 @@ class TestViewStats:
         mock_factory, mock_db = _mock_session_maker()
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             result = await _get_view_stats()
 
         assert len(result) == 3
@@ -282,10 +248,7 @@ class TestViewStats:
 
         mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
 
-        with patch(
-            "backend.workers.tasks.benchmark_refresh_tasks.get_task_session_maker",
-            return_value=mock_factory,
-        ):
+        with patch(PATCH_PATH, return_value=mock_factory):
             result = await _get_view_stats()
 
         for view_name in MATERIALIZED_VIEWS:
@@ -314,6 +277,7 @@ for _key, _orig in _saved.items():
         sys.modules.pop(_key, None)
     else:
         sys.modules[_key] = _orig
+
 
 
         
