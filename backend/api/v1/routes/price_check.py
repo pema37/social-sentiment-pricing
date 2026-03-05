@@ -56,9 +56,15 @@ def _check_rate_limit(ip: str) -> bool:
 
 # ── Lead storage ──────────────────────────────────────────────────────
 
-async def _store_lead(email: str, store_url: str, store_name: str = "") -> None:
+async def _store_lead(
+    email: str,
+    store_url: str,
+    store_name: str = "",
+    category: str | None = None,
+    ip_hash: str | None = None,
+) -> None:
     """
-    Store the Price Check lead in the prospect_audit_events table.
+    Store the Price Check lead in the audit_requests table.
 
     Best-effort — failures are logged but don't break the scan.
     """
@@ -67,17 +73,18 @@ async def _store_lead(email: str, store_url: str, store_name: str = "") -> None:
             await db.execute(
                 text(
                     """
-                    INSERT INTO prospect_audit_events
-                        (email, store_url, store_name, event_type, created_at)
+                    INSERT INTO audit_requests
+                        (email, store_url, store_name, category, ip_hash, created_at)
                     VALUES
-                        (:email, :store_url, :store_name, 'price_check_started', :now)
-                    ON CONFLICT DO NOTHING
+                        (:email, :store_url, :store_name, :category, :ip_hash, :now)
                     """
                 ),
                 {
                     "email": email,
                     "store_url": store_url,
                     "store_name": store_name,
+                    "category": category,
+                    "ip_hash": ip_hash,
                     "now": datetime.now(timezone.utc),
                 },
             )
@@ -85,6 +92,54 @@ async def _store_lead(email: str, store_url: str, store_name: str = "") -> None:
             logger.info("Stored price check lead: %s / %s", email, store_url)
     except Exception as e:
         logger.warning("Failed to store lead: %s", e)
+
+
+async def _update_lead_report(
+    email: str,
+    store_url: str,
+    report: dict,
+) -> None:
+    """
+    Update the audit_requests row with the completed report data.
+
+    Called after the pipeline completes so we capture full results.
+    Best-effort — failures are logged but don't break anything.
+    """
+    try:
+        async for db in get_session():
+            await db.execute(
+                text(
+                    """
+                    UPDATE audit_requests
+                    SET
+                        store_name              = :store_name,
+                        products_scanned        = :products_scanned,
+                        competitors_found       = :competitors_found,
+                        estimated_monthly_impact = :monthly_impact,
+                        estimated_annual_impact  = :annual_impact,
+                        confidence              = :confidence,
+                        report_data             = :report_data
+                    WHERE email = :email
+                      AND store_url = :store_url
+                      AND report_data IS NULL
+                    """
+                ),
+                {
+                    "store_name": report.get("store_name", ""),
+                    "products_scanned": report.get("products_scanned"),
+                    "competitors_found": report.get("competitors_found"),
+                    "monthly_impact": report.get("estimated_monthly_impact"),
+                    "annual_impact": report.get("estimated_annual_impact"),
+                    "confidence": report.get("confidence"),
+                    "report_data": json.dumps(report),
+                    "email": email,
+                    "store_url": store_url,
+                },
+            )
+            await db.commit()
+            logger.info("Updated report data for: %s / %s", email, store_url)
+    except Exception as e:
+        logger.warning("Failed to update lead report: %s", e)
 
 
 # ── SSE streaming endpoint ────────────────────────────────────────────
@@ -157,9 +212,14 @@ async def price_check_stream(
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
-    # Store lead (best-effort, don't block the scan)
+    # Store lead on scan start (best-effort)
     try:
-        await _store_lead(email.strip(), store_url.strip())
+        await _store_lead(
+            email=email.strip(),
+            store_url=store_url.strip(),
+            category=category.strip() if category else None,
+            ip_hash=client_ip,
+        )
     except Exception:
         pass
 
@@ -175,6 +235,21 @@ async def price_check_stream(
                 if await request.is_disconnected():
                     logger.info("Client disconnected during price check")
                     return
+
+                # On completion, update the row with full report data
+                if (
+                    event.get("agent") == "complete"
+                    and event.get("status") == "done"
+                    and event.get("data")
+                ):
+                    try:
+                        await _update_lead_report(
+                            email=email.strip(),
+                            store_url=store_url.strip(),
+                            report=event["data"],
+                        )
+                    except Exception:
+                        pass
 
                 yield f"data: {json.dumps(event)}\n\n"
 
@@ -198,7 +273,5 @@ async def price_check_stream(
             "Access-Control-Allow-Origin": "*",
         },
     )
-
-
 
 
