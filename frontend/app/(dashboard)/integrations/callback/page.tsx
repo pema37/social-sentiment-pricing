@@ -42,17 +42,17 @@ export default function OAuthCallbackPage() {
 
   /**
    * Process the OAuth callback
-   * Extracts params and sends to backend for token exchange
+   * Extracts params and sends to backend for token exchange,
+   * then triggers an initial full product sync.
    */
   const processCallback = useCallback(async () => {
-    // Extract OAuth params from URL
     const code = searchParams.get('code');
     const oauthState = searchParams.get('state');
     const shop = searchParams.get('shop');
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
 
-    // Handle OAuth error from provider
+    // 1. Handle OAuth error from provider FIRST
     if (error) {
       setState({
         status: 'error',
@@ -61,7 +61,7 @@ export default function OAuthCallbackPage() {
       return;
     }
 
-    // Validate required params
+    // 2. Validate required params
     if (!code || !oauthState) {
       setState({
         status: 'error',
@@ -71,28 +71,32 @@ export default function OAuthCallbackPage() {
     }
 
     try {
-      setState({
-        status: 'loading',
-        message: 'Exchanging authorization code...',
-      });
+      setState({ status: 'loading', message: 'Exchanging authorization code...' });
 
-      // Send to backend to exchange code for access token
+      // 3. Exchange code for access token
       const response = await api.post<OAuthCallbackResponse>(
         '/api/v1/integrations/oauth/callback',
-        {
-          code,
-          state: oauthState,
-          shop, // Shopify includes this
-        }
+        { code, state: oauthState, shop }
       );
 
+      // 4. Trigger initial full product sync (non-fatal if it fails)
+      setState({ status: 'loading', message: 'Syncing products from your store...' });
+      try {
+        await api.post(`/api/v1/integrations/${response.integration_id}/sync`, {
+          sync_type: 'full',
+        });
+      } catch (syncErr) {
+        // Non-fatal: integration is connected, sync can be retried manually
+        console.error('Initial sync failed:', syncErr);
+      }
+
+      // 5. Show success and redirect
       setState({
         status: 'success',
         message: `Successfully connected ${response.store_url}!`,
         platform: response.platform,
       });
 
-      // Redirect to integrations page with success message
       setTimeout(() => {
         router.push(
           `/integrations?connected=true&platform=${response.platform}&message=${encodeURIComponent(response.message)}`
@@ -101,16 +105,9 @@ export default function OAuthCallbackPage() {
 
     } catch (err) {
       console.error('OAuth callback error:', err);
-      
-      // Extract error message
-      let errorMessage = 'Failed to complete connection. Please try again.';
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-
       setState({
         status: 'error',
-        message: errorMessage,
+        message: err instanceof Error ? err.message : 'Failed to complete connection. Please try again.',
       });
     }
   }, [searchParams, router]);
@@ -241,3 +238,7 @@ function ErrorIcon() {
     </div>
   );
 }
+
+
+
+
