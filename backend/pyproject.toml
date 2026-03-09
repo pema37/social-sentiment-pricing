@@ -28,6 +28,11 @@ addopts = [
     "--timeout=60",
 ]
 
+# Fix: prevents pydantic plugin scan hang on Python 3.13 (importlib.metadata timeout)
+env = [
+    "PYDANTIC_DISABLE_PLUGINS=1",
+]
+
 # Ignore directories
 norecursedirs = [
     ".git",
@@ -57,4 +62,6 @@ exclude_lines = [
 ]
 fail_under = 40    # Raise as coverage grows — target 70%+ by Phase 5
 show_missing = true
+
+
 

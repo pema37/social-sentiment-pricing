@@ -2,7 +2,7 @@
 
 /**
  * Server-side auth guard
- * 
+ *
  * Prevents the "flash of unauthorized content" — where unauthenticated users
  * briefly see the dashboard before the client-side redirect kicks in.
  *
@@ -19,6 +19,9 @@
  * Shopify embedded apps skip this entirely — they use App Bridge session
  * tokens, not cookies or localStorage. The matcher config below excludes
  * the Shopify auth callback routes.
+ *
+ * FIXED (2026-03-08): /integrations/claim is a public route — it handles
+ * its own auth after the Shopify install flow. Middleware must not block it.
  */
 
 import { NextResponse } from 'next/server';
@@ -33,6 +36,7 @@ const PUBLIC_ROUTES = [
   '/auth/callback',
   '/api/shopify',
   '/api/auth',
+  '/integrations/claim', // Shopify post-install claim flow — handles own auth
 ];
 
 function isPublicRoute(pathname: string): boolean {
@@ -56,28 +60,25 @@ export function middleware(request: NextRequest) {
   const hasAuth = request.cookies.get('ssp_auth')?.value === '1';
 
   if (!hasAuth) {
-    // Store the attempted URL so login page can redirect back
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
+
+    // Preserve the full path + search so login can redirect back after auth.
+    // Used by the Shopify install flow: after OAuth the backend redirects to
+    // /login?redirect=/integrations/claim?integration_id=xxx
+    // The login page reads this param and navigates there after auth succeeds.
+    const redirectTarget = pathname + request.nextUrl.search;
+    loginUrl.searchParams.set('redirect', redirectTarget);
+
     return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
 }
 
-// Only run middleware on page routes — skip static files, API routes,
-// Next.js internals, and assets
 export const config = {
   matcher: [
-    /*
-     * Match all paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     * - public folder assets
-     * - API routes (handled by their own auth)
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
+
 

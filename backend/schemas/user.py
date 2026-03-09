@@ -2,7 +2,8 @@
 
 from typing import Optional
 from sqlmodel import SQLModel
-from pydantic import EmailStr
+from pydantic import EmailStr, ConfigDict
+
 
 # BASE USER (shared fields)
 class UserBase(SQLModel):
@@ -26,8 +27,7 @@ class UserRead(SQLModel):
     role: str
     is_active: bool
 
-    class Config:
-        from_attributes = True  
+    model_config = ConfigDict(from_attributes=True)
 
 
 # UPDATE CURRENT USER (partial update)
@@ -37,5 +37,7 @@ class UserUpdateMe(SQLModel):
     full_name: Optional[str] = None
     password: Optional[str] = None  # plain password to be hashed
 
-    class Config:         
-        from_attributes = True   
+    model_config = ConfigDict(from_attributes=True)
+
+
+    

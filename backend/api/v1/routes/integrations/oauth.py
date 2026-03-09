@@ -4,13 +4,17 @@ UPDATED (2026-02-20): After successful Shopify OAuth, redirect to billing
 plan selection instead of straight to dashboard. This ensures new installs
 are prompted to pick a paid plan (Shopify App Store compliance requirement).
 
-FIXED (2026-03-08): Added claim endpoint to attach orphaned integrations
-(user_id=None) to authenticated users after install flow.
+FIXED (2026-03-08): Permanent install flow fix:
+- Embedded installs (host param present) → billing page
+- Direct installs while logged in (user_id set, no host) → integrations page
+- Direct installs while logged out (user_id None) → login page with claim redirect
+- Added /claim endpoint to attach orphaned integrations to authenticated users
 """
 
 import logging
 import secrets
 from datetime import datetime, UTC
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -116,25 +120,28 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_session),
 ):
     """
-    OAuth callback - handles both authenticated flow and fresh Shopify installs.
+    OAuth callback — three install paths:
 
-    UPDATED (2026-02-20): After successful Shopify OAuth, redirect to billing
-    plan selection page instead of dashboard. This is required for Shopify App
-    Store compliance — merchants must be able to select a plan after install.
+    1. Embedded App Store install (host param present):
+       → billing page (Shopify compliance requirement)
 
-    For reinstalls where a billing subscription already exists, Shopify
-    automatically reactivates it, so the billing page will show the active plan.
+    2. Direct install URL, merchant was logged in (user_id set, no host):
+       → /integrations?connected=true (integration is fully linked)
+
+    3. Direct install URL, merchant was NOT logged in (user_id=None, no host):
+       → /login?redirect=/integrations/claim?integration_id=xxx
+       Frontend login page redirects after auth, claim page links the integration.
     """
 
     integration = None
 
-    # Try finding by state (existing authenticated flow)
+    # 1. Try state match first (most reliable — set by shopify_install.py)
     if state:
         stmt = select(Integration).where(Integration.oauth_state == state)
         result = await db.execute(stmt)
         integration = result.scalars().first()
 
-    # Fresh Shopify install — no state match, find or create by shop
+    # 2. Fall back to shop URL lookup
     if not integration and shop:
         stmt = select(Integration).where(
             Integration.platform == EcommercePlatform.SHOPIFY,
@@ -143,21 +150,17 @@ async def oauth_callback(
         result = await db.execute(stmt)
         integration = result.scalars().first()
 
-        if not integration:
-            # Create new integration for this shop (user linked later via /claim)
-            integration = Integration(
-                platform=EcommercePlatform.SHOPIFY,
-                store_url=shop,
-                store_name=shop.replace(".myshopify.com", ""),
-                status=IntegrationStatus.DISCONNECTED,
-                access_token_encrypted=b"pending",
-            )
-            db.add(integration)
-            await db.flush()
-
+    # 3. Create stub for brand-new installs with no prior record
     if not integration:
-        error_url = f"{settings.FRONTEND_URL}/integrations?error=invalid_state&message=OAuth+session+expired+or+invalid"
-        return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
+        integration = Integration(
+            platform=EcommercePlatform.SHOPIFY,
+            store_url=shop,
+            store_name=shop.replace(".myshopify.com", ""),
+            status=IntegrationStatus.DISCONNECTED,
+            access_token_encrypted=b"pending",
+        )
+        db.add(integration)
+        await db.flush()
 
     service = get_ecommerce_service(integration.platform)
     redirect_uri = f"{settings.BACKEND_URL}/api/v1/integrations/oauth/callback"
@@ -177,10 +180,12 @@ async def oauth_callback(
 
         error_url = (
             f"{settings.FRONTEND_URL}/integrations"
-            f"?error=oauth_failed&message={oauth_result.error}&platform={integration.platform.value}"
+            f"?error=oauth_failed&message={quote(oauth_result.error)}"
+            f"&platform={integration.platform.value}"
         )
         return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
 
+    # OAuth succeeded — store token and activate
     integration.access_token_encrypted = encrypt_token(oauth_result.access_token)
     if oauth_result.refresh_token:
         integration.refresh_token_encrypted = encrypt_token(oauth_result.refresh_token)
@@ -195,8 +200,12 @@ async def oauth_callback(
     db.add(integration)
     await db.commit()
 
-    logger.info(f"OAuth successful for integration {integration.id} ({integration.platform.value})")
+    logger.info(
+        f"OAuth successful for integration {integration.id} "
+        f"({integration.platform.value}) user_id={integration.user_id}"
+    )
 
+    # Register webhooks (non-blocking)
     try:
         webhook_service = WebhookRegistrationService(db)
         results = await webhook_service.register_webhooks(integration.id)
@@ -206,32 +215,31 @@ async def oauth_callback(
         logger.warning(f"Auto webhook registration failed: {e}")
 
     # =========================================================================
-    # REDIRECT LOGIC
-    # If user_id is None (installed via App Store without being logged in),
-    # redirect to claim flow so frontend can attach to authenticated user.
-    # Otherwise Shopify → billing, WooCommerce → dashboard.
+    # REDIRECT LOGIC — permanent, covers all three install paths
     # =========================================================================
 
-    if integration.user_id is None:
+    if host:
+        # Path 1: Embedded App Store install — billing required by Shopify
         success_url = (
-            f"{settings.FRONTEND_URL}/integrations/claim"
-            f"?integration_id={integration.id}&shop={shop}&installed=true"
+            f"{settings.FRONTEND_URL}/settings/billing"
+            f"?shop={shop}&host={host}&installed=true&integration_id={integration.id}"
         )
-    elif integration.platform == EcommercePlatform.SHOPIFY:
-        if host:
-            success_url = (
-                f"{settings.FRONTEND_URL}/settings/billing"
-                f"?shop={shop}&host={host}&installed=true&integration_id={integration.id}"
-            )
-        else:
-            success_url = (
-                f"{settings.FRONTEND_URL}/settings/billing"
-                f"?shop={shop}&installed=true&integration_id={integration.id}"
-            )
-    else:
+
+    elif integration.user_id is not None:
+        # Path 2: Direct install, merchant was already logged in — fully linked
         success_url = (
             f"{settings.FRONTEND_URL}/integrations"
-            f"?connected=true&integration_id={integration.id}&platform={integration.platform.value}"
+            f"?connected=true&integration_id={integration.id}"
+            f"&platform={integration.platform.value}"
+        )
+
+    else:
+        # Path 3: Direct install, merchant was NOT logged in — needs to claim
+        # Encode the claim path so login page can redirect there after auth
+        claim_path = f"/integrations/claim?integration_id={integration.id}&platform={integration.platform.value}"
+        success_url = (
+            f"{settings.FRONTEND_URL}/login"
+            f"?redirect={quote(claim_path)}"
         )
 
     return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
@@ -319,9 +327,8 @@ async def claim_integration(
     """
     Attach an orphaned integration (user_id=None) to the authenticated user.
 
-    Called after App Store installs where the merchant wasn't logged in
-    during the OAuth flow. Frontend hits this after login to link the
-    integration to the correct account.
+    Called after App Store installs where the merchant was not logged in
+    during the OAuth flow. The login page redirects here after auth.
     """
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -345,6 +352,4 @@ async def claim_integration(
     logger.info(f"Integration {integration_id} claimed by user {current_user.id}")
 
     return {"ok": True, "integration_id": str(integration.id)}
-
-
 
