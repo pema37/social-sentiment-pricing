@@ -62,7 +62,7 @@ class ProductSyncService:
         """Get user's active integration, optionally filtered by platform."""
         stmt = select(Integration).where(
             Integration.user_id == user_id,
-            Integration.status == IntegrationStatus.ACTIVE,
+            Integration.status.in_([IntegrationStatus.ACTIVE, IntegrationStatus.ERROR]),
         )
         if platform:
             stmt = stmt.where(Integration.platform == platform)
@@ -74,7 +74,7 @@ class ProductSyncService:
         """Get all active integrations for a user."""
         stmt = select(Integration).where(
             Integration.user_id == user_id,
-            Integration.status == IntegrationStatus.ACTIVE,
+            Integration.status.in_([IntegrationStatus.ACTIVE, IntegrationStatus.ERROR]),
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())

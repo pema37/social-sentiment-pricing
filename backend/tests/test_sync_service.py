@@ -47,6 +47,7 @@ _async_mod.AsyncSession = MagicMock()
 
 class _FakeIntegrationStatus:
     ACTIVE = "active"
+    ERROR = "error"
 
 
 class _FakeEcommercePlatform:

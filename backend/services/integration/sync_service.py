@@ -292,9 +292,14 @@ class SyncService:
         
         if not integration:
             raise ValueError("Integration not found")
-        if integration.status != IntegrationStatus.ACTIVE:
+        if integration.status not in (IntegrationStatus.ACTIVE, IntegrationStatus.ERROR):
             raise ValueError("Integration is not active")
-        
+        # Reset error status so sync can proceed
+        if integration.status == IntegrationStatus.ERROR:
+            integration.status = IntegrationStatus.ACTIVE
+            self.db.add(integration)
+            await self.db.commit()
+
         return integration
     
     async def _create_sync_log(self, integration: Integration, sync_type: str) -> IntegrationSyncLog:

@@ -87,13 +87,13 @@ async def trigger_sync(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Integration not found"
         )
-    
-    if integration.status != IntegrationStatus.ACTIVE:
+
+    if integration.status not in (IntegrationStatus.ACTIVE, IntegrationStatus.ERROR):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Integration is not active"
         )
-    
+
     if integration.sync_status == "syncing":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

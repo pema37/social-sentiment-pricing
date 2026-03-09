@@ -47,7 +47,7 @@ sys.modules["models.product"].Product = _FakeProduct
 
 class _FakeIntegrationStatus:
     ACTIVE = "active"
-
+    ERROR = "error"
 
 class _FakeEcommercePlatform(str, Enum):
     SHOPIFY = "shopify"
