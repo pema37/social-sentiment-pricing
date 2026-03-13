@@ -9,6 +9,9 @@ This module configures the Celery app with:
 PATCHED (2025-01-07): Added sync_verification_tasks for periodic price sync checks
 PATCHED (2026-02-17): Added outcome_measurement_tasks for multi-window feedback loop
 PATCHED (2026-02-18): Phase 5 — Added intelligence_tasks for IE learning/experimentation/calibration
+PATCHED (2026-03-13): Added check-integration-health beat entry (every 30 min).
+    Polls ACTIVE + ERROR integrations and writes status back to DB so the
+    frontend diagnostic panel reflects real connection state automatically.
 """
 
 import os
@@ -29,8 +32,8 @@ celery_app = Celery(
         "workers.tasks.sync_verification_tasks",
         "workers.tasks.outcome_measurement_tasks",
         "workers.tasks.benchmark_refresh_tasks",
-        "workers.tasks.intelligence_tasks",    
-        "workers.tasks.audit_tasks",  
+        "workers.tasks.intelligence_tasks",
+        "workers.tasks.audit_tasks",
     ]
 )
 
@@ -42,10 +45,10 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=300,  # 5 minutes max per task
-    task_soft_time_limit=270,  # Soft limit 30 seconds before hard limit
-    worker_prefetch_multiplier=1,  # Fetch one task at a time (better for long tasks)
-    task_acks_late=True,  # Acknowledge after task completion (safer)
+    task_time_limit=300,        # 5 minutes max per task
+    task_soft_time_limit=270,   # Soft limit 30 seconds before hard limit
+    worker_prefetch_multiplier=1,   # Fetch one task at a time (better for long tasks)
+    task_acks_late=True,            # Acknowledge after task completion (safer)
 )
 
 # Scheduled tasks (beat schedule)
@@ -97,6 +100,18 @@ celery_app.conf.beat_schedule = {
     "verify-price-syncs": {
         "task": "workers.tasks.sync_verification_tasks.verify_price_syncs",
         "schedule": crontab(minute=30, hour="*/6"),
+        "options": {"queue": "celery"},
+    },
+
+    # ADDED (2026-03-13): Poll integration health every 30 minutes.
+    # Calls health_check() on all ACTIVE + ERROR integrations and writes
+    # the result back to the integrations table. This ensures a revoked
+    # Shopify token surfaces as status=ERROR automatically — without
+    # waiting for a merchant to manually trigger a health check — so the
+    # frontend reconnect CTA appears promptly and init_oauth can proceed.
+    "check-integration-health": {
+        "task": "workers.tasks.sync_verification_tasks.check_all_integration_health",
+        "schedule": crontab(minute="*/30"),
         "options": {"queue": "celery"},
     },
 
@@ -161,5 +176,6 @@ celery_app.conf.beat_schedule = {
 # ═══════════════════════════════════════════════════════════════════════
 from workers.tasks.intelligence_tasks import register_ie_beat_schedule
 register_ie_beat_schedule(celery_app)
+
 
 

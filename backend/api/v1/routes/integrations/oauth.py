@@ -1,3 +1,4 @@
+# backend/api/v1/routes/integrations/oauth.py
 """OAuth flow and WooCommerce API key connection endpoints.
 
 UPDATED (2026-02-20): After successful Shopify OAuth, redirect to billing
@@ -9,6 +10,11 @@ FIXED (2026-03-08): Permanent install flow fix:
 - Direct installs while logged in (user_id set, no host) → integrations page
 - Direct installs while logged out (user_id None) → login page with claim redirect
 - Added /claim endpoint to attach orphaned integrations to authenticated users
+
+FIXED (2026-03-13): init_oauth now allows reconnect from ERROR state.
+Previously only DISCONNECTED was allowed past the "already connected" guard.
+A revoked token leaves status=ERROR in the DB (via the health check fix),
+so the reconnect CTA must be able to re-initiate OAuth from ERROR state.
 """
 
 import logging
@@ -41,6 +47,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Statuses that block a new OAuth init — only a fully ACTIVE integration
+# should prevent re-connection. ERROR and DISCONNECTED must be allowed
+# through so the merchant can reconnect without contacting support.
+_RECONNECTABLE_STATUSES = {IntegrationStatus.DISCONNECTED, IntegrationStatus.ERROR}
+
 
 def get_ecommerce_service(platform: EcommercePlatform):
     """Factory to get the right service for the platform."""
@@ -51,7 +62,7 @@ def get_ecommerce_service(platform: EcommercePlatform):
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported platform: {platform}"
+            detail=f"Unsupported platform: {platform}",
         )
 
 
@@ -63,7 +74,12 @@ async def init_oauth(
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Start OAuth flow for connecting a store."""
+    """
+    Start OAuth flow for connecting a store.
+
+    Allows reconnect when the existing integration is in ERROR or
+    DISCONNECTED state. Only blocks if status is ACTIVE (healthy token).
+    """
     stmt = select(Integration).where(
         Integration.user_id == current_user.id,
         Integration.platform == data.platform,
@@ -72,10 +88,14 @@ async def init_oauth(
     result = await db.execute(stmt)
     existing = result.scalars().first()
 
-    if existing and existing.status == IntegrationStatus.ACTIVE:
+    # FIXED (2026-03-13): was `existing.status == IntegrationStatus.ACTIVE`
+    # which blocked reconnect when token was revoked (status stays ACTIVE
+    # until health check runs and writes ERROR to DB).
+    # Now: only block if ACTIVE — ERROR and DISCONNECTED proceed to re-auth.
+    if existing and existing.status not in _RECONNECTABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This store is already connected"
+            detail="This store is already connected",
         )
 
     state = secrets.token_urlsafe(32)
@@ -91,6 +111,7 @@ async def init_oauth(
     if existing:
         existing.oauth_state = state
         existing.status = IntegrationStatus.DISCONNECTED
+        existing.error_message = None
         existing.store_url = data.store_url
         db.add(existing)
     else:
@@ -235,8 +256,11 @@ async def oauth_callback(
 
     else:
         # Path 3: Direct install, merchant was NOT logged in — needs to claim
-        # Encode the claim path so login page can redirect there after auth
-        claim_path = f"/integrations/claim?integration_id={integration.id}&platform={integration.platform.value}"
+        claim_path = (
+            f"/integrations/claim"
+            f"?integration_id={integration.id}"
+            f"&platform={integration.platform.value}"
+        )
         success_url = (
             f"{settings.FRONTEND_URL}/login"
             f"?redirect={quote(claim_path)}"
@@ -265,7 +289,7 @@ async def connect_woocommerce(
     if existing and existing.status == IntegrationStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This store is already connected"
+            detail="This store is already connected",
         )
 
     service = WooCommerceService()
@@ -279,7 +303,7 @@ async def connect_woocommerce(
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid API credentials. Please verify your consumer key and secret."
+            detail="Invalid API credentials. Please verify your consumer key and secret.",
         )
 
     if existing:
@@ -341,7 +365,7 @@ async def claim_integration(
     if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found or already claimed"
+            detail="Integration not found or already claimed",
         )
 
     integration.user_id = current_user.id
@@ -352,4 +376,6 @@ async def claim_integration(
     logger.info(f"Integration {integration_id} claimed by user {current_user.id}")
 
     return {"ok": True, "integration_id": str(integration.id)}
+
+
 
