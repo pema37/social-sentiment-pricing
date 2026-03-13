@@ -11,6 +11,7 @@ NEW (2025-01-30): Added Crisis Detection, Launch Detection, Market Trends Visual
 FIXED (2025-01-30): Added products_import router - CSV import was returning 404
 NEW (2026-02-18): Phase 5 — Intelligence Environment dashboard routes
 FIXED (2026-02-19): Made x402 and autonomous pipeline imports conditional
+NEW (2026-03-13): Shopify billing webhooks — app/subscriptions_update, app/uninstalled
 """
 
 from contextlib import asynccontextmanager
@@ -72,7 +73,10 @@ from api.v1.routes.audit_email import router as audit_email_router
 from api.v1.routes.prospect_analytics import router as prospect_analytics_router
 from api.v1.routes.price_check import router as price_check_router
 
-
+# Shopify billing webhooks — handles app/subscriptions_update and app/uninstalled
+from api.v1.routes.integrations.shopify_billing_webhooks import (
+    router as shopify_billing_webhooks_router,
+)
 
 # Intelligence Environment — standalone at /api/v1/outcomes
 from api.v1.routes.pricing.outcomes import router as outcomes_router
@@ -170,6 +174,7 @@ app.include_router(sentiment_router, prefix="/api/v1")
 app.include_router(competitors_router, prefix="/api/v1")
 app.include_router(alerts_router, prefix="/api/v1")
 app.include_router(integrations_router, prefix="/api/v1")
+app.include_router(shopify_billing_webhooks_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(webhooks_router, prefix="/api/v1")
 app.include_router(websocket_router, prefix="/api/v1")
@@ -220,3 +225,4 @@ async def root():
     }
 
 
+    

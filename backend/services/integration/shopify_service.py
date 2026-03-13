@@ -70,8 +70,8 @@ class ShopifyService(
 
     API_VERSION = "2025-10"
     REQUIRED_SCOPES = ["read_products", "write_products", "read_orders"]
-    WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete"]
-    WEBHOOK_TOPICS_GQL = ["PRODUCTS_CREATE", "PRODUCTS_UPDATE", "PRODUCTS_DELETE"]
+    WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete", "app/subscriptions_update", "app/uninstalled"]
+    WEBHOOK_TOPICS_GQL = ["PRODUCTS_CREATE", "PRODUCTS_UPDATE", "PRODUCTS_DELETE", "APP_SUBSCRIPTIONS_UPDATE", "APP_UNINSTALLED"]
 
     # Price verification tolerance (rounding: $19.999 -> $20.00)
     PRICE_VERIFICATION_TOLERANCE = Decimal("0.02")
