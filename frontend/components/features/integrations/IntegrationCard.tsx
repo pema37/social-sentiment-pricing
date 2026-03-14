@@ -27,6 +27,7 @@ import {
   useDisconnectIntegration, 
   useTriggerSync, 
   useSyncStatus,
+  useInitOAuth,
 } from '@/lib/hooks/use-integrations';
 import { Button } from '@/components/ui';
 import { formatRelativeTime } from '@/lib/utils';
@@ -52,6 +53,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
   const config = PLATFORM_CONFIGS[integration.platform];
   const disconnect = useDisconnectIntegration();
   const triggerSync = useTriggerSync();
+  const initOAuth = useInitOAuth(); 
   
   // Poll when integration prop says syncing OR when user clicked sync button
   const shouldPoll = integration.sync_status === 'syncing' || pollEnabled;
@@ -180,8 +182,22 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
 
       {/* Error message */}
       {integration.error_message && (
-        <div className="mt-3 rounded-md bg-red-50 p-2">
+        <div className="mt-3 rounded-md bg-red-50 p-3 space-y-2">
           <p className="text-xs text-red-700">{integration.error_message}</p>
+          {integration.status === 'error' && (
+            <button
+              onClick={() =>
+                initOAuth.mutate({
+                  platform: integration.platform,
+                  store_url: integration.store_url,
+                })
+              }
+              disabled={initOAuth.isPending}
+              className="text-xs font-semibold text-red-700 underline hover:no-underline disabled:opacity-50"
+            >
+              {initOAuth.isPending ? 'Redirecting to Shopify…' : '↻ Reconnect this store'}
+            </button>
+          )}
         </div>
       )}
 
