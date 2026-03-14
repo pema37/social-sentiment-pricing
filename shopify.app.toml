@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 client_id = "e8b514a99ecab7a30a8bb65b97e9c144"
 name = "ActualPrice Public"
-application_url = "https://ssp-staging.vercel.app"
+application_url = "https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/integrations/shopify/install"
 embedded = true
 
 [webhooks]
