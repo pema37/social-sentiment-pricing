@@ -158,7 +158,7 @@ async def check_integration_health(
     # Check for price mismatches
     for product_id, data in product_platform_map.items():
         for platform in data["platforms_linked"]:
-            if platform["external_price"] and data["current_price"]:
+            if platform["external_price"] is not None and data["current_price"] is not None:
                 diff = abs(platform["external_price"] - data["current_price"])
                 if diff > 0.01:
                     issues.append({

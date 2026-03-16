@@ -59,8 +59,8 @@ logger = get_logger(__name__)
 # Price difference threshold to consider as mismatch (in dollars)
 PRICE_MISMATCH_THRESHOLD = Decimal("0.05")
 
-# Maximum products to check per run (to avoid timeout)
-MAX_PRODUCTS_PER_RUN = 100
+# Maximum links to check per run (None = check all eligible links)
+MAX_PRODUCTS_PER_RUN: Optional[int] = None
 
 # How old a sync can be before we force a re-check (hours)
 STALE_SYNC_HOURS = 24
@@ -170,8 +170,10 @@ async def _verify_all_price_syncs() -> Dict:
             select(ProductIntegrationLink)
             .where(ProductIntegrationLink.sync_enabled == True)
             .where(ProductIntegrationLink.integration_id.in_(integrations.keys()))
-            .limit(MAX_PRODUCTS_PER_RUN)
+            .order_by(ProductIntegrationLink.id)
         )
+        if MAX_PRODUCTS_PER_RUN is not None:
+            links_stmt = links_stmt.limit(MAX_PRODUCTS_PER_RUN)
         links_result = await db.execute(links_stmt)
         links = list(links_result.scalars().all())
 
@@ -215,7 +217,10 @@ async def _verify_all_price_syncs() -> Dict:
                         external_product_id=link.external_product_id
                     )
                     if external_product:
-                        platform_price = external_product.price
+                        platform_price = _resolve_link_price(
+                            external_product=external_product,
+                            external_variant_id=link.external_variant_id,
+                        )
 
                 elif integration.platform.lower() == "shopify":
                     external_product = await shopify_service.fetch_single_product(
@@ -224,7 +229,10 @@ async def _verify_all_price_syncs() -> Dict:
                         external_product_id=link.external_product_id
                     )
                     if external_product:
-                        platform_price = external_product.price
+                        platform_price = _resolve_link_price(
+                            external_product=external_product,
+                            external_variant_id=link.external_variant_id,
+                        )
 
                 if platform_price is None:
                     results["errors"] += 1
@@ -282,6 +290,19 @@ async def _verify_all_price_syncs() -> Dict:
     )
 
     return results
+
+
+def _resolve_link_price(external_product, external_variant_id: Optional[str]) -> Optional[float]:
+    """Resolve the effective external price for a specific product-integration link."""
+    if not external_product:
+        return None
+
+    if external_variant_id and getattr(external_product, "variants", None):
+        for variant in external_product.variants:
+            if str(getattr(variant, "id", "")) == str(external_variant_id):
+                return variant.price
+
+    return external_product.price
 
 
 async def _auto_fix_price_mismatches(dry_run: bool = True) -> Dict:
