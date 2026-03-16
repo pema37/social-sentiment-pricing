@@ -80,9 +80,10 @@ const systemItems: NavItem[] = [
 
 interface SidebarProps {
   onLogout?: () => void;
+  onLinkClick?: () => void;
 }
 
-export function Sidebar({ onLogout }: SidebarProps) {
+export function Sidebar({ onLogout, onLinkClick }: SidebarProps) {
   const pathname = usePathname();
   const { isEmbedded } = useShopifyEmbedded();
 
@@ -121,6 +122,7 @@ export function Sidebar({ onLogout }: SidebarProps) {
       <li key={item.href}>
         <Link
           href={item.href}
+          onClick={onLinkClick}
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg',
             'text-sm font-medium transition-colors duration-200',

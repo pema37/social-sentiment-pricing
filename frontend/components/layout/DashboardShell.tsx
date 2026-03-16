@@ -67,7 +67,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Only pass onLogout in standalone mode */}
-        <Sidebar onLogout={isEmbedded ? undefined : handleLogout} />
+        <Sidebar 
+          onLogout={isEmbedded ? undefined : handleLogout} 
+          onLinkClick={() => setSidebarOpen(false)}
+        />
       </div>
 
       {/* Mobile close button */}
