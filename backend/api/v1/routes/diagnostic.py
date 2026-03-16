@@ -7,7 +7,7 @@ Endpoints:
   - GET /api/v1/diagnostic/product/{product_id}/push-status
 """
 
-from typing import List
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 import logging
 
@@ -17,9 +17,12 @@ from sqlmodel import select
 
 from db.session import get_session
 from core.deps import get_current_user
+from core.encryption import decrypt_token
 from models.user import User
 from models.product import Product
 from models.integration import Integration, ProductIntegrationLink, IntegrationStatus
+from services.integration.shopify_service import ShopifyService
+from services.integration.woocommerce_service import WooCommerceService
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,12 @@ async def check_integration_health(
     integrations = list(int_result.scalars().all())
     
     integration_summary = []
+    integration_map = {i.id: i for i in integrations}
+
+    # Live price fetch helpers (manual diagnostic endpoint, safe to call per link)
+    shopify_service = ShopifyService()
+    woo_service = WooCommerceService()
+    product_price_cache: Dict[tuple[str, str], Any] = {}
     for integration in integrations:
         integration_summary.append({
             "id": str(integration.id),
@@ -85,10 +94,18 @@ async def check_integration_health(
         
         platforms_linked = []
         for link in product_links:
-            integration = next((i for i in integrations if i.id == link.integration_id), None)
+            integration = integration_map.get(link.integration_id)
             if integration:
                 platform_name = integration.platform.value if hasattr(integration.platform, 'value') else str(integration.platform)
                 int_status = integration.status.value if hasattr(integration.status, 'value') else str(integration.status)
+
+                live_external_price = await _get_live_external_price_for_link(
+                    link=link,
+                    integration=integration,
+                    shopify_service=shopify_service,
+                    woo_service=woo_service,
+                    product_price_cache=product_price_cache,
+                )
                 
                 platforms_linked.append({
                     "platform": platform_name,
@@ -96,7 +113,7 @@ async def check_integration_health(
                     "integration_status": int_status,
                     "sync_enabled": link.sync_enabled,
                     "external_product_id": link.external_product_id,
-                    "external_price": float(link.external_price) if link.external_price else None,
+                    "external_price": live_external_price if live_external_price is not None else (float(link.external_price) if link.external_price is not None else None),
                     "last_price_push_at": link.last_price_push_at.isoformat() if link.last_price_push_at else None,
                     "would_push": link.sync_enabled and integration.status == IntegrationStatus.ACTIVE,
                 })
@@ -324,5 +341,71 @@ def _diagnose_push_status(push_targets, skipped_targets, all_links):
         "platforms": [t["platform"] for t in push_targets],
         "action": None,
     }
+
+
+async def _get_live_external_price_for_link(
+    link: ProductIntegrationLink,
+    integration: Integration,
+    shopify_service: ShopifyService,
+    woo_service: WooCommerceService,
+    product_price_cache: Dict[tuple[str, str], Any],
+) -> Optional[float]:
+    """Best-effort live price fetch for a link; returns None on any failure."""
+    try:
+        access_token = decrypt_token(integration.access_token_encrypted)
+    except Exception:
+        return None
+
+    platform = integration.platform.value if hasattr(integration.platform, "value") else str(integration.platform)
+    platform = platform.lower()
+    cache_key = (str(integration.id), link.external_product_id)
+
+    external_product = product_price_cache.get(cache_key)
+    if external_product is None:
+        try:
+            if platform == "shopify":
+                external_product = await shopify_service.fetch_single_product(
+                    store_url=integration.store_url,
+                    access_token=access_token,
+                    external_product_id=link.external_product_id,
+                )
+            elif platform == "woocommerce":
+                external_product = await woo_service.fetch_single_product(
+                    store_url=integration.store_url,
+                    access_token=access_token,
+                    external_product_id=link.external_product_id,
+                )
+            else:
+                return None
+        except Exception:
+            return None
+        product_price_cache[cache_key] = external_product
+
+    if not external_product:
+        return None
+
+    variant_price = _resolve_variant_price(external_product, link.external_variant_id)
+    if variant_price is not None:
+        return float(variant_price)
+
+    if getattr(external_product, "price", None) is not None:
+        return float(external_product.price)
+
+    return None
+
+
+def _resolve_variant_price(external_product: Any, external_variant_id: Optional[str]) -> Optional[float]:
+    if not external_variant_id:
+        return None
+
+    variants = getattr(external_product, "variants", None)
+    if not variants:
+        return None
+
+    for variant in variants:
+        if str(getattr(variant, "id", "")) == str(external_variant_id):
+            return getattr(variant, "price", None)
+
+    return None
 
 
