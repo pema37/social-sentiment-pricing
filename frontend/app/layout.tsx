@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { Providers } from './providers';
 import { Toaster } from '@/components/ui/Toaster';
 import './globals.css';
@@ -16,12 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Shopify requirement: App Bridge must be loaded from CDN as the first script tag. */}
-        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
         <meta
           name="shopify-api-key"
           content={process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || ''}
+        />
+        <Script
+          src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+          strategy="beforeInteractive"
         />
       </head>
       <body>

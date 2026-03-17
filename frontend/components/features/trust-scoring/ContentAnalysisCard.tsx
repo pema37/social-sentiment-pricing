@@ -32,7 +32,6 @@ export function ContentAnalysisCard({
   className = '' 
 }: ContentAnalysisCardProps) {
   const { 
-    content_id,
     word_count,
     is_duplicate,
     duplicate_count,

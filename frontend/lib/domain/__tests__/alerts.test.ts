@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  alertConfigFormSchema,
   alertConfigToFormData,
   formDataToCreateAlertConfig,
   formDataToUpdateAlertConfig,
   validateAlertConfigForm,
   validateAndCreateAlertConfig,
-  validateAndUpdateAlertConfig,
   getAlertTypeLabel,
   getSeverityColor,
   getAlertStatusColor,
@@ -303,7 +301,7 @@ describe('display helpers', () => {
     });
 
     it('returns type as-is for unknown types', () => {
-      expect(getAlertTypeLabel('unknown_type' as any)).toBe('unknown_type');
+      expect(getAlertTypeLabel('unknown_type' as never)).toBe('unknown_type');
     });
   });
 
@@ -316,7 +314,7 @@ describe('display helpers', () => {
     });
 
     it('defaults to gray for unknown', () => {
-      expect(getSeverityColor('unknown' as any)).toBe('gray');
+      expect(getSeverityColor('unknown' as never)).toBe('gray');
     });
   });
 
@@ -338,7 +336,7 @@ describe('display helpers', () => {
     });
 
     it('returns status as-is for unknown', () => {
-      expect(getAlertStatusLabel('unknown' as any)).toBe('unknown');
+      expect(getAlertStatusLabel('unknown' as never)).toBe('unknown');
     });
   });
 
@@ -366,19 +364,19 @@ describe('display helpers', () => {
 
   describe('isAlertUnread', () => {
     it('returns true for pending', () => {
-      expect(isAlertUnread({ status: 'pending' } as any)).toBe(true);
+      expect(isAlertUnread({ status: 'pending' } as never)).toBe(true);
     });
 
     it('returns true for sent', () => {
-      expect(isAlertUnread({ status: 'sent' } as any)).toBe(true);
+      expect(isAlertUnread({ status: 'sent' } as never)).toBe(true);
     });
 
     it('returns false for acknowledged', () => {
-      expect(isAlertUnread({ status: 'acknowledged' } as any)).toBe(false);
+      expect(isAlertUnread({ status: 'acknowledged' } as never)).toBe(false);
     });
 
     it('returns false for resolved', () => {
-      expect(isAlertUnread({ status: 'resolved' } as any)).toBe(false);
+      expect(isAlertUnread({ status: 'resolved' } as never)).toBe(false);
     });
   });
 });

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  wooCommerceConnectSchema,
-  shopifyConnectSchema,
-  productLinkSchema,
   normalizeStoreUrl,
   getStoreDomain,
   formDataToWooCommerceRequest,
