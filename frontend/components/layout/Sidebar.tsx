@@ -137,11 +137,19 @@ export function Sidebar({ onLogout, onLinkClick }: SidebarProps) {
   const renderNavItem = (item: NavItem) => {
     const active = isActive(item.href);
 
+    const handleNavItemClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+      // Same-route clicks won't trigger navigation, so close the mobile drawer explicitly.
+      if (active) {
+        event.preventDefault();
+      }
+      onLinkClick?.();
+    };
+
     return (
       <li key={item.href}>
         <Link
           href={item.href}
-          onClick={onLinkClick}
+          onClick={handleNavItemClick}
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg',
             'text-sm font-medium transition-colors duration-200',

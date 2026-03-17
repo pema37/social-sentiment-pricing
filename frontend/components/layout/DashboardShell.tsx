@@ -20,10 +20,16 @@ interface DashboardShellProps {
 
 export function DashboardShell({ children }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [reopenBlockedUntil, setReopenBlockedUntil] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuthStore();
   const { isEmbedded } = useShopifyEmbedded();
+
+  const closeSidebarFromNav = () => {
+    setSidebarOpen(false);
+    setReopenBlockedUntil(Date.now() + 400);
+  };
 
   // Close sidebar when route changes (user clicked a nav link)
   useEffect(() => {
@@ -69,7 +75,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         {/* Only pass onLogout in standalone mode */}
         <Sidebar 
           onLogout={isEmbedded ? undefined : handleLogout} 
-          onLinkClick={() => setSidebarOpen(false)}
+          onLinkClick={closeSidebarFromNav}
         />
       </div>
 
@@ -97,7 +103,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200 relative z-50">
           {/* Left: Hamburger menu */}
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => {
+              if (Date.now() < reopenBlockedUntil) return;
+              setSidebarOpen(true);
+            }}
             className="p-2 rounded-lg hover:bg-gray-100"
             aria-label="Open menu"
             aria-expanded={sidebarOpen}
