@@ -7,16 +7,18 @@ These endpoints are designed to be consumed by AI agents via x402 micropayments.
 No API keys, no subscriptions — just pay and query.
 """
 
+import random
+from datetime import UTC, datetime
+
 from fastapi import APIRouter
 from fastapi_x402 import pay
 from pydantic import BaseModel
-from datetime import datetime, timezone
-import random
 
 router = APIRouter(prefix="/api/v1/agent", tags=["x402 Agent API"])
 
 
 # ───────────────────── Response Schemas ───────────────────── #
+
 
 class PricingIntelligenceResponse(BaseModel):
     product: str
@@ -60,6 +62,7 @@ class AgentHealthResponse(BaseModel):
 
 # ───────────────────── Free Endpoint (discovery) ───────────────────── #
 
+
 @router.get("/health")
 async def agent_health():
     """Free endpoint — lets agents discover ActualPrice capabilities."""
@@ -72,11 +75,12 @@ async def agent_health():
         },
         x402_enabled=True,
         endpoints_available=3,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
     )
 
 
 # ───────────────────── Paid Endpoints (x402 gated) ───────────────────── #
+
 
 @router.get("/pricing-intelligence")
 @pay("$0.01")  # 1 cent per query in USDC
@@ -84,7 +88,7 @@ async def get_pricing_intelligence(product: str = "wireless-headphones"):
     """
     Agent-consumable pricing intelligence.
     Pay $0.01 USDC via x402 to get real-time competitive pricing data.
-    
+
     The Scout agent monitors competitors, the Analyst processes sentiment,
     and the Strategist generates the recommendation — all in one query.
     """
@@ -95,7 +99,7 @@ async def get_pricing_intelligence(product: str = "wireless-headphones"):
     competitor_max = base_price * random.uniform(1.05, 1.20)
     competitor_avg = (competitor_min + competitor_max) / 2
     sentiment = random.uniform(-0.3, 0.8)
-    
+
     if base_price > competitor_avg * 1.1:
         recommendation = "LOWER_PRICE"
         confidence = 0.85
@@ -115,7 +119,7 @@ async def get_pricing_intelligence(product: str = "wireless-headphones"):
         recommendation=recommendation,
         confidence=confidence,
         sentiment_score=round(sentiment, 3),
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
     )
 
 
@@ -126,23 +130,23 @@ async def detect_crisis(brand: str = "nike"):
     Real-time crisis detection for any brand.
     Pay $0.01 USDC via x402 to check if a brand is experiencing a social media crisis
     that could impact pricing decisions.
-    
+
     The Analyst agent monitors social sentiment across platforms and flags
     significant negative shifts that require immediate pricing action.
     """
     # Simulate crisis detection (in production, calls crisis_detector service)
     crisis_roll = random.random()
-    
+
     if crisis_roll > 0.8:
         return CrisisAlertResponse(
             brand=brand,
             crisis_detected=True,
             severity="high",
             description=f"Significant negative sentiment spike detected for {brand}. "
-                       f"Multiple viral posts criticizing product quality.",
+            f"Multiple viral posts criticizing product quality.",
             sentiment_shift=-0.45,
             recommended_action="PAUSE_PRICE_INCREASES — wait 48-72 hours for sentiment to stabilize",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
     else:
         return CrisisAlertResponse(
@@ -152,7 +156,7 @@ async def detect_crisis(brand: str = "nike"):
             description=f"No crisis detected for {brand}. Sentiment is within normal range.",
             sentiment_shift=round(random.uniform(-0.05, 0.1), 3),
             recommended_action="PROCEED_NORMALLY — safe to execute pricing changes",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
 
@@ -162,13 +166,13 @@ async def get_market_trends(category: str = "electronics"):
     """
     Market trend analysis for a product category.
     Pay $0.01 USDC via x402 to get AI-generated market insights.
-    
+
     The Scout agent collects market data, and the Strategist generates
     actionable trend analysis for pricing decisions.
     """
     directions = ["up", "down", "stable"]
     direction = random.choice(directions)
-    
+
     return MarketTrendResponse(
         category=category,
         trend_direction=direction,
@@ -176,9 +180,7 @@ async def get_market_trends(category: str = "electronics"):
         volume_change_pct=round(random.uniform(-15.0, 25.0), 2),
         top_movers=["Sony WH-1000XM5", "Apple AirPods Pro", "Bose QC Ultra"],
         ai_summary=f"The {category} market is trending {direction}. "
-                   f"Competitive pressure is {'increasing' if direction == 'down' else 'moderate'}. "
-                   f"Recommended strategy: {'aggressive pricing' if direction == 'down' else 'maintain margins'}.",
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        f"Competitive pressure is {'increasing' if direction == 'down' else 'moderate'}. "
+        f"Recommended strategy: {'aggressive pricing' if direction == 'down' else 'maintain margins'}.",
+        timestamp=datetime.now(UTC).isoformat(),
     )
-
-

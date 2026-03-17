@@ -11,9 +11,8 @@ Follows FastAPI best practices with clear separation from business logic.
 """
 
 import json
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from core.logging import get_logger
@@ -30,34 +29,33 @@ router = APIRouter(prefix="/trends-visual", tags=["Market Trends Visual"])
 # ENDPOINTS
 # =========================================================================
 
+
 @router.post("/analyze", response_model=TrendAnalysisResponse)
 async def analyze_trends(data: MarketDataInput):
     """
     Analyze market trends for a product (non-streaming).
-    
+
     Runs all three agents (Observer → Analyst → Forecaster) and returns
     a summary of the analysis.
     """
     try:
         market_data = data.to_dict()
-        
+
         # Collect all messages
         message_count = 0
         async for msg in market_trends_analyzer.analyze_stream(
-            product=data.product,
-            category=data.category,
-            market_data=market_data
+            product=data.product, category=data.category, market_data=market_data
         ):
             message_count += 1
-        
+
         return TrendAnalysisResponse(
             status="success",
             message=f"Analysis complete. {message_count} messages generated.",
             product=data.product,
             category=data.category,
-            message_count=message_count
+            message_count=message_count,
         )
-        
+
     except Exception as e:
         logger.error(f"Trend analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -67,32 +65,30 @@ async def analyze_trends(data: MarketDataInput):
 async def analyze_trends_stream(data: MarketDataInput):
     """
     Analyze market trends with streaming response.
-    
+
     Returns Server-Sent Events (SSE) with real-time analysis updates
     from each agent as they process.
-    
+
     Event format:
     ```
     data: {"agent": "observer", "thought_type": "observation", "content": "...", "is_final": false}
     ```
     """
     market_data = data.to_dict()
-    
+
     async def generate():
         try:
             async for msg in market_trends_analyzer.analyze_stream(
-                product=data.product,
-                category=data.category,
-                market_data=market_data
+                product=data.product, category=data.category, market_data=market_data
             ):
                 yield f"data: {json.dumps(msg.to_dict())}\n\n"
-            
+
             yield f"data: {json.dumps({'done': True})}\n\n"
-            
+
         except Exception as e:
             logger.error(f"Streaming analysis failed: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -100,7 +96,7 @@ async def analyze_trends_stream(data: MarketDataInput):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
-        }
+        },
     )
 
 
@@ -119,25 +115,25 @@ async def analyze_trends_with_image(
     competitor_activity: str = Form("normal"),
     market_position: str = Form("mid"),
     seasonality: str = Form("normal"),
-    image: UploadFile = File(..., description="Chart/graph image for visual analysis")
+    image: UploadFile = File(..., description="Chart/graph image for visual analysis"),
 ):
     """
     Analyze market trends including visual chart analysis.
-    
+
     Accepts an image file (chart/graph) for multimodal analysis.
     The Observer agent will analyze the chart patterns in addition
     to the numerical market data.
-    
+
     Returns streaming SSE response.
     """
     # Validate image
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
-    
+
     # Read image
     image_bytes = await image.read()
     image_type = image.content_type.split("/")[1] if image.content_type else "png"
-    
+
     market_data = {
         "sentiment_score": sentiment_score,
         "sentiment_trend": sentiment_trend,
@@ -151,7 +147,7 @@ async def analyze_trends_with_image(
         "market_position": market_position,
         "seasonality": seasonality,
     }
-    
+
     async def generate():
         try:
             async for msg in market_trends_analyzer.analyze_stream(
@@ -159,16 +155,16 @@ async def analyze_trends_with_image(
                 category=category,
                 market_data=market_data,
                 image_bytes=image_bytes,
-                image_type=image_type
+                image_type=image_type,
             ):
                 yield f"data: {json.dumps(msg.to_dict())}\n\n"
-            
+
             yield f"data: {json.dumps({'done': True})}\n\n"
-            
+
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -176,43 +172,31 @@ async def analyze_trends_with_image(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
 @router.post("/analyze/image-only")
-async def analyze_image_only(
-    product: str = Form(...),
-    category: str = Form(...),
-    image: UploadFile = File(...)
-):
+async def analyze_image_only(product: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
     """
     Analyze just a chart image without additional market data.
-    
+
     Useful for quick visual pattern recognition on uploaded charts.
     Returns the visual analysis as plain text.
     """
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
-    
+
     image_bytes = await image.read()
     image_type = image.content_type.split("/")[1] if image.content_type else "png"
-    
+
     try:
         analysis = await market_trends_analyzer.analyze_image(
-            image_bytes=image_bytes,
-            image_type=image_type,
-            product=product,
-            category=category
+            image_bytes=image_bytes, image_type=image_type, product=product, category=category
         )
-        
-        return {
-            "status": "success",
-            "product": product,
-            "category": category,
-            "analysis": analysis
-        }
-        
+
+        return {"status": "success", "product": product, "category": category, "analysis": analysis}
+
     except Exception as e:
         logger.error(f"Image-only analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -222,14 +206,14 @@ async def analyze_image_only(
 async def trends_visual_health():
     """
     Health check for trends visual analyzer.
-    
+
     Returns service status, model info, and available agents.
     """
     return TrendHealthResponse(
         status="healthy",
         service="market-trends-visual",
         model=market_trends_analyzer.model,
-        agents=["observer", "analyst", "forecaster"]
+        agents=["observer", "analyst", "forecaster"],
     )
 
 
@@ -243,23 +227,19 @@ async def list_agents():
             {
                 "name": "observer",
                 "role": "Scans market data and visual charts for patterns",
-                "outputs": ["patterns", "signals", "anomalies"]
+                "outputs": ["patterns", "signals", "anomalies"],
             },
             {
-                "name": "analyst", 
+                "name": "analyst",
                 "role": "Interprets correlations, drivers, and risks",
-                "outputs": ["trend_strength", "risks", "opportunities"]
+                "outputs": ["trend_strength", "risks", "opportunities"],
             },
             {
                 "name": "forecaster",
                 "role": "Predicts trends and recommends pricing actions",
-                "outputs": ["direction", "recommendation", "timing"]
-            }
+                "outputs": ["direction", "recommendation", "timing"],
+            },
         ],
         "flow": "observer → analyst → forecaster",
-        "supports_multimodal": True
+        "supports_multimodal": True,
     }
-
-
-
-

@@ -29,13 +29,12 @@ Place at: backend/services/scoring/urgency_scorer.py
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
-
+from dataclasses import dataclass
 
 # ──────────────────────────────────────────────────────────
 # SIGNAL INPUTS
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class UrgencySignals:
@@ -52,40 +51,41 @@ class UrgencySignals:
     """
 
     # ── Sentiment signals (weight: 15%) ──
-    sentiment_score: Optional[float] = None       # -1.0 to 1.0 (Scout compound score)
-    sentiment_change_24h: Optional[float] = None   # Delta from previous 24h
-    crisis_detected: bool = False                  # From Scout crisis detection
-    crisis_severity: Optional[float] = None        # 0.0-1.0 if crisis detected
+    sentiment_score: float | None = None  # -1.0 to 1.0 (Scout compound score)
+    sentiment_change_24h: float | None = None  # Delta from previous 24h
+    crisis_detected: bool = False  # From Scout crisis detection
+    crisis_severity: float | None = None  # 0.0-1.0 if crisis detected
 
     # ── Trend velocity signals (weight: 25%) ──
-    mention_growth_rate: Optional[float] = None    # From SignalProcessor (Decimal as float)
-    trend_velocity: Optional[float] = None         # Rate of acceleration (0-1)
-    sentiment_momentum: Optional[float] = None     # Direction of sentiment change (-1 to 1)
-    is_trending: bool = False                      # From SignalProcessor
+    mention_growth_rate: float | None = None  # From SignalProcessor (Decimal as float)
+    trend_velocity: float | None = None  # Rate of acceleration (0-1)
+    sentiment_momentum: float | None = None  # Direction of sentiment change (-1 to 1)
+    is_trending: bool = False  # From SignalProcessor
 
     # ── Competitor signals (weight: 25%) ──
     competitor_count: int = 0
     # How our position changed: None = unknown, positive = we got more expensive relative to market
-    position_change_7d: Optional[float] = None
+    position_change_7d: float | None = None
     # What percentage of competitors changed price in last 7 days
-    pct_competitors_changed: Optional[float] = None
+    pct_competitors_changed: float | None = None
     # Average magnitude of competitor price changes
-    avg_competitor_change_pct: Optional[float] = None
+    avg_competitor_change_pct: float | None = None
     # Current position index (0 = cheapest, 1 = most expensive)
-    competitive_position_index: Optional[float] = None
+    competitive_position_index: float | None = None
 
     # ── Inventory pressure signals (weight: 20%) ──
-    days_of_inventory: Optional[float] = None      # Current stock / avg daily sales
-    stockout_risk: bool = False                     # < 7 days of inventory
+    days_of_inventory: float | None = None  # Current stock / avg daily sales
+    stockout_risk: bool = False  # < 7 days of inventory
 
     # ── Search demand signals (weight: 15%) ──
-    search_volume_trend: Optional[float] = None    # Rate of change in search volume
-    search_volume_index: Optional[float] = None    # Absolute level (normalized 0-1)
+    search_volume_trend: float | None = None  # Rate of change in search volume
+    search_volume_index: float | None = None  # Absolute level (normalized 0-1)
 
 
 # ──────────────────────────────────────────────────────────
 # RESULT TYPE
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class UrgencyResult:
@@ -100,14 +100,14 @@ class UrgencyResult:
       breakdown       → stored in evidence chain for tracing
     """
 
-    score: float                   # 0.0-1.0 composite urgency
-    level_label: str               # "critical", "high", "medium", "low", "none"
-    reasons: list[str]             # Human-readable urgency reasons
-    dominant_signal: str           # Which component contributed most
-    confidence: float              # 0.0-1.0 how much we trust this score
-    breakdown: dict[str, float]    # Per-component scores for transparency
-    signals_available: int         # How many of the 5 signals had data
-    signals_total: int = 5         # Always 5
+    score: float  # 0.0-1.0 composite urgency
+    level_label: str  # "critical", "high", "medium", "low", "none"
+    reasons: list[str]  # Human-readable urgency reasons
+    dominant_signal: str  # Which component contributed most
+    confidence: float  # 0.0-1.0 how much we trust this score
+    breakdown: dict[str, float]  # Per-component scores for transparency
+    signals_available: int  # How many of the 5 signals had data
+    signals_total: int = 5  # Always 5
 
 
 # ──────────────────────────────────────────────────────────
@@ -130,16 +130,16 @@ MEDIUM_THRESHOLD: float = 0.40
 LOW_THRESHOLD: float = 0.20
 
 # Sentiment thresholds
-SENTIMENT_STRONG_THRESHOLD: float = 0.5   # |score| > this = strong signal
+SENTIMENT_STRONG_THRESHOLD: float = 0.5  # |score| > this = strong signal
 SENTIMENT_MODERATE_THRESHOLD: float = 0.2  # |score| > this = moderate signal
 
 # Trend thresholds
-TRENDING_GROWTH_RATE: float = 0.5    # 50% growth rate = significant
-STRONG_GROWTH_RATE: float = 1.0      # 100% = very significant
+TRENDING_GROWTH_RATE: float = 0.5  # 50% growth rate = significant
+STRONG_GROWTH_RATE: float = 1.0  # 100% = very significant
 
 # Competitor activity thresholds
 SIGNIFICANT_COMP_CHANGE_PCT: float = 0.30  # 30% of competitors changed
-HIGH_COMP_CHANGE_MAGNITUDE: float = 0.05   # 5% avg price change
+HIGH_COMP_CHANGE_MAGNITUDE: float = 0.05  # 5% avg price change
 
 # Inventory thresholds
 CRITICAL_INVENTORY_DAYS: float = 7.0
@@ -151,6 +151,7 @@ OVERSTOCK_INVENTORY_DAYS: float = 90.0
 # ──────────────────────────────────────────────────────────
 # SCORER
 # ──────────────────────────────────────────────────────────
+
 
 class UrgencyScorer:
     """
@@ -182,7 +183,7 @@ class UrgencyScorer:
         Returns UrgencyResult with score, level, reasons, and breakdown.
         """
         # Compute each component (None = no data for this signal)
-        components: dict[str, Optional[float]] = {
+        components: dict[str, float | None] = {
             "sentiment": self._score_sentiment(signals),
             "trend_velocity": self._score_trend_velocity(signals),
             "competitor_signal": self._score_competitor_signal(signals),
@@ -207,16 +208,10 @@ class UrgencyScorer:
 
         # Redistribute weights proportionally to available signals
         available_weight_sum = sum(WEIGHTS[k] for k in available)
-        effective_weights = {
-            k: WEIGHTS[k] / available_weight_sum
-            for k in available
-        }
+        effective_weights = {k: WEIGHTS[k] / available_weight_sum for k in available}
 
         # Compute weighted score
-        score = sum(
-            available[k] * effective_weights[k]
-            for k in available
-        )
+        score = sum(available[k] * effective_weights[k] for k in available)
         score = max(0.0, min(1.0, score))
 
         # Build breakdown (include zeros for missing signals)
@@ -259,7 +254,7 @@ class UrgencyScorer:
     # SIGNAL SCORERS (each returns 0-1 or None)
     # ──────────────────────────────────────────────
 
-    def _score_sentiment(self, signals: UrgencySignals) -> Optional[float]:
+    def _score_sentiment(self, signals: UrgencySignals) -> float | None:
         """
         Sentiment urgency: extreme sentiment (positive OR negative) = high urgency.
 
@@ -292,18 +287,14 @@ class UrgencyScorer:
 
         return min(1.0, base + change_boost)
 
-    def _score_trend_velocity(self, signals: UrgencySignals) -> Optional[float]:
+    def _score_trend_velocity(self, signals: UrgencySignals) -> float | None:
         """
         Trend velocity urgency: rapid acceleration in either direction = urgency.
 
         Uses mention_growth_rate (primary), trend_velocity (secondary),
         and sentiment_momentum (tertiary).
         """
-        has_data = (
-            signals.mention_growth_rate is not None
-            or signals.trend_velocity is not None
-            or signals.is_trending
-        )
+        has_data = signals.mention_growth_rate is not None or signals.trend_velocity is not None or signals.is_trending
         if not has_data:
             return None
 
@@ -337,7 +328,7 @@ class UrgencyScorer:
 
         return min(1.0, score)
 
-    def _score_competitor_signal(self, signals: UrgencySignals) -> Optional[float]:
+    def _score_competitor_signal(self, signals: UrgencySignals) -> float | None:
         """
         Competitor urgency: significant competitor activity = urgency.
 
@@ -392,7 +383,7 @@ class UrgencyScorer:
 
         return min(1.0, score)
 
-    def _score_inventory_pressure(self, signals: UrgencySignals) -> Optional[float]:
+    def _score_inventory_pressure(self, signals: UrgencySignals) -> float | None:
         """
         Inventory urgency: running out or overstocked both create urgency.
 
@@ -435,7 +426,7 @@ class UrgencyScorer:
         excess = min((days - OVERSTOCK_INVENTORY_DAYS) / 90.0, 1.0)
         return 0.4 + excess * 0.2
 
-    def _score_search_demand(self, signals: UrgencySignals) -> Optional[float]:
+    def _score_search_demand(self, signals: UrgencySignals) -> float | None:
         """
         Search demand urgency: spiking search interest = urgency to optimize price.
 
@@ -480,7 +471,7 @@ class UrgencyScorer:
     @staticmethod
     def _build_reasons(
         signals: UrgencySignals,
-        components: dict[str, Optional[float]],
+        components: dict[str, float | None],
     ) -> list[str]:
         """Build human-readable urgency reasons from signal scores."""
         reasons = []
@@ -575,6 +566,3 @@ class UrgencyScorer:
 
         confidence = min(1.0, base + quality_boost)
         return confidence
-    
-
-    

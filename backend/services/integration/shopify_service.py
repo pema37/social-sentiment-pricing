@@ -25,22 +25,21 @@ All downstream callers unchanged: ShopifyService().method() still works.
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
 
 from core.config import settings
+
 from .base import EcommerceService
-from .schemas import OAuthResult, ConnectionStatus
-from .retry import RetryConfig, execute_with_retry
 from .http_client import RetryableClient
-from .circuit_breaker import CircuitOpenError
+from .retry import RetryConfig, execute_with_retry
+from .schemas import ConnectionStatus, OAuthResult
+from .shopify_orders import ShopifyOrdersMixin
+from .shopify_pricing import ShopifyPricingMixin
 
 # Mixins
 from .shopify_products import ShopifyProductsMixin
-from .shopify_pricing import ShopifyPricingMixin
-from .shopify_orders import ShopifyOrdersMixin
 from .shopify_webhooks import ShopifyWebhooksMixin
 
 logger = logging.getLogger(__name__)
@@ -70,13 +69,25 @@ class ShopifyService(
 
     API_VERSION = "2025-10"
     REQUIRED_SCOPES = ["read_products", "write_products", "read_orders"]
-    WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete", "app/subscriptions_update", "app/uninstalled"]
-    WEBHOOK_TOPICS_GQL = ["PRODUCTS_CREATE", "PRODUCTS_UPDATE", "PRODUCTS_DELETE", "APP_SUBSCRIPTIONS_UPDATE", "APP_UNINSTALLED"]
+    WEBHOOK_TOPICS = [
+        "products/create",
+        "products/update",
+        "products/delete",
+        "app/subscriptions_update",
+        "app/uninstalled",
+    ]
+    WEBHOOK_TOPICS_GQL = [
+        "PRODUCTS_CREATE",
+        "PRODUCTS_UPDATE",
+        "PRODUCTS_DELETE",
+        "APP_SUBSCRIPTIONS_UPDATE",
+        "APP_UNINSTALLED",
+    ]
 
     # Price verification tolerance (rounding: $19.999 -> $20.00)
     PRICE_VERIFICATION_TOLERANCE = Decimal("0.02")
 
-    def __init__(self, retry_config: Optional[RetryConfig] = None):
+    def __init__(self, retry_config: RetryConfig | None = None):
         config = retry_config or RetryConfig(
             max_retries=3,
             base_delay=1.0,
@@ -102,7 +113,7 @@ class ShopifyService(
         shop_domain: str,
         access_token: str,
         query: str,
-        variables: Optional[dict] = None,
+        variables: dict | None = None,
     ) -> dict:
         payload: dict = {"query": query}
         if variables:
@@ -139,9 +150,7 @@ class ShopifyService(
     # OAuth (unchanged – OAuth endpoints are NOT Admin API)
     # ================================================================
 
-    def generate_oauth_url(
-        self, store_url: str, state: str, redirect_uri: str
-    ) -> str:
+    def generate_oauth_url(self, store_url: str, state: str, redirect_uri: str) -> str:
         shop_domain = self._get_shop_domain(store_url)
         params = {
             "client_id": settings.SHOPIFY_CLIENT_ID,
@@ -151,9 +160,7 @@ class ShopifyService(
         }
         return f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
 
-    async def exchange_oauth_code(
-        self, store_url: str, code: str, redirect_uri: str
-    ) -> OAuthResult:
+    async def exchange_oauth_code(self, store_url: str, code: str, redirect_uri: str) -> OAuthResult:
         shop_domain = self._get_shop_domain(store_url)
 
         async def _exchange():
@@ -170,9 +177,7 @@ class ShopifyService(
                 return response.json()
 
         try:
-            data = await execute_with_retry(
-                _exchange, config=self.retry_config, operation_name="shopify_oauth"
-            )
+            data = await execute_with_retry(_exchange, config=self.retry_config, operation_name="shopify_oauth")
             return OAuthResult(
                 success=True,
                 access_token=data.get("access_token"),
@@ -230,12 +235,10 @@ class ShopifyService(
     def _auth_headers(self, access_token: str) -> dict:
         return {"X-Shopify-Access-Token": access_token, "Content-Type": "application/json"}
 
-    def _parse_datetime(self, date_str: Optional[str]) -> Optional[datetime]:
+    def _parse_datetime(self, date_str: str | None) -> datetime | None:
         if not date_str:
             return None
         try:
             return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             return None
-
-            

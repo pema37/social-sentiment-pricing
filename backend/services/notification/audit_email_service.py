@@ -16,7 +16,6 @@ Usage:
 
 import base64
 import logging
-from typing import Optional
 from dataclasses import dataclass
 
 from core.config import settings
@@ -27,9 +26,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AuditEmailResult:
     """Result of an audit email send attempt."""
+
     success: bool
-    message_id: Optional[str] = None
-    error: Optional[str] = None
+    message_id: str | None = None
+    error: str | None = None
 
 
 class AuditEmailService:
@@ -48,6 +48,7 @@ class AuditEmailService:
         if not self._client and self.is_configured:
             try:
                 from sendgrid import SendGridAPIClient
+
                 self._client = SendGridAPIClient(self.api_key)
             except ImportError:
                 logger.error("sendgrid package not installed")
@@ -58,11 +59,11 @@ class AuditEmailService:
         self,
         to_email: str,
         pdf_bytes: bytes,
-        store_name: Optional[str] = None,
+        store_name: str | None = None,
         headline_impact: str = "$0",
         lookback_days: int = 90,
-        sender_name: Optional[str] = None,
-        personal_note: Optional[str] = None,
+        sender_name: str | None = None,
+        personal_note: str | None = None,
     ) -> AuditEmailResult:
         """
         Send a pricing audit PDF via email.
@@ -78,10 +79,7 @@ class AuditEmailService:
         """
         if not self.is_configured:
             logger.warning("SendGrid not configured — skipping audit email")
-            return AuditEmailResult(
-                success=False,
-                error="SendGrid not configured (missing API key or from email)"
-            )
+            return AuditEmailResult(success=False, error="SendGrid not configured (missing API key or from email)")
 
         client = self._get_client()
         if not client:
@@ -89,8 +87,15 @@ class AuditEmailService:
 
         try:
             from sendgrid.helpers.mail import (
-                Mail, Email, To, Content, Attachment,
-                FileContent, FileName, FileType, Disposition,
+                Attachment,
+                Content,
+                Disposition,
+                Email,
+                FileContent,
+                FileName,
+                FileType,
+                Mail,
+                To,
             )
 
             store_label = store_name or "your store"
@@ -145,7 +150,7 @@ class AuditEmailService:
                 return AuditEmailResult(success=False, error=error_msg)
 
         except Exception as e:
-            error_msg = f"Audit email error: {str(e)}"
+            error_msg = f"Audit email error: {e!s}"
             logger.exception(error_msg)
             return AuditEmailResult(success=False, error=error_msg)
 
@@ -154,8 +159,8 @@ class AuditEmailService:
         store_name: str,
         headline_impact: str,
         lookback_days: int,
-        sender_name: Optional[str],
-        personal_note: Optional[str],
+        sender_name: str | None,
+        personal_note: str | None,
     ) -> str:
         note_section = ""
         if personal_note:
@@ -256,8 +261,8 @@ class AuditEmailService:
         store_name: str,
         headline_impact: str,
         lookback_days: int,
-        sender_name: Optional[str],
-        personal_note: Optional[str],
+        sender_name: str | None,
+        personal_note: str | None,
     ) -> str:
         lines = [
             "Hi there,",
@@ -274,19 +279,17 @@ class AuditEmailService:
         if personal_note:
             lines.extend([personal_note, ""])
 
-        lines.extend([
-            "Want to see how ActualPrice can automate this for you?",
-            "Book a demo: https://cal.com/actualprice/demo",
-            "",
-            "Best,",
-            sender_name or "The ActualPrice Team",
-            "",
-            "---",
-            "ActualPrice — AI-powered pricing intelligence for e-commerce merchants",
-        ])
+        lines.extend(
+            [
+                "Want to see how ActualPrice can automate this for you?",
+                "Book a demo: https://cal.com/actualprice/demo",
+                "",
+                "Best,",
+                sender_name or "The ActualPrice Team",
+                "",
+                "---",
+                "ActualPrice — AI-powered pricing intelligence for e-commerce merchants",
+            ]
+        )
 
         return "\n".join(lines)
-    
-
-
-    

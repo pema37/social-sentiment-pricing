@@ -1,8 +1,7 @@
 # backend/core/config.py
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
-from typing import Optional, List
-from pydantic import ConfigDict
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
@@ -12,23 +11,23 @@ class Settings(BaseSettings):
     # ===================
     # Application
     # ===================
-    model_config = SettingsConfigDict(env_file = str(ENV_FILE), extra = "ignore")
+    model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
     APP_NAME: str = "Social Sentiment Pricing API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # development, staging, production
-    
+
     # ===================
     # Database
     # ===================
     DATABASE_URL: str
-    
+
     # ===================
     # URLs
     # ===================
     BACKEND_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"
-    
+
     # ===================
     # Security / JWT
     # ===================
@@ -37,68 +36,68 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
     ENCRYPTION_KEY: str
-    
+
     # ===================
     # CORS
     # ===================
     # CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     CORS_ORIGINS: str = "*"
-    
+
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         """Parse comma-separated CORS origins into a list."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
-    
+
     # ===================
     # Redis / Celery
     # ===================
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    
+
     # ===================
     # Monitoring & Observability
     # ===================
-    SENTRY_DSN: Optional[str] = None
+    SENTRY_DSN: str | None = None
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions
     SENTRY_PROFILES_SAMPLE_RATE: float = 0.1
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"  # json or console
-    
+
     # ===================
     # External APIs
     # ===================
-    OPENAI_API_KEY: Optional[str] = None
-    GEMINI_API_KEY: Optional[str] = None
-    YOUCOM_API_KEY: Optional[str] = None
-    
+    OPENAI_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
+    YOUCOM_API_KEY: str | None = None
+
     # Reddit
-    REDDIT_CLIENT_ID: Optional[str] = None
-    REDDIT_CLIENT_SECRET: Optional[str] = None
+    REDDIT_CLIENT_ID: str | None = None
+    REDDIT_CLIENT_SECRET: str | None = None
     REDDIT_USER_AGENT: str = "SocialSentimentPricing/1.0"
-    
+
     # Twitter/X (future)
-    TWITTER_BEARER_TOKEN: Optional[str] = None
-    
+    TWITTER_BEARER_TOKEN: str | None = None
+
     # ===================
     # E-commerce Integrations
     # ===================
-    SHOPIFY_CLIENT_ID: Optional[str] = None
-    SHOPIFY_CLIENT_SECRET: Optional[str] = None
-    WOOCOMMERCE_CONSUMER_KEY: Optional[str] = None
-    WOOCOMMERCE_CONSUMER_SECRET: Optional[str] = None
-    
+    SHOPIFY_CLIENT_ID: str | None = None
+    SHOPIFY_CLIENT_SECRET: str | None = None
+    WOOCOMMERCE_CONSUMER_KEY: str | None = None
+    WOOCOMMERCE_CONSUMER_SECRET: str | None = None
+
     # ===================
     # Notifications
     # ===================
-    SENDGRID_API_KEY: Optional[str] = None
-    SENDGRID_FROM_EMAIL: Optional[str] = None
-    SLACK_WEBHOOK_URL: Optional[str] = None
-    
+    SENDGRID_API_KEY: str | None = None
+    SENDGRID_FROM_EMAIL: str | None = None
+    SLACK_WEBHOOK_URL: str | None = None
+
     # ===================
     # Alerting
     # ===================
-    ALERT_EMAIL: Optional[str] = None  # Email for critical alerts
-    PAGERDUTY_KEY: Optional[str] = None  # PagerDuty integration key
+    ALERT_EMAIL: str | None = None  # Email for critical alerts
+    PAGERDUTY_KEY: str | None = None  # PagerDuty integration key
 
     # ===================
     # MNEE Payments
@@ -106,7 +105,7 @@ class Settings(BaseSettings):
     MNEE_API_KEY: str = ""
     MNEE_ENVIRONMENT: str = "sandbox"  # sandbox or production
     MNEE_WEBHOOK_SECRET: str = ""
-    SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address 
+    SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address
 
 
 settings = Settings()

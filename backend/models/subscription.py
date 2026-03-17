@@ -7,16 +7,18 @@ for Shopify Billing API integration. These fields are nullable —
 only populated for merchants who subscribe via Shopify App Store.
 MNEE subscribers continue using the existing flow without these fields.
 """
-from datetime import datetime, timezone
-from typing import Optional
-from uuid import UUID, uuid4
+
+from datetime import UTC, datetime
 from enum import Enum
-from sqlmodel import SQLModel, Field
+from uuid import UUID, uuid4
+
 from sqlalchemy import Column, DateTime, String
+from sqlmodel import Field, SQLModel
 
 
 class SubscriptionTier(str, Enum):
     """Available subscription tiers."""
+
     FREE = "free"
     STARTER = "starter"
     PROFESSIONAL = "professional"
@@ -25,6 +27,7 @@ class SubscriptionTier(str, Enum):
 
 class SubscriptionStatus(str, Enum):
     """Subscription status."""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     PAST_DUE = "past_due"
@@ -36,33 +39,36 @@ class SubscriptionStatus(str, Enum):
 # Subscription Model
 # =============================================================================
 
+
 class SubscriptionBase(SQLModel):
     """Base subscription fields."""
-    
+
     # Plan info - use str instead of Enum to avoid PostgreSQL enum issues
     tier: str = Field(default="free", max_length=20)
     status: str = Field(default="active", max_length=20)
-    
+
     # Pricing
     monthly_price: str = Field(default="0.00", max_length=20)
-    
+
     # Billing period
-    current_period_start: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
-    current_period_end: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
-    
+    current_period_start: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    current_period_end: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
     # Cancellation
-    cancelled_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    cancelled_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     cancel_at_period_end: bool = Field(default=False)
-    
+
     # ========== Shopify Billing API Fields (2026-02-20) ==========
     # Only populated for merchants who subscribe via Shopify App Store.
     # Null for MNEE/standalone subscribers.
-    shopify_charge_id: Optional[str] = Field(
+    shopify_charge_id: str | None = Field(
         default=None,
         sa_column=Column(String(255), nullable=True),
         description="Shopify AppSubscription GID (e.g. gid://shopify/AppSubscription/12345)",
     )
-    shopify_plan_name: Optional[str] = Field(
+    shopify_plan_name: str | None = Field(
         default=None,
         sa_column=Column(String(100), nullable=True),
         description="Shopify plan display name (e.g. 'ActualPrice Professional')",
@@ -71,43 +77,51 @@ class SubscriptionBase(SQLModel):
 
 class Subscription(SubscriptionBase, table=True):
     """User subscription record."""
-    
+
     __tablename__ = "subscriptions"
-    
+
     # Primary key
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    
+
     # One subscription per user
     user_id: UUID = Field(foreign_key="users.id", unique=True, index=True)
-    
+
     # Timestamps
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
-    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    )
 
 
 # =============================================================================
 # Pydantic Schemas for API
 # =============================================================================
 
+
 class SubscriptionCreate(SQLModel):
     """Schema for creating a subscription."""
+
     tier: str = "free"
 
 
 class SubscriptionUpdate(SQLModel):
     """Schema for updating a subscription."""
-    tier: Optional[str] = None
-    status: Optional[str] = None
-    cancel_at_period_end: Optional[bool] = None
+
+    tier: str | None = None
+    status: str | None = None
+    cancel_at_period_end: bool | None = None
 
 
 class SubscriptionResponse(SubscriptionBase):
     """Schema for subscription API response."""
+
     id: UUID
     user_id: UUID
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -164,6 +178,3 @@ def get_tier_price(tier) -> str:
     """Get monthly price for a tier."""
     limits = get_tier_limits(tier)
     return limits["price"]
-
-
-    

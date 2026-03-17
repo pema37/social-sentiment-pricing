@@ -21,21 +21,19 @@ Place at: backend/services/scoring/score_fusion.py
 
 from __future__ import annotations
 
-from typing import Optional
-
-from .elasticity_calculator import ElasticityResult
 from .competitive_position import PositionResult
-from .urgency_scorer import UrgencyResult
+from .elasticity_calculator import ElasticityResult
 from .fusion_types import (
+    ELASTICITY_MAGNITUDE,
+    POSITION_DIRECTION_BIAS,
+    URGENCY_MULTIPLIER,
     ConflictType,
     FusionResult,
     GuardrailConfig,
     ProductContext,
-    ELASTICITY_MAGNITUDE,
-    URGENCY_MULTIPLIER,
-    POSITION_DIRECTION_BIAS,
 )
 from .guardrails import GuardrailEnforcer
+from .urgency_scorer import UrgencyResult
 
 
 class ScoreFusion:
@@ -52,7 +50,7 @@ class ScoreFusion:
         )
     """
 
-    def __init__(self, guardrails: Optional[GuardrailConfig] = None):
+    def __init__(self, guardrails: GuardrailConfig | None = None):
         self._enforcer = GuardrailEnforcer(guardrails)
 
     def compute(
@@ -61,7 +59,7 @@ class ScoreFusion:
         position: PositionResult,
         urgency: UrgencyResult,
         product: ProductContext,
-        sentiment_score: Optional[float] = None,
+        sentiment_score: float | None = None,
     ) -> FusionResult:
         """Run the full fusion pipeline."""
         reasoning_steps: list[str] = []
@@ -73,15 +71,17 @@ class ScoreFusion:
         pos_dir = self._position_direction(position)
         urg_dir = self._urgency_direction(urgency)
 
-        reasoning_steps.append(
-            f"Component votes: elasticity={elast_dir}, "
-            f"position={pos_dir}, urgency={urg_dir}"
-        )
+        reasoning_steps.append(f"Component votes: elasticity={elast_dir}, position={pos_dir}, urgency={urg_dir}")
 
         # ── Step 2: Resolve direction conflicts ──
         raw_direction, conflict_info = self._resolve_direction(
-            elast_dir, pos_dir, urg_dir,
-            elasticity, position, urgency, sentiment_score,
+            elast_dir,
+            pos_dir,
+            urg_dir,
+            elasticity,
+            position,
+            urgency,
+            sentiment_score,
         )
         conflicts.extend(conflict_info["conflicts"])
         resolutions.extend(conflict_info["resolutions"])
@@ -89,7 +89,9 @@ class ScoreFusion:
 
         # ── Step 3: Low confidence override ──
         overall_conf_prelim = self._compute_overall_confidence(
-            elasticity, position, urgency,
+            elasticity,
+            position,
+            urgency,
         )
         if overall_conf_prelim < 0.3:
             raw_direction = "hold"
@@ -98,30 +100,27 @@ class ScoreFusion:
                 f"Overall confidence {overall_conf_prelim:.2f} < 0.3 threshold. "
                 f"Recommending hold until more data accumulates."
             )
-            reasoning_steps.append(
-                f"Low confidence override: {overall_conf_prelim:.2f} < 0.3 → hold"
-            )
+            reasoning_steps.append(f"Low confidence override: {overall_conf_prelim:.2f} < 0.3 → hold")
 
         # ── Step 4: Compute raw magnitude ──
         raw_magnitude_pct = self._compute_magnitude(
-            raw_direction, elasticity, position, urgency,
+            raw_direction,
+            elasticity,
+            position,
+            urgency,
         )
 
         # Apply conflict damping
         damping = conflict_info.get("magnitude_damping", 1.0)
         raw_magnitude_pct *= damping
         if damping < 1.0:
-            reasoning_steps.append(
-                f"Conflict damping applied: magnitude × {damping:.0%}"
-            )
+            reasoning_steps.append(f"Conflict damping applied: magnitude × {damping:.0%}")
 
         # Apply merchant bias
         if product.merchant_bias != 0.0:
             bias_factor = 1.0 + (product.merchant_bias * 0.2)
             raw_magnitude_pct *= bias_factor
-            reasoning_steps.append(
-                f"Merchant bias adjustment: × {bias_factor:.2f}"
-            )
+            reasoning_steps.append(f"Merchant bias adjustment: × {bias_factor:.2f}")
 
         # Compute raw price
         if raw_direction == "increase":
@@ -133,19 +132,18 @@ class ScoreFusion:
 
         raw_price = product.current_price * (1.0 + raw_change_pct)
         reasoning_steps.append(
-            f"Raw recommendation: {product.current_price:.2f} → {raw_price:.2f} "
-            f"({raw_change_pct:+.2%})"
+            f"Raw recommendation: {product.current_price:.2f} → {raw_price:.2f} ({raw_change_pct:+.2%})"
         )
 
         # ── Step 5: Apply guardrails ──
         final_price, guardrail_results, was_clamped = self._enforcer.apply(
-            raw_price, raw_change_pct, product,
+            raw_price,
+            raw_change_pct,
+            product,
         )
 
         if was_clamped:
-            reasoning_steps.append(
-                f"Guardrails applied: {raw_price:.2f} → {final_price:.2f}"
-            )
+            reasoning_steps.append(f"Guardrails applied: {raw_price:.2f} → {final_price:.2f}")
 
         # Final change percentage
         if product.current_price > 0:
@@ -169,7 +167,9 @@ class ScoreFusion:
             "data_quality": self._data_quality_score(elasticity, position, urgency),
         }
         overall_confidence = self._compute_overall_confidence(
-            elasticity, position, urgency,
+            elasticity,
+            position,
+            urgency,
         )
 
         # Reduce confidence if conflicts detected
@@ -178,16 +178,18 @@ class ScoreFusion:
             overall_confidence = max(0.1, overall_confidence - conflict_penalty)
 
         # ── Step 7: Build reasoning ──
-        needs_review = any(
-            c in (ConflictType.POSITION_VS_SENTIMENT, ConflictType.LOW_CONFIDENCE)
-            for c in conflicts
-        )
+        needs_review = any(c in (ConflictType.POSITION_VS_SENTIMENT, ConflictType.LOW_CONFIDENCE) for c in conflicts)
         suggest_data = overall_confidence < 0.4 or elasticity.n_observations == 0
 
         reasoning = self._build_reasoning(
-            final_direction, final_change_pct, product,
-            elasticity, position, urgency,
-            conflicts, was_clamped,
+            final_direction,
+            final_change_pct,
+            product,
+            elasticity,
+            position,
+            urgency,
+            conflicts,
+            was_clamped,
         )
 
         return FusionResult(
@@ -225,10 +227,10 @@ class ScoreFusion:
         """
         ped = abs(e.estimate)
         if ped < 0.6 and e.confidence > 0.5:
-            return "increase"   # Inelastic + confident: safe to raise
+            return "increase"  # Inelastic + confident: safe to raise
         elif ped > 2.0 and e.confidence > 0.5:
-            return "decrease"   # Very elastic + confident: consider lowering
-        return "hold"           # Moderate or uncertain: no direction from elasticity
+            return "decrease"  # Very elastic + confident: consider lowering
+        return "hold"  # Moderate or uncertain: no direction from elasticity
 
     @staticmethod
     def _position_direction(p: PositionResult) -> str:
@@ -284,7 +286,7 @@ class ScoreFusion:
         elasticity: ElasticityResult,
         position: PositionResult,
         urgency: UrgencyResult,
-        sentiment_score: Optional[float],
+        sentiment_score: float | None,
     ) -> tuple[str, dict]:
         """
         Apply conflict resolution protocols from IE Architecture v2.
@@ -306,12 +308,9 @@ class ScoreFusion:
             if elasticity.confidence > 0.7 and urgency.score < 0.5:
                 conflicts.append(ConflictType.ELASTICITY_VS_URGENCY)
                 resolutions.append(
-                    "Elasticity suggests increase but urgency is low. "
-                    "Proceeding with increase at 50% magnitude."
+                    "Elasticity suggests increase but urgency is low. Proceeding with increase at 50% magnitude."
                 )
-                steps.append(
-                    "Conflict: elasticity↑ vs urgency→ | Resolution: magnitude × 50%"
-                )
+                steps.append("Conflict: elasticity↑ vs urgency→ | Resolution: magnitude × 50%")
                 damping = 0.5
 
         # ── Protocol 2: Position cheapest + sentiment negative ──
@@ -322,9 +321,7 @@ class ScoreFusion:
                     "We're the cheapest but sentiment is negative. "
                     "Possible quality perception issue — holding price for manual review."
                 )
-                steps.append(
-                    "Conflict: cheapest + negative sentiment | Resolution: hold + manual review"
-                )
+                steps.append("Conflict: cheapest + negative sentiment | Resolution: hold + manual review")
                 return "hold", {
                     "conflicts": conflicts,
                     "resolutions": resolutions,
@@ -362,10 +359,7 @@ class ScoreFusion:
                 f"decrease conf={confidences['decrease']:.2f}. "
                 f"Higher confidence ({winner}) wins at 70% magnitude."
             )
-            steps.append(
-                f"Conflict: contradictory | Winner: {winner} "
-                f"(conf {confidences[winner]:.2f}) | Damping: 70%"
-            )
+            steps.append(f"Conflict: contradictory | Winner: {winner} (conf {confidences[winner]:.2f}) | Damping: 70%")
             damping = min(damping, 0.7)
             return winner, {
                 "conflicts": conflicts,
@@ -387,8 +381,7 @@ class ScoreFusion:
 
         if not steps:
             steps.append(
-                f"Direction vote: increase={increase_votes}, "
-                f"decrease={decrease_votes}, hold={hold_votes} → {direction}"
+                f"Direction vote: increase={increase_votes}, decrease={decrease_votes}, hold={hold_votes} → {direction}"
             )
 
         return direction, {
@@ -441,9 +434,7 @@ class ScoreFusion:
         magnitude = base_magnitude * urg_mult
 
         # 3. Position bias
-        bias_table = POSITION_DIRECTION_BIAS.get(
-            position.market_pressure, POSITION_DIRECTION_BIAS["no_data"]
-        )
+        bias_table = POSITION_DIRECTION_BIAS.get(position.market_pressure, POSITION_DIRECTION_BIAS["no_data"])
         pos_mult = bias_table.get(direction, 1.0)
         magnitude *= pos_mult
 
@@ -451,9 +442,9 @@ class ScoreFusion:
         #    than half the gap per change.
         if position.gap_to_median_pct != 0 and position.competitor_count > 0:
             gap_magnitude = abs(position.gap_to_median_pct) / 100.0 * 0.5
-            if direction == "increase" and position.market_pressure == "underpriced":
-                magnitude = min(magnitude, gap_magnitude)
-            elif direction == "decrease" and position.market_pressure == "overpriced":
+            if (direction == "increase" and position.market_pressure == "underpriced") or (
+                direction == "decrease" and position.market_pressure == "overpriced"
+            ):
                 magnitude = min(magnitude, gap_magnitude)
 
         return magnitude
@@ -473,12 +464,7 @@ class ScoreFusion:
           elasticity: 30%, position: 25%, urgency: 20%, data_quality: 25%
         """
         dq = self._data_quality_score(elasticity, position, urgency)
-        return (
-            elasticity.confidence * 0.30
-            + position.confidence * 0.25
-            + urgency.confidence * 0.20
-            + dq * 0.25
-        )
+        return elasticity.confidence * 0.30 + position.confidence * 0.25 + urgency.confidence * 0.20 + dq * 0.25
 
     @staticmethod
     def _data_quality_score(
@@ -550,19 +536,11 @@ class ScoreFusion:
         # Elasticity context
         ped = abs(elasticity.estimate)
         if ped > 1.5:
-            parts.append(
-                f"Demand is elastic (PED={elasticity.estimate:.2f}) — "
-                f"customers are price-sensitive."
-            )
+            parts.append(f"Demand is elastic (PED={elasticity.estimate:.2f}) — customers are price-sensitive.")
         elif ped < 0.7:
-            parts.append(
-                f"Demand is inelastic (PED={elasticity.estimate:.2f}) — "
-                f"pricing power is strong."
-            )
+            parts.append(f"Demand is inelastic (PED={elasticity.estimate:.2f}) — pricing power is strong.")
         else:
-            parts.append(
-                f"Demand has moderate elasticity (PED={elasticity.estimate:.2f})."
-            )
+            parts.append(f"Demand has moderate elasticity (PED={elasticity.estimate:.2f}).")
 
         # Position context
         if position.market_pressure == "underpriced":
@@ -578,16 +556,11 @@ class ScoreFusion:
                 f"of {position.competitor_count} competitors."
             )
         elif position.competitor_count > 0:
-            parts.append(
-                f"Fairly positioned among {position.competitor_count} "
-                f"competitors (CPI={position.cpi:.0f})."
-            )
+            parts.append(f"Fairly positioned among {position.competitor_count} competitors (CPI={position.cpi:.0f}).")
 
         # Urgency context
         if urgency.score >= 0.6:
-            parts.append(
-                f"Urgency is {urgency.level_label} ({urgency.score:.2f})."
-            )
+            parts.append(f"Urgency is {urgency.level_label} ({urgency.score:.2f}).")
             if urgency.reasons:
                 parts.append(f"Drivers: {', '.join(urgency.reasons[:3])}.")
 
@@ -596,19 +569,8 @@ class ScoreFusion:
             parts.append("Price was adjusted by guardrail constraints.")
 
         # Confidence note
-        conf = (
-            elasticity.confidence * 0.30
-            + position.confidence * 0.25
-            + urgency.confidence * 0.20
-            + 0.5 * 0.25
-        )
+        conf = elasticity.confidence * 0.30 + position.confidence * 0.25 + urgency.confidence * 0.20 + 0.5 * 0.25
         if conf < 0.4:
-            parts.append(
-                "Confidence is low — consider gathering more data before acting."
-            )
+            parts.append("Confidence is low — consider gathering more data before acting.")
 
         return " ".join(parts)
-    
-
-
-    

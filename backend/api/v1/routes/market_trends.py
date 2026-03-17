@@ -13,7 +13,6 @@ from schemas.market_trends import (
 )
 from services.market_trends_service import market_trends_service
 
-
 router = APIRouter(prefix="/market-trends", tags=["Market Trends"])
 
 
@@ -21,50 +20,40 @@ router = APIRouter(prefix="/market-trends", tags=["Market Trends"])
 async def analyze_market_trends(request: MarketTrendsRequest) -> MarketTrendsResponse:
     """
     Get AI-analyzed trending products.
-    
+
     Analyzes current market trends and returns trending products
     with AI-generated insights and recommendations.
     """
     try:
         result = await market_trends_service.get_trends(
-            category=request.category,
-            source=request.source,
-            limit=request.limit
+            category=request.category, source=request.source, limit=request.limit
         )
-        
+
         return MarketTrendsResponse(
             trends=result["trends"],
             ai_summary=result["ai_summary"],
             generated_at=result["generated_at"],
             category=result.get("category"),
-            source=result.get("source")
+            source=result.get("source"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/trends", response_model=MarketTrendsResponse)
-async def get_trends(
-    category: str = None,
-    source: str = None,
-    limit: int = 10
-) -> MarketTrendsResponse:
+async def get_trends(category: str = None, source: str = None, limit: int = 10) -> MarketTrendsResponse:
     """
     Get trending products (GET version for easy testing).
     """
     try:
-        result = await market_trends_service.get_trends(
-            category=category,
-            source=source,
-            limit=limit
-        )
-        
+        result = await market_trends_service.get_trends(category=category, source=source, limit=limit)
+
         return MarketTrendsResponse(
             trends=result["trends"],
             ai_summary=result["ai_summary"],
             generated_at=result["generated_at"],
             category=result.get("category"),
-            source=result.get("source")
+            source=result.get("source"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -88,7 +77,3 @@ async def get_sources() -> TrendSourcesResponse:
 async def market_trends_health():
     """Check if market trends service is operational."""
     return market_trends_service.get_health()
-
-
-
-

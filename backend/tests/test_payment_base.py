@@ -7,8 +7,7 @@ PaymentServiceFactory — registry/factory for network services.
 
 import sys
 from abc import ABCMeta
-from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,6 +18,7 @@ _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
 class _FakeTransactionVerification:
     """Mimics schemas.payment.TransactionVerification."""
+
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -28,7 +28,7 @@ _schema_mod = MagicMock()
 _schema_mod.TransactionVerification = _FakeTransactionVerification
 sys.modules["schemas.payment"] = _schema_mod
 
-from services.payment.base import PaymentVerificationService, PaymentServiceFactory
+from services.payment.base import PaymentServiceFactory, PaymentVerificationService
 
 # Restore
 for _m in _MOCKED:
@@ -40,6 +40,7 @@ del _m
 
 
 # ── Concrete stub for testing ────────────────────────────────────
+
 
 class _StubPaymentService(PaymentVerificationService):
     """Minimal concrete implementation for testing."""
@@ -56,15 +57,16 @@ class _StubPaymentService(PaymentVerificationService):
     def is_available(self) -> bool:
         return self._available
 
-    async def verify_transaction(self, transaction_hash, expected_amount,
-                                  expected_recipient, expected_memo=None):
+    async def verify_transaction(self, transaction_hash, expected_amount, expected_recipient, expected_memo=None):
         return self._create_verification_result(
-            verified=True, transaction_hash=transaction_hash,
+            verified=True,
+            transaction_hash=transaction_hash,
         )
 
     async def get_transaction_status(self, transaction_hash):
         return self._create_verification_result(
-            verified=False, transaction_hash=transaction_hash,
+            verified=False,
+            transaction_hash=transaction_hash,
         )
 
 
@@ -72,7 +74,6 @@ class _StubPaymentService(PaymentVerificationService):
 # PaymentVerificationService — ABC enforcement
 # ──────────────────────────────────────────────
 class TestABCEnforcement:
-
     def test_cannot_instantiate_abc(self):
         with pytest.raises(TypeError):
             PaymentVerificationService()
@@ -80,9 +81,14 @@ class TestABCEnforcement:
     def test_must_implement_network_name(self):
         class Bad(PaymentVerificationService):
             @property
-            def is_available(self): return True
-            async def verify_transaction(self, *a, **kw): pass
-            async def get_transaction_status(self, *a, **kw): pass
+            def is_available(self):
+                return True
+
+            async def verify_transaction(self, *a, **kw):
+                pass
+
+            async def get_transaction_status(self, *a, **kw):
+                pass
 
         with pytest.raises(TypeError):
             Bad()
@@ -90,9 +96,14 @@ class TestABCEnforcement:
     def test_must_implement_is_available(self):
         class Bad(PaymentVerificationService):
             @property
-            def network_name(self): return "x"
-            async def verify_transaction(self, *a, **kw): pass
-            async def get_transaction_status(self, *a, **kw): pass
+            def network_name(self):
+                return "x"
+
+            async def verify_transaction(self, *a, **kw):
+                pass
+
+            async def get_transaction_status(self, *a, **kw):
+                pass
 
         with pytest.raises(TypeError):
             Bad()
@@ -100,10 +111,15 @@ class TestABCEnforcement:
     def test_must_implement_verify_transaction(self):
         class Bad(PaymentVerificationService):
             @property
-            def network_name(self): return "x"
+            def network_name(self):
+                return "x"
+
             @property
-            def is_available(self): return True
-            async def get_transaction_status(self, *a, **kw): pass
+            def is_available(self):
+                return True
+
+            async def get_transaction_status(self, *a, **kw):
+                pass
 
         with pytest.raises(TypeError):
             Bad()
@@ -111,10 +127,15 @@ class TestABCEnforcement:
     def test_must_implement_get_transaction_status(self):
         class Bad(PaymentVerificationService):
             @property
-            def network_name(self): return "x"
+            def network_name(self):
+                return "x"
+
             @property
-            def is_available(self): return True
-            async def verify_transaction(self, *a, **kw): pass
+            def is_available(self):
+                return True
+
+            async def verify_transaction(self, *a, **kw):
+                pass
 
         with pytest.raises(TypeError):
             Bad()
@@ -131,7 +152,6 @@ class TestABCEnforcement:
 # Concrete properties
 # ──────────────────────────────────────────────
 class TestConcreteProperties:
-
     def test_network_name(self):
         svc = _StubPaymentService(name="bsv")
         assert svc.network_name == "bsv"
@@ -149,61 +169,70 @@ class TestConcreteProperties:
 # _create_verification_result
 # ──────────────────────────────────────────────
 class TestCreateVerificationResult:
-
     def test_returns_transaction_verification(self):
         svc = _StubPaymentService(name="ethereum")
         result = svc._create_verification_result(
-            verified=True, transaction_hash="0xabc",
+            verified=True,
+            transaction_hash="0xabc",
         )
         assert isinstance(result, _FakeTransactionVerification)
 
     def test_sets_verified(self):
         svc = _StubPaymentService()
         result = svc._create_verification_result(
-            verified=True, transaction_hash="tx1",
+            verified=True,
+            transaction_hash="tx1",
         )
         assert result.verified is True
 
     def test_sets_verified_false(self):
         svc = _StubPaymentService()
         result = svc._create_verification_result(
-            verified=False, transaction_hash="tx1",
+            verified=False,
+            transaction_hash="tx1",
         )
         assert result.verified is False
 
     def test_sets_transaction_hash(self):
         svc = _StubPaymentService()
         result = svc._create_verification_result(
-            verified=True, transaction_hash="0xdeadbeef",
+            verified=True,
+            transaction_hash="0xdeadbeef",
         )
         assert result.transaction_hash == "0xdeadbeef"
 
     def test_sets_network_from_property(self):
         svc = _StubPaymentService(name="bsv")
         result = svc._create_verification_result(
-            verified=True, transaction_hash="tx1",
+            verified=True,
+            transaction_hash="tx1",
         )
         assert result.network == "bsv"
 
     def test_sets_error(self):
         svc = _StubPaymentService()
         result = svc._create_verification_result(
-            verified=False, transaction_hash="tx1", error="not found",
+            verified=False,
+            transaction_hash="tx1",
+            error="not found",
         )
         assert result.error == "not found"
 
     def test_error_none_by_default(self):
         svc = _StubPaymentService()
         result = svc._create_verification_result(
-            verified=True, transaction_hash="tx1",
+            verified=True,
+            transaction_hash="tx1",
         )
         assert result.error is None
 
     def test_passes_kwargs(self):
         svc = _StubPaymentService()
         result = svc._create_verification_result(
-            verified=True, transaction_hash="tx1",
-            amount=1000, confirmations=6,
+            verified=True,
+            transaction_hash="tx1",
+            amount=1000,
+            confirmations=6,
         )
         assert result.amount == 1000
         assert result.confirmations == 6
@@ -213,7 +242,6 @@ class TestCreateVerificationResult:
 # verify_transaction / get_transaction_status via stub
 # ──────────────────────────────────────────────
 class TestStubMethods:
-
     @pytest.mark.asyncio
     async def test_verify_transaction(self):
         svc = _StubPaymentService(name="bsv")
@@ -233,7 +261,6 @@ class TestStubMethods:
 # PaymentServiceFactory
 # ──────────────────────────────────────────────
 class TestPaymentServiceFactory:
-
     def setup_method(self):
         """Clear registry before each test."""
         PaymentServiceFactory._services = {}
@@ -291,5 +318,3 @@ class TestPaymentServiceFactory:
         PaymentServiceFactory.register("ethereum", eth)
         assert PaymentServiceFactory.get_service("bsv") is bsv
         assert PaymentServiceFactory.get_service("ethereum") is eth
-
-        

@@ -23,14 +23,14 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Sequence
-
 
 # ──────────────────────────────────────────────────────────
 # INPUT: Outcome records (duck-typed from DB rows)
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class OutcomeRecord:
@@ -51,26 +51,26 @@ class OutcomeRecord:
     # What was recommended
     recommended_price: float
     original_price: float
-    recommended_change_pct: float          # Signed: +0.05 = 5% increase
-    confidence_score: float                # 0-1 overall confidence
+    recommended_change_pct: float  # Signed: +0.05 = 5% increase
+    confidence_score: float  # 0-1 overall confidence
 
     # What the merchant did
-    action: str                            # "accepted", "modified", "rejected", "ignored"
-    actual_price_set: Optional[float]      # None if rejected/ignored
-    merchant_modified_to: Optional[float]  # None if accepted as-is or rejected
+    action: str  # "accepted", "modified", "rejected", "ignored"
+    actual_price_set: float | None  # None if rejected/ignored
+    merchant_modified_to: float | None  # None if accepted as-is or rejected
 
     # Measured impact (7-day window, the primary measurement)
-    revenue_before_7d: Optional[float] = None
-    revenue_after_7d: Optional[float] = None
-    revenue_delta_pct: Optional[float] = None
-    units_before_7d: Optional[int] = None
-    units_after_7d: Optional[int] = None
-    margin_before: Optional[float] = None
-    margin_after: Optional[float] = None
+    revenue_before_7d: float | None = None
+    revenue_after_7d: float | None = None
+    revenue_delta_pct: float | None = None
+    units_before_7d: int | None = None
+    units_after_7d: int | None = None
+    margin_before: float | None = None
+    margin_after: float | None = None
 
     # Experiment metadata (populated by Phase 3 experiment_manager)
-    strategy_arm: Optional[str] = None     # e.g., "conservative", "competitive"
-    is_exploration: bool = False           # True if from 5% holdout
+    strategy_arm: str | None = None  # e.g., "conservative", "competitive"
+    is_exploration: bool = False  # True if from 5% holdout
 
     @property
     def was_acted_on(self) -> bool:
@@ -91,7 +91,7 @@ class OutcomeRecord:
         return (price_set - self.original_price) / self.original_price
 
     @property
-    def modification_ratio(self) -> Optional[float]:
+    def modification_ratio(self) -> float | None:
         """
         How much the merchant modified the recommendation.
 
@@ -110,23 +110,26 @@ class OutcomeRecord:
 # OUTPUT: Per-category computed features
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class ConfidenceBandPerformance:
     """Performance metrics for a confidence band (e.g., 0.6-0.8)."""
-    band_label: str                        # e.g., "0.6-0.8"
+
+    band_label: str  # e.g., "0.6-0.8"
     band_lower: float
     band_upper: float
     count: int
     avg_revenue_lift_pct: float
     avg_margin_delta: float
-    acceptance_rate: float                 # % of recommendations acted on
-    positive_outcome_rate: float           # % with revenue_delta > 0
+    acceptance_rate: float  # % of recommendations acted on
+    positive_outcome_rate: float  # % with revenue_delta > 0
 
 
 @dataclass
 class MagnitudeBucket:
     """Performance metrics for a magnitude range."""
-    bucket_label: str                      # e.g., "2-5%"
+
+    bucket_label: str  # e.g., "2-5%"
     bucket_lower_pct: float
     bucket_upper_pct: float
     count: int
@@ -148,45 +151,45 @@ class CategoryFeatures:
 
     category: str
     computed_at: datetime
-    n_outcomes: int                        # Total outcomes analyzed
+    n_outcomes: int  # Total outcomes analyzed
 
     # ── Observed elasticity ──
-    observed_elasticities: list[float]     # Individual PED observations
-    mean_observed_elasticity: Optional[float]
-    median_observed_elasticity: Optional[float]
-    elasticity_std: Optional[float]
-    elasticity_n: int                      # How many valid elasticity observations
+    observed_elasticities: list[float]  # Individual PED observations
+    mean_observed_elasticity: float | None
+    median_observed_elasticity: float | None
+    elasticity_std: float | None
+    elasticity_n: int  # How many valid elasticity observations
 
     # ── Acceptance rates ──
-    acceptance_rate: float                 # (accepted + modified) / total
-    accepted_rate: float                   # accepted / total
-    modified_rate: float                   # modified / total
-    rejected_rate: float                   # rejected / total
-    ignored_rate: float                    # ignored / total
+    acceptance_rate: float  # (accepted + modified) / total
+    accepted_rate: float  # accepted / total
+    modified_rate: float  # modified / total
+    rejected_rate: float  # rejected / total
+    ignored_rate: float  # ignored / total
 
     # ── Revenue lift ──
-    mean_revenue_lift_pct: Optional[float]
-    median_revenue_lift_pct: Optional[float]
-    positive_outcome_rate: float           # % with revenue_delta > 0
+    mean_revenue_lift_pct: float | None
+    median_revenue_lift_pct: float | None
+    positive_outcome_rate: float  # % with revenue_delta > 0
 
     # ── Margin impact ──
-    mean_margin_delta: Optional[float]
+    mean_margin_delta: float | None
 
     # ── Confidence band performance ──
     confidence_band_performance: list[ConfidenceBandPerformance]
-    confidence_outcome_correlation: Optional[float]  # Pearson r
+    confidence_outcome_correlation: float | None  # Pearson r
 
     # ── Optimal magnitude ──
     magnitude_performance: list[MagnitudeBucket]
-    best_magnitude_bucket: Optional[str]   # Label of highest avg_revenue_lift bucket
+    best_magnitude_bucket: str | None  # Label of highest avg_revenue_lift bucket
 
     # ── Merchant modification patterns ──
-    mean_modification_ratio: Optional[float]  # Avg how much merchants scale recs
-    modification_direction_bias: float     # >0 = merchants increase more than rec'd
+    mean_modification_ratio: float | None  # Avg how much merchants scale recs
+    modification_direction_bias: float  # >0 = merchants increase more than rec'd
 
     # ── Data quality ──
-    pct_with_impact_data: float            # % of outcomes with measured impact
-    pct_acted_on: float                    # % accepted or modified
+    pct_with_impact_data: float  # % of outcomes with measured impact
+    pct_acted_on: float  # % accepted or modified
 
 
 # ──────────────────────────────────────────────────────────
@@ -246,7 +249,8 @@ class FeatureEngineer:
         records: list[OutcomeRecord],
     ) -> CategoryFeatures:
         """Compute all features for one category."""
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
+
         now = datetime.now(UTC)
         n = len(records)
 
@@ -303,11 +307,7 @@ class FeatureEngineer:
         best_bucket = self._find_best_magnitude(mag_perf)
 
         # ── Modification patterns ──
-        mod_ratios = [
-            r.modification_ratio
-            for r in records
-            if r.modification_ratio is not None
-        ]
+        mod_ratios = [r.modification_ratio for r in records if r.modification_ratio is not None]
         mean_mod_ratio = statistics.mean(mod_ratios) if mod_ratios else None
 
         # Direction bias: do merchants tend to scale up or down?
@@ -381,9 +381,7 @@ class FeatureEngineer:
                 continue  # Price barely moved, can't measure elasticity
 
             # Unit change
-            pct_unit_change = (
-                (r.units_after_7d - r.units_before_7d) / r.units_before_7d
-            )
+            pct_unit_change = (r.units_after_7d - r.units_before_7d) / r.units_before_7d
 
             # PED = %ΔQ / %ΔP
             ped = pct_unit_change / pct_price_change
@@ -417,16 +415,23 @@ class FeatureEngineer:
 
         for label, lower, upper in _CONFIDENCE_BANDS:
             band_records = [
-                r for r in records
-                if lower <= r.confidence_score < upper
-                or (upper == 1.0 and r.confidence_score == 1.0)
+                r
+                for r in records
+                if lower <= r.confidence_score < upper or (upper == 1.0 and r.confidence_score == 1.0)
             ]
             if not band_records:
-                results.append(ConfidenceBandPerformance(
-                    band_label=label, band_lower=lower, band_upper=upper,
-                    count=0, avg_revenue_lift_pct=0.0, avg_margin_delta=0.0,
-                    acceptance_rate=0.0, positive_outcome_rate=0.0,
-                ))
+                results.append(
+                    ConfidenceBandPerformance(
+                        band_label=label,
+                        band_lower=lower,
+                        band_upper=upper,
+                        count=0,
+                        avg_revenue_lift_pct=0.0,
+                        avg_margin_delta=0.0,
+                        acceptance_rate=0.0,
+                        positive_outcome_rate=0.0,
+                    )
+                )
                 continue
 
             n = len(band_records)
@@ -447,16 +452,18 @@ class FeatureEngineer:
                 avg_margin = 0.0
                 pos_rate = 0.0
 
-            results.append(ConfidenceBandPerformance(
-                band_label=label,
-                band_lower=lower,
-                band_upper=upper,
-                count=n,
-                avg_revenue_lift_pct=round(avg_lift, 4),
-                avg_margin_delta=round(avg_margin, 4),
-                acceptance_rate=round(acted / n, 4),
-                positive_outcome_rate=round(pos_rate, 4),
-            ))
+            results.append(
+                ConfidenceBandPerformance(
+                    band_label=label,
+                    band_lower=lower,
+                    band_upper=upper,
+                    count=n,
+                    avg_revenue_lift_pct=round(avg_lift, 4),
+                    avg_margin_delta=round(avg_margin, 4),
+                    acceptance_rate=round(acted / n, 4),
+                    positive_outcome_rate=round(pos_rate, 4),
+                )
+            )
 
         return results
 
@@ -467,7 +474,7 @@ class FeatureEngineer:
     @staticmethod
     def _compute_confidence_correlation(
         with_impact: list[OutcomeRecord],
-    ) -> Optional[float]:
+    ) -> float | None:
         """
         Pearson r between confidence_score and revenue_delta_pct.
 
@@ -510,18 +517,21 @@ class FeatureEngineer:
 
         for label, lower, upper in _MAGNITUDE_BUCKETS:
             bucket_records = [
-                r for r in records
-                if r.was_acted_on and r.has_impact_data
-                and lower <= abs(r.actual_change_pct) < upper
+                r for r in records if r.was_acted_on and r.has_impact_data and lower <= abs(r.actual_change_pct) < upper
             ]
 
             if not bucket_records:
-                results.append(MagnitudeBucket(
-                    bucket_label=label,
-                    bucket_lower_pct=lower, bucket_upper_pct=upper,
-                    count=0, avg_revenue_lift_pct=0.0,
-                    avg_margin_delta=0.0, positive_outcome_rate=0.0,
-                ))
+                results.append(
+                    MagnitudeBucket(
+                        bucket_label=label,
+                        bucket_lower_pct=lower,
+                        bucket_upper_pct=upper,
+                        count=0,
+                        avg_revenue_lift_pct=0.0,
+                        avg_margin_delta=0.0,
+                        positive_outcome_rate=0.0,
+                    )
+                )
                 continue
 
             n = len(bucket_records)
@@ -534,21 +544,24 @@ class FeatureEngineer:
             avg_margin = statistics.mean(margin_deltas) if margin_deltas else 0.0
             pos_rate = sum(1 for r in bucket_records if r.revenue_delta_pct > 0) / n
 
-            results.append(MagnitudeBucket(
-                bucket_label=label,
-                bucket_lower_pct=lower, bucket_upper_pct=upper,
-                count=n,
-                avg_revenue_lift_pct=round(avg_lift, 4),
-                avg_margin_delta=round(avg_margin, 4),
-                positive_outcome_rate=round(pos_rate, 4),
-            ))
+            results.append(
+                MagnitudeBucket(
+                    bucket_label=label,
+                    bucket_lower_pct=lower,
+                    bucket_upper_pct=upper,
+                    count=n,
+                    avg_revenue_lift_pct=round(avg_lift, 4),
+                    avg_margin_delta=round(avg_margin, 4),
+                    positive_outcome_rate=round(pos_rate, 4),
+                )
+            )
 
         return results
 
     @staticmethod
     def _find_best_magnitude(
         buckets: list[MagnitudeBucket],
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Find the magnitude bucket with highest avg_revenue_lift.
 
@@ -559,7 +572,3 @@ class FeatureEngineer:
             return None
         best = max(eligible, key=lambda b: b.avg_revenue_lift_pct)
         return best.bucket_label if best.avg_revenue_lift_pct > 0 else None
-    
-
-
-    

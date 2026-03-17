@@ -7,8 +7,8 @@ ARRAY columns in pricing_rules model. These tests verify the API
 surface is correctly wired without hitting the database.
 """
 
-import sys
 import os
+
 import pytest
 
 # fastapi_x402 requires PAY_TO_ADDRESS when app initializes
@@ -24,22 +24,29 @@ def _mock_core_config():
     """Override conftest: app import needs real core.config."""
     pass
 
+
 @pytest.fixture(autouse=True)
 def _mock_core_logging():
     """Override conftest: app import needs real core.logging."""
     pass
 
+
 @pytest.fixture(autouse=True)
 def _clean_polluted_modules():
     """Remove stub modules left by other test files so real app can import."""
     import sys as _sys
-    polluted = [k for k in _sys.modules
-                if isinstance(_sys.modules[k], type(_sys)) is False
-                and k.startswith(("services.", "models."))
-                and hasattr(_sys.modules[k], "__path__") is False
-                and not hasattr(_sys.modules[k], "__file__")]
+
+    polluted = [
+        k
+        for k in _sys.modules
+        if isinstance(_sys.modules[k], type(_sys)) is False
+        and k.startswith(("services.", "models."))
+        and hasattr(_sys.modules[k], "__path__") is False
+        and not hasattr(_sys.modules[k], "__file__")
+    ]
     # Also remove any services.* that are plain ModuleType stubs without __file__
     from types import ModuleType
+
     to_remove = []
     for k, v in _sys.modules.items():
         if k.startswith("services.") and isinstance(v, ModuleType) and not hasattr(v, "__file__"):
@@ -54,19 +61,22 @@ def _clean_polluted_modules():
 # App Initialization Tests
 # ===================================================================
 
-class TestAppInitialization:
 
+class TestAppInitialization:
     def test_app_imports(self):
         """FastAPI app should import without errors."""
         from main import app
+
         assert app is not None
 
     def test_app_title(self):
         from main import app
+
         assert app.title is not None
 
     def test_app_has_routes(self):
         from main import app
+
         routes = [r.path for r in app.routes]
         assert len(routes) > 0
 
@@ -75,12 +85,14 @@ class TestAppInitialization:
 # Route Registration Tests
 # ===================================================================
 
+
 class TestRouteRegistration:
     """Verify that expected API routes are registered."""
 
     @pytest.fixture(autouse=True)
     def _load_routes(self):
         from main import app
+
         self.routes = [r.path for r in app.routes]
 
     def test_health_route_registered(self):
@@ -115,13 +127,16 @@ class TestRouteRegistration:
 # Non-DB Endpoint Tests (using TestClient)
 # ===================================================================
 
+
 class TestPublicEndpoints:
     """Test endpoints that don't require database or authentication."""
 
     @pytest.fixture(autouse=True)
     def _setup_client(self):
         from fastapi.testclient import TestClient
+
         from main import app
+
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def test_root_returns_200(self):
@@ -165,9 +180,10 @@ class TestPublicEndpoints:
 # Protected Endpoint Auth Check Tests
 # ===================================================================
 
+
 class TestAuthRequired:
     """Verify protected endpoints reject unauthenticated requests.
-    
+
     Note: 500 is accepted because without a database connection,
     endpoints may crash before reaching auth middleware.
     """
@@ -175,7 +191,9 @@ class TestAuthRequired:
     @pytest.fixture(autouse=True)
     def _setup_client(self):
         from fastapi.testclient import TestClient
+
         from main import app
+
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def test_products_requires_auth(self):
@@ -203,12 +221,14 @@ class TestAuthRequired:
 # Error Handling Tests
 # ===================================================================
 
-class TestErrorHandling:
 
+class TestErrorHandling:
     @pytest.fixture(autouse=True)
     def _setup_client(self):
         from fastapi.testclient import TestClient
+
         from main import app
+
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def test_404_on_unknown_route(self):
@@ -224,37 +244,42 @@ class TestErrorHandling:
 # Schema / Model Import Tests
 # ===================================================================
 
+
 class TestSchemaImports:
     """Verify all schemas import cleanly — catches circular import bugs."""
 
     def test_auth_schemas(self):
         from schemas.auth import LoginRequest, UserResponse
+
         assert LoginRequest is not None
         assert UserResponse is not None
 
     def test_product_schemas(self):
         from schemas.product import ProductRead
+
         assert ProductRead is not None
 
     def test_sentiment_schemas(self):
-        from schemas.sentiment import SentimentRead, SentimentResponse
+        from schemas.sentiment import SentimentRead
+
         assert SentimentRead is not None
 
     def test_competitor_schemas(self):
         from schemas.competitor import CompetitorResponse
+
         assert CompetitorResponse is not None
 
     def test_pricing_schemas(self):
-        from schemas.pricing import PricingRuleResponse, PriceRecommendationResponse
+        from schemas.pricing import PricingRuleResponse
+
         assert PricingRuleResponse is not None
 
     def test_trust_scoring_schemas(self):
-        from schemas.trust_scoring import AuthorScoreRequest, ContentAnalysisRequest
+        from schemas.trust_scoring import AuthorScoreRequest
+
         assert AuthorScoreRequest is not None
 
     def test_alert_schemas(self):
         from schemas.alert import AlertRead
+
         assert AlertRead is not None
-
-
-        

@@ -12,35 +12,33 @@ FIX (2026-02-17): Typed evidence extraction with backward compat for old recomme
 """
 
 import logging
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from math import sqrt
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models.recommendation_outcome import (
-    RecommendationOutcome,
-    OutcomeLabel,
-    MerchantDecision,
-    MeasurementStatus,
-    RecommendationSource,
-)
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
 from models.pricing_rule import PricingRule
 from models.product import Product
+from models.recommendation_outcome import (
+    MeasurementStatus,
+    MerchantDecision,
+    OutcomeLabel,
+    RecommendationOutcome,
+    RecommendationSource,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class OutcomeService:
-
     # Thresholds for outcome classification
-    POSITIVE_THRESHOLD = Decimal("0.02")   # 2% improvement
+    POSITIVE_THRESHOLD = Decimal("0.02")  # 2% improvement
     NEGATIVE_THRESHOLD = Decimal("-0.02")  # 2% decline
-    MIN_DATA_THRESHOLD = 3                  # Minimum sales to be conclusive
+    MIN_DATA_THRESHOLD = 3  # Minimum sales to be conclusive
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -62,30 +60,30 @@ class OutcomeService:
         measurement_window_hours: int = 48,
         # ── New: merchant decision tracking ──
         merchant_decision: str = MerchantDecision.ACCEPTED.value,
-        actual_price_set: Optional[Decimal] = None,
+        actual_price_set: Decimal | None = None,
         # ── New: confidence decomposition ──
-        confidence_elasticity: Optional[float] = None,
-        confidence_position: Optional[float] = None,
-        confidence_urgency: Optional[float] = None,
-        confidence_data_quality: Optional[float] = None,
+        confidence_elasticity: float | None = None,
+        confidence_position: float | None = None,
+        confidence_urgency: float | None = None,
+        confidence_data_quality: float | None = None,
         # ── New: analyst scoring snapshot ──
-        elasticity_estimate: Optional[float] = None,
-        urgency_score: Optional[float] = None,
-        sentiment_score: Optional[float] = None,
-        competitive_position_index: Optional[float] = None,
-        competitor_count: Optional[int] = None,
-        data_completeness: Optional[float] = None,
+        elasticity_estimate: float | None = None,
+        urgency_score: float | None = None,
+        sentiment_score: float | None = None,
+        competitive_position_index: float | None = None,
+        competitor_count: int | None = None,
+        data_completeness: float | None = None,
         # ── New: agent evidence chain ──
-        scout_evidence: Optional[dict] = None,
-        analyst_evidence: Optional[dict] = None,
-        strategist_evidence: Optional[dict] = None,
+        scout_evidence: dict | None = None,
+        analyst_evidence: dict | None = None,
+        strategist_evidence: dict | None = None,
         # ── New: cross-merchant fields ──
-        product_category: Optional[str] = None,
-        store_platform: Optional[str] = None,
+        product_category: str | None = None,
+        store_platform: str | None = None,
         # ── New: recommendation source ──
         recommendation_source: str = RecommendationSource.RULE_BASED.value,
         # ── New: margin ──
-        margin_before: Optional[Decimal] = None,
+        margin_before: Decimal | None = None,
     ) -> RecommendationOutcome:
         """Record the outcome of an applied recommendation."""
 
@@ -99,9 +97,7 @@ class OutcomeService:
             raise ValueError("Recommendation was not applied")
 
         # Check if outcome already recorded
-        stmt = select(RecommendationOutcome).where(
-            RecommendationOutcome.recommendation_id == recommendation_id
-        )
+        stmt = select(RecommendationOutcome).where(RecommendationOutcome.recommendation_id == recommendation_id)
         result = await self.db.execute(stmt)
         existing = result.scalars().first()
         if existing:
@@ -112,7 +108,7 @@ class OutcomeService:
         if recommendation.triggered_rule_id:
             rule = await self.db.get(PricingRule, recommendation.triggered_rule_id)
             if rule:
-                rule_type = rule.rule_type.value if hasattr(rule.rule_type, 'value') else str(rule.rule_type)
+                rule_type = rule.rule_type.value if hasattr(rule.rule_type, "value") else str(rule.rule_type)
 
         # Calculate changes
         revenue_change = revenue_after - revenue_before
@@ -123,7 +119,9 @@ class OutcomeService:
         units_change = units_sold_after - units_sold_before
         units_change_percent = None
         if units_sold_before > 0:
-            units_change_percent = Decimal(str((units_sold_after - units_sold_before) / units_sold_before * 100)).quantize(Decimal("0.01"))
+            units_change_percent = Decimal(
+                str((units_sold_after - units_sold_before) / units_sold_before * 100)
+            ).quantize(Decimal("0.01"))
 
         # Calculate avg daily metrics
         days = max(measurement_window_hours / 24, 1)
@@ -132,9 +130,7 @@ class OutcomeService:
 
         # Calculate outcome score and label
         outcome_score, outcome_label = self._calculate_outcome(
-            revenue_before, revenue_after,
-            units_sold_before, units_sold_after,
-            recommendation.change_percent
+            revenue_before, revenue_after, units_sold_before, units_sold_after, recommendation.change_percent
         )
 
         now = datetime.now(UTC)
@@ -157,36 +153,29 @@ class OutcomeService:
             rule_id=recommendation.triggered_rule_id,
             rule_type=rule_type,
             recommendation_source=recommendation_source,
-
             price_before=recommendation.current_price,
             price_after=recommendation.recommended_price,
             price_change_percent=recommendation.change_percent,
-
             sales_count_before=sales_count_before,
             units_sold_before=units_sold_before,
             revenue_before=revenue_before,
             avg_daily_sales_before=avg_daily_before,
-
             sales_count_after=sales_count_after,
             units_sold_after=units_sold_after,
             revenue_after=revenue_after,
             avg_daily_sales_after=avg_daily_after,
-
             revenue_change=revenue_change,
             revenue_change_percent=revenue_change_percent,
             units_change=units_change,
             units_change_percent=units_change_percent,
-
             outcome_score=outcome_score,
             outcome_label=outcome_label,
             original_confidence=recommendation.confidence_score,
-
             # Confidence decomposition
             confidence_elasticity=confidence_elasticity,
             confidence_position=confidence_position,
             confidence_urgency=confidence_urgency,
             confidence_data_quality=confidence_data_quality,
-
             # Analyst scoring snapshot
             elasticity_estimate=elasticity_estimate,
             urgency_score=urgency_score,
@@ -194,28 +183,22 @@ class OutcomeService:
             competitive_position_index=competitive_position_index,
             competitor_count=competitor_count,
             data_completeness=data_completeness,
-
             # Merchant decision
             merchant_decision=merchant_decision,
             actual_price_set=actual_price_set or recommendation.recommended_price,
             merchant_modification_percent=merchant_modification_percent,
             decided_at=now,
-
             # Agent evidence chain
             scout_evidence=scout_evidence,
             analyst_evidence=analyst_evidence,
             strategist_evidence=strategist_evidence,
-
             # Cross-merchant fields
             product_category=product_category,
             store_platform=store_platform,
-
             # Margin
             margin_before=margin_before,
-
             # Measurement state
             measurement_status=MeasurementStatus.DECISION_RECORDED.value,
-
             price_applied_at=recommendation.applied_at or now,
             measurement_window_hours=measurement_window_hours,
             measured_at=now,
@@ -237,7 +220,7 @@ class OutcomeService:
         revenue_after: Decimal,
         units_before: int,
         units_after: int,
-        price_change_percent: Decimal
+        price_change_percent: Decimal,
     ) -> tuple[Decimal, OutcomeLabel]:
         """Calculate outcome score (-1 to 1) and label."""
 
@@ -254,7 +237,7 @@ class OutcomeService:
         else:
             units_ratio = Decimal("1") if units_after > 0 else Decimal("0")
 
-        score = (revenue_ratio * Decimal("0.7") + units_ratio * Decimal("0.3"))
+        score = revenue_ratio * Decimal("0.7") + units_ratio * Decimal("0.3")
         score = max(Decimal("-1"), min(Decimal("1"), score))
         score = score.quantize(Decimal("0.01"))
 
@@ -274,20 +257,19 @@ class OutcomeService:
     async def get_outcomes(
         self,
         user_id: UUID,
-        product_id: Optional[UUID] = None,
-        rule_id: Optional[UUID] = None,
-        outcome_label: Optional[OutcomeLabel] = None,
+        product_id: UUID | None = None,
+        rule_id: UUID | None = None,
+        outcome_label: OutcomeLabel | None = None,
         days: int = 30,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
     ) -> list[RecommendationOutcome]:
         """List outcomes with filters."""
 
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
         stmt = select(RecommendationOutcome).where(
-            RecommendationOutcome.user_id == user_id,
-            RecommendationOutcome.created_at >= cutoff
+            RecommendationOutcome.user_id == user_id, RecommendationOutcome.created_at >= cutoff
         )
 
         if product_id:
@@ -311,7 +293,7 @@ class OutcomeService:
         self,
         outcome_id: UUID,
         user_id: UUID,
-    ) -> Optional[RecommendationOutcome]:
+    ) -> RecommendationOutcome | None:
         """Fetch a single outcome by ID, scoped to the requesting user."""
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.id == outcome_id,
@@ -329,8 +311,8 @@ class OutcomeService:
         recommendation_id: UUID,
         user_id: UUID,
         merchant_decision: str,
-        actual_price_set: Optional[Decimal] = None,
-        rejection_reason: Optional[str] = None,
+        actual_price_set: Decimal | None = None,
+        rejection_reason: str | None = None,
     ) -> RecommendationOutcome:
         """
         Record a merchant's decision on a recommendation — IMMEDIATELY.
@@ -358,9 +340,7 @@ class OutcomeService:
             raise ValueError("Recommendation not found")
 
         # ── Guard: don't double-record ──
-        stmt = select(RecommendationOutcome).where(
-            RecommendationOutcome.recommendation_id == recommendation_id
-        )
+        stmt = select(RecommendationOutcome).where(RecommendationOutcome.recommendation_id == recommendation_id)
         result = await self.db.execute(stmt)
         existing = result.scalars().first()
         if existing:
@@ -387,11 +367,7 @@ class OutcomeService:
         if recommendation.triggered_rule_id:
             rule = await self.db.get(PricingRule, recommendation.triggered_rule_id)
             if rule:
-                rule_type = (
-                    rule.rule_type.value
-                    if hasattr(rule.rule_type, 'value')
-                    else str(rule.rule_type)
-                )
+                rule_type = rule.rule_type.value if hasattr(rule.rule_type, "value") else str(rule.rule_type)
 
         # ── Extract evidence from recommendation.factors ──
         #
@@ -460,16 +436,8 @@ class OutcomeService:
 
         # ── Extract analyst scoring snapshot ──
         # Typed analyst evidence has these at top level
-        sentiment_score_val = (
-            typed_analyst.get("sentiment_score")
-            if isinstance(typed_analyst, dict)
-            else None
-        )
-        competitor_count_val = (
-            typed_analyst.get("competitor_count")
-            if isinstance(typed_analyst, dict)
-            else None
-        )
+        sentiment_score_val = typed_analyst.get("sentiment_score") if isinstance(typed_analyst, dict) else None
+        competitor_count_val = typed_analyst.get("competitor_count") if isinstance(typed_analyst, dict) else None
 
         # Fallback: old-style price_impacts dict
         if sentiment_score_val is None:
@@ -499,7 +467,7 @@ class OutcomeService:
         if recommendation.product_id:
             product = await self.db.get(Product, recommendation.product_id)
             if product:
-                product_category = getattr(product, 'category', None)
+                product_category = getattr(product, "category", None)
 
         # ── Calculate modification percent ──
         merchant_modification_percent = None
@@ -507,14 +475,10 @@ class OutcomeService:
         if actual_price_set is not None and recommendation.recommended_price > 0:
             diff = actual_price_set - recommendation.recommended_price
             merchant_modification_percent = float(
-                (diff / recommendation.recommended_price * 100)
-                .quantize(Decimal("0.01"))
+                (diff / recommendation.recommended_price * 100).quantize(Decimal("0.01"))
             )
             # Auto-detect: "accepted" but changed price by >1% → "modified"
-            if (
-                effective_decision == MerchantDecision.ACCEPTED.value
-                and abs(merchant_modification_percent) > 1.0
-            ):
+            if effective_decision == MerchantDecision.ACCEPTED.value and abs(merchant_modification_percent) > 1.0:
                 effective_decision = MerchantDecision.MODIFIED.value
 
         # ── Determine measurement status ──
@@ -524,9 +488,7 @@ class OutcomeService:
             MerchantDecision.AUTO_APPLIED.value,
         )
         measurement_status = (
-            MeasurementStatus.DECISION_RECORDED.value
-            if needs_measurement
-            else MeasurementStatus.MEASURED_30D.value
+            MeasurementStatus.DECISION_RECORDED.value if needs_measurement else MeasurementStatus.MEASURED_30D.value
         )
 
         effective_price = actual_price_set or recommendation.recommended_price
@@ -540,12 +502,10 @@ class OutcomeService:
             rule_id=recommendation.triggered_rule_id,
             rule_type=rule_type,
             recommendation_source=RecommendationSource.RULE_BASED.value,
-
             # Price data
             price_before=recommendation.current_price,
             price_after=effective_price,
             price_change_percent=recommendation.change_percent,
-
             # Sales data: zeros — Celery fills at 7d/14d/30d
             sales_count_before=0,
             units_sold_before=0,
@@ -559,72 +519,38 @@ class OutcomeService:
             revenue_change_percent=None,
             units_change=0,
             units_change_percent=None,
-
             # Outcome: inconclusive until measurement
             outcome_score=Decimal("0"),
             outcome_label=OutcomeLabel.INCONCLUSIVE,
             original_confidence=recommendation.confidence_score,
-
             # Confidence decomposition
             confidence_elasticity=confidence_elasticity,
             confidence_position=confidence_position,
             confidence_urgency=confidence_urgency,
             confidence_data_quality=confidence_data_quality,
-
             # Analyst scoring snapshot (all 6 fields)
-            elasticity_estimate=(
-                float(elasticity_estimate_val)
-                if elasticity_estimate_val is not None
-                else None
-            ),
-            urgency_score=(
-                float(urgency_score_val)
-                if urgency_score_val is not None
-                else None
-            ),
-            sentiment_score=(
-                float(sentiment_score_val)
-                if sentiment_score_val is not None
-                else None
-            ),
+            elasticity_estimate=(float(elasticity_estimate_val) if elasticity_estimate_val is not None else None),
+            urgency_score=(float(urgency_score_val) if urgency_score_val is not None else None),
+            sentiment_score=(float(sentiment_score_val) if sentiment_score_val is not None else None),
             competitive_position_index=(
-                float(competitive_position_index_val)
-                if competitive_position_index_val is not None
-                else None
+                float(competitive_position_index_val) if competitive_position_index_val is not None else None
             ),
-            competitor_count=(
-                int(competitor_count_val)
-                if competitor_count_val is not None
-                else None
-            ),
-            data_completeness=(
-                float(data_completeness_val)
-                if data_completeness_val is not None
-                else None
-            ),
-
+            competitor_count=(int(competitor_count_val) if competitor_count_val is not None else None),
+            data_completeness=(float(data_completeness_val) if data_completeness_val is not None else None),
             # Merchant decision
             merchant_decision=effective_decision,
             actual_price_set=effective_price,
             merchant_modification_percent=merchant_modification_percent,
             decided_at=now,
-
             # Agent evidence chain
-            scout_evidence=(
-                scout_evidence if isinstance(scout_evidence, dict) else None
-            ),
-            analyst_evidence=(
-                analyst_evidence if isinstance(analyst_evidence, dict) else None
-            ),
+            scout_evidence=(scout_evidence if isinstance(scout_evidence, dict) else None),
+            analyst_evidence=(analyst_evidence if isinstance(analyst_evidence, dict) else None),
             strategist_evidence=strategist_evidence,
-
             # Cross-merchant intelligence
             product_category=product_category,
             store_platform=recommendation.applied_to_platform,
-
             # Measurement state
             measurement_status=measurement_status,
-
             # Timestamps
             price_applied_at=recommendation.applied_at or now,
             measurement_window_hours=0,  # Multi-window, not single
@@ -656,8 +582,7 @@ class OutcomeService:
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
         stmt = select(RecommendationOutcome).where(
-            RecommendationOutcome.rule_id == rule_id,
-            RecommendationOutcome.created_at >= cutoff
+            RecommendationOutcome.rule_id == rule_id, RecommendationOutcome.created_at >= cutoff
         )
         result = await self.db.execute(stmt)
         outcomes = list(result.scalars().all())
@@ -666,7 +591,7 @@ class OutcomeService:
             return {
                 "rule_id": rule_id,
                 "rule_name": rule.name,
-                "rule_type": rule.rule_type.value if hasattr(rule.rule_type, 'value') else str(rule.rule_type),
+                "rule_type": rule.rule_type.value if hasattr(rule.rule_type, "value") else str(rule.rule_type),
                 "total_outcomes": 0,
                 "positive_outcomes": 0,
                 "negative_outcomes": 0,
@@ -702,10 +627,7 @@ class OutcomeService:
         confidence_correlation = None
         lifts = [o.revenue_lift_7d for o in outcomes if o.revenue_lift_7d is not None]
         if len(lifts) >= 5:
-            conf_values = [
-                float(o.original_confidence) for o in outcomes
-                if o.revenue_lift_7d is not None
-            ]
+            conf_values = [float(o.original_confidence) for o in outcomes if o.revenue_lift_7d is not None]
             confidence_correlation = pearson_r(conf_values, lifts)
             if confidence_correlation is not None:
                 confidence_correlation = round(confidence_correlation, 4)
@@ -713,7 +635,7 @@ class OutcomeService:
         return {
             "rule_id": rule_id,
             "rule_name": rule.name,
-            "rule_type": rule.rule_type.value if hasattr(rule.rule_type, 'value') else str(rule.rule_type),
+            "rule_type": rule.rule_type.value if hasattr(rule.rule_type, "value") else str(rule.rule_type),
             "total_outcomes": total,
             "positive_outcomes": positive,
             "negative_outcomes": negative,
@@ -736,8 +658,7 @@ class OutcomeService:
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
         stmt = select(RecommendationOutcome).where(
-            RecommendationOutcome.user_id == user_id,
-            RecommendationOutcome.created_at >= cutoff
+            RecommendationOutcome.user_id == user_id, RecommendationOutcome.created_at >= cutoff
         )
         result = await self.db.execute(stmt)
         outcomes = list(result.scalars().all())
@@ -791,7 +712,9 @@ class OutcomeService:
             by_rule_type[rt]["revenue_impact"] += o.revenue_change
 
         for rt, stats in by_rule_type.items():
-            stats["success_rate"] = float(Decimal(str(stats["positive"] / stats["count"] * 100)).quantize(Decimal("0.01")))
+            stats["success_rate"] = float(
+                Decimal(str(stats["positive"] / stats["count"] * 100)).quantize(Decimal("0.01"))
+            )
             stats["revenue_impact"] = float(stats["revenue_impact"])
 
         rule_scores: dict = {}
@@ -805,13 +728,15 @@ class OutcomeService:
         for rule_id, data in rule_scores.items():
             avg = sum(data["scores"]) / len(data["scores"])
             rule = await self.db.get(PricingRule, rule_id)
-            rule_averages.append({
-                "rule_id": str(rule_id),
-                "rule_name": rule.name if rule else "Unknown",
-                "rule_type": data["rule_type"],
-                "avg_score": float(avg.quantize(Decimal("0.01"))),
-                "outcome_count": len(data["scores"]),
-            })
+            rule_averages.append(
+                {
+                    "rule_id": str(rule_id),
+                    "rule_name": rule.name if rule else "Unknown",
+                    "rule_type": data["rule_type"],
+                    "avg_score": float(avg.quantize(Decimal("0.01"))),
+                    "outcome_count": len(data["scores"]),
+                }
+            )
 
         rule_averages.sort(key=lambda x: x["avg_score"], reverse=True)
 
@@ -844,7 +769,7 @@ class OutcomeService:
             RecommendationOutcome.user_id == user_id,
             RecommendationOutcome.rule_type == rule_type,
             RecommendationOutcome.created_at >= cutoff,
-            RecommendationOutcome.outcome_label != OutcomeLabel.INCONCLUSIVE
+            RecommendationOutcome.outcome_label != OutcomeLabel.INCONCLUSIVE,
         )
         result = await self.db.execute(stmt)
         outcomes = list(result.scalars().all())
@@ -860,7 +785,8 @@ class OutcomeService:
 # SHARED UTILITY (used by this module + sibling modules)
 # ──────────────────────────────────────────────
 
-def pearson_r(x: list[float], y: list[float]) -> Optional[float]:
+
+def pearson_r(x: list[float], y: list[float]) -> float | None:
     """Calculate Pearson correlation coefficient.
 
     Shared across outcome modules. Import as:
@@ -881,5 +807,3 @@ def pearson_r(x: list[float], y: list[float]) -> Optional[float]:
         return None
 
     return numerator / (denom_x * denom_y)
-
-

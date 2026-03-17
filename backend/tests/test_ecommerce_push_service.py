@@ -19,9 +19,8 @@ PATCHED (2026-02-22): Fixed mock patching bugs:
 """
 
 import sys
-from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -102,6 +101,7 @@ def make_integration(platform="shopify", active=True):
 
 def make_success_response(old_price=95.0):
     from services.integration.base import PriceUpdateResult
+
     resp = MagicMock()
     resp.result = PriceUpdateResult.SUCCESS
     resp.old_price = old_price
@@ -110,7 +110,6 @@ def make_success_response(old_price=95.0):
 
 
 def make_failure_response(error="API rate limited"):
-    from services.integration.base import PriceUpdateResult
     resp = MagicMock()
     # Make result NOT equal to SUCCESS
     resp.result = MagicMock()
@@ -133,8 +132,8 @@ def make_mock_service(success=True, old_price=95.0, error="API rate limited"):
 # 1. Initialization
 # ============================================================
 
-class TestEcommercePushServiceInit:
 
+class TestEcommercePushServiceInit:
     def test_stores_db(self):
         db = make_mock_db()
         svc = EcommercePushService(db)
@@ -145,8 +144,8 @@ class TestEcommercePushServiceInit:
 # 2. push_price (orchestration)
 # ============================================================
 
-class TestPushPrice:
 
+class TestPushPrice:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_no_links_returns_failure(self, mock_select):
@@ -180,9 +179,12 @@ class TestPushPrice:
         db.execute.return_value = mock_result
 
         svc = EcommercePushService(db)
-        svc._push_to_platform = AsyncMock(return_value={
-            "platform": "shopify", "success": True,
-        })
+        svc._push_to_platform = AsyncMock(
+            return_value={
+                "platform": "shopify",
+                "success": True,
+            }
+        )
 
         result = await svc.push_price(make_product())
         assert result["success"] is True
@@ -202,10 +204,12 @@ class TestPushPrice:
         db.execute.return_value = mock_result
 
         svc = EcommercePushService(db)
-        svc._push_to_platform = AsyncMock(side_effect=[
-            {"platform": "shopify", "success": True},
-            {"platform": "woocommerce", "success": True},
-        ])
+        svc._push_to_platform = AsyncMock(
+            side_effect=[
+                {"platform": "shopify", "success": True},
+                {"platform": "woocommerce", "success": True},
+            ]
+        )
 
         result = await svc.push_price(make_product())
         assert result["success"] is True
@@ -226,10 +230,12 @@ class TestPushPrice:
         db.execute.return_value = mock_result
 
         svc = EcommercePushService(db)
-        svc._push_to_platform = AsyncMock(side_effect=[
-            {"platform": "shopify", "success": True},
-            {"platform": "woocommerce", "success": False, "error": "timeout"},
-        ])
+        svc._push_to_platform = AsyncMock(
+            side_effect=[
+                {"platform": "shopify", "success": True},
+                {"platform": "woocommerce", "success": False, "error": "timeout"},
+            ]
+        )
 
         result = await svc.push_price(make_product())
         assert result["success"] is True
@@ -250,9 +256,13 @@ class TestPushPrice:
         db.execute.return_value = mock_result
 
         svc = EcommercePushService(db)
-        svc._push_to_platform = AsyncMock(return_value={
-            "platform": "shopify", "success": False, "error": "API error",
-        })
+        svc._push_to_platform = AsyncMock(
+            return_value={
+                "platform": "shopify",
+                "success": False,
+                "error": "API error",
+            }
+        )
 
         result = await svc.push_price(make_product())
         assert result["success"] is False
@@ -285,9 +295,11 @@ class TestPushPrice:
 #   pytest tests/test_ecommerce_push_service.py::TestPushToPlatform -v
 # ============================================================
 
-@pytest.mark.skip(reason="sys.modules poisoning in full suite — pass in isolation: pytest tests/test_ecommerce_push_service.py -v")
-class TestPushToPlatform:
 
+@pytest.mark.skip(
+    reason="sys.modules poisoning in full suite — pass in isolation: pytest tests/test_ecommerce_push_service.py -v"
+)
+class TestPushToPlatform:
     def setup_method(self):
         """Clear class-level service cache before each test."""
         EcommercePushService._services = {}
@@ -336,7 +348,7 @@ class TestPushToPlatform:
 
         mock_service = make_mock_service(success=True, old_price=95.0)
 
-        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+        with patch.object(EcommercePushService, "_get_service", return_value=mock_service):
             svc = EcommercePushService(db)
             product = make_product(current_price=Decimal("99.99"))
             result = await svc._push_to_platform(product, make_link())
@@ -353,7 +365,7 @@ class TestPushToPlatform:
 
         mock_service = make_mock_service(success=True)
 
-        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+        with patch.object(EcommercePushService, "_get_service", return_value=mock_service):
             svc = EcommercePushService(db)
             result = await svc._push_to_platform(make_product(), make_link())
 
@@ -367,7 +379,8 @@ class TestPushToPlatform:
         db.get.return_value = make_integration(platform="bigcommerce")
 
         with patch.object(
-            EcommercePushService, '_get_service',
+            EcommercePushService,
+            "_get_service",
             side_effect=ValueError("Unsupported platform: bigcommerce"),
         ):
             svc = EcommercePushService(db)
@@ -384,7 +397,7 @@ class TestPushToPlatform:
 
         mock_service = make_mock_service(success=False, error="rate limited")
 
-        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+        with patch.object(EcommercePushService, "_get_service", return_value=mock_service):
             svc = EcommercePushService(db)
             result = await svc._push_to_platform(make_product(), make_link())
 
@@ -403,7 +416,7 @@ class TestPushToPlatform:
         link = make_link()
         product = make_product(current_price=Decimal("99.99"))
 
-        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+        with patch.object(EcommercePushService, "_get_service", return_value=mock_service):
             svc = EcommercePushService(db)
             await svc._push_to_platform(product, link)
 
@@ -421,7 +434,7 @@ class TestPushToPlatform:
 
         mock_service = make_mock_service(success=True)
 
-        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+        with patch.object(EcommercePushService, "_get_service", return_value=mock_service):
             svc = EcommercePushService(db)
             await svc._push_to_platform(make_product(), make_link())
 
@@ -438,7 +451,7 @@ class TestPushToPlatform:
 
         mock_service = make_mock_service(success=True, old_price=85.0)
 
-        with patch.object(EcommercePushService, '_get_service', return_value=mock_service):
+        with patch.object(EcommercePushService, "_get_service", return_value=mock_service):
             svc = EcommercePushService(db)
             result = await svc._push_to_platform(make_product(), make_link())
 
@@ -454,7 +467,3 @@ class TestPushToPlatform:
 
         assert result["success"] is False
         assert result["error_code"] == "EXCEPTION"
-
-
-
-        

@@ -20,21 +20,20 @@ decomposition, agent evidence chain, merchant decision tracking, cross-merchant
 fields, analyst scoring snapshot, measurement status state machine.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 from uuid import UUID, uuid4
 
+from sqlalchemy import Column, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Column, DateTime, Text
-from sqlalchemy.types import Float as SAFloat
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
-
 
 # ──────────────────────────────────────────────
 # Enums
 # ──────────────────────────────────────────────
+
 
 class OutcomeLabel(str, Enum):
     POSITIVE = "positive"
@@ -45,6 +44,7 @@ class OutcomeLabel(str, Enum):
 
 class MerchantDecision(str, Enum):
     """What the merchant did with the recommendation."""
+
     ACCEPTED = "accepted"
     MODIFIED = "modified"
     REJECTED = "rejected"
@@ -55,16 +55,17 @@ class MerchantDecision(str, Enum):
 
 class MeasurementStatus(str, Enum):
     """Tracks which impact windows have been measured.
-    
+
     State machine:
     awaiting_decision → decision_recorded → measured_7d → measured_14d → measured_30d
-    
+
     The background job queries by status + price_applied_at to find rows
     due for their next measurement window.
     """
+
     AWAITING_DECISION = "awaiting_decision"
     DECISION_RECORDED = "decision_recorded"
-    SINGLE_MEASURED = "single_measured"     # Legacy: existing 48h measurement
+    SINGLE_MEASURED = "single_measured"  # Legacy: existing 48h measurement
     MEASURED_7D = "measured_7d"
     MEASURED_14D = "measured_14d"
     MEASURED_30D = "measured_30d"
@@ -73,6 +74,7 @@ class MeasurementStatus(str, Enum):
 
 class RecommendationSource(str, Enum):
     """Which pipeline produced this recommendation."""
+
     FULL_PIPELINE = "full_pipeline"
     RULE_BASED = "rule_based"
     MANUAL = "manual"
@@ -84,28 +86,17 @@ class RecommendationSource(str, Enum):
 # Model
 # ──────────────────────────────────────────────
 
+
 class RecommendationOutcome(SQLModel, table=True):
     __tablename__ = "recommendation_outcomes"
 
     # ── Identity ──
-    id: UUID = Field(
-        default_factory=uuid4,
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True)
-    )
-    user_id: UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True)
-    )
-    recommendation_id: UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, unique=True, index=True)
-    )
-    product_id: UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True)
-    )
-    rule_id: Optional[UUID] = Field(
-        default=None,
-        sa_column=Column(PG_UUID(as_uuid=True), nullable=True, index=True)
-    )
-    rule_type: Optional[str] = Field(default=None, max_length=50)
+    id: UUID = Field(default_factory=uuid4, sa_column=Column(PG_UUID(as_uuid=True), primary_key=True))
+    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
+    recommendation_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, unique=True, index=True))
+    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
+    rule_id: UUID | None = Field(default=None, sa_column=Column(PG_UUID(as_uuid=True), nullable=True, index=True))
+    rule_type: str | None = Field(default=None, max_length=50)
 
     # ── Recommendation source ──
     recommendation_source: str = Field(
@@ -130,9 +121,9 @@ class RecommendationOutcome(SQLModel, table=True):
     avg_daily_sales_after: Decimal = Field(default=Decimal("0"), decimal_places=2)
 
     revenue_change: Decimal = Field(default=Decimal("0"), decimal_places=2)
-    revenue_change_percent: Optional[Decimal] = Field(default=None, decimal_places=2)
+    revenue_change_percent: Decimal | None = Field(default=None, decimal_places=2)
     units_change: int = Field(default=0)
-    units_change_percent: Optional[Decimal] = Field(default=None, decimal_places=2)
+    units_change_percent: Decimal | None = Field(default=None, decimal_places=2)
 
     # ── Outcome scoring (existing) ──
     outcome_score: Decimal = Field(default=Decimal("0"), decimal_places=2)
@@ -140,20 +131,20 @@ class RecommendationOutcome(SQLModel, table=True):
 
     # ── Confidence: overall (existing) + decomposition (new) ──
     original_confidence: Decimal = Field(decimal_places=2)
-    confidence_elasticity: Optional[float] = Field(default=None)
-    confidence_position: Optional[float] = Field(default=None)
-    confidence_urgency: Optional[float] = Field(default=None)
-    confidence_data_quality: Optional[float] = Field(default=None)
+    confidence_elasticity: float | None = Field(default=None)
+    confidence_position: float | None = Field(default=None)
+    confidence_urgency: float | None = Field(default=None)
+    confidence_data_quality: float | None = Field(default=None)
 
     # ── Analyst scoring snapshot (new) ──
     # What the Analyst computed at time of recommendation.
     # Enables "predicted vs actual" for Bayesian prior updates.
-    elasticity_estimate: Optional[float] = Field(default=None)
-    urgency_score: Optional[float] = Field(default=None)
-    sentiment_score: Optional[float] = Field(default=None)
-    competitive_position_index: Optional[float] = Field(default=None)
-    competitor_count: Optional[int] = Field(default=None)
-    data_completeness: Optional[float] = Field(default=None)
+    elasticity_estimate: float | None = Field(default=None)
+    urgency_score: float | None = Field(default=None)
+    sentiment_score: float | None = Field(default=None)
+    competitive_position_index: float | None = Field(default=None)
+    competitor_count: int | None = Field(default=None)
+    data_completeness: float | None = Field(default=None)
 
     # ── Merchant decision tracking (new) ──
     # What the merchant actually did — the modification pattern is
@@ -162,50 +153,41 @@ class RecommendationOutcome(SQLModel, table=True):
         default=MerchantDecision.ACCEPTED.value,
         max_length=20,
     )
-    actual_price_set: Optional[Decimal] = Field(default=None, decimal_places=2)
-    merchant_modification_percent: Optional[float] = Field(default=None)
-    decided_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    actual_price_set: Decimal | None = Field(default=None, decimal_places=2)
+    merchant_modification_percent: float | None = Field(default=None)
+    decided_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
     # ── Multi-window revenue measurement (new) ──
     # Filled by background job at 7d, 14d, 30d after price_applied_at.
-    revenue_7d_after: Optional[Decimal] = Field(default=None, decimal_places=2)
-    revenue_14d_after: Optional[Decimal] = Field(default=None, decimal_places=2)
-    revenue_30d_after: Optional[Decimal] = Field(default=None, decimal_places=2)
+    revenue_7d_after: Decimal | None = Field(default=None, decimal_places=2)
+    revenue_14d_after: Decimal | None = Field(default=None, decimal_places=2)
+    revenue_30d_after: Decimal | None = Field(default=None, decimal_places=2)
 
-    units_7d_after: Optional[int] = Field(default=None)
-    units_14d_after: Optional[int] = Field(default=None)
-    units_30d_after: Optional[int] = Field(default=None)
+    units_7d_after: int | None = Field(default=None)
+    units_14d_after: int | None = Field(default=None)
+    units_30d_after: int | None = Field(default=None)
 
-    revenue_lift_7d: Optional[float] = Field(default=None)
-    revenue_lift_14d: Optional[float] = Field(default=None)
-    revenue_lift_30d: Optional[float] = Field(default=None)
+    revenue_lift_7d: float | None = Field(default=None)
+    revenue_lift_14d: float | None = Field(default=None)
+    revenue_lift_30d: float | None = Field(default=None)
 
     # ── Margin tracking (new) ──
-    margin_before: Optional[Decimal] = Field(default=None, decimal_places=3)
-    margin_7d_after: Optional[Decimal] = Field(default=None, decimal_places=3)
-    margin_30d_after: Optional[Decimal] = Field(default=None, decimal_places=3)
-    margin_delta: Optional[float] = Field(default=None)
+    margin_before: Decimal | None = Field(default=None, decimal_places=3)
+    margin_7d_after: Decimal | None = Field(default=None, decimal_places=3)
+    margin_30d_after: Decimal | None = Field(default=None, decimal_places=3)
+    margin_delta: float | None = Field(default=None)
 
     # ── Agent evidence chain (new) ──
     # Full provenance for failure tracing. When a recommendation fails,
     # trace which agent's reasoning was wrong.
-    scout_evidence: Optional[dict] = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True)
-    )
-    analyst_evidence: Optional[dict] = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True)
-    )
-    strategist_evidence: Optional[dict] = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True)
-    )
+    scout_evidence: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    analyst_evidence: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    strategist_evidence: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
 
     # ── Cross-merchant intelligence fields (new) ──
     # Required for category benchmarks (activates at 5+ merchants).
-    product_category: Optional[str] = Field(default=None, max_length=100)
-    store_platform: Optional[str] = Field(default=None, max_length=20)
+    product_category: str | None = Field(default=None, max_length=100)
+    store_platform: str | None = Field(default=None, max_length=20)
 
     # ── Measurement status (new) ──
     measurement_status: str = Field(
@@ -216,11 +198,12 @@ class RecommendationOutcome(SQLModel, table=True):
     # ── Timestamps (existing) ──
     price_applied_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
     measurement_window_hours: int = Field(default=48)
-    measured_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)))
+    measured_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    )
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    )
 
     class Config:
         use_enum_values = True
-
-
-        

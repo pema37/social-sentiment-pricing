@@ -10,12 +10,12 @@ Run: pytest backend/tests/test_autonomous_schemas.py -v
 """
 
 import json
-from datetime import datetime, timezone
+import os
+from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
 
-import os
 os.environ.setdefault("GEMINI_API_KEY", "test-dummy-key")
 
 from services.ai_trend_analysis.autonomous_orchestrator import (
@@ -26,7 +26,6 @@ from services.ai_trend_analysis.autonomous_orchestrator import (
     PricingDecision,
 )
 
-
 # ---------------------------------------------------------------------------
 # MarketSignal (Scout Agent Output)
 # ---------------------------------------------------------------------------
@@ -34,6 +33,7 @@ from services.ai_trend_analysis.autonomous_orchestrator import (
 
 class SampleDataFactory:
     """Factory for generating sample schema data."""
+
     def market_signal(self, overrides=None):
         data = {
             "competitor_name": "TestCompetitor",
@@ -85,6 +85,7 @@ class SampleDataFactory:
 @pytest.fixture
 def sample_data():
     return SampleDataFactory()
+
 
 class TestMarketSignal:
     """Scout Agent output schema — must be rock-solid for downstream agents."""
@@ -160,15 +161,14 @@ class TestMarketSignal:
         assert signal.signal_type == "price_drop"
 
     def test_positive_price_change_allowed(self, sample_data):
-        signal = MarketSignal(
-            **sample_data.market_signal({"price_change_pct": 10.0, "signal_type": "price_increase"})
-        )
+        signal = MarketSignal(**sample_data.market_signal({"price_change_pct": 10.0, "signal_type": "price_increase"}))
         assert signal.price_change_pct > 0
 
 
 # ---------------------------------------------------------------------------
 # MarketAssessment (Analyst Agent Output)
 # ---------------------------------------------------------------------------
+
 
 class TestMarketAssessment:
     """Analyst Agent output — feeds directly into Strategist decisions."""
@@ -233,9 +233,7 @@ class TestMarketAssessment:
 
     def test_direction_values_accepted(self, sample_data):
         for direction in ["increase", "decrease", "hold"]:
-            assessment = MarketAssessment(
-                **sample_data.market_assessment({"recommended_direction": direction})
-            )
+            assessment = MarketAssessment(**sample_data.market_assessment({"recommended_direction": direction}))
             assert assessment.recommended_direction == direction
 
     def test_serialization_roundtrip(self, sample_data):
@@ -251,6 +249,7 @@ class TestMarketAssessment:
 # ---------------------------------------------------------------------------
 # PricingDecision (Strategist Agent Output)
 # ---------------------------------------------------------------------------
+
 
 class TestPricingDecision:
     """Strategist output — the final autonomous action."""
@@ -305,6 +304,7 @@ class TestPricingDecision:
 # AgentStreamEvent (SSE Wire Format)
 # ---------------------------------------------------------------------------
 
+
 class TestAgentStreamEvent:
     """SSE event schema — must serialize correctly for EventSource clients."""
 
@@ -343,6 +343,7 @@ class TestAgentStreamEvent:
 # AgentPhase Enum
 # ---------------------------------------------------------------------------
 
+
 class TestAgentPhase:
     """Enum for pipeline phase tracking."""
 
@@ -355,7 +356,3 @@ class TestAgentPhase:
     def test_string_comparison(self):
         assert AgentPhase.SCOUT == "scout"
         assert AgentPhase.STRATEGIST != "analyst"
-
-
-
-        

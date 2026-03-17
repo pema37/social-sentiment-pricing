@@ -20,16 +20,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 
 # ---------------------------------------------------------------------------
 # Shared types
 # ---------------------------------------------------------------------------
+
 
 class PriceDirection(str, Enum):
     INCREASE = "increase"
@@ -38,9 +38,9 @@ class PriceDirection(str, Enum):
 
 
 class DataQualityLevel(str, Enum):
-    HIGH = "high"           # completeness >= 0.8
-    MEDIUM = "medium"       # completeness >= 0.5
-    LOW = "low"             # completeness >= 0.2
+    HIGH = "high"  # completeness >= 0.8
+    MEDIUM = "medium"  # completeness >= 0.5
+    LOW = "low"  # completeness >= 0.2
     INSUFFICIENT = "insufficient"  # completeness < 0.2
 
 
@@ -55,19 +55,14 @@ class ContractViolation(Exception):
         constraint: What was expected
         raw_output: The original unvalidated dict
     """
-    def __init__(
-        self, agent: str, field: str, value: Any,
-        constraint: str, raw_output: Optional[dict] = None
-    ):
+
+    def __init__(self, agent: str, field: str, value: Any, constraint: str, raw_output: dict | None = None):
         self.agent = agent
         self.field = field
         self.value = value
         self.constraint = constraint
         self.raw_output = raw_output
-        super().__init__(
-            f"ContractViolation [{agent}]: field '{field}' = {value!r} "
-            f"violates constraint: {constraint}"
-        )
+        super().__init__(f"ContractViolation [{agent}]: field '{field}' = {value!r} violates constraint: {constraint}")
 
     def to_dict(self) -> dict:
         return {
@@ -94,15 +89,17 @@ def compute_provenance_hash(data: dict) -> str:
 # SCOUT CONTRACTS
 # ---------------------------------------------------------------------------
 
+
 class CompetitorPrice(BaseModel):
     """A single competitor price observation."""
+
     competitor_name: str = Field(min_length=1, max_length=255)
     price: float = Field(gt=0, description="Must be positive")
     currency: str = Field(default="USD", max_length=3)
-    url: Optional[str] = None
-    scraped_at: Optional[datetime] = None
+    url: str | None = None
+    scraped_at: datetime | None = None
     in_stock: bool = True
-    shipping_cost: Optional[float] = Field(default=None, ge=0)
+    shipping_cost: float | None = Field(default=None, ge=0)
 
 
 class ScoutInput(BaseModel):
@@ -111,10 +108,11 @@ class ScoutInput(BaseModel):
 
     Validated BEFORE the Scout runs to catch bad requests early.
     """
+
     product_id: str = Field(min_length=1)
     merchant_id: str = Field(min_length=1)
     product_name: str = Field(min_length=1, max_length=500)
-    product_category: Optional[str] = None
+    product_category: str | None = None
     current_price: float = Field(gt=0)
     target_competitors: list[str] = Field(
         default_factory=list,
@@ -134,9 +132,10 @@ class ScoutOutput(BaseModel):
     Every field is typed and constrained — no free-text analysis.
     The Scout observes; it does not interpret or recommend.
     """
+
     product_id: str
     merchant_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Competitive data
     competitor_prices: list[CompetitorPrice] = Field(default_factory=list)
@@ -173,8 +172,10 @@ class ScoutOutput(BaseModel):
 # ANALYST CONTRACTS
 # ---------------------------------------------------------------------------
 
+
 class ElasticityEstimate(BaseModel):
     """Price elasticity of demand estimate with uncertainty."""
+
     value: float = Field(description="PED value (typically negative)")
     confidence_interval_low: float
     confidence_interval_high: float
@@ -191,6 +192,7 @@ class ElasticityEstimate(BaseModel):
 
 class PositionIndex(BaseModel):
     """Competitive position index."""
+
     value: float = Field(ge=0, le=200, description="CPI = (avg_competitor / our_price) * 100")
     percentile: float = Field(ge=0, le=100, description="% of competitors priced above us")
     competitor_count: int = Field(ge=0)
@@ -199,6 +201,7 @@ class PositionIndex(BaseModel):
 
 class UrgencyScore(BaseModel):
     """Time-pressure urgency composite."""
+
     value: float = Field(ge=0, le=1)
     components: dict[str, float] = Field(
         default_factory=dict,
@@ -212,13 +215,14 @@ class AnalystInput(BaseModel):
 
     Includes Scout's provenance hash for chain verification.
     """
+
     scout_output: ScoutOutput
     scout_provenance_hash: str = Field(min_length=16, max_length=16)
-    category_priors: Optional[dict[str, float]] = None
-    historical_outcomes: Optional[list[dict]] = None
+    category_priors: dict[str, float] | None = None
+    historical_outcomes: list[dict] | None = None
 
     @model_validator(mode="after")
-    def verify_provenance(self) -> "AnalystInput":
+    def verify_provenance(self) -> AnalystInput:
         expected = self.scout_output.provenance_hash
         if self.scout_provenance_hash != expected:
             raise ValueError(
@@ -235,9 +239,10 @@ class AnalystOutput(BaseModel):
     Scores are computed by the proprietary scoring engine (not LLM).
     The Analyst interprets signals; it does not recommend prices.
     """
+
     product_id: str
     merchant_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     scout_output_hash: str = Field(description="Provenance: links to exact Scout output")
 
     # Proprietary scores (from deterministic scoring engine)
@@ -246,9 +251,9 @@ class AnalystOutput(BaseModel):
     urgency_score: UrgencyScore
 
     # Category context
-    category_avg_price: Optional[float] = Field(default=None, gt=0)
-    category_price_range: Optional[tuple[float, float]] = None
-    category_elasticity: Optional[float] = None
+    category_avg_price: float | None = Field(default=None, gt=0)
+    category_price_range: tuple[float, float] | None = None
+    category_elasticity: float | None = None
 
     # Signals for Strategist
     price_direction: PriceDirection
@@ -275,8 +280,10 @@ class AnalystOutput(BaseModel):
 # STRATEGIST CONTRACTS
 # ---------------------------------------------------------------------------
 
+
 class GuardrailVerification(BaseModel):
     """Verification that all guardrails passed."""
+
     min_margin_met: bool
     max_change_respected: bool
     daily_limit_ok: bool
@@ -292,14 +299,15 @@ class StrategistInput(BaseModel):
     Includes both Analyst output and original Scout output for
     full evidence chain access.
     """
+
     analyst_output: AnalystOutput
     analyst_provenance_hash: str = Field(min_length=16, max_length=16)
     scout_output: ScoutOutput
-    merchant_preferences: Optional[dict[str, Any]] = None
-    experiment_overrides: Optional[dict[str, Any]] = None
+    merchant_preferences: dict[str, Any] | None = None
+    experiment_overrides: dict[str, Any] | None = None
 
     @model_validator(mode="after")
-    def verify_provenance(self) -> "StrategistInput":
+    def verify_provenance(self) -> StrategistInput:
         expected = self.analyst_output.provenance_hash
         if self.analyst_provenance_hash != expected:
             raise ValueError(
@@ -316,10 +324,11 @@ class StrategistOutput(BaseModel):
     The Strategist produces the actionable recommendation with
     guardrail verification and full evidence chain.
     """
+
     recommendation_id: str = Field(min_length=1)
     product_id: str
     merchant_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     analyst_output_hash: str = Field(description="Provenance chain")
 
     # The recommendation
@@ -340,7 +349,8 @@ class StrategistOutput(BaseModel):
 
     # Evidence chain (full provenance from Scout → Analyst → Strategist)
     justification: str = Field(
-        min_length=10, max_length=2000,
+        min_length=10,
+        max_length=2000,
         description="Human-readable justification",
     )
     risk_factors: list[str] = Field(default_factory=list)
@@ -350,9 +360,9 @@ class StrategistOutput(BaseModel):
     )
 
     # Experiment metadata (if IE is enabled)
-    experiment_arm: Optional[str] = None
+    experiment_arm: str | None = None
     is_exploration: bool = False
-    scoring_version: Optional[str] = None
+    scoring_version: str | None = None
 
     @field_validator("suggested_price")
     @classmethod
@@ -362,35 +372,22 @@ class StrategistOutput(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def verify_direction_matches_change(self) -> "StrategistOutput":
+    def verify_direction_matches_change(self) -> StrategistOutput:
         if self.change_pct > 0.1 and self.direction != PriceDirection.INCREASE:
-            raise ValueError(
-                f"change_pct={self.change_pct} but direction={self.direction}"
-            )
+            raise ValueError(f"change_pct={self.change_pct} but direction={self.direction}")
         if self.change_pct < -0.1 and self.direction != PriceDirection.DECREASE:
-            raise ValueError(
-                f"change_pct={self.change_pct} but direction={self.direction}"
-            )
+            raise ValueError(f"change_pct={self.change_pct} but direction={self.direction}")
         return self
 
     @model_validator(mode="after")
-    def verify_guardrails_passed(self) -> "StrategistOutput":
+    def verify_guardrails_passed(self) -> StrategistOutput:
         g = self.guardrails
         if not g.min_margin_met:
-            raise ValueError(
-                "Cannot recommend a price that violates margin floor. "
-                f"Margin after: {g.margin_after}"
-            )
+            raise ValueError(f"Cannot recommend a price that violates margin floor. Margin after: {g.margin_after}")
         if not g.max_change_respected:
-            raise ValueError(
-                f"Price change {self.change_pct}% exceeds max allowed"
-            )
+            raise ValueError(f"Price change {self.change_pct}% exceeds max allowed")
         return self
 
     @property
     def provenance_hash(self) -> str:
         return compute_provenance_hash(self.model_dump(mode="json"))
-    
-
-
-    

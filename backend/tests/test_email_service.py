@@ -7,7 +7,7 @@ client initialization, send_alert_email, HTML/plain text builders.
 
 import sys
 from dataclasses import fields
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -50,7 +50,6 @@ SVC_MOD = "services.notification.email_service"
 # EmailResult dataclass
 # ──────────────────────────────────────────────
 class TestEmailResult:
-
     def test_success_result(self):
         r = EmailResult(success=True, message_id="msg-123")
         assert r.success is True
@@ -82,7 +81,6 @@ class TestEmailResult:
 # EmailService — init
 # ──────────────────────────────────────────────
 class TestEmailServiceInit:
-
     def test_reads_api_key(self):
         with patch(f"{SVC_MOD}.settings") as mock_settings:
             mock_settings.SENDGRID_API_KEY = "key-123"
@@ -109,7 +107,6 @@ class TestEmailServiceInit:
 # EmailService — is_configured
 # ──────────────────────────────────────────────
 class TestIsConfigured:
-
     def test_true_when_both_set(self):
         with patch(f"{SVC_MOD}.settings") as mock_settings:
             mock_settings.SENDGRID_API_KEY = "key"
@@ -150,7 +147,6 @@ class TestIsConfigured:
 # EmailService — _get_client
 # ──────────────────────────────────────────────
 class TestGetClient:
-
     def test_returns_none_when_not_configured(self):
         with patch(f"{SVC_MOD}.settings") as mock_settings:
             mock_settings.SENDGRID_API_KEY = ""
@@ -206,7 +202,6 @@ class TestGetClient:
 # EmailService — send_alert_email
 # ──────────────────────────────────────────────
 class TestSendAlertEmail:
-
     def _make_service(self, api_key="SG.test", from_email="from@test.com"):
         with patch(f"{SVC_MOD}.settings") as mock_settings:
             mock_settings.SENDGRID_API_KEY = api_key
@@ -252,11 +247,14 @@ class TestSendAlertEmail:
         svc._client = mock_client
 
         # Mock sendgrid.helpers.mail imports
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             result = await svc.send_alert_email(
                 to_email="user@test.com",
                 subject="Price Alert",
@@ -279,14 +277,19 @@ class TestSendAlertEmail:
         mock_client.send.return_value = mock_response
         svc._client = mock_client
 
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             result = await svc.send_alert_email(
-                to_email="u@t.com", subject="S",
-                alert_title="T", alert_message="M",
+                to_email="u@t.com",
+                subject="S",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is True
@@ -303,14 +306,19 @@ class TestSendAlertEmail:
         mock_client.send.return_value = mock_response
         svc._client = mock_client
 
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             result = await svc.send_alert_email(
-                to_email="u@t.com", subject="S",
-                alert_title="T", alert_message="M",
+                to_email="u@t.com",
+                subject="S",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is True
@@ -327,14 +335,19 @@ class TestSendAlertEmail:
         mock_client.send.return_value = mock_response
         svc._client = mock_client
 
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             result = await svc.send_alert_email(
-                to_email="u@t.com", subject="S",
-                alert_title="T", alert_message="M",
+                to_email="u@t.com",
+                subject="S",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is False
@@ -348,14 +361,19 @@ class TestSendAlertEmail:
         mock_client.send.side_effect = Exception("Network error")
         svc._client = mock_client
 
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             result = await svc.send_alert_email(
-                to_email="u@t.com", subject="S",
-                alert_title="T", alert_message="M",
+                to_email="u@t.com",
+                subject="S",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is False
@@ -373,14 +391,19 @@ class TestSendAlertEmail:
         mock_client.send.return_value = mock_response
         svc._client = mock_client
 
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             result = await svc.send_alert_email(
-                to_email="u@t.com", subject="S",
-                alert_title="T", alert_message="M",
+                to_email="u@t.com",
+                subject="S",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is True
@@ -398,15 +421,20 @@ class TestSendAlertEmail:
         mock_client.send.return_value = mock_response
         svc._client = mock_client
 
-        with patch.dict("sys.modules", {
-            "sendgrid": MagicMock(),
-            "sendgrid.helpers": MagicMock(),
-            "sendgrid.helpers.mail": MagicMock(),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "sendgrid": MagicMock(),
+                "sendgrid.helpers": MagicMock(),
+                "sendgrid.helpers.mail": MagicMock(),
+            },
+        ):
             # Just verify it doesn't crash with default severity
             result = await svc.send_alert_email(
-                to_email="u@t.com", subject="S",
-                alert_title="T", alert_message="M",
+                to_email="u@t.com",
+                subject="S",
+                alert_title="T",
+                alert_message="M",
             )
             assert result.success is True
 
@@ -415,7 +443,6 @@ class TestSendAlertEmail:
 # EmailService — _build_alert_html
 # ──────────────────────────────────────────────
 class TestBuildAlertHtml:
-
     def _make_service(self):
         with patch(f"{SVC_MOD}.settings") as mock_settings:
             mock_settings.SENDGRID_API_KEY = "key"
@@ -503,7 +530,6 @@ class TestBuildAlertHtml:
 # EmailService — _build_alert_plain
 # ──────────────────────────────────────────────
 class TestBuildAlertPlain:
-
     def _make_service(self):
         with patch(f"{SVC_MOD}.settings") as mock_settings:
             mock_settings.SENDGRID_API_KEY = "key"
@@ -566,5 +592,3 @@ class TestBuildAlertPlain:
         assert "a: 1" in text
         assert "b: 2" in text
         assert "c: 3" in text
-
-        

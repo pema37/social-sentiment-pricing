@@ -2,10 +2,13 @@
 
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session as SyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session as SyncSession
+from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
+
 from core.config import settings
 
 # =============================================================================
@@ -71,6 +74,7 @@ SyncSessionLocal = sessionmaker(
 # SESSION PROVIDERS
 # =============================================================================
 
+
 async def get_session():
     """FastAPI dependency that provides an async database session."""
     async with async_session() as session:
@@ -97,7 +101,7 @@ async def get_session_context():
 def get_sync_session():
     """
     Synchronous session context manager for Celery tasks.
-    
+
     Usage:
         with get_sync_session() as session:
             # do database operations
@@ -118,6 +122,7 @@ def get_sync_session():
 # CELERY ASYNC HELPER
 # =============================================================================
 
+
 def run_async(coro):
     """
     Run an async coroutine in a sync context (for Celery workers).
@@ -135,7 +140,3 @@ async def init_db():
     """Initialize database tables (for development)."""
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-
-
-
-        

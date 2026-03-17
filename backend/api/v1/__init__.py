@@ -9,12 +9,12 @@ Aggregates all v1 route modules into a single router.
 from fastapi import APIRouter
 
 from api.v1.routes import (
-    health_router,
     auth_router,
-    users_router,
+    competitors_router,
+    health_router,
     products_router,
     sentiment_router,
-    competitors_router,
+    users_router,
 )
 
 api_router = APIRouter()
@@ -28,4 +28,3 @@ api_router.include_router(sentiment_router)
 
 # Phase 2: Competitor routes
 api_router.include_router(competitors_router)
-

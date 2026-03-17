@@ -20,9 +20,8 @@ Total: ~55 tests
 """
 
 import sys
-from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -38,14 +37,14 @@ for mod in [
 import pytest
 
 from services.pricing.competitor_fallback import (
-    CompetitorFallbackService,
     ABOVE_COMPETITOR_THRESHOLD,
     BELOW_COMPETITOR_THRESHOLD,
-    MAX_VALID_COMPETITOR_PRICE,
+    COMPETITOR_CONFIDENCE,
     COMPETITOR_MATCH_FACTOR,
     INCREASE_FACTOR,
+    MAX_VALID_COMPETITOR_PRICE,
     MIN_CHANGE_THRESHOLD,
-    COMPETITOR_CONFIDENCE,
+    CompetitorFallbackService,
 )
 
 SERVICE_PATH = "services.pricing.competitor_fallback"
@@ -96,6 +95,7 @@ def make_settings(
 
 def make_signals(competitor_prices=None):
     from services.pricing.rule_evaluator import MarketSignals
+
     return MarketSignals(competitor_prices=competitor_prices or {})
 
 
@@ -103,8 +103,8 @@ def make_signals(competitor_prices=None):
 # 1. Module Constants
 # ============================================================
 
-class TestModuleConstants:
 
+class TestModuleConstants:
     def test_above_competitor_threshold(self):
         assert ABOVE_COMPETITOR_THRESHOLD == Decimal("10")
 
@@ -131,8 +131,8 @@ class TestModuleConstants:
 # 2. Initialization
 # ============================================================
 
-class TestCompetitorFallbackInit:
 
+class TestCompetitorFallbackInit:
     def test_stores_db(self):
         db = make_mock_db()
         svc = CompetitorFallbackService(db)
@@ -148,8 +148,8 @@ class TestCompetitorFallbackInit:
 # 3. generate (orchestration)
 # ============================================================
 
-class TestGenerate:
 
+class TestGenerate:
     @pytest.mark.asyncio
     async def test_returns_none_when_no_competitor_prices(self):
         db = make_mock_db()
@@ -204,9 +204,7 @@ class TestGenerate:
 
         svc._find_valid_competitor_price = MagicMock(return_value=(Decimal("80"), COMP_ID))
         svc._is_valid_current_price = MagicMock(return_value=True)
-        svc._calculate_competitor_based_price = MagicMock(
-            return_value=(Decimal("78.40"), "Price match at 98%")
-        )
+        svc._calculate_competitor_based_price = MagicMock(return_value=(Decimal("78.40"), "Price match at 98%"))
         svc._apply_constraints = MagicMock(return_value=Decimal("78.40"))
         svc._calculate_change_percent = MagicMock(return_value=Decimal("-21.60"))
         svc.settings_service.get_or_create = AsyncMock(return_value=make_settings())
@@ -222,8 +220,8 @@ class TestGenerate:
 # 4. _find_valid_competitor_price
 # ============================================================
 
-class TestFindValidCompetitorPrice:
 
+class TestFindValidCompetitorPrice:
     def setup_method(self):
         self.svc = CompetitorFallbackService(make_mock_db())
 
@@ -275,8 +273,8 @@ class TestFindValidCompetitorPrice:
 # 5. _is_valid_current_price
 # ============================================================
 
-class TestIsValidCurrentPrice:
 
+class TestIsValidCurrentPrice:
     def setup_method(self):
         self.svc = CompetitorFallbackService(make_mock_db())
 
@@ -297,60 +295,48 @@ class TestIsValidCurrentPrice:
 # 6. _calculate_competitor_based_price
 # ============================================================
 
-class TestCalculateCompetitorBasedPrice:
 
+class TestCalculateCompetitorBasedPrice:
     def setup_method(self):
         self.svc = CompetitorFallbackService(make_mock_db())
 
     def test_above_competitor_suggests_decrease(self):
         """Current=120, competitor=100 → 20% above → suggest 98% match."""
         product = make_product(current_price=Decimal("120"))
-        new_price, reasoning = self.svc._calculate_competitor_based_price(
-            product, Decimal("100")
-        )
+        new_price, reasoning = self.svc._calculate_competitor_based_price(product, Decimal("100"))
         assert new_price == Decimal("100") * COMPETITOR_MATCH_FACTOR  # 98.00
         assert "above competitor" in reasoning
 
     def test_below_competitor_suggests_increase(self):
         """Current=80, competitor=100 → -20% → suggest 5% increase."""
         product = make_product(current_price=Decimal("80"))
-        new_price, reasoning = self.svc._calculate_competitor_based_price(
-            product, Decimal("100")
-        )
+        new_price, reasoning = self.svc._calculate_competitor_based_price(product, Decimal("100"))
         assert new_price == Decimal("80") * INCREASE_FACTOR  # 84.00
         assert "below competitor" in reasoning
 
     def test_competitive_returns_none(self):
         """Current=100, competitor=100 → 0% diff → competitive."""
         product = make_product(current_price=Decimal("100"))
-        new_price, reasoning = self.svc._calculate_competitor_based_price(
-            product, Decimal("100")
-        )
+        new_price, reasoning = self.svc._calculate_competitor_based_price(product, Decimal("100"))
         assert new_price is None
         assert reasoning == ""
 
     def test_exactly_at_above_threshold_no_change(self):
         """10% above is exactly at threshold → not >10, so competitive."""
         product = make_product(current_price=Decimal("110"))
-        new_price, _ = self.svc._calculate_competitor_based_price(
-            product, Decimal("100")
-        )
+        new_price, _ = self.svc._calculate_competitor_based_price(product, Decimal("100"))
         assert new_price is None
 
     def test_just_above_threshold_triggers(self):
         """10.01% above → triggers decrease."""
         product = make_product(current_price=Decimal("110.01"))
-        new_price, _ = self.svc._calculate_competitor_based_price(
-            product, Decimal("100")
-        )
+        new_price, _ = self.svc._calculate_competitor_based_price(product, Decimal("100"))
         assert new_price is not None
 
     def test_exactly_at_below_threshold_no_change(self):
         """15% below = -15 → not < -15, so competitive."""
         product = make_product(current_price=Decimal("85"))
-        new_price, _ = self.svc._calculate_competitor_based_price(
-            product, Decimal("100")
-        )
+        new_price, _ = self.svc._calculate_competitor_based_price(product, Decimal("100"))
         assert new_price is None
 
 
@@ -358,8 +344,8 @@ class TestCalculateCompetitorBasedPrice:
 # 7. _apply_constraints
 # ============================================================
 
-class TestApplyConstraints:
 
+class TestApplyConstraints:
     def setup_method(self):
         self.svc = CompetitorFallbackService(make_mock_db())
 
@@ -388,8 +374,8 @@ class TestApplyConstraints:
 # 8. _calculate_change_percent
 # ============================================================
 
-class TestCalculateChangePercent:
 
+class TestCalculateChangePercent:
     def setup_method(self):
         self.svc = CompetitorFallbackService(make_mock_db())
 
@@ -414,45 +400,35 @@ class TestCalculateChangePercent:
 # 9. _build_factors
 # ============================================================
 
-class TestBuildFactors:
 
+class TestBuildFactors:
     def setup_method(self):
         self.svc = CompetitorFallbackService(make_mock_db())
 
     def test_has_required_keys(self):
-        result = self.svc._build_factors(
-            Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80")
-        )
+        result = self.svc._build_factors(Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80"))
         assert "match_details" in result
         assert "price_impacts" in result
         assert "confidence_breakdown" in result
         assert "data_source" in result
 
     def test_data_source_is_competitor_only(self):
-        result = self.svc._build_factors(
-            Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80")
-        )
+        result = self.svc._build_factors(Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80"))
         assert result["data_source"] == "competitor_only"
 
     def test_match_details_contains_competitor_info(self):
-        result = self.svc._build_factors(
-            Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80")
-        )
+        result = self.svc._build_factors(Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80"))
         details = result["match_details"]
         assert details["rule_type"] == "competitor_fallback"
         assert details["competitor_id"] == str(COMP_ID)
         assert details["competitor_price"] == 80.0
 
     def test_confidence_is_065(self):
-        result = self.svc._build_factors(
-            Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80")
-        )
+        result = self.svc._build_factors(Decimal("100"), Decimal("90"), str(COMP_ID), Decimal("80"))
         assert result["confidence_breakdown"]["base_confidence"] == 0.65
 
     def test_none_competitor_id(self):
-        result = self.svc._build_factors(
-            Decimal("100"), Decimal("90"), None, Decimal("80")
-        )
+        result = self.svc._build_factors(Decimal("100"), Decimal("90"), None, Decimal("80"))
         assert result["match_details"]["competitor_id"] is None
 
 
@@ -460,8 +436,8 @@ class TestBuildFactors:
 # 10. _try_auto_apply
 # ============================================================
 
-class TestTryAutoApply:
 
+class TestTryAutoApply:
     @pytest.mark.asyncio
     async def test_skips_when_requires_approval(self):
         db = make_mock_db()
@@ -516,6 +492,3 @@ class TestTryAutoApply:
 
         # Should not raise
         await svc._try_auto_apply(rec, USER_ID, settings)
-
-
-        

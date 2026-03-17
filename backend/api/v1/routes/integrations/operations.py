@@ -17,28 +17,28 @@ This is the single source of truth for integration health state.
 """
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
-from db.session import get_session
 from core.encryption import decrypt_token
-from models.user import User
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
+from db.session import get_session
 from models.integration import (
-    Integration,
-    ProductIntegrationLink,
-    IntegrationStatus,
     EcommercePlatform,
+    Integration,
+    IntegrationStatus,
+    ProductIntegrationLink,
 )
+from models.user import User
 from schemas.integration import (
+    IntegrationHealthResponse,
     PricePushRequest,
     PricePushResponse,
-    IntegrationHealthResponse,
 )
 from services.integration import (
     EcommerceService,
@@ -139,13 +139,11 @@ async def push_price(
         await db.commit()
 
         logger.info(
-            f"Price pushed for product link {link.id}: "
-            f"${price_response.old_price} -> ${price_request.new_price}"
+            f"Price pushed for product link {link.id}: ${price_response.old_price} -> ${price_request.new_price}"
         )
     else:
         logger.warning(
-            f"Price push failed for product link {link.id}: "
-            f"{price_response.error if price_response else 'No response'}"
+            f"Price push failed for product link {link.id}: {price_response.error if price_response else 'No response'}"
         )
 
     return PricePushResponse(
@@ -192,9 +190,7 @@ async def check_integration_health(
     try:
         access_token = decrypt_token(integration.access_token_encrypted)
     except Exception as exc:
-        logger.warning(
-            f"Failed to decrypt token for integration {integration_id}: {exc}"
-        )
+        logger.warning(f"Failed to decrypt token for integration {integration_id}: {exc}")
         integration.status = IntegrationStatus.ERROR
         integration.error_message = "Stored credentials are invalid. Please reconnect."
         integration.updated_at = datetime.now(UTC)
@@ -223,9 +219,7 @@ async def check_integration_health(
 
     if connection_status == ConnectionStatus.HEALTHY:
         if integration.status != IntegrationStatus.ACTIVE:
-            logger.info(
-                f"Integration {integration_id} recovered → setting ACTIVE"
-            )
+            logger.info(f"Integration {integration_id} recovered → setting ACTIVE")
         integration.status = IntegrationStatus.ACTIVE
         integration.error_message = None
 
@@ -234,15 +228,9 @@ async def check_integration_health(
         # RATE_LIMITED is transient but we still surface it — the next
         # successful health check (manual or scheduled) will clear it.
         error_map = {
-            ConnectionStatus.UNAUTHORIZED: (
-                "Shopify access token was revoked. Reconnect your store."
-            ),
-            ConnectionStatus.RATE_LIMITED: (
-                "Shopify API rate limit hit. Will retry automatically."
-            ),
-            ConnectionStatus.UNHEALTHY: (
-                "Could not reach the store. Check the store URL."
-            ),
+            ConnectionStatus.UNAUTHORIZED: ("Shopify access token was revoked. Reconnect your store."),
+            ConnectionStatus.RATE_LIMITED: ("Shopify API rate limit hit. Will retry automatically."),
+            ConnectionStatus.UNHEALTHY: ("Could not reach the store. Check the store URL."),
         }
         error_message = error_map.get(
             connection_status,
@@ -251,8 +239,7 @@ async def check_integration_health(
 
         if integration.status != IntegrationStatus.ERROR:
             logger.warning(
-                f"Integration {integration_id} health check failed "
-                f"({connection_status.value}) → setting ERROR"
+                f"Integration {integration_id} health check failed ({connection_status.value}) → setting ERROR"
             )
 
         integration.status = IntegrationStatus.ERROR
@@ -269,6 +256,3 @@ async def check_integration_health(
         status=connection_status.value,
         checked_at=now,
     )
-
-
-

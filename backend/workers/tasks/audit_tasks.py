@@ -14,20 +14,18 @@ conflicts when running in Celery's forked worker processes.
 
 import asyncio
 import re
-from typing import Optional
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import select
 
-from workers.celery_app import celery_app
 from core.config import settings
 from core.logging import get_logger
-from models.user import User
 from models.competitor_product import CompetitorProduct
 from schemas.retrospective_audit import AuditRequest
 from services.retrospective_audit_service import RetrospectiveAuditService
+from workers.celery_app import celery_app
 
 logger = get_logger(__name__)
 
@@ -35,6 +33,7 @@ logger = get_logger(__name__)
 # ==============================================================================
 # HELPERS (same pattern as pricing_tasks.py)
 # ==============================================================================
+
 
 def get_task_session_maker():
     """Create a fresh async session maker for Celery tasks."""
@@ -44,8 +43,8 @@ def get_task_session_maker():
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     if "sslmode=" in db_url:
-        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
-        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
+        db_url = re.sub(r"[\?&]sslmode=[^&]*", "", db_url)
+        db_url = db_url.replace("?&", "?").replace("&&", "&").rstrip("?&")
 
     use_ssl = "neon.tech" in db_url or "railway" in db_url
 
@@ -86,6 +85,7 @@ def run_async(coro):
 # ASYNC IMPLEMENTATIONS
 # ==============================================================================
 
+
 async def _generate_weekly_audits():
     """
     Generate 90-day retrospective audits for all users who have
@@ -98,11 +98,7 @@ async def _generate_weekly_audits():
 
     async with session_maker() as db:
         # Find all user IDs that have active competitor products
-        stmt = (
-            select(CompetitorProduct.product_id)
-            .where(CompetitorProduct.is_active == True)
-            .distinct()
-        )
+        stmt = select(CompetitorProduct.product_id).where(CompetitorProduct.is_active == True).distinct()
         result = await db.execute(stmt)
         product_ids_with_comps = [row[0] for row in result.all()]
 
@@ -112,11 +108,8 @@ async def _generate_weekly_audits():
 
         # Get distinct user IDs from those products
         from models.product import Product
-        user_stmt = (
-            select(Product.user_id)
-            .where(Product.id.in_(product_ids_with_comps))
-            .distinct()
-        )
+
+        user_stmt = select(Product.user_id).where(Product.id.in_(product_ids_with_comps)).distinct()
         user_result = await db.execute(user_stmt)
         user_ids = [row[0] for row in user_result.all()]
 
@@ -146,8 +139,7 @@ async def _generate_weekly_audits():
                 logger.error(f"Error generating audit for user {user_id}: {e}")
 
         logger.info(
-            f"Weekly audit generation complete: "
-            f"{len(user_ids)} users, {audits_generated} audits, {errors} errors"
+            f"Weekly audit generation complete: {len(user_ids)} users, {audits_generated} audits, {errors} errors"
         )
 
         return {
@@ -183,6 +175,7 @@ async def _generate_audit_for_user(user_id: str, lookback_days: int = 90):
 # CELERY TASKS
 # ==============================================================================
 
+
 @celery_app.task(name="workers.tasks.audit_tasks.generate_weekly_audits")
 def generate_weekly_audits():
     """
@@ -201,6 +194,3 @@ def generate_audit_for_user(user_id: str, lookback_days: int = 90):
     Triggered by: Manual request, new competitor data linked, etc.
     """
     return run_async(_generate_audit_for_user(user_id, lookback_days))
-
-
-

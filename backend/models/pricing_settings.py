@@ -3,88 +3,64 @@
 Pricing Settings Model - Per-user configuration for auto-approval and notifications.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlmodel import Field, SQLModel
 from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlmodel import Field, SQLModel
 
 
 class PricingSettings(SQLModel, table=True):
     __tablename__ = "pricing_settings"
 
-    id: UUID = Field(
-        default_factory=uuid4,
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True)
-    )
-    
+    id: UUID = Field(default_factory=uuid4, sa_column=Column(PG_UUID(as_uuid=True), primary_key=True))
+
     # One settings record per user
-    user_id: UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, unique=True, index=True)
-    )
-    
+    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, unique=True, index=True))
+
     # Auto-approval thresholds
     auto_approve_enabled: bool = Field(default=True)
     auto_approve_max_increase: Decimal = Field(
-        default=Decimal("5.0"),
-        decimal_places=2,
-        description="Auto-approve price increases up to this %"
+        default=Decimal("5.0"), decimal_places=2, description="Auto-approve price increases up to this %"
     )
     auto_approve_max_decrease: Decimal = Field(
-        default=Decimal("10.0"),
-        decimal_places=2,
-        description="Auto-approve price decreases up to this %"
+        default=Decimal("10.0"), decimal_places=2, description="Auto-approve price decreases up to this %"
     )
     auto_approve_min_confidence: Decimal = Field(
-        default=Decimal("0.7"),
-        decimal_places=2,
-        description="Minimum confidence score for auto-approval (0.0-1.0)"
+        default=Decimal("0.7"), decimal_places=2, description="Minimum confidence score for auto-approval (0.0-1.0)"
     )
     min_margin_percent: Decimal = Field(
         default=Decimal("10.0"),
         decimal_places=2,
-        description="Minimum profit margin % - never price below cost + this margin"
+        description="Minimum profit margin % - never price below cost + this margin",
     )
-    
+
     # Rate limits
     max_auto_changes_per_day: int = Field(default=3)
     global_cooldown_hours: int = Field(default=24)
-    
+
     # Blackout periods (no auto-changes)
-    blackout_hours_start: Optional[int] = Field(
-        default=0,
-        description="Hour (0-23) when blackout starts"
-    )
-    blackout_hours_end: Optional[int] = Field(
-        default=6,
-        description="Hour (0-23) when blackout ends"
-    )
-    
+    blackout_hours_start: int | None = Field(default=0, description="Hour (0-23) when blackout starts")
+    blackout_hours_end: int | None = Field(default=6, description="Hour (0-23) when blackout ends")
+
     # Products requiring manual approval regardless of thresholds
-    require_approval_above_price: Optional[Decimal] = Field(
-        default=None,
-        decimal_places=2,
-        description="Products priced above this always need approval"
+    require_approval_above_price: Decimal | None = Field(
+        default=None, decimal_places=2, description="Products priced above this always need approval"
     )
-    
+
     # Recommendation expiry
-    recommendation_valid_hours: int = Field(
-        default=48,
-        description="Hours before pending recommendations expire"
-    )
-    
+    recommendation_valid_hours: int = Field(default=48, description="Hours before pending recommendations expire")
+
     # Notifications
     notify_on_auto_apply: bool = Field(default=True)
     notify_on_pending: bool = Field(default=True)
-    notification_email: Optional[str] = Field(default=None, max_length=255)
-    notification_slack_webhook: Optional[str] = Field(default=None, max_length=500)
-    
+    notification_email: str | None = Field(default=None, max_length=255)
+    notification_slack_webhook: str | None = Field(default=None, max_length=500)
+
     # Timestamps
     created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     )
-    updated_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
-
+    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))

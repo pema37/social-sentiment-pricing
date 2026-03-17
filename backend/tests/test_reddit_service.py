@@ -11,11 +11,10 @@ Covers:
 - get_reddit_collector: factory function
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -23,7 +22,9 @@ import pytest
 # 1. sys.modules stub isolation
 # ---------------------------------------------------------------------------
 _MOCKED = [
-    "db.session", "core.config", "praw",
+    "db.session",
+    "core.config",
+    "praw",
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
@@ -63,8 +64,8 @@ sys.modules["praw"] = _praw_stub
 # ---------------------------------------------------------------------------
 # 2. Import module under test
 # ---------------------------------------------------------------------------
+from services.ingestion.base import CollectedMention, SocialSource
 from services.ingestion.reddit_service import RedditCollector, get_reddit_collector
-from services.ingestion.base import SocialSource, CollectedMention
 
 # ---------------------------------------------------------------------------
 # 3. Restore sys.modules
@@ -80,6 +81,7 @@ del _m
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _make_mock_submission(**overrides):
     """Create a fake praw Submission object."""
@@ -100,6 +102,7 @@ def _make_mock_submission(**overrides):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestInit:
     def test_mock_mode(self):
@@ -323,5 +326,3 @@ class TestGetRedditCollector:
     def test_default_not_mock(self):
         rc = get_reddit_collector()
         assert rc.mock_mode is False
-
-        

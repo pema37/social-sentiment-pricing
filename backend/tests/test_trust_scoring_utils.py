@@ -6,47 +6,46 @@ spam detection, and time pattern analysis.
 """
 
 import sys
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
-from datetime import datetime, timezone, timedelta
 
 # Standard import isolation
 for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
+import pytest
+
 from services.trust_scoring.utils import (
-    normalize_text,
+    BOT_USERNAME_PATTERNS,
+    SPAM_PHRASES,
+    analyze_posting_times,
+    calculate_account_age_score,
+    calculate_follower_score,
+    calculate_spam_score,
     compute_content_hash,
     compute_fuzzy_hash,
-    jaccard_similarity,
-    text_similarity,
-    find_similar_texts,
+    count_emojis,
+    detect_burst_activity,
     extract_hashtags,
     extract_mentions,
     extract_urls,
-    count_emojis,
+    find_similar_texts,
     get_content_metrics,
-    SPAM_PHRASES,
-    BOT_USERNAME_PATTERNS,
-    has_spam_phrases,
     has_excessive_caps,
     has_keyword_stuffing,
+    has_spam_phrases,
     is_bot_username,
-    calculate_spam_score,
-    calculate_account_age_score,
-    calculate_follower_score,
-    analyze_posting_times,
-    detect_burst_activity,
+    jaccard_similarity,
+    normalize_text,
+    text_similarity,
 )
-
-import pytest
 
 
 # ──────────────────────────────────────────────
 # normalize_text
 # ──────────────────────────────────────────────
 class TestNormalizeText:
-
     def test_empty_string(self):
         assert normalize_text("") == ""
 
@@ -109,7 +108,6 @@ class TestNormalizeText:
 # compute_content_hash
 # ──────────────────────────────────────────────
 class TestComputeContentHash:
-
     def test_returns_string(self):
         result = compute_content_hash("hello")
         assert isinstance(result, str)
@@ -153,7 +151,6 @@ class TestComputeContentHash:
 # compute_fuzzy_hash
 # ──────────────────────────────────────────────
 class TestComputeFuzzyHash:
-
     def test_returns_set(self):
         result = compute_fuzzy_hash("the quick brown fox jumps over")
         assert isinstance(result, set)
@@ -201,7 +198,6 @@ class TestComputeFuzzyHash:
 # jaccard_similarity
 # ──────────────────────────────────────────────
 class TestJaccardSimilarity:
-
     def test_identical_sets(self):
         s = {"a", "b", "c"}
         assert jaccard_similarity(s, s) == 1.0
@@ -237,15 +233,11 @@ class TestJaccardSimilarity:
 # text_similarity
 # ──────────────────────────────────────────────
 class TestTextSimilarity:
-
     def test_identical_texts(self):
         assert text_similarity("hello world foo bar", "hello world foo bar") == 1.0
 
     def test_completely_different(self):
-        result = text_similarity(
-            "the quick brown fox jumps",
-            "lorem ipsum dolor sit amet"
-        )
+        result = text_similarity("the quick brown fox jumps", "lorem ipsum dolor sit amet")
         assert result < 0.3
 
     def test_similar_texts(self):
@@ -268,7 +260,6 @@ class TestTextSimilarity:
 # find_similar_texts
 # ──────────────────────────────────────────────
 class TestFindSimilarTexts:
-
     def test_finds_exact_match(self):
         target = "this is a test sentence here"
         candidates = ["something else entirely different", "this is a test sentence here"]
@@ -318,7 +309,6 @@ class TestFindSimilarTexts:
 # extract_hashtags
 # ──────────────────────────────────────────────
 class TestExtractHashtags:
-
     def test_single_hashtag(self):
         assert extract_hashtags("love #python") == ["python"]
 
@@ -346,7 +336,6 @@ class TestExtractHashtags:
 # extract_mentions
 # ──────────────────────────────────────────────
 class TestExtractMentions:
-
     def test_single_mention(self):
         assert extract_mentions("hey @alice") == ["alice"]
 
@@ -370,7 +359,6 @@ class TestExtractMentions:
 # extract_urls
 # ──────────────────────────────────────────────
 class TestExtractUrls:
-
     def test_http_url(self):
         result = extract_urls("visit http://example.com")
         assert len(result) == 1
@@ -400,7 +388,6 @@ class TestExtractUrls:
 # count_emojis
 # ──────────────────────────────────────────────
 class TestCountEmojis:
-
     def test_no_emojis(self):
         assert count_emojis("plain text") == 0
 
@@ -419,7 +406,6 @@ class TestCountEmojis:
 # get_content_metrics
 # ──────────────────────────────────────────────
 class TestGetContentMetrics:
-
     def test_returns_dict(self):
         result = get_content_metrics("hello world")
         assert isinstance(result, dict)
@@ -427,9 +413,14 @@ class TestGetContentMetrics:
     def test_all_keys_present(self):
         result = get_content_metrics("test")
         expected_keys = {
-            "character_count", "word_count", "hashtag_count",
-            "mention_count", "link_count", "emoji_count",
-            "uppercase_ratio", "avg_word_length",
+            "character_count",
+            "word_count",
+            "hashtag_count",
+            "mention_count",
+            "link_count",
+            "emoji_count",
+            "uppercase_ratio",
+            "avg_word_length",
         }
         assert set(result.keys()) == expected_keys
 
@@ -471,7 +462,6 @@ class TestGetContentMetrics:
 # SPAM_PHRASES constant
 # ──────────────────────────────────────────────
 class TestSpamPhrases:
-
     def test_is_set(self):
         assert isinstance(SPAM_PHRASES, set)
 
@@ -489,7 +479,6 @@ class TestSpamPhrases:
 # has_spam_phrases
 # ──────────────────────────────────────────────
 class TestHasSpamPhrases:
-
     def test_clean_text(self):
         assert has_spam_phrases("I love this product") is False
 
@@ -513,7 +502,6 @@ class TestHasSpamPhrases:
 # has_excessive_caps
 # ──────────────────────────────────────────────
 class TestHasExcessiveCaps:
-
     def test_normal_text(self):
         assert has_excessive_caps("Hello, how are you today?") is False
 
@@ -547,7 +535,6 @@ class TestHasExcessiveCaps:
 # has_keyword_stuffing
 # ──────────────────────────────────────────────
 class TestHasKeywordStuffing:
-
     def test_normal_text(self):
         assert has_keyword_stuffing("this is a normal varied sentence") is False
 
@@ -578,7 +565,6 @@ class TestHasKeywordStuffing:
 # BOT_USERNAME_PATTERNS
 # ──────────────────────────────────────────────
 class TestBotUsernamePatterns:
-
     def test_is_list(self):
         assert isinstance(BOT_USERNAME_PATTERNS, list)
 
@@ -591,7 +577,6 @@ class TestBotUsernamePatterns:
 # is_bot_username
 # ──────────────────────────────────────────────
 class TestIsBotUsername:
-
     def test_normal_username(self):
         assert is_bot_username("sarah_jones") is False
 
@@ -629,13 +614,14 @@ class TestIsBotUsername:
 # calculate_spam_score
 # ──────────────────────────────────────────────
 class TestCalculateSpamScore:
-
     def test_clean_text_low_score(self):
         score = calculate_spam_score("This product has excellent build quality and great battery life")
         assert score < 0.3
 
     def test_spam_text_high_score(self):
-        score = calculate_spam_score("CLICK HERE for FREE MONEY! crypto giveaway #a #b #c #d #e #f https://spam.com https://spam2.com https://spam3.com")
+        score = calculate_spam_score(
+            "CLICK HERE for FREE MONEY! crypto giveaway #a #b #c #d #e #f https://spam.com https://spam2.com https://spam3.com"
+        )
         assert score > 0.5
 
     def test_returns_float(self):
@@ -687,7 +673,6 @@ class TestCalculateSpamScore:
 # calculate_account_age_score
 # ──────────────────────────────────────────────
 class TestCalculateAccountAgeScore:
-
     def test_none_returns_neutral(self):
         assert calculate_account_age_score(None) == 0.5
 
@@ -740,7 +725,6 @@ class TestCalculateAccountAgeScore:
 # calculate_follower_score
 # ──────────────────────────────────────────────
 class TestCalculateFollowerScore:
-
     def test_none_returns_neutral(self):
         assert calculate_follower_score(None) == 0.5
 
@@ -803,9 +787,8 @@ class TestCalculateFollowerScore:
 # analyze_posting_times
 # ──────────────────────────────────────────────
 class TestAnalyzePostingTimes:
-
     def _make_time(self, **kwargs):
-        base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         return base + timedelta(**kwargs)
 
     def test_empty_list(self):
@@ -859,8 +842,14 @@ class TestAnalyzePostingTimes:
     def test_returns_all_keys_for_multiple(self):
         times = [self._make_time(seconds=i * 100) for i in range(5)]
         result = analyze_posting_times(times)
-        for key in ["count", "avg_interval_seconds", "min_interval_seconds",
-                     "max_interval_seconds", "is_suspicious", "regularity_score"]:
+        for key in [
+            "count",
+            "avg_interval_seconds",
+            "min_interval_seconds",
+            "max_interval_seconds",
+            "is_suspicious",
+            "regularity_score",
+        ]:
             assert key in result
 
 
@@ -868,9 +857,8 @@ class TestAnalyzePostingTimes:
 # detect_burst_activity
 # ──────────────────────────────────────────────
 class TestDetectBurstActivity:
-
     def _make_time(self, **kwargs):
-        base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         return base + timedelta(**kwargs)
 
     def test_fewer_than_threshold(self):
@@ -910,5 +898,3 @@ class TestDetectBurstActivity:
     def test_just_below_threshold(self):
         times = [self._make_time(minutes=i * 5) for i in range(9)]
         assert detect_burst_activity(times, window_minutes=60, burst_threshold=10) is False
-
-        

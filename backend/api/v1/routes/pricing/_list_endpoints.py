@@ -4,20 +4,19 @@ List, get, and stats endpoints for recommendations.
 Read-only operations.
 """
 
-from typing import Optional
-from uuid import UUID
-from datetime import datetime, timedelta, UTC
 import logging
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from db.session import get_session
 from core.deps import get_current_user
-from models.user import User
+from db.session import get_session
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.user import User
 from schemas.common import PaginatedResponse, PaginationParams
 from schemas.pricing import PriceRecommendationResponse
 
@@ -34,7 +33,7 @@ async def get_recommendation_stats(
 ):
     """Get recommendation statistics."""
     since = datetime.now(UTC) - timedelta(days=days)
-    
+
     # Count by status
     stats = {}
     for rec_status in RecommendationStatus:
@@ -46,18 +45,18 @@ async def get_recommendation_stats(
         )
         result = await db.execute(stmt)
         stats[rec_status.value] = result.scalar() or 0
-    
+
     # Calculate totals
     total_generated = sum(stats.values())
     total_applied = stats.get("applied", 0)
     total_rejected = stats.get("rejected", 0)
     total_expired = stats.get("expired", 0)
     total_pending = stats.get("pending", 0)
-    
+
     # Approval rate
     decided = total_applied + total_rejected
     approval_rate = (total_applied / decided * 100) if decided > 0 else 0
-    
+
     # Average confidence
     stmt_conf = (
         select(func.avg(PriceRecommendation.confidence_score))
@@ -66,20 +65,23 @@ async def get_recommendation_stats(
     )
     result = await db.execute(stmt_conf)
     avg_confidence = result.scalar()
-    
+
     # Average price change percent
     stmt_change = (
-        select(func.avg(
-            (PriceRecommendation.recommended_price - PriceRecommendation.current_price) 
-            / PriceRecommendation.current_price * 100
-        ))
+        select(
+            func.avg(
+                (PriceRecommendation.recommended_price - PriceRecommendation.current_price)
+                / PriceRecommendation.current_price
+                * 100
+            )
+        )
         .where(PriceRecommendation.user_id == current_user.id)
         .where(PriceRecommendation.current_price > 0)
         .where(PriceRecommendation.created_at >= since)
     )
     result = await db.execute(stmt_change)
     avg_price_change = result.scalar()
-    
+
     return {
         "total_generated": total_generated,
         "total_applied": total_applied,
@@ -95,35 +97,33 @@ async def get_recommendation_stats(
 @router.get("/recommendations", response_model=PaginatedResponse[PriceRecommendationResponse])
 async def list_recommendations(
     request: Request,
-    status: Optional[RecommendationStatus] = Query(default=None),
-    product_id: Optional[UUID] = Query(default=None),
+    status: RecommendationStatus | None = Query(default=None),
+    product_id: UUID | None = Query(default=None),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List price recommendations."""
-    query = select(PriceRecommendation).where(
-        PriceRecommendation.user_id == current_user.id
-    )
-    
+    query = select(PriceRecommendation).where(PriceRecommendation.user_id == current_user.id)
+
     if status:
         query = query.where(PriceRecommendation.status == status)
     if product_id:
         query = query.where(PriceRecommendation.product_id == product_id)
-    
+
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
     count_result = await db.execute(count_query)
     total = count_result.scalar_one()
-    
+
     # Paginate
     query = query.order_by(PriceRecommendation.created_at.desc())
     query = query.offset(pagination.offset).limit(pagination.page_size)
-    
+
     result = await db.execute(query)
     items = list(result.scalars().all())
     total_pages = (total + pagination.page_size - 1) // pagination.page_size
-    
+
     return PaginatedResponse(
         items=items,
         total=total,
@@ -136,7 +136,7 @@ async def list_recommendations(
 @router.get("/recommendations/pending", response_model=PaginatedResponse[PriceRecommendationResponse])
 async def list_pending_recommendations(
     request: Request,
-    product_id: Optional[UUID] = Query(default=None),
+    product_id: UUID | None = Query(default=None),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -146,21 +146,21 @@ async def list_pending_recommendations(
         PriceRecommendation.user_id == current_user.id,
         PriceRecommendation.status == RecommendationStatus.PENDING,
     )
-    
+
     if product_id:
         query = query.where(PriceRecommendation.product_id == product_id)
-    
+
     count_query = select(func.count()).select_from(query.subquery())
     count_result = await db.execute(count_query)
     total = count_result.scalar_one()
-    
+
     query = query.order_by(PriceRecommendation.created_at.desc())
     query = query.offset(pagination.offset).limit(pagination.page_size)
-    
+
     result = await db.execute(query)
     items = list(result.scalars().all())
     total_pages = (total + pagination.page_size - 1) // pagination.page_size
-    
+
     return PaginatedResponse(
         items=items,
         total=total,
@@ -182,8 +182,3 @@ async def get_recommendation(
     if not recommendation or recommendation.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recommendation not found")
     return recommendation
-
-
-
-
-    

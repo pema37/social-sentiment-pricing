@@ -35,18 +35,16 @@ Privacy architecture:
 """
 
 import logging
-from datetime import datetime, timedelta, UTC
-from decimal import Decimal
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.recommendation_outcome import (
-    RecommendationOutcome,
     OutcomeLabel,
+    RecommendationOutcome,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,7 +54,6 @@ DEFAULT_K_ANONYMITY = 5
 
 
 class OutcomeBenchmarkService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -69,7 +66,7 @@ class OutcomeBenchmarkService:
         product_category: str,
         days: int = 90,
         min_merchants: int = DEFAULT_K_ANONYMITY,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Aggregate anonymized outcome data across merchants in a category.
 
         Reads from mv_category_benchmarks materialized view for speed.
@@ -140,9 +137,7 @@ class OutcomeBenchmarkService:
             logger.debug(f"Materialized view unavailable, falling back to programmatic: {e}")
 
         # ── Fallback: programmatic aggregation ──
-        return await self._get_category_benchmarks_programmatic(
-            product_category, days, min_merchants
-        )
+        return await self._get_category_benchmarks_programmatic(product_category, days, min_merchants)
 
     async def list_available_categories(
         self,
@@ -184,16 +179,14 @@ class OutcomeBenchmarkService:
             logger.debug(f"Materialized view unavailable, falling back: {e}")
 
         # ── Fallback: programmatic ──
-        return await self._list_available_categories_programmatic(
-            min_merchants, days
-        )
+        return await self._list_available_categories_programmatic(min_merchants, days)
 
     async def get_category_context_for_strategist(
         self,
         product_category: str,
         days: int = 90,
         min_merchants: int = DEFAULT_K_ANONYMITY,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Generate a context string for injection into the Strategist's prompt.
 
         This is Tier 1 feedback (context injection): before generating any
@@ -203,9 +196,7 @@ class OutcomeBenchmarkService:
         Returns None if insufficient data (k-anonymity not met).
         Returns a plain-text summary string for prompt injection.
         """
-        benchmarks = await self.get_category_benchmarks(
-            product_category, days, min_merchants
-        )
+        benchmarks = await self.get_category_benchmarks(product_category, days, min_merchants)
 
         if not benchmarks:
             return None
@@ -218,26 +209,19 @@ class OutcomeBenchmarkService:
 
         if benchmarks.get("avg_revenue_lift_7d") is not None:
             lines.append(
-                f"- Average 7-day revenue lift for successful recommendations: "
-                f"{benchmarks['avg_revenue_lift_7d']}%"
+                f"- Average 7-day revenue lift for successful recommendations: {benchmarks['avg_revenue_lift_7d']}%"
             )
 
         if benchmarks.get("avg_revenue_lift_30d") is not None:
-            lines.append(
-                f"- Average 30-day revenue lift: {benchmarks['avg_revenue_lift_30d']}%"
-            )
+            lines.append(f"- Average 30-day revenue lift: {benchmarks['avg_revenue_lift_30d']}%")
 
         if benchmarks.get("optimal_price_change_range"):
             r = benchmarks["optimal_price_change_range"]
             lines.append(
-                f"- Optimal price change range (IQR of successes): "
-                f"{r['p25']}% to {r['p75']}% (median {r['median']}%)"
+                f"- Optimal price change range (IQR of successes): {r['p25']}% to {r['p75']}% (median {r['median']}%)"
             )
 
-        lines.append(
-            f"- Average confidence of measured recommendations: "
-            f"{benchmarks.get('avg_confidence', 'N/A')}"
-        )
+        lines.append(f"- Average confidence of measured recommendations: {benchmarks.get('avg_confidence', 'N/A')}")
 
         return "\n".join(lines)
 
@@ -247,7 +231,7 @@ class OutcomeBenchmarkService:
 
     async def get_data_gap_failure_rates(
         self,
-        user_id: Optional[UUID] = None,
+        user_id: UUID | None = None,
         days: int = 90,
     ) -> list[dict]:
         """Identify categories where low data completeness causes failures.
@@ -298,7 +282,7 @@ class OutcomeBenchmarkService:
 
     async def get_scout_priority_queue(
         self,
-        user_id: Optional[UUID] = None,
+        user_id: UUID | None = None,
         days: int = 90,
     ) -> list[dict]:
         """Generate a priority queue for the Scout's scraping scheduler.
@@ -321,13 +305,15 @@ class OutcomeBenchmarkService:
             else:
                 interval_hours = 4
 
-            priority_queue.append({
-                "category": item["category"],
-                "scout_priority": item["scout_priority"],
-                "suggested_scrape_interval_hours": interval_hours,
-                "failure_gap": item["failure_gap"],
-                "evidence_count": item["low_data_outcomes"],
-            })
+            priority_queue.append(
+                {
+                    "category": item["category"],
+                    "scout_priority": item["scout_priority"],
+                    "suggested_scrape_interval_hours": interval_hours,
+                    "failure_gap": item["failure_gap"],
+                    "evidence_count": item["low_data_outcomes"],
+                }
+            )
 
         return priority_queue
 
@@ -346,17 +332,13 @@ class OutcomeBenchmarkService:
 
         for view_name in views:
             try:
-                await self.db.execute(
-                    text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}")
-                )
+                await self.db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}"))
                 await self.db.commit()
                 results[view_name] = "refreshed"
-            except Exception as e:
+            except Exception:
                 await self.db.rollback()
                 try:
-                    await self.db.execute(
-                        text(f"REFRESH MATERIALIZED VIEW {view_name}")
-                    )
+                    await self.db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
                     await self.db.commit()
                     results[view_name] = "refreshed_regular"
                 except Exception as e2:
@@ -374,7 +356,7 @@ class OutcomeBenchmarkService:
         product_category: str,
         days: int = 90,
         min_merchants: int = DEFAULT_K_ANONYMITY,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Original programmatic aggregation — used as fallback."""
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
@@ -448,18 +430,20 @@ class OutcomeBenchmarkService:
         for cat, data in categories.items():
             merchant_count = len(data["merchants"])
             if merchant_count >= min_merchants:
-                available.append({
-                    "category": cat,
-                    "merchant_count": merchant_count,
-                    "outcome_count": data["count"],
-                })
+                available.append(
+                    {
+                        "category": cat,
+                        "merchant_count": merchant_count,
+                        "outcome_count": data["count"],
+                    }
+                )
 
         available.sort(key=lambda x: x["merchant_count"], reverse=True)
         return available
 
     async def _get_data_gap_failure_rates_programmatic(
         self,
-        user_id: Optional[UUID] = None,
+        user_id: UUID | None = None,
         days: int = 90,
     ) -> list[dict]:
         """Original programmatic aggregation — used as fallback and for user-scoped queries."""
@@ -503,28 +487,26 @@ class OutcomeBenchmarkService:
         for cat, stats in categories.items():
             low_failure_rate = 0.0
             if stats["low_data_total"] > 0:
-                low_failure_rate = round(
-                    stats["low_data_failures"] / stats["low_data_total"] * 100, 2
-                )
+                low_failure_rate = round(stats["low_data_failures"] / stats["low_data_total"] * 100, 2)
 
             high_failure_rate = 0.0
             if stats["high_data_total"] > 0:
-                high_failure_rate = round(
-                    stats["high_data_failures"] / stats["high_data_total"] * 100, 2
-                )
+                high_failure_rate = round(stats["high_data_failures"] / stats["high_data_total"] * 100, 2)
 
             failure_gap = round(low_failure_rate - high_failure_rate, 2)
 
-            results.append({
-                "category": cat,
-                "failure_rate_low_data": low_failure_rate,
-                "failure_rate_high_data": high_failure_rate,
-                "failure_gap": failure_gap,
-                "low_data_outcomes": stats["low_data_total"],
-                "high_data_outcomes": stats["high_data_total"],
-                "total_outcomes": stats["total"],
-                "scout_priority": "high" if failure_gap > 20 else "medium" if failure_gap > 10 else "low",
-            })
+            results.append(
+                {
+                    "category": cat,
+                    "failure_rate_low_data": low_failure_rate,
+                    "failure_rate_high_data": high_failure_rate,
+                    "failure_gap": failure_gap,
+                    "low_data_outcomes": stats["low_data_total"],
+                    "high_data_outcomes": stats["high_data_total"],
+                    "total_outcomes": stats["total"],
+                    "scout_priority": "high" if failure_gap > 20 else "medium" if failure_gap > 10 else "low",
+                }
+            )
 
         results.sort(key=lambda x: x["failure_gap"], reverse=True)
         return results
@@ -535,7 +517,7 @@ class OutcomeBenchmarkService:
         days: int = 90,
     ) -> dict:
         """Get recommendation source breakdown for a category.
-        
+
         Not materialized — it's a lightweight secondary query.
         """
         cutoff = datetime.now(UTC) - timedelta(days=days)
@@ -558,13 +540,9 @@ class OutcomeBenchmarkService:
     @staticmethod
     def _calculate_optimal_change_range(
         outcomes: list[RecommendationOutcome],
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """IQR of price changes from successful outcomes."""
-        positive_changes = [
-            float(o.price_change_percent)
-            for o in outcomes
-            if o.outcome_label == OutcomeLabel.POSITIVE
-        ]
+        positive_changes = [float(o.price_change_percent) for o in outcomes if o.outcome_label == OutcomeLabel.POSITIVE]
 
         if len(positive_changes) < 3:
             return None
@@ -600,6 +578,3 @@ class OutcomeBenchmarkService:
                 }
 
         return result
-    
-
-    

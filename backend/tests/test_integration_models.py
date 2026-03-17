@@ -5,20 +5,20 @@ Enums and dataclasses for e-commerce integrations.
 Pure data models — no async, no DB.
 """
 
-from datetime import datetime, UTC
 from dataclasses import fields
+from datetime import UTC, datetime
 
 import pytest
 
 from services.integration.schemas import (
-    PriceUpdateResult,
     ConnectionStatus,
-    OAuthResult,
-    ExternalProductVariant,
     ExternalProduct,
-    ProductSyncResult,
+    ExternalProductVariant,
+    OAuthResult,
     PriceUpdateRequest,
     PriceUpdateResponse,
+    PriceUpdateResult,
+    ProductSyncResult,
     WebhookRegistration,
 )
 
@@ -27,7 +27,6 @@ from services.integration.schemas import (
 # PriceUpdateResult enum
 # ──────────────────────────────────────────────
 class TestPriceUpdateResult:
-
     def test_success_value(self):
         assert PriceUpdateResult.SUCCESS.value == "success"
 
@@ -66,7 +65,6 @@ class TestPriceUpdateResult:
 # ConnectionStatus enum
 # ──────────────────────────────────────────────
 class TestConnectionStatus:
-
     def test_healthy_value(self):
         assert ConnectionStatus.HEALTHY.value == "healthy"
 
@@ -98,7 +96,6 @@ class TestConnectionStatus:
 # OAuthResult
 # ──────────────────────────────────────────────
 class TestOAuthResult:
-
     def test_required_field_success(self):
         r = OAuthResult(success=True)
         assert r.success is True
@@ -139,7 +136,6 @@ class TestOAuthResult:
 # ExternalProductVariant
 # ──────────────────────────────────────────────
 class TestExternalProductVariant:
-
     def test_required_fields(self):
         v = ExternalProductVariant(id="v-1", title="Default")
         assert v.id == "v-1"
@@ -174,7 +170,6 @@ class TestExternalProductVariant:
 # ExternalProduct
 # ──────────────────────────────────────────────
 class TestExternalProduct:
-
     def test_required_fields(self):
         p = ExternalProduct(id="p-1", title="Widget")
         assert p.id == "p-1"
@@ -233,7 +228,6 @@ class TestExternalProduct:
 # ProductSyncResult
 # ──────────────────────────────────────────────
 class TestProductSyncResult:
-
     def test_required_field_success(self):
         r = ProductSyncResult(success=True)
         assert r.success is True
@@ -275,7 +269,6 @@ class TestProductSyncResult:
 # PriceUpdateRequest
 # ──────────────────────────────────────────────
 class TestPriceUpdateRequest:
-
     def test_required_field(self):
         r = PriceUpdateRequest(external_product_id="p-1")
         assert r.external_product_id == "p-1"
@@ -309,7 +302,6 @@ class TestPriceUpdateRequest:
 # PriceUpdateResponse
 # ──────────────────────────────────────────────
 class TestPriceUpdateResponse:
-
     def test_required_fields(self):
         r = PriceUpdateResponse(
             result=PriceUpdateResult.SUCCESS,
@@ -373,7 +365,6 @@ class TestPriceUpdateResponse:
 # WebhookRegistration
 # ──────────────────────────────────────────────
 class TestWebhookRegistration:
-
     def test_required_field_success(self):
         w = WebhookRegistration(success=True)
         assert w.success is True
@@ -410,7 +401,6 @@ class TestWebhookRegistration:
 # Cross-model integration
 # ──────────────────────────────────────────────
 class TestCrossModel:
-
     def test_product_with_variants(self):
         v1 = ExternalProductVariant(id="v-1", title="Small", price=10.0)
         v2 = ExternalProductVariant(id="v-2", title="Large", price=20.0)
@@ -446,5 +436,3 @@ class TestCrossModel:
         status = ConnectionStatus.UNHEALTHY
         msg = f"Store is {status.value}"
         assert "unhealthy" in msg
-
-        

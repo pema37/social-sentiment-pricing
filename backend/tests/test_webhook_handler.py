@@ -2,10 +2,9 @@
 Tests for services.integration.webhook_handler
 """
 
+import json
 import sys
 import types
-import json
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -17,10 +16,14 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "models", "models.integration",
-    "core", "core.encryption",
+    "models",
+    "models.integration",
+    "core",
+    "core.encryption",
     "services.integration.shopify_service",
     "services.integration.woocommerce_service",
     "services.integration.sync_service",
@@ -74,11 +77,10 @@ sys.modules["services.integration.sync_service"].SyncService = lambda *a, **kw: 
 
 # --- import under test ---
 from services.integration.webhook_handler import (
-    WebhookHandler,
-    WebhookSource,
     WebhookAction,
-    WebhookEvent,
+    WebhookHandler,
     WebhookResult,
+    WebhookSource,
 )
 
 # Restore
@@ -100,6 +102,7 @@ for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_handler():
     db = AsyncMock()
@@ -224,7 +227,7 @@ class TestHandleShopifyWebhook:
         handler._find_integration = AsyncMock(return_value=None)
 
         result = await handler.handle_shopify_webhook(
-            payload=b'{}', signature="sig", shop_domain="unknown.myshopify.com", topic="products/update"
+            payload=b"{}", signature="sig", shop_domain="unknown.myshopify.com", topic="products/update"
         )
         assert result.success is False
         assert "not found" in result.error.lower()
@@ -238,7 +241,7 @@ class TestHandleShopifyWebhook:
         handler._shopify.verify_webhook_signature.return_value = False
 
         result = await handler.handle_shopify_webhook(
-            payload=b'{}', signature="bad-sig", shop_domain="myshop.myshopify.com", topic="products/update"
+            payload=b"{}", signature="bad-sig", shop_domain="myshop.myshopify.com", topic="products/update"
         )
         assert result.success is False
         assert "signature" in result.error.lower()
@@ -282,7 +285,7 @@ class TestHandleShopifyWebhook:
         handler._find_integration = AsyncMock(side_effect=RuntimeError("db down"))
 
         result = await handler.handle_shopify_webhook(
-            payload=b'{}', signature="sig", shop_domain="x.myshopify.com", topic="products/update"
+            payload=b"{}", signature="sig", shop_domain="x.myshopify.com", topic="products/update"
         )
         assert result.success is False
         assert "db down" in result.error
@@ -295,7 +298,7 @@ class TestHandleWooCommerceWebhook:
         handler._find_integration = AsyncMock(return_value=None)
 
         result = await handler.handle_woocommerce_webhook(
-            payload=b'{}', signature="sig", webhook_source="unknown.com", webhook_topic="product.updated"
+            payload=b"{}", signature="sig", webhook_source="unknown.com", webhook_topic="product.updated"
         )
         assert result.success is False
 
@@ -308,7 +311,7 @@ class TestHandleWooCommerceWebhook:
         handler._woocommerce.verify_webhook_signature.return_value = False
 
         result = await handler.handle_woocommerce_webhook(
-            payload=b'{}', signature="bad", webhook_source="shop.com", webhook_topic="product.updated"
+            payload=b"{}", signature="bad", webhook_source="shop.com", webhook_topic="product.updated"
         )
         assert result.success is False
         assert "signature" in result.error.lower()
@@ -336,7 +339,7 @@ class TestHandleWooCommerceWebhook:
         handler._find_integration = AsyncMock(side_effect=RuntimeError("crash"))
 
         result = await handler.handle_woocommerce_webhook(
-            payload=b'{}', signature="sig", webhook_source="shop.com", webhook_topic="product.updated"
+            payload=b"{}", signature="sig", webhook_source="shop.com", webhook_topic="product.updated"
         )
         assert result.success is False
 
@@ -377,6 +380,3 @@ class TestGetWebhookSecret:
         with patch("services.integration.webhook_handler.decrypt_token", return_value="no-colon"):
             with pytest.raises(ValueError, match="No webhook secret"):
                 handler._get_webhook_secret(integ)
-
-
-                

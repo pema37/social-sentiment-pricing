@@ -14,15 +14,15 @@ for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
+import pytest
+
 from services.payment.exceptions import (
-    MneeBaseError,
     MneeApiError,
-    MneeValidationError,
+    MneeBaseError,
     MneeConfigError,
     MneeNetworkError,
+    MneeValidationError,
 )
-
-import pytest
 
 
 # ──────────────────────────────────────────────
@@ -298,7 +298,7 @@ class TestExceptionHierarchy:
             MneeApiError("a", status_code=500),
             MneeValidationError("b", field="x"),
             MneeConfigError("c", missing_key="k"),
-            MneeNetworkError("d", original_error=IOError("e")),
+            MneeNetworkError("d", original_error=OSError("e")),
         ]
         for error in errors:
             with pytest.raises(MneeBaseError):
@@ -323,6 +323,3 @@ class TestExceptionHierarchy:
         assert isinstance(err, MneeBaseError)
         assert isinstance(err, Exception)
         assert not isinstance(err, MneeValidationError)
-
-
-        

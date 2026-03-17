@@ -22,34 +22,30 @@ Conservative defaults:
 """
 
 import uuid as uuid_lib
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, List, Dict
-from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
+from sqlalchemy import Date, and_, cast, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, and_, cast, Date
 from sqlmodel import select
 
-from models.product import Product
 from models.competitor import Competitor
-from models.competitor_product import CompetitorProduct
 from models.competitor_price_history import CompetitorPriceHistory
+from models.competitor_product import CompetitorProduct
 from models.price_history import PriceHistory
+from models.product import Product
 from schemas.retrospective_audit import (
     AuditRequest,
     AuditSummary,
-    SKUAuditResult,
     PricingGapDay,
     RetrospectiveAuditResponse,
-    AuditListItem,
+    SKUAuditResult,
 )
-
 
 # ── Constants ─────────────────────────────────────────────────
 ALIGNMENT_THRESHOLD = Decimal("0.02")  # ±2% = aligned
 DEFAULT_DAILY_UNITS = 5
-ELASTICITY_FACTOR = Decimal("0.015")   # 1.5% unit loss per 1% overpricing
+ELASTICITY_FACTOR = Decimal("0.015")  # 1.5% unit loss per 1% overpricing
 TWO = Decimal("2")
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -74,7 +70,7 @@ class RetrospectiveAuditService:
 
     async def generate_audit(self, request: AuditRequest) -> RetrospectiveAuditResponse:
         """Generate a complete retrospective loss audit."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         period_start = now - timedelta(days=request.lookback_days)
 
         # 1. Get products to analyze
@@ -83,7 +79,7 @@ class RetrospectiveAuditService:
             return self._empty_audit(now, period_start, request.lookback_days)
 
         # 2. For each product, compute the SKU-level audit
-        sku_results: List[SKUAuditResult] = []
+        sku_results: list[SKUAuditResult] = []
         for product in products:
             result = await self._audit_single_product(
                 product=product,
@@ -116,18 +112,14 @@ class RetrospectiveAuditService:
     # PRODUCT RETRIEVAL
     # ══════════════════════════════════════════════════════════
 
-    async def _get_auditable_products(
-        self, product_ids: Optional[List[uuid_lib.UUID]] = None
-    ) -> List[Product]:
+    async def _get_auditable_products(self, product_ids: list[uuid_lib.UUID] | None = None) -> list[Product]:
         """
         Get products that have at least one active competitor product link.
         Optionally filter to specific product IDs.
         """
         # Subquery: product IDs that have at least one competitor product
         competitor_product_ids = (
-            select(CompetitorProduct.product_id)
-            .where(CompetitorProduct.is_active == True)
-            .distinct()
+            select(CompetitorProduct.product_id).where(CompetitorProduct.is_active == True).distinct()
         )
 
         query = (
@@ -158,13 +150,12 @@ class RetrospectiveAuditService:
         period_start: datetime,
         period_end: datetime,
         estimated_daily_units: int,
-    ) -> Optional[SKUAuditResult]:
+    ) -> SKUAuditResult | None:
         """Compute the retrospective audit for one product."""
 
         # Get competitor product links for this product
         cp_result = await self.session.execute(
-            select(CompetitorProduct)
-            .where(
+            select(CompetitorProduct).where(
                 and_(
                     CompetitorProduct.product_id == product.id,
                     CompetitorProduct.is_active == True,
@@ -183,9 +174,7 @@ class RetrospectiveAuditService:
         comp_result = await self.session.execute(
             select(Competitor.id, Competitor.name).where(Competitor.id.in_(competitor_ids))
         )
-        competitor_name_map: Dict[uuid_lib.UUID, str] = {
-            row.id: row.name for row in comp_result.all()
-        }
+        competitor_name_map: dict[uuid_lib.UUID, str] = {row.id: row.name for row in comp_result.all()}
         competitor_names = list(competitor_name_map.values())
 
         # Get competitor price history grouped by day
@@ -206,14 +195,14 @@ class RetrospectiveAuditService:
         )
 
         # Walk through each day and compute gaps
-        daily_gaps: List[PricingGapDay] = []
+        daily_gaps: list[PricingGapDay] = []
         days_overpriced = 0
         days_underpriced = 0
         days_aligned = 0
         total_lost_revenue = ZERO
         total_missed_margin = ZERO
-        overpriced_gap_percents: List[Decimal] = []
-        underpriced_gap_percents: List[Decimal] = []
+        overpriced_gap_percents: list[Decimal] = []
+        underpriced_gap_percents: list[Decimal] = []
 
         for day_str, comp_avg in sorted(daily_competitor_prices.items()):
             merchant_price = merchant_daily_prices.get(day_str, product.current_price)
@@ -225,9 +214,7 @@ class RetrospectiveAuditService:
             optimal_price = comp_avg
 
             gap_amount = merchant_price - optimal_price
-            gap_percent = (gap_amount / optimal_price * HUNDRED).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
+            gap_percent = (gap_amount / optimal_price * HUNDRED).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
             # Classify the gap
             abs_gap_ratio = abs(gap_amount) / optimal_price
@@ -241,14 +228,8 @@ class RetrospectiveAuditService:
 
                 # Lost revenue: overpricing drives away customers
                 # lost_units = daily_units × elasticity × gap%
-                lost_units = (
-                    Decimal(str(estimated_daily_units))
-                    * ELASTICITY_FACTOR
-                    * abs(gap_percent)
-                )
-                day_lost_revenue = (lost_units * merchant_price).quantize(
-                    Decimal("0.01"), rounding=ROUND_HALF_UP
-                )
+                lost_units = Decimal(str(estimated_daily_units)) * ELASTICITY_FACTOR * abs(gap_percent)
+                day_lost_revenue = (lost_units * merchant_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                 total_lost_revenue += day_lost_revenue
             else:
                 gap_type = "underpriced"
@@ -257,26 +238,28 @@ class RetrospectiveAuditService:
 
                 # Missed margin: you could have charged more
                 missed_per_unit = abs(gap_amount)
-                day_missed_margin = (
-                    Decimal(str(estimated_daily_units)) * missed_per_unit
-                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                day_missed_margin = (Decimal(str(estimated_daily_units)) * missed_per_unit).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
                 total_missed_margin += day_missed_margin
 
             # Parse date string back to datetime for the response
             try:
-                day_dt = datetime.strptime(day_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                day_dt = datetime.strptime(day_str, "%Y-%m-%d").replace(tzinfo=UTC)
             except ValueError:
-                day_dt = datetime.now(timezone.utc)
+                day_dt = datetime.now(UTC)
 
-            daily_gaps.append(PricingGapDay(
-                date=day_dt,
-                your_price=merchant_price.quantize(Decimal("0.01")),
-                competitor_avg_price=comp_avg.quantize(Decimal("0.01")),
-                optimal_price=optimal_price.quantize(Decimal("0.01")),
-                gap_amount=gap_amount.quantize(Decimal("0.01")),
-                gap_percent=gap_percent,
-                gap_type=gap_type,
-            ))
+            daily_gaps.append(
+                PricingGapDay(
+                    date=day_dt,
+                    your_price=merchant_price.quantize(Decimal("0.01")),
+                    competitor_avg_price=comp_avg.quantize(Decimal("0.01")),
+                    optimal_price=optimal_price.quantize(Decimal("0.01")),
+                    gap_amount=gap_amount.quantize(Decimal("0.01")),
+                    gap_percent=gap_percent,
+                    gap_type=gap_type,
+                )
+            )
 
         total_impact = total_lost_revenue + total_missed_margin
 
@@ -284,31 +267,28 @@ class RetrospectiveAuditService:
         current_comp_avg = None
         current_gap_pct = None
         latest_comp_prices = [
-            cp.current_price for cp in comp_products
-            if cp.current_price is not None and cp.current_price > 0
+            cp.current_price for cp in comp_products if cp.current_price is not None and cp.current_price > 0
         ]
         if latest_comp_prices:
-            current_comp_avg = (
-                sum(latest_comp_prices) / Decimal(str(len(latest_comp_prices)))
-            ).quantize(Decimal("0.01"))
+            current_comp_avg = (sum(latest_comp_prices) / Decimal(str(len(latest_comp_prices)))).quantize(
+                Decimal("0.01")
+            )
             if current_comp_avg > 0:
-                current_gap_pct = (
-                    (product.current_price - current_comp_avg)
-                    / current_comp_avg
-                    * HUNDRED
-                ).quantize(Decimal("0.01"))
+                current_gap_pct = ((product.current_price - current_comp_avg) / current_comp_avg * HUNDRED).quantize(
+                    Decimal("0.01")
+                )
 
         avg_overpriced = None
         if overpriced_gap_percents:
-            avg_overpriced = (
-                sum(overpriced_gap_percents) / Decimal(str(len(overpriced_gap_percents)))
-            ).quantize(Decimal("0.01"))
+            avg_overpriced = (sum(overpriced_gap_percents) / Decimal(str(len(overpriced_gap_percents)))).quantize(
+                Decimal("0.01")
+            )
 
         avg_underpriced = None
         if underpriced_gap_percents:
-            avg_underpriced = (
-                sum(underpriced_gap_percents) / Decimal(str(len(underpriced_gap_percents)))
-            ).quantize(Decimal("0.01"))
+            avg_underpriced = (sum(underpriced_gap_percents) / Decimal(str(len(underpriced_gap_percents)))).quantize(
+                Decimal("0.01")
+            )
 
         return SKUAuditResult(
             product_id=product.id,
@@ -337,10 +317,10 @@ class RetrospectiveAuditService:
 
     async def _get_daily_competitor_prices(
         self,
-        competitor_product_ids: List[uuid_lib.UUID],
+        competitor_product_ids: list[uuid_lib.UUID],
         period_start: datetime,
         period_end: datetime,
-    ) -> Dict[str, Decimal]:
+    ) -> dict[str, Decimal]:
         """
         Get average competitor price per day across all competitor product links.
         Returns {date_string: avg_price}.
@@ -365,9 +345,9 @@ class RetrospectiveAuditService:
         result = await self.session.execute(query)
         rows = result.all()
 
-        daily_prices: Dict[str, Decimal] = {}
+        daily_prices: dict[str, Decimal] = {}
         for row in rows:
-            date_key = row.obs_date.strftime("%Y-%m-%d") if hasattr(row.obs_date, 'strftime') else str(row.obs_date)
+            date_key = row.obs_date.strftime("%Y-%m-%d") if hasattr(row.obs_date, "strftime") else str(row.obs_date)
             daily_prices[date_key] = Decimal(str(row.avg_price))
 
         # Fill gaps: if we don't have data for a day, use last known price
@@ -382,7 +362,7 @@ class RetrospectiveAuditService:
         product: Product,
         period_start: datetime,
         period_end: datetime,
-    ) -> Dict[str, Decimal]:
+    ) -> dict[str, Decimal]:
         """
         Reconstruct the merchant's price for each day from PriceHistory.
         Falls back to current_price if no history exists.
@@ -406,7 +386,7 @@ class RetrospectiveAuditService:
         if not history:
             # No price changes in the period — price was constant
             # Fill every day with current_price
-            daily: Dict[str, Decimal] = {}
+            daily: dict[str, Decimal] = {}
             current = period_start
             while current <= period_end:
                 daily[current.strftime("%Y-%m-%d")] = product.current_price
@@ -414,7 +394,7 @@ class RetrospectiveAuditService:
             return daily
 
         # Build daily map: walk through changes, carry forward
-        daily: Dict[str, Decimal] = {}
+        daily: dict[str, Decimal] = {}
         # Start with the price before the first change in the window
         running_price = history[0].old_price if history[0].old_price else product.base_price
         change_idx = 0
@@ -424,10 +404,7 @@ class RetrospectiveAuditService:
             day_str = current.strftime("%Y-%m-%d")
 
             # Apply any price changes that happened on this day
-            while (
-                change_idx < len(history)
-                and history[change_idx].created_at.strftime("%Y-%m-%d") <= day_str
-            ):
+            while change_idx < len(history) and history[change_idx].created_at.strftime("%Y-%m-%d") <= day_str:
                 running_price = history[change_idx].new_price
                 change_idx += 1
 
@@ -442,13 +419,13 @@ class RetrospectiveAuditService:
 
     @staticmethod
     def _forward_fill_prices(
-        daily_prices: Dict[str, Decimal],
+        daily_prices: dict[str, Decimal],
         period_start: datetime,
         period_end: datetime,
-    ) -> Dict[str, Decimal]:
+    ) -> dict[str, Decimal]:
         """Forward-fill missing days with last known price."""
-        filled: Dict[str, Decimal] = {}
-        last_known: Optional[Decimal] = None
+        filled: dict[str, Decimal] = {}
+        last_known: Decimal | None = None
 
         # Find the earliest known price to seed
         sorted_keys = sorted(daily_prices.keys())
@@ -468,7 +445,7 @@ class RetrospectiveAuditService:
 
     def _build_summary(
         self,
-        sku_results: List[SKUAuditResult],
+        sku_results: list[SKUAuditResult],
         lookback_days: int,
         period_start: datetime,
         period_end: datetime,
@@ -496,28 +473,19 @@ class RetrospectiveAuditService:
         total_missed = sum(s.estimated_missed_margin for s in sku_results)
         total_impact = total_lost + total_missed
 
-        avg_days_over = (
-            sum(Decimal(str(s.days_overpriced)) for s in sku_results) / n
-        ).quantize(Decimal("0.1"))
-        avg_days_under = (
-            sum(Decimal(str(s.days_underpriced)) for s in sku_results) / n
-        ).quantize(Decimal("0.1"))
+        avg_days_over = (sum(Decimal(str(s.days_overpriced)) for s in sku_results) / n).quantize(Decimal("0.1"))
+        avg_days_under = (sum(Decimal(str(s.days_underpriced)) for s in sku_results) / n).quantize(Decimal("0.1"))
 
         # Average overpriced gap across SKUs that were overpriced
-        overpriced_skus = [
-            s for s in sku_results if s.avg_overpriced_gap_percent is not None
-        ]
+        overpriced_skus = [s for s in sku_results if s.avg_overpriced_gap_percent is not None]
         avg_gap = None
         if overpriced_skus:
             avg_gap = (
-                sum(s.avg_overpriced_gap_percent for s in overpriced_skus)
-                / Decimal(str(len(overpriced_skus)))
+                sum(s.avg_overpriced_gap_percent for s in overpriced_skus) / Decimal(str(len(overpriced_skus)))
             ).quantize(Decimal("0.01"))
 
         # Top loss products (sorted by total impact, top 5)
-        sorted_by_impact = sorted(
-            sku_results, key=lambda s: s.total_estimated_impact, reverse=True
-        )
+        sorted_by_impact = sorted(sku_results, key=lambda s: s.total_estimated_impact, reverse=True)
         top_loss = [s.product_name for s in sorted_by_impact[:5]]
 
         # Monthly & annual projections
@@ -572,7 +540,3 @@ class RetrospectiveAuditService:
             ),
             sku_results=[],
         )
-
-
-
-        

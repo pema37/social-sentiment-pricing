@@ -16,23 +16,24 @@ Total: ~85 tests
 """
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # === Import isolation ===
 if "db.session" not in sys.modules:
     sys.modules["db.session"] = MagicMock()
 
 import pytest
+
 from services.sentiment_analyzer import (
     SentimentAnalyzer,
     SentimentResult,
     sentiment_analyzer,
 )
 
-
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def make_result(
     score=0.5,
@@ -55,8 +56,8 @@ def make_result(
 # 1. SentimentResult Dataclass
 # ============================================================
 
-class TestSentimentResult:
 
+class TestSentimentResult:
     def test_basic_creation(self):
         result = make_result()
         assert result.score == 0.5
@@ -91,6 +92,7 @@ class TestSentimentResult:
 # ============================================================
 # 2. _get_label
 # ============================================================
+
 
 class TestGetLabel:
     """Tests for compound score → label mapping."""
@@ -145,6 +147,7 @@ class TestGetLabel:
 # 3. _calculate_confidence
 # ============================================================
 
+
 class TestCalculateConfidence:
     """Tests for confidence calculation from VADER scores."""
 
@@ -196,6 +199,7 @@ class TestCalculateConfidence:
 # ============================================================
 # 4. analyze() — Single Text (Async, Real VADER)
 # ============================================================
+
 
 class TestAnalyze:
     """Tests for single-text analysis using real VADER."""
@@ -295,6 +299,7 @@ class TestAnalyze:
 # 5. analyze_batch() — Multiple Texts
 # ============================================================
 
+
 class TestAnalyzeBatch:
     """Tests for batch text analysis."""
 
@@ -341,6 +346,7 @@ class TestAnalyzeBatch:
 # ============================================================
 # 6. calculate_aggregate()
 # ============================================================
+
 
 class TestCalculateAggregate:
     """Tests for aggregate sentiment statistics."""
@@ -470,9 +476,15 @@ class TestCalculateAggregate:
         results = [make_result()]
         agg = await self.analyzer.calculate_aggregate(results)
         expected_keys = {
-            "average_score", "average_confidence", "total_count",
-            "positive_count", "negative_count", "neutral_count",
-            "very_positive_count", "very_negative_count", "trend",
+            "average_score",
+            "average_confidence",
+            "total_count",
+            "positive_count",
+            "negative_count",
+            "neutral_count",
+            "very_positive_count",
+            "very_negative_count",
+            "trend",
         }
         assert set(agg.keys()) == expected_keys
 
@@ -495,8 +507,8 @@ class TestCalculateAggregate:
 # 7. Singleton Instance
 # ============================================================
 
-class TestSingletonInstance:
 
+class TestSingletonInstance:
     def test_singleton_exists(self):
         assert sentiment_analyzer is not None
 
@@ -516,8 +528,8 @@ class TestSingletonInstance:
 # 8. Edge Cases
 # ============================================================
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     def setup_method(self):
         self.analyzer = SentimentAnalyzer()
 
@@ -570,7 +582,3 @@ class TestEdgeCases:
         result = await self.analyzer.analyze("   ")
         assert isinstance(result, SentimentResult)
         assert result.score == 0.0
-
-
-
-        

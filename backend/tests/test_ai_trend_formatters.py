@@ -17,7 +17,7 @@ Covers all static methods in DataFormatter:
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 # ── Import isolation ──────────────────────────────────────────────
@@ -27,10 +27,10 @@ for mod in ["db.session"]:
 
 from services.ai_trend_analysis.formatters import DataFormatter
 
-
 # ==================================================================
 # format_products
 # ==================================================================
+
 
 class TestFormatProducts:
     def test_empty_list(self):
@@ -118,12 +118,13 @@ class TestFormatProducts:
 # format_sentiment_history
 # ==================================================================
 
+
 class TestFormatSentimentHistory:
     def test_empty_list(self):
         assert DataFormatter.format_sentiment_history([]) == "No sentiment data available"
 
     def test_single_entry(self):
-        data = [{"created_at": datetime(2026, 2, 1, tzinfo=timezone.utc), "score": 0.75}]
+        data = [{"created_at": datetime(2026, 2, 1, tzinfo=UTC), "score": 0.75}]
         result = DataFormatter.format_sentiment_history(data)
         assert "2026-02-01" in result
         assert "0.75" in result
@@ -131,8 +132,8 @@ class TestFormatSentimentHistory:
 
     def test_multiple_entries_same_day_averaged(self):
         data = [
-            {"created_at": datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc), "score": 0.80},
-            {"created_at": datetime(2026, 2, 1, 14, 0, tzinfo=timezone.utc), "score": 0.60},
+            {"created_at": datetime(2026, 2, 1, 12, 0, tzinfo=UTC), "score": 0.80},
+            {"created_at": datetime(2026, 2, 1, 14, 0, tzinfo=UTC), "score": 0.60},
         ]
         result = DataFormatter.format_sentiment_history(data)
         assert "2026-02-01" in result
@@ -141,8 +142,8 @@ class TestFormatSentimentHistory:
 
     def test_multiple_days_sorted_reverse(self):
         data = [
-            {"created_at": datetime(2026, 1, 1, tzinfo=timezone.utc), "score": 0.50},
-            {"created_at": datetime(2026, 2, 1, tzinfo=timezone.utc), "score": 0.80},
+            {"created_at": datetime(2026, 1, 1, tzinfo=UTC), "score": 0.50},
+            {"created_at": datetime(2026, 2, 1, tzinfo=UTC), "score": 0.80},
         ]
         result = DataFormatter.format_sentiment_history(data)
         lines = result.strip().split("\n")
@@ -153,10 +154,12 @@ class TestFormatSentimentHistory:
     def test_limits_to_14_days(self):
         data = []
         for day in range(1, 25):
-            data.append({
-                "created_at": datetime(2026, 1, day, tzinfo=timezone.utc),
-                "score": 0.5,
-            })
+            data.append(
+                {
+                    "created_at": datetime(2026, 1, day, tzinfo=UTC),
+                    "score": 0.5,
+                }
+            )
         result = DataFormatter.format_sentiment_history(data)
         lines = result.strip().split("\n")
         assert len(lines) == 14
@@ -164,23 +167,25 @@ class TestFormatSentimentHistory:
     def test_exactly_14_days(self):
         data = []
         for day in range(1, 15):
-            data.append({
-                "created_at": datetime(2026, 1, day, tzinfo=timezone.utc),
-                "score": 0.5,
-            })
+            data.append(
+                {
+                    "created_at": datetime(2026, 1, day, tzinfo=UTC),
+                    "score": 0.5,
+                }
+            )
         result = DataFormatter.format_sentiment_history(data)
         lines = result.strip().split("\n")
         assert len(lines) == 14
 
     def test_negative_scores(self):
-        data = [{"created_at": datetime(2026, 2, 1, tzinfo=timezone.utc), "score": -0.65}]
+        data = [{"created_at": datetime(2026, 2, 1, tzinfo=UTC), "score": -0.65}]
         result = DataFormatter.format_sentiment_history(data)
         assert "-0.65" in result
 
     def test_average_formatting_two_decimals(self):
         data = [
-            {"created_at": datetime(2026, 2, 1, tzinfo=timezone.utc), "score": 0.333},
-            {"created_at": datetime(2026, 2, 1, tzinfo=timezone.utc), "score": 0.666},
+            {"created_at": datetime(2026, 2, 1, tzinfo=UTC), "score": 0.333},
+            {"created_at": datetime(2026, 2, 1, tzinfo=UTC), "score": 0.666},
         ]
         result = DataFormatter.format_sentiment_history(data)
         # Average is 0.4995, formatted to 2 decimals = 0.50
@@ -190,6 +195,7 @@ class TestFormatSentimentHistory:
 # ==================================================================
 # format_sentiment_drops
 # ==================================================================
+
 
 class TestFormatSentimentDrops:
     def test_empty_list(self):
@@ -211,6 +217,7 @@ class TestFormatSentimentDrops:
 # ==================================================================
 # format_mentions_summary
 # ==================================================================
+
 
 class TestFormatMentionsSummary:
     def test_empty_list(self):
@@ -257,6 +264,7 @@ class TestFormatMentionsSummary:
 # ==================================================================
 # format_recent_mentions
 # ==================================================================
+
 
 class TestFormatRecentMentions:
     def test_empty_list(self):
@@ -323,6 +331,7 @@ class TestFormatRecentMentions:
 # format_negative_mentions
 # ==================================================================
 
+
 class TestFormatNegativeMentions:
     def test_empty_list(self):
         assert DataFormatter.format_negative_mentions([]) == "No significant negative mentions"
@@ -373,6 +382,7 @@ class TestFormatNegativeMentions:
 # format_competitor_data
 # ==================================================================
 
+
 class TestFormatCompetitorData:
     def test_empty_list(self):
         assert DataFormatter.format_competitor_data([]) == "No competitor data available"
@@ -408,6 +418,7 @@ class TestFormatCompetitorData:
 # ==================================================================
 # format_competitor_prices
 # ==================================================================
+
 
 class TestFormatCompetitorPrices:
     def test_empty_list(self):
@@ -450,6 +461,7 @@ class TestFormatCompetitorPrices:
 # format_competitor_activities
 # ==================================================================
 
+
 class TestFormatCompetitorActivities:
     def test_empty_list(self):
         assert DataFormatter.format_competitor_activities([]) == "No recent competitor activities"
@@ -470,6 +482,7 @@ class TestFormatCompetitorActivities:
 # ==================================================================
 # format_current_alerts
 # ==================================================================
+
 
 class TestFormatCurrentAlerts:
     def test_empty_list(self):
@@ -515,6 +528,7 @@ class TestFormatCurrentAlerts:
 # format_trends
 # ==================================================================
 
+
 class TestFormatTrends:
     def test_empty_list(self):
         assert DataFormatter.format_trends([]) == "No significant trends detected"
@@ -534,6 +548,7 @@ class TestFormatTrends:
 # format_events
 # ==================================================================
 
+
 class TestFormatEvents:
     def test_empty_list(self):
         assert DataFormatter.format_events([]) == "No notable events"
@@ -548,6 +563,3 @@ class TestFormatEvents:
         lines = result.strip().split("\n")
         assert len(lines) == 2
         assert all(line.startswith("- ") for line in lines)
-
-
-        

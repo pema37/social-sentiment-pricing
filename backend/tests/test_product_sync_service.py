@@ -4,10 +4,9 @@ Tests for services.integration.product_sync_service
 
 import sys
 import types
-from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -18,10 +17,15 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "models", "models.product", "models.integration",
-    "core", "core.encryption",
+    "models",
+    "models.product",
+    "models.integration",
+    "core",
+    "core.encryption",
 ]
 
 for _mod_name in _needed:
@@ -42,12 +46,14 @@ class _FakeProduct:
     user_id = MagicMock()
     is_active = MagicMock()
 
+
 sys.modules["models.product"].Product = _FakeProduct
 
 
 class _FakeIntegrationStatus:
     ACTIVE = "active"
     ERROR = "error"
+
 
 class _FakeEcommercePlatform(str, Enum):
     SHOPIFY = "shopify"
@@ -93,6 +99,7 @@ for _name, _mod in _stubs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_service(db=None):
     db = db or AsyncMock()
@@ -369,5 +376,3 @@ class TestBulkPushProducts:
 
         result = await svc.bulk_push_products(uuid4())
         assert result["pushed"] == 0
-
-        

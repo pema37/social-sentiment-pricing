@@ -9,15 +9,14 @@ consistent behavior and easy swapping/testing.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from ..schemas import (
-    SearchProvider,
     MatchedProduct,
-    ProviderResult,
     MatchSearchRequest,
+    ProviderResult,
+    SearchProvider,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +24,10 @@ logger = logging.getLogger(__name__)
 class BaseSearchProvider(ABC):
     """
     Abstract base class for competitor search providers.
-    
+
     Each provider (SerpAPI, Google, DuckDuckGo, etc.) implements
     this interface to provide a consistent API for the orchestrator.
-    
+
     Subclasses must implement:
         - provider_name: The SearchProvider enum value
         - is_available: Check if provider can be used
@@ -69,12 +68,12 @@ class BaseSearchProvider(ABC):
     def is_available(self) -> bool:
         """
         Check if this provider is available for use.
-        
+
         Should verify:
         - API keys are configured (if required)
         - Service is not rate limited
         - Any other prerequisites
-        
+
         Returns:
             True if provider can accept requests
         """
@@ -89,19 +88,19 @@ class BaseSearchProvider(ABC):
     ) -> ProviderResult:
         """
         Perform the actual search.
-        
+
         This is the core method that subclasses implement.
         It should:
         1. Make the API request
         2. Parse the response
         3. Convert to MatchedProduct objects
         4. Return ProviderResult
-        
+
         Args:
             query: Search query string
             max_results: Maximum results to return
             **kwargs: Additional provider-specific options
-            
+
         Returns:
             ProviderResult with products or error
         """
@@ -118,22 +117,23 @@ class BaseSearchProvider(ABC):
     ) -> ProviderResult:
         """
         Execute a search with standard pre/post processing.
-        
+
         This is the public method called by the orchestrator.
         It wraps _search() with:
         - Availability check
         - Error handling
         - Logging
         - Timing
-        
+
         Args:
             request: Search request parameters
             **kwargs: Additional options
-            
+
         Returns:
             ProviderResult
         """
         import time
+
         start_time = time.time()
 
         # Check availability
@@ -147,11 +147,8 @@ class BaseSearchProvider(ABC):
         try:
             # Build query from request
             query = request.build_query()
-            
-            logger.info(
-                f"[{self.provider_name.value}] Searching for: {query} "
-                f"(max_results={request.max_results})"
-            )
+
+            logger.info(f"[{self.provider_name.value}] Searching for: {query} (max_results={request.max_results})")
 
             # Execute search
             result = await self._search(
@@ -166,13 +163,10 @@ class BaseSearchProvider(ABC):
             # Log result
             if result.success:
                 logger.info(
-                    f"[{self.provider_name.value}] Found {result.product_count} products "
-                    f"in {result.response_time_ms}ms"
+                    f"[{self.provider_name.value}] Found {result.product_count} products in {result.response_time_ms}ms"
                 )
             else:
-                logger.warning(
-                    f"[{self.provider_name.value}] Search failed: {result.error}"
-                )
+                logger.warning(f"[{self.provider_name.value}] Search failed: {result.error}")
 
             return result
 
@@ -193,29 +187,29 @@ class BaseSearchProvider(ABC):
         self,
         title: str,
         url: str,
-        price: Optional[Any] = None,
+        price: Any | None = None,
         merchant: str = "",
         **kwargs,
-    ) -> Optional[MatchedProduct]:
+    ) -> MatchedProduct | None:
         """
         Helper to create a MatchedProduct with validation.
-        
+
         Args:
             title: Product title
             url: Product URL
             price: Price (will be parsed)
             merchant: Merchant name
             **kwargs: Additional fields
-            
+
         Returns:
             MatchedProduct or None if validation fails
         """
         from ..utils import (
+            clean_product_title,
             extract_domain,
             get_merchant_name,
-            parse_price,
             is_skip_domain,
-            clean_product_title,
+            parse_price,
         )
 
         # Validate required fields
@@ -259,27 +253,27 @@ class BaseSearchProvider(ABC):
 class ProviderRegistry:
     """
     Registry of available search providers.
-    
+
     Allows dynamic registration and lookup of providers.
     """
 
     def __init__(self):
-        self._providers: Dict[SearchProvider, BaseSearchProvider] = {}
+        self._providers: dict[SearchProvider, BaseSearchProvider] = {}
 
     def register(self, provider: BaseSearchProvider) -> None:
         """Register a provider instance."""
         self._providers[provider.provider_name] = provider
         logger.info(f"Registered provider: {provider.provider_name.value}")
 
-    def get(self, name: SearchProvider) -> Optional[BaseSearchProvider]:
+    def get(self, name: SearchProvider) -> BaseSearchProvider | None:
         """Get a provider by name."""
         return self._providers.get(name)
 
-    def get_available(self) -> List[BaseSearchProvider]:
+    def get_available(self) -> list[BaseSearchProvider]:
         """Get all available (configured) providers."""
         return [p for p in self._providers.values() if p.is_available()]
 
-    def get_all(self) -> List[BaseSearchProvider]:
+    def get_all(self) -> list[BaseSearchProvider]:
         """Get all registered providers."""
         return list(self._providers.values())
 
@@ -291,5 +285,3 @@ class ProviderRegistry:
 
 # Global registry instance
 provider_registry = ProviderRegistry()
-
-

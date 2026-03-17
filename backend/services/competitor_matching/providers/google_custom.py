@@ -18,20 +18,19 @@ Setup:
 Docs: https://developers.google.com/custom-search/v1/overview
 """
 
-import os
 import logging
-from typing import Optional, List, Dict, Any
+import os
+from typing import Any
 
 import httpx
 
-from .base import BaseSearchProvider
 from ..schemas import (
-    SearchProvider,
     MatchedProduct,
     ProviderResult,
+    SearchProvider,
 )
 from ..utils import extract_price_from_text
-
+from .base import BaseSearchProvider
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 class GoogleCustomSearchProvider(BaseSearchProvider):
     """
     Google Custom Search API provider.
-    
+
     Good free option with 100 searches/day.
     Results are web pages, not shopping-specific,
     so price extraction is less reliable.
@@ -49,13 +48,13 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        search_engine_id: Optional[str] = None,
+        api_key: str | None = None,
+        search_engine_id: str | None = None,
         timeout: float = 30.0,
     ):
         """
         Initialize Google Custom Search provider.
-        
+
         Args:
             api_key: Google API key (or set GOOGLE_API_KEY env var)
             search_engine_id: Custom Search Engine ID (or set GOOGLE_SEARCH_CX env var)
@@ -64,10 +63,10 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self.search_engine_id = search_engine_id or os.getenv("GOOGLE_SEARCH_CX")
         self.timeout = timeout
-        
+
         # Track daily usage (resets at midnight)
         self._daily_requests = 0
-        self._last_reset_date: Optional[str] = None
+        self._last_reset_date: str | None = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # Abstract Property Implementations
@@ -110,11 +109,11 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
     ) -> ProviderResult:
         """
         Search using Google Custom Search API.
-        
+
         Args:
             query: Search query
             max_results: Maximum results (API max is 10 per request)
-            
+
         Returns:
             ProviderResult with products
         """
@@ -152,7 +151,7 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
             if "error" in data:
                 error_info = data["error"]
                 error_msg = error_info.get("message", "Unknown error")
-                
+
                 # Check for quota exceeded
                 if error_info.get("code") == 429:
                     return ProviderResult(
@@ -161,7 +160,7 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
                         error="Daily quota exceeded (100 free searches)",
                         rate_limited=True,
                     )
-                
+
                 return ProviderResult(
                     provider=self.provider_name,
                     success=False,
@@ -180,7 +179,7 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
 
         except httpx.HTTPStatusError as e:
             error_msg = f"HTTP {e.response.status_code}"
-            
+
             if e.response.status_code == 403:
                 # Try to get error details
                 try:
@@ -198,7 +197,7 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
                 error_msg = "API access forbidden - check API key"
             elif e.response.status_code == 400:
                 error_msg = "Invalid request - check search engine ID"
-            
+
             return ProviderResult(
                 provider=self.provider_name,
                 success=False,
@@ -224,20 +223,20 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
     # Private Methods
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _parse_results(self, data: Dict[str, Any]) -> List[MatchedProduct]:
+    def _parse_results(self, data: dict[str, Any]) -> list[MatchedProduct]:
         """
         Parse Google Custom Search results.
-        
+
         Args:
             data: Raw API response
-            
+
         Returns:
             List of MatchedProduct
         """
         products = []
-        
+
         items = data.get("items", [])
-        
+
         for item in items:
             product = self._parse_item(item)
             if product:
@@ -245,19 +244,19 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
 
         return products
 
-    def _parse_item(self, item: Dict[str, Any]) -> Optional[MatchedProduct]:
+    def _parse_item(self, item: dict[str, Any]) -> MatchedProduct | None:
         """
         Parse a single search result item.
-        
+
         Args:
             item: Single result from API
-            
+
         Returns:
             MatchedProduct or None
         """
         title = item.get("title", "")
         url = item.get("link", "")
-        
+
         if not title or not url:
             return None
 
@@ -286,33 +285,33 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
             raw_data=item,
         )
 
-    def _extract_image(self, item: Dict[str, Any]) -> Optional[str]:
+    def _extract_image(self, item: dict[str, Any]) -> str | None:
         """Extract image URL from pagemap."""
         pagemap = item.get("pagemap", {})
-        
+
         # Try CSE thumbnail
         cse_thumb = pagemap.get("cse_thumbnail", [])
         if cse_thumb and isinstance(cse_thumb, list):
             return cse_thumb[0].get("src")
-        
+
         # Try CSE image
         cse_image = pagemap.get("cse_image", [])
         if cse_image and isinstance(cse_image, list):
             return cse_image[0].get("src")
-        
+
         # Try metatags og:image
         metatags = pagemap.get("metatags", [])
         if metatags and isinstance(metatags, list):
             og_image = metatags[0].get("og:image")
             if og_image:
                 return og_image
-        
+
         return None
 
-    def _extract_rating(self, item: Dict[str, Any]) -> Optional[float]:
+    def _extract_rating(self, item: dict[str, Any]) -> float | None:
         """Extract rating from pagemap."""
         pagemap = item.get("pagemap", {})
-        
+
         # Try aggregaterating
         aggregate = pagemap.get("aggregaterating", [])
         if aggregate and isinstance(aggregate, list):
@@ -320,7 +319,7 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
                 return float(aggregate[0].get("ratingvalue", 0))
             except (ValueError, TypeError):
                 pass
-        
+
         # Try product schema
         product = pagemap.get("product", [])
         if product and isinstance(product, list):
@@ -328,15 +327,15 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
                 return float(product[0].get("ratingvalue", 0))
             except (ValueError, TypeError):
                 pass
-        
+
         return None
 
     def _check_daily_reset(self) -> None:
         """Reset daily counter if date has changed."""
         from datetime import date
-        
+
         today = date.today().isoformat()
-        
+
         if self._last_reset_date != today:
             self._daily_requests = 0
             self._last_reset_date = today
@@ -345,10 +344,10 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
     # Public Utility Methods
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Get usage statistics."""
         self._check_daily_reset()
-        
+
         return {
             "provider": self.provider_name.value,
             "daily_requests": self._daily_requests,
@@ -360,7 +359,3 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
         """Get remaining free searches for today."""
         self._check_daily_reset()
         return max(0, self.daily_free_limit - self._daily_requests)
-    
-
-
-    

@@ -1,5 +1,6 @@
 """Import directly from submodules where needed."""
-from .base import provider_registry, BaseSearchProvider, ProviderRegistry
+
+from .base import BaseSearchProvider, ProviderRegistry, provider_registry
 from .duckduckgo import DuckDuckGoProvider
 from .google_custom import GoogleCustomSearchProvider
 from .serpapi import SerpAPIProvider

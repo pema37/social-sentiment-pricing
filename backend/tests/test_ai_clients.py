@@ -24,10 +24,9 @@ Tests for services/ai_trend_analysis/ai_clients.py
 ...
 """
 
-import sys
 import json
-import base64
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+import sys
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -41,13 +40,13 @@ for mod in _MOCKED_MODULES:
         sys.modules[mod] = MagicMock()
 
 from services.ai_trend_analysis.ai_clients import (
+    DEFAULT_MODEL,
     GEMINI3_FLASH,
     GEMINI3_PRO,
-    DEFAULT_MODEL,
-    ThoughtType,
-    StreamChunk,
-    ImageAnalysisResult,
     AIClients,
+    ImageAnalysisResult,
+    StreamChunk,
+    ThoughtType,
 )
 
 # ── IMMEDIATE cleanup — must happen before pytest collects later modules ──
@@ -63,6 +62,7 @@ del _mod  # clean up loop variable
 # Constants
 # ==================================================================
 
+
 class TestConstants:
     def test_gemini3_flash(self):
         assert GEMINI3_FLASH == "gemini-3-flash-preview"
@@ -77,6 +77,7 @@ class TestConstants:
 # ==================================================================
 # ThoughtType Enum
 # ==================================================================
+
 
 class TestThoughtType:
     def test_observation(self):
@@ -101,6 +102,7 @@ class TestThoughtType:
 # ==================================================================
 # StreamChunk Dataclass
 # ==================================================================
+
 
 class TestStreamChunk:
     def test_basic_creation(self):
@@ -130,6 +132,7 @@ class TestStreamChunk:
 # ==================================================================
 # ImageAnalysisResult Dataclass
 # ==================================================================
+
 
 class TestImageAnalysisResult:
     def test_basic_creation(self):
@@ -179,6 +182,7 @@ class TestImageAnalysisResult:
 # AIClients.__init__
 # ==================================================================
 
+
 class TestAIClientsInit:
     def test_initial_state(self):
         client = AIClients()
@@ -190,6 +194,7 @@ class TestAIClientsInit:
 # ==================================================================
 # _build_thinking_config
 # ==================================================================
+
 
 class TestBuildThinkingConfig:
     def test_returns_config_object(self):
@@ -222,6 +227,7 @@ class TestBuildThinkingConfig:
 # ==================================================================
 # _extract_thought_from_chunk
 # ==================================================================
+
 
 class TestExtractThoughtFromChunk:
     def test_thought_part_true(self):
@@ -265,6 +271,7 @@ class TestExtractThoughtFromChunk:
 # ==================================================================
 # _detect_thought_type
 # ==================================================================
+
 
 class TestDetectThoughtType:
     def test_observation_keywords(self):
@@ -315,6 +322,7 @@ class TestDetectThoughtType:
 # _get_fallback_response
 # ==================================================================
 
+
 class TestGetFallbackResponse:
     def test_returns_dict(self):
         client = AIClients()
@@ -340,6 +348,7 @@ class TestGetFallbackResponse:
 # ==================================================================
 # call_openai
 # ==================================================================
+
 
 class TestCallOpenAI:
     @pytest.mark.asyncio
@@ -382,6 +391,7 @@ class TestCallOpenAI:
 # ==================================================================
 # call_gemini
 # ==================================================================
+
 
 class TestCallGemini:
     @pytest.mark.asyncio
@@ -435,6 +445,7 @@ class TestCallGemini:
 # call (router)
 # ==================================================================
 
+
 class TestCall:
     @pytest.mark.asyncio
     async def test_routes_to_openai_by_default(self):
@@ -461,7 +472,7 @@ class TestCall:
         client = AIClients()
         client.call_openai = AsyncMock(return_value={"result": "openai"})
 
-        with patch.object(type(client), 'gemini_client', new_callable=PropertyMock, return_value=None):
+        with patch.object(type(client), "gemini_client", new_callable=PropertyMock, return_value=None):
             result, model = await client.call("system", "user", use_model="gemini")
             assert model == "openai"
 
@@ -470,11 +481,12 @@ class TestCall:
 # stream_gemini3
 # ==================================================================
 
+
 class TestStreamGemini3:
     @pytest.mark.asyncio
     async def test_no_client_yields_unavailable(self):
         client = AIClients()
-        with patch.object(type(client), 'gemini3_client', new_callable=PropertyMock, return_value=None):
+        with patch.object(type(client), "gemini3_client", new_callable=PropertyMock, return_value=None):
             chunks = []
             async for chunk in client.stream_gemini3("test prompt"):
                 chunks.append(chunk)
@@ -566,11 +578,12 @@ class TestStreamGemini3:
 # analyze_image_stream
 # ==================================================================
 
+
 class TestAnalyzeImageStream:
     @pytest.mark.asyncio
     async def test_no_client_yields_unavailable(self):
         client = AIClients()
-        with patch.object(type(client), 'gemini3_client', new_callable=PropertyMock, return_value=None):
+        with patch.object(type(client), "gemini3_client", new_callable=PropertyMock, return_value=None):
             chunks = []
             async for c in client.analyze_image_stream(b"fake_image"):
                 chunks.append(c)
@@ -604,9 +617,7 @@ class TestAnalyzeImageStream:
         client._gemini3_client = mock_gemini3
 
         chunks = []
-        async for c in client.analyze_image_stream(
-            b"fake", "png", analysis_prompt="Custom analysis"
-        ):
+        async for c in client.analyze_image_stream(b"fake", "png", analysis_prompt="Custom analysis"):
             chunks.append(c)
 
         mock_gemini3.models.generate_content_stream.assert_called_once()
@@ -630,11 +641,12 @@ class TestAnalyzeImageStream:
 # analyze_image (structured, non-streaming)
 # ==================================================================
 
+
 class TestAnalyzeImage:
     @pytest.mark.asyncio
     async def test_no_client_returns_empty_result(self):
         client = AIClients()
-        with patch.object(type(client), 'gemini3_client', new_callable=PropertyMock, return_value=None):
+        with patch.object(type(client), "gemini3_client", new_callable=PropertyMock, return_value=None):
             result = await client.analyze_image(b"fake_image")
             assert isinstance(result, ImageAnalysisResult)
             assert "not available" in result.raw_text
@@ -644,15 +656,17 @@ class TestAnalyzeImage:
         client = AIClients()
         mock_gemini3 = MagicMock()
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "product_name": "Widget Pro",
-            "price": "$29.99",
-            "currency": "USD",
-            "features": ["Fast", "Light"],
-            "reviews_summary": "Very good",
-            "promo_signals": ["10% OFF"],
-            "confidence": 0.92,
-        })
+        mock_response.text = json.dumps(
+            {
+                "product_name": "Widget Pro",
+                "price": "$29.99",
+                "currency": "USD",
+                "features": ["Fast", "Light"],
+                "reviews_summary": "Very good",
+                "promo_signals": ["10% OFF"],
+                "confidence": 0.92,
+            }
+        )
         mock_gemini3.models.generate_content.return_value = mock_response
         client._gemini3_client = mock_gemini3
 
@@ -669,7 +683,7 @@ class TestAnalyzeImage:
         mock_gemini3 = MagicMock()
         data = {"product_name": "Gadget", "confidence": 0.8}
         mock_response = MagicMock()
-        mock_response.text = f'```json\n{json.dumps(data)}\n```'
+        mock_response.text = f"```json\n{json.dumps(data)}\n```"
         mock_gemini3.models.generate_content.return_value = mock_response
         client._gemini3_client = mock_gemini3
 
@@ -716,7 +730,3 @@ class TestAnalyzeImage:
         assert result.features == []
         assert result.promo_signals == []
         assert result.confidence == 0.5
-
-
-
-        

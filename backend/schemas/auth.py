@@ -6,15 +6,16 @@ Auth Schemas.
 PATCHED (2025-01-07): Added RefreshRequest and refresh_token to TokenResponse.
 """
 
-from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, ConfigDict
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    full_name: str | None = None 
+    full_name: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -24,6 +25,7 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     """NEW: Refresh token request payload."""
+
     refresh_token: str
 
 
@@ -32,7 +34,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     username: str | None = None
-    full_name: str | None = None 
+    full_name: str | None = None
     role: str
     is_active: bool
     created_at: datetime
@@ -52,5 +54,3 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
-
-

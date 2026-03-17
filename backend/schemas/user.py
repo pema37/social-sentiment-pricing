@@ -1,14 +1,14 @@
 # backend/schemas/user.py
 
-from typing import Optional
+
+from pydantic import ConfigDict, EmailStr
 from sqlmodel import SQLModel
-from pydantic import EmailStr, ConfigDict
 
 
 # BASE USER (shared fields)
 class UserBase(SQLModel):
     email: EmailStr
-    username: Optional[str] = None
+    username: str | None = None
     is_active: bool = True
 
 
@@ -16,14 +16,14 @@ class UserBase(SQLModel):
 class UserCreate(SQLModel):
     email: EmailStr
     password: str
-    username: Optional[str] = None
+    username: str | None = None
 
 
 # READ USER (response model)
 class UserRead(SQLModel):
     id: int
     email: EmailStr
-    username: Optional[str] = None
+    username: str | None = None
     role: str
     is_active: bool
 
@@ -32,12 +32,9 @@ class UserRead(SQLModel):
 
 # UPDATE CURRENT USER (partial update)
 class UserUpdateMe(SQLModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
-    password: Optional[str] = None  # plain password to be hashed
+    username: str | None = None
+    email: EmailStr | None = None
+    full_name: str | None = None
+    password: str | None = None  # plain password to be hashed
 
     model_config = ConfigDict(from_attributes=True)
-
-
-    

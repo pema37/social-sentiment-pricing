@@ -20,9 +20,9 @@ Total: ~68 tests
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 # === Import isolation ===
@@ -44,11 +44,12 @@ class _FakePriceHistory:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+
 sys.modules["models.competitor_price_history"].CompetitorPriceHistory = _FakePriceHistory
 
 from services.competitor_scraper import (
-    ScrapeResult,
     CompetitorScraperService,
+    ScrapeResult,
 )
 
 SERVICE_PATH = "services.competitor_scraper"
@@ -57,6 +58,7 @@ SERVICE_PATH = "services.competitor_scraper"
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def make_competitor_product(
     url="https://example.com/product",
@@ -81,8 +83,8 @@ def make_competitor(scraping_config=None):
 # 1. ScrapeResult dataclass
 # ============================================================
 
-class TestScrapeResult:
 
+class TestScrapeResult:
     def test_defaults(self):
         r = ScrapeResult(success=True)
         assert r.price is None
@@ -102,7 +104,7 @@ class TestScrapeResult:
         assert r.error == "timeout"
 
     def test_scraped_at_auto_set(self):
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         r = ScrapeResult(success=True)
         assert r.scraped_at >= before
 
@@ -111,8 +113,8 @@ class TestScrapeResult:
 # 2. Initialization & Constants
 # ============================================================
 
-class TestCompetitorScraperServiceInit:
 
+class TestCompetitorScraperServiceInit:
     def test_default_params(self):
         svc = CompetitorScraperService()
         assert svc.timeout == 30.0
@@ -141,8 +143,8 @@ class TestCompetitorScraperServiceInit:
 # 3. _parse_price
 # ============================================================
 
-class TestParsePrice:
 
+class TestParsePrice:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
@@ -181,8 +183,8 @@ class TestParsePrice:
 # 4. _validate_price (anomaly detection)
 # ============================================================
 
-class TestValidatePrice:
 
+class TestValidatePrice:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
@@ -299,13 +301,14 @@ class TestValidatePrice:
 # 5. _check_availability
 # ============================================================
 
-class TestCheckAvailability:
 
+class TestCheckAvailability:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
     def _make_soup(self, html):
         from bs4 import BeautifulSoup
+
         return BeautifulSoup(html, "html.parser")
 
     def test_available_by_default(self):
@@ -334,13 +337,14 @@ class TestCheckAvailability:
 # 6. _extract_from_meta
 # ============================================================
 
-class TestExtractFromMeta:
 
+class TestExtractFromMeta:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
     def _make_soup(self, html):
         from bs4 import BeautifulSoup
+
         return BeautifulSoup(html, "html.parser")
 
     def test_og_price(self):
@@ -363,13 +367,14 @@ class TestExtractFromMeta:
 # 7. _extract_from_json_ld
 # ============================================================
 
-class TestExtractFromJsonLd:
 
+class TestExtractFromJsonLd:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
     def _make_soup(self, json_ld):
         from bs4 import BeautifulSoup
+
         html = f'<html><head><script type="application/ld+json">{json_ld}</script></head></html>'
         return BeautifulSoup(html, "html.parser")
 
@@ -392,6 +397,7 @@ class TestExtractFromJsonLd:
 
     def test_invalid_json(self):
         from bs4 import BeautifulSoup
+
         html = '<html><head><script type="application/ld+json">{invalid json}</script></head></html>'
         soup = BeautifulSoup(html, "html.parser")
         price, raw = self.svc._extract_from_json_ld(soup)
@@ -407,14 +413,15 @@ class TestExtractFromJsonLd:
 # 8. _extract_price (orchestration)
 # ============================================================
 
-class TestExtractPrice:
 
+class TestExtractPrice:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
     @pytest.mark.asyncio
     async def test_css_selector_first(self):
         from bs4 import BeautifulSoup
+
         html = '<html><body><span class="my-price">$42.00</span></body></html>'
         soup = BeautifulSoup(html, "html.parser")
         config = {"price_selector": ".my-price"}
@@ -424,6 +431,7 @@ class TestExtractPrice:
     @pytest.mark.asyncio
     async def test_falls_through_to_json_ld(self):
         from bs4 import BeautifulSoup
+
         html = '<html><head><script type="application/ld+json">{"@type": "Product", "offers": {"price": "33.00"}}</script></head><body></body></html>'
         soup = BeautifulSoup(html, "html.parser")
         price, raw = await self.svc._extract_price(soup, {})
@@ -432,6 +440,7 @@ class TestExtractPrice:
     @pytest.mark.asyncio
     async def test_falls_through_to_meta(self):
         from bs4 import BeautifulSoup
+
         html = '<html><head><meta property="og:price:amount" content="55.00"></head><body></body></html>'
         soup = BeautifulSoup(html, "html.parser")
         price, raw = await self.svc._extract_price(soup, {})
@@ -440,6 +449,7 @@ class TestExtractPrice:
     @pytest.mark.asyncio
     async def test_common_selector_fallback(self):
         from bs4 import BeautifulSoup
+
         html = '<html><body><span class="price">$19.99</span></body></html>'
         soup = BeautifulSoup(html, "html.parser")
         price, raw = await self.svc._extract_price(soup, {})
@@ -448,6 +458,7 @@ class TestExtractPrice:
     @pytest.mark.asyncio
     async def test_data_price_attribute(self):
         from bs4 import BeautifulSoup
+
         html = '<html><body><span data-price="24.99">some text</span></body></html>'
         soup = BeautifulSoup(html, "html.parser")
         price, raw = await self.svc._extract_price(soup, {})
@@ -456,6 +467,7 @@ class TestExtractPrice:
     @pytest.mark.asyncio
     async def test_no_price_found(self):
         from bs4 import BeautifulSoup
+
         html = "<html><body><p>No prices here</p></body></html>"
         soup = BeautifulSoup(html, "html.parser")
         price, raw = await self.svc._extract_price(soup, {})
@@ -466,8 +478,8 @@ class TestExtractPrice:
 # 9. scrape_price (full orchestration)
 # ============================================================
 
-class TestScrapePrice:
 
+class TestScrapePrice:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
@@ -515,6 +527,7 @@ class TestScrapePrice:
     @pytest.mark.asyncio
     async def test_timeout_returns_error(self):
         import httpx
+
         cp = make_competitor_product()
         comp = make_competitor()
         self.svc._fetch_page = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
@@ -526,6 +539,7 @@ class TestScrapePrice:
     @pytest.mark.asyncio
     async def test_http_error_returns_error(self):
         import httpx
+
         cp = make_competitor_product()
         comp = make_competitor()
         mock_resp = MagicMock()
@@ -543,8 +557,8 @@ class TestScrapePrice:
 # 10. create_price_history_record
 # ============================================================
 
-class TestCreatePriceHistoryRecord:
 
+class TestCreatePriceHistoryRecord:
     def setup_method(self):
         self.svc = CompetitorScraperService()
 
@@ -620,6 +634,3 @@ class TestCreatePriceHistoryRecord:
         assert record.currency == "EUR"
         assert record.scrape_method == "http"
         assert record.competitor_product_id == cp.id
-
-
-        

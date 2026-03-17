@@ -17,14 +17,16 @@ _LAZY_IMPORTS = {
     "CircuitOpenError": "services.integration.circuit_breaker",
 }
 
+
 def __getattr__(name):
     if name in _LAZY_IMPORTS:
         import importlib
+
         module = importlib.import_module(_LAZY_IMPORTS[name])
         value = getattr(module, name)
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__all__ = list(_LAZY_IMPORTS.keys())
 
+__all__ = list(_LAZY_IMPORTS.keys())

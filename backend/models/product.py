@@ -1,13 +1,14 @@
 # backend/models/product.py
 
 import uuid as uuid_lib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from models.integration import ProductIntegrationLink
@@ -19,9 +20,7 @@ class Product(SQLModel, table=True):
     # SKU uniqueness is now per-user, not global.
     # Enforced by composite unique constraint (user_id, sku) via Alembic migration
     # sku_per_user_001. This allows different merchants to have the same SKU.
-    __table_args__ = (
-        UniqueConstraint("user_id", "sku", name="uq_products_user_id_sku"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "sku", name="uq_products_user_id_sku"),)
 
     id: uuid_lib.UUID = Field(
         default_factory=uuid_lib.uuid4,
@@ -34,43 +33,36 @@ class Product(SQLModel, table=True):
 
     name: str = Field(max_length=255, index=True)
     # FIX: Removed unique=True — now enforced as (user_id, sku) via __table_args__
-    sku: Optional[str] = Field(default=None, max_length=100)
-    description: Optional[str] = Field(default=None)
+    sku: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None)
 
-    category: Optional[str] = Field(default=None, max_length=100) 
-    image_url: Optional[str] = Field(default=None)                 
-    is_active: bool = Field(default=True)                          
+    category: str | None = Field(default=None, max_length=100)
+    image_url: str | None = Field(default=None)
+    is_active: bool = Field(default=True)
 
     base_price: Decimal = Field(default=0, max_digits=10, decimal_places=2)
     current_price: Decimal = Field(default=0, max_digits=10, decimal_places=2)
-    min_price: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
-    max_price: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
-    cost: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2, description="Cost to acquire/produce")
+    min_price: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
+    max_price: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
+    cost: Decimal | None = Field(default=None, max_digits=10, decimal_places=2, description="Cost to acquire/produce")
 
     # FIXED: Changed default from 0.1 to 0.2 (20% sentiment impact)
     sentiment_multiplier: Decimal = Field(default=Decimal("0.2"), max_digits=3, decimal_places=2)
-    
+
     # NOTE: Keeping auto_pricing_enabled default as False for safety
     # Users should explicitly opt-in to automatic price changes
     auto_pricing_enabled: bool = Field(default=False)
 
-    keywords: List[str] = Field(default=[], sa_column=Column(JSONB))
-
-
+    keywords: list[str] = Field(default=[], sa_column=Column(JSONB))
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 
     # Relationships
-    integration_links: List["ProductIntegrationLink"] = Relationship(back_populates="product")
-
-
-
-
-    
+    integration_links: list["ProductIntegrationLink"] = Relationship(back_populates="product")

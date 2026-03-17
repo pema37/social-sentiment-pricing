@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import ValidationError
 
@@ -35,7 +35,6 @@ from .contracts_v2 import (
     ScoutOutput,
     StrategistInput,
     StrategistOutput,
-    compute_provenance_hash,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,10 +46,11 @@ T = TypeVar("T")
 # Validation result wrapper
 # ---------------------------------------------------------------------------
 
+
 class ValidationStatus(str, Enum):
     VALID = "valid"
     INVALID = "invalid"
-    PARTIAL = "partial"     # Some fields invalid but usable with defaults
+    PARTIAL = "partial"  # Some fields invalid but usable with defaults
 
 
 class ValidationResult:
@@ -65,9 +65,9 @@ class ValidationResult:
         self,
         status: ValidationStatus,
         agent: str,
-        model: Optional[Any] = None,
-        errors: Optional[list[ContractViolation]] = None,
-        raw_output: Optional[dict] = None,
+        model: Any | None = None,
+        errors: list[ContractViolation] | None = None,
+        raw_output: dict | None = None,
         duration_ms: float = 0.0,
     ):
         self.status = status
@@ -101,6 +101,7 @@ class ValidationResult:
 # Core validator
 # ---------------------------------------------------------------------------
 
+
 class AgentValidator:
     """
     Validates agent inputs and outputs against their semantic contracts.
@@ -126,8 +127,8 @@ class AgentValidator:
     @staticmethod
     def validate_analyst_input(
         scout_output: ScoutOutput,
-        category_priors: Optional[dict] = None,
-        historical_outcomes: Optional[list] = None,
+        category_priors: dict | None = None,
+        historical_outcomes: list | None = None,
     ) -> ValidationResult:
         """
         Validate data before it goes to the Analyst agent.
@@ -151,8 +152,8 @@ class AgentValidator:
     def validate_strategist_input(
         analyst_output: AnalystOutput,
         scout_output: ScoutOutput,
-        merchant_preferences: Optional[dict] = None,
-        experiment_overrides: Optional[dict] = None,
+        merchant_preferences: dict | None = None,
+        experiment_overrides: dict | None = None,
     ) -> ValidationResult:
         """
         Validate data before it goes to the Strategist agent.
@@ -200,17 +201,21 @@ class AgentValidator:
             errors = []
             for error in exc.errors():
                 field_path = " -> ".join(str(loc) for loc in error["loc"])
-                errors.append(ContractViolation(
-                    agent=agent,
-                    field=field_path,
-                    value=error.get("input"),
-                    constraint=error["msg"],
-                    raw_output=raw,
-                ))
+                errors.append(
+                    ContractViolation(
+                        agent=agent,
+                        field=field_path,
+                        value=error.get("input"),
+                        constraint=error["msg"],
+                        raw_output=raw,
+                    )
+                )
 
             logger.warning(
                 "[Contract] %s output validation failed: %d errors. First: %s",
-                agent, len(errors), errors[0] if errors else "unknown",
+                agent,
+                len(errors),
+                errors[0] if errors else "unknown",
             )
 
             return ValidationResult(
@@ -224,18 +229,22 @@ class AgentValidator:
             duration = (time.monotonic() - t0) * 1000
             logger.error(
                 "[Contract] Unexpected error validating %s: %s",
-                agent, exc, exc_info=True,
+                agent,
+                exc,
+                exc_info=True,
             )
             return ValidationResult(
                 status=ValidationStatus.INVALID,
                 agent=agent,
-                errors=[ContractViolation(
-                    agent=agent,
-                    field="__root__",
-                    value=None,
-                    constraint=f"Unexpected error: {exc}",
-                    raw_output=raw,
-                )],
+                errors=[
+                    ContractViolation(
+                        agent=agent,
+                        field="__root__",
+                        value=None,
+                        constraint=f"Unexpected error: {exc}",
+                        raw_output=raw,
+                    )
+                ],
                 raw_output=raw,
                 duration_ms=duration,
             )
@@ -244,6 +253,7 @@ class AgentValidator:
 # ---------------------------------------------------------------------------
 # Pipeline validator: wraps full Scout → Analyst → Strategist flow
 # ---------------------------------------------------------------------------
+
 
 class PipelineValidator:
     """
@@ -274,9 +284,7 @@ class PipelineValidator:
         self._strategist_fn = strategist_fn
         self._strict = strict
 
-    def run_validated_pipeline(
-        self, scout_input_data: dict
-    ) -> dict[str, Any]:
+    def run_validated_pipeline(self, scout_input_data: dict) -> dict[str, Any]:
         """
         Run the full pipeline with contract validation at every boundary.
 
@@ -305,10 +313,13 @@ class PipelineValidator:
         try:
             scout_raw = self._scout_fn(scout_input_result.model or scout_input_data)
         except Exception as exc:
-            validations.append(ValidationResult(
-                status=ValidationStatus.INVALID, agent="scout",
-                errors=[ContractViolation("scout", "__call__", None, str(exc))],
-            ))
+            validations.append(
+                ValidationResult(
+                    status=ValidationStatus.INVALID,
+                    agent="scout",
+                    errors=[ContractViolation("scout", "__call__", None, str(exc))],
+                )
+            )
             return self._failure_result(validations, provenance, f"Scout execution failed: {exc}")
 
         # Step 3: Validate Scout output
@@ -329,10 +340,13 @@ class PipelineValidator:
         try:
             analyst_raw = self._analyst_fn(analyst_input_result.model or scout_output)
         except Exception as exc:
-            validations.append(ValidationResult(
-                status=ValidationStatus.INVALID, agent="analyst",
-                errors=[ContractViolation("analyst", "__call__", None, str(exc))],
-            ))
+            validations.append(
+                ValidationResult(
+                    status=ValidationStatus.INVALID,
+                    agent="analyst",
+                    errors=[ContractViolation("analyst", "__call__", None, str(exc))],
+                )
+            )
             return self._failure_result(validations, provenance, f"Analyst execution failed: {exc}")
 
         # Step 6: Validate Analyst output
@@ -346,21 +360,20 @@ class PipelineValidator:
         provenance["analyst_hash"] = analyst_output.provenance_hash
 
         # Step 7: Validate Strategist input (with provenance)
-        strategist_input_result = AgentValidator.validate_strategist_input(
-            analyst_output, scout_output
-        )
+        strategist_input_result = AgentValidator.validate_strategist_input(analyst_output, scout_output)
         validations.append(strategist_input_result)
 
         # Step 8: Run Strategist
         try:
-            strategist_raw = self._strategist_fn(
-                strategist_input_result.model or analyst_output
-            )
+            strategist_raw = self._strategist_fn(strategist_input_result.model or analyst_output)
         except Exception as exc:
-            validations.append(ValidationResult(
-                status=ValidationStatus.INVALID, agent="strategist",
-                errors=[ContractViolation("strategist", "__call__", None, str(exc))],
-            ))
+            validations.append(
+                ValidationResult(
+                    status=ValidationStatus.INVALID,
+                    agent="strategist",
+                    errors=[ContractViolation("strategist", "__call__", None, str(exc))],
+                )
+            )
             return self._failure_result(validations, provenance, f"Strategist execution failed: {exc}")
 
         # Step 9: Validate Strategist output
@@ -397,6 +410,3 @@ class PipelineValidator:
             "success": False,
             "failure_reason": reason,
         }
-    
-
-    

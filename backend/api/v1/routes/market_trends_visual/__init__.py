@@ -5,7 +5,7 @@ Multi-Agent Trend Analysis System using Gemini 3 with multimodal support.
 
 Agents:
 1. Observer Agent - Scans market data and visual charts for patterns
-2. Analyst Agent - Interprets correlations, drivers, and risks  
+2. Analyst Agent - Interprets correlations, drivers, and risks
 3. Forecaster Agent - Predicts trends and recommends pricing actions
 
 Usage:
@@ -22,45 +22,38 @@ Usage:
 # Export router for FastAPI app registration
 from .router import router
 
-# Export service for direct usage
-from .service import market_trends_analyzer, MarketTrendsAnalyzer
-
 # Export schemas for type hints
 from .schemas import (
-    TrendAgent,
-    TrendDirection,
-    TrendTimeframe,
-    TrendMessage,
-    MarketDataPoint,
-    TrendForecast,
     MarketDataInput,
+    MarketDataPoint,
+    TrendAgent,
     TrendAnalysisResponse,
+    TrendDirection,
+    TrendForecast,
     TrendHealthResponse,
+    TrendMessage,
+    TrendTimeframe,
 )
+
+# Export service for direct usage
+from .service import MarketTrendsAnalyzer, market_trends_analyzer
 
 __all__ = [
     # Router
     "router",
-    
     # Service
     "market_trends_analyzer",
     "MarketTrendsAnalyzer",
-    
     # Enums
     "TrendAgent",
-    "TrendDirection", 
+    "TrendDirection",
     "TrendTimeframe",
-    
     # Data classes
     "TrendMessage",
     "MarketDataPoint",
     "TrendForecast",
-    
     # Pydantic models
     "MarketDataInput",
     "TrendAnalysisResponse",
     "TrendHealthResponse",
 ]
-
-
-

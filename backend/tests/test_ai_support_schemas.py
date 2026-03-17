@@ -14,18 +14,17 @@ from schemas.ai_support import (
     ChatMessageSchema,
     SupportChatRequest,
     SupportChatResponse,
-    TopicSuggestion,
-    SupportTopicsResponse,
     SupportHealthResponse,
+    SupportTopicsResponse,
+    TopicSuggestion,
 )
-
 
 # =====================================================================
 # ChatMessageSchema
 # =====================================================================
 
-class TestChatMessageSchema:
 
+class TestChatMessageSchema:
     def test_valid_user(self):
         m = ChatMessageSchema(role="user", content="How do I set up pricing rules?")
         assert m.role == "user"
@@ -59,8 +58,8 @@ class TestChatMessageSchema:
 # SupportChatRequest
 # =====================================================================
 
-class TestSupportChatRequest:
 
+class TestSupportChatRequest:
     def test_valid_minimal(self):
         r = SupportChatRequest(message="Help me with pricing")
         assert r.message == "Help me with pricing"
@@ -96,8 +95,8 @@ class TestSupportChatRequest:
 # SupportChatResponse
 # =====================================================================
 
-class TestSupportChatResponse:
 
+class TestSupportChatResponse:
     def test_valid_minimal(self):
         r = SupportChatResponse(message="Here's how to do it...")
         assert r.topic_detected is None
@@ -119,8 +118,8 @@ class TestSupportChatResponse:
 # TopicSuggestion
 # =====================================================================
 
-class TestTopicSuggestion:
 
+class TestTopicSuggestion:
     def test_valid(self):
         t = TopicSuggestion(
             id="pricing",
@@ -138,8 +137,8 @@ class TestTopicSuggestion:
 # SupportTopicsResponse
 # =====================================================================
 
-class TestSupportTopicsResponse:
 
+class TestSupportTopicsResponse:
     def test_valid(self):
         r = SupportTopicsResponse(
             topics=[
@@ -161,8 +160,8 @@ class TestSupportTopicsResponse:
 # SupportHealthResponse
 # =====================================================================
 
-class TestSupportHealthResponse:
 
+class TestSupportHealthResponse:
     def test_valid_defaults(self):
         r = SupportHealthResponse(
             status="ok",
@@ -189,6 +188,3 @@ class TestSupportHealthResponse:
                 openai_configured=True,
                 features=[],
             )
-
-
-            

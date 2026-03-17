@@ -10,17 +10,16 @@ Uses Gemini 3 streaming with multimodal support for image analysis.
 """
 
 import json
-from typing import Optional, AsyncGenerator, List
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from enum import Enum
 from datetime import datetime
+from enum import Enum
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import (
-    ai_clients,
     DEFAULT_MODEL,
-    StreamChunk,
     ThoughtType,
+    ai_clients,
 )
 
 logger = get_logger(__name__)
@@ -28,6 +27,7 @@ logger = get_logger(__name__)
 
 class LaunchAgent(str, Enum):
     """The three agents in our launch detection system."""
+
     SCANNER = "scanner"
     VALIDATOR = "validator"
     ASSESSOR = "assessor"
@@ -35,6 +35,7 @@ class LaunchAgent(str, Enum):
 
 class ThreatLevel(str, Enum):
     """Threat levels for competitive launches."""
+
     NONE = "none"
     LOW = "low"
     MEDIUM = "medium"
@@ -44,6 +45,7 @@ class ThreatLevel(str, Enum):
 
 class LaunchType(str, Enum):
     """Types of product launches detected."""
+
     NEW_PRODUCT = "new_product"
     MAJOR_UPDATE = "major_update"
     REBRAND = "rebrand"
@@ -55,8 +57,9 @@ class LaunchType(str, Enum):
 @dataclass
 class LaunchMessage:
     """A message from an agent during launch analysis."""
+
     agent: LaunchAgent
-    thought_type: Optional[ThoughtType]
+    thought_type: ThoughtType | None
     content: str
     is_final: bool = False
     metadata: dict = field(default_factory=dict)
@@ -65,19 +68,21 @@ class LaunchMessage:
 @dataclass
 class LaunchSignal:
     """A signal indicating potential product launch."""
+
     source: str  # twitter, reddit, screenshot, news, press_release
     content: str  # text content or image description
-    url: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    url: str | None = None
+    timestamp: datetime | None = None
     engagement: int = 0  # likes, shares, comments
-    author: Optional[str] = None
-    image_data: Optional[bytes] = None
+    author: str | None = None
+    image_data: bytes | None = None
     image_type: str = "png"
 
 
 @dataclass
 class LaunchAlert:
     """Final launch alert from the system."""
+
     is_launch: bool
     launch_type: LaunchType
     threat_level: ThreatLevel
@@ -85,72 +90,81 @@ class LaunchAlert:
     product_name: str
     competitor_name: str
     summary: str
-    key_features: List[str] = field(default_factory=list)
+    key_features: list[str] = field(default_factory=list)
     target_market: str = "unknown"
-    estimated_price: Optional[str] = None
-    launch_date: Optional[str] = None
-    recommended_actions: List[str] = field(default_factory=list)
+    estimated_price: str | None = None
+    launch_date: str | None = None
+    recommended_actions: list[str] = field(default_factory=list)
     urgency: str = "monitor"
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
 
 class LaunchDetector:
     """
     Orchestrates multi-agent product launch detection and analysis.
-    
+
     Flow:
     1. Scanner Agent analyzes signals (text/images) for launch indicators
     2. Validator Agent confirms launch and extracts detailed information
     3. Assessor Agent evaluates competitive threat and recommends response
-    
+
     All agents stream their "thinking" in real-time.
     """
-    
+
     def __init__(self):
         self.model = DEFAULT_MODEL
-        
+
         # Detection thresholds
         self.min_confidence = 0.3  # Minimum confidence to proceed to validation
         self.min_signals = 1  # Minimum signals needed for analysis
-        
+
         # Launch indicator keywords
         self.launch_keywords = [
-            "new product", "launching", "announcing", "introducing",
-            "released", "unveiled", "debuting", "available now",
-            "coming soon", "pre-order", "just dropped", "brand new"
+            "new product",
+            "launching",
+            "announcing",
+            "introducing",
+            "released",
+            "unveiled",
+            "debuting",
+            "available now",
+            "coming soon",
+            "pre-order",
+            "just dropped",
+            "brand new",
         ]
-    
+
     # =========================================================================
     # SCANNER AGENT - Detect launch signals from images/text
     # =========================================================================
-    
+
     async def run_scanner_agent(
         self,
-        signals: List[LaunchSignal],
+        signals: list[LaunchSignal],
         competitor_name: str,
-        image_data: Optional[bytes] = None,
-        image_type: str = "png"
-    ) -> AsyncGenerator[LaunchMessage, None]:
+        image_data: bytes | None = None,
+        image_type: str = "png",
+    ) -> AsyncGenerator[LaunchMessage]:
         """
         Scanner Agent: Analyzes signals for product launch indicators.
-        
+
         Handles both text signals and image analysis (multimodal).
         """
         yield LaunchMessage(
             agent=LaunchAgent.SCANNER,
             thought_type=ThoughtType.OBSERVATION,
-            content=f"🔍 Scanner Agent activated. Analyzing {len(signals)} signals for {competitor_name}..."
+            content=f"🔍 Scanner Agent activated. Analyzing {len(signals)} signals for {competitor_name}...",
         )
-        
+
         # If we have an image, prioritize multimodal analysis
         if image_data:
             async for msg in self._analyze_image(image_data, image_type, competitor_name):
                 yield msg
             return
-        
+
         # Prepare signal summary for Gemini
         signal_summary = self._prepare_signal_summary(signals)
-        
+
         scanner_prompt = f"""You are a competitive intelligence scanner detecting product launches.
 
 COMPETITOR: {competitor_name}
@@ -184,14 +198,14 @@ Be specific about which signals support your conclusions."""
                 yield LaunchMessage(
                     agent=LaunchAgent.SCANNER,
                     thought_type=chunk.thought_type or ThoughtType.OBSERVATION,
-                    content=chunk.text
+                    content=chunk.text,
                 )
-        
+
         # Analyze response for launch detection
         launch_detected, confidence = self._analyze_scanner_response(full_response, signals)
-        
+
         status = "🚨 LAUNCH SIGNALS DETECTED" if launch_detected else "✅ No launch indicators"
-        
+
         yield LaunchMessage(
             agent=LaunchAgent.SCANNER,
             thought_type=ThoughtType.DECISION,
@@ -203,28 +217,25 @@ Be specific about which signals support your conclusions."""
                     "confidence": confidence,
                     "signals_analyzed": len(signals),
                     "sources": self._get_signal_sources(signals),
-                    "analysis": full_response
+                    "analysis": full_response,
                 }
-            }
+            },
         )
-    
+
     async def _analyze_image(
-        self,
-        image_data: bytes,
-        image_type: str,
-        competitor_name: str
-    ) -> AsyncGenerator[LaunchMessage, None]:
+        self, image_data: bytes, image_type: str, competitor_name: str
+    ) -> AsyncGenerator[LaunchMessage]:
         """
         Analyze product screenshot/image for launch signals.
-        
+
         Uses Gemini's multimodal capabilities for image understanding.
         """
         yield LaunchMessage(
             agent=LaunchAgent.SCANNER,
             thought_type=ThoughtType.OBSERVATION,
-            content=f"📸 Analyzing product image for {competitor_name}..."
+            content=f"📸 Analyzing product image for {competitor_name}...",
         )
-        
+
         image_prompt = f"""You are analyzing a product image/screenshot for competitive intelligence.
 
 COMPETITOR: {competitor_name}
@@ -258,26 +269,24 @@ Analyze this image thoroughly:
 Be thorough - extract every piece of text and visual information relevant to competitive analysis."""
 
         full_response = ""
-        async for chunk in ai_clients.analyze_image_stream(
-            image_data, image_type, image_prompt, model=self.model
-        ):
+        async for chunk in ai_clients.analyze_image_stream(image_data, image_type, image_prompt, model=self.model):
             if chunk.text and not chunk.is_final:
                 full_response += chunk.text
                 yield LaunchMessage(
                     agent=LaunchAgent.SCANNER,
                     thought_type=chunk.thought_type or ThoughtType.OBSERVATION,
-                    content=chunk.text
+                    content=chunk.text,
                 )
-        
+
         # Check for launch indicators in image analysis
         launch_detected = any(
-            kw in full_response.lower() 
+            kw in full_response.lower()
             for kw in ["new product", "launch", "introducing", "announcing", "just released", "now available"]
         )
         confidence = 0.8 if launch_detected else 0.2
-        
+
         status = "🚨 LAUNCH DETECTED IN IMAGE" if launch_detected else "✅ No launch indicators in image"
-        
+
         yield LaunchMessage(
             agent=LaunchAgent.SCANNER,
             thought_type=ThoughtType.DECISION,
@@ -288,40 +297,37 @@ Be thorough - extract every piece of text and visual information relevant to com
                     "launch_detected": launch_detected,
                     "confidence": confidence,
                     "analysis_type": "image",
-                    "analysis": full_response
+                    "analysis": full_response,
                 }
-            }
+            },
         )
-    
+
     # =========================================================================
     # VALIDATOR AGENT - Confirm launch and extract details
     # =========================================================================
-    
+
     async def run_validator_agent(
-        self,
-        scan_result: dict,
-        competitor_name: str,
-        signals: List[LaunchSignal]
-    ) -> AsyncGenerator[LaunchMessage, None]:
+        self, scan_result: dict, competitor_name: str, signals: list[LaunchSignal]
+    ) -> AsyncGenerator[LaunchMessage]:
         """
         Validator Agent: Confirms launch and extracts detailed product information.
         """
         yield LaunchMessage(
             agent=LaunchAgent.VALIDATOR,
             thought_type=ThoughtType.OBSERVATION,
-            content="🔎 Validator Agent activated. Confirming launch details..."
+            content="🔎 Validator Agent activated. Confirming launch details...",
         )
-        
+
         # Get most relevant signal content for validation
         signal_details = self._get_detailed_signals(signals, limit=5)
-        
+
         validator_prompt = f"""You are a competitive intelligence validator confirming a potential product launch.
 
 COMPETITOR: {competitor_name}
-INITIAL SCAN CONFIDENCE: {scan_result.get('confidence', 0):.0%}
+INITIAL SCAN CONFIDENCE: {scan_result.get("confidence", 0):.0%}
 
 SCANNER ANALYSIS:
-{scan_result.get('analysis', 'No analysis available')}
+{scan_result.get("analysis", "No analysis available")}
 
 DETAILED SIGNAL CONTENT:
 {signal_details}
@@ -375,59 +381,52 @@ End with a structured JSON block:
                 yield LaunchMessage(
                     agent=LaunchAgent.VALIDATOR,
                     thought_type=chunk.thought_type or ThoughtType.ANALYSIS,
-                    content=chunk.text
+                    content=chunk.text,
                 )
-        
+
         # Parse validation results
         validated = self._parse_validator_json(full_response)
-        
-        confidence = validated.get('confidence', 0)
-        product_name = validated.get('product_name', 'Unknown Product')
-        
+
+        confidence = validated.get("confidence", 0)
+        product_name = validated.get("product_name", "Unknown Product")
+
         yield LaunchMessage(
             agent=LaunchAgent.VALIDATOR,
             thought_type=ThoughtType.DECISION,
             content=f"\n\n✅ Validation complete. Product: {product_name} | Confidence: {confidence}%",
             is_final=True,
-            metadata={
-                "validated": validated,
-                "full_analysis": full_response
-            }
+            metadata={"validated": validated, "full_analysis": full_response},
         )
-    
+
     # =========================================================================
     # ASSESSOR AGENT - Assess threat and recommend response
     # =========================================================================
-    
+
     async def run_assessor_agent(
-        self,
-        scan_result: dict,
-        validated: dict,
-        competitor_name: str,
-        your_product: str
-    ) -> AsyncGenerator[LaunchMessage, None]:
+        self, scan_result: dict, validated: dict, competitor_name: str, your_product: str
+    ) -> AsyncGenerator[LaunchMessage]:
         """
         Assessor Agent: Evaluates competitive threat and recommends response strategy.
         """
         yield LaunchMessage(
             agent=LaunchAgent.ASSESSOR,
             thought_type=ThoughtType.OBSERVATION,
-            content="🎯 Assessor Agent activated. Evaluating competitive threat..."
+            content="🎯 Assessor Agent activated. Evaluating competitive threat...",
         )
-        
+
         assessor_prompt = f"""You are a competitive strategy assessor evaluating a competitor's product launch.
 
 COMPETITOR: {competitor_name}
 YOUR PRODUCT: {your_product}
 
 VALIDATED LAUNCH DETAILS:
-- Product: {validated.get('product_name', 'Unknown')}
-- Launch Type: {validated.get('launch_type', 'unknown')}
-- Confidence: {validated.get('confidence', 0)}%
-- Key Features: {', '.join(validated.get('key_features', ['Unknown']))}
-- Target Market: {validated.get('target_market', 'Unknown')}
-- Price: {validated.get('estimated_price', 'Unknown')}
-- Launch Date: {validated.get('launch_date', 'TBD')}
+- Product: {validated.get("product_name", "Unknown")}
+- Launch Type: {validated.get("launch_type", "unknown")}
+- Confidence: {validated.get("confidence", 0)}%
+- Key Features: {", ".join(validated.get("key_features", ["Unknown"]))}
+- Target Market: {validated.get("target_market", "Unknown")}
+- Price: {validated.get("estimated_price", "Unknown")}
+- Launch Date: {validated.get("launch_date", "TBD")}
 
 Your task is to assess the competitive threat:
 
@@ -496,108 +495,95 @@ End with a structured JSON block:
                 yield LaunchMessage(
                     agent=LaunchAgent.ASSESSOR,
                     thought_type=chunk.thought_type or ThoughtType.ANALYSIS,
-                    content=chunk.text
+                    content=chunk.text,
                 )
-        
+
         # Parse assessment results
         assessment = self._parse_assessor_json(full_response)
-        threat_level = assessment.get('threat_level', 'medium').upper()
-        urgency = assessment.get('urgency', 'monitor')
-        
+        threat_level = assessment.get("threat_level", "medium").upper()
+        urgency = assessment.get("urgency", "monitor")
+
         yield LaunchMessage(
             agent=LaunchAgent.ASSESSOR,
             thought_type=ThoughtType.RECOMMENDATION,
             content=f"\n\n✅ Assessment complete. Threat Level: {threat_level} | Urgency: {urgency.upper()}",
             is_final=True,
-            metadata={
-                "assessment": assessment,
-                "full_analysis": full_response
-            }
+            metadata={"assessment": assessment, "full_analysis": full_response},
         )
-    
+
     # =========================================================================
     # HELPER METHODS
     # =========================================================================
-    
-    def _prepare_signal_summary(self, signals: List[LaunchSignal]) -> str:
+
+    def _prepare_signal_summary(self, signals: list[LaunchSignal]) -> str:
         """Prepare signals as formatted text for Gemini."""
         if not signals:
             return "No signals available"
-        
+
         lines = []
         for i, sig in enumerate(signals[:20], 1):  # Limit to 20 signals
             timestamp = sig.timestamp.strftime("%Y-%m-%d %H:%M") if sig.timestamp else "Unknown time"
             engagement = f" | Engagement: {sig.engagement}" if sig.engagement > 0 else ""
             author = f" | @{sig.author}" if sig.author else ""
-            
+
             lines.append(f"[Signal {i}] [{sig.source.upper()}] {timestamp}{author}{engagement}")
             lines.append(f"Content: {sig.content[:300]}{'...' if len(sig.content) > 300 else ''}")
             if sig.url:
                 lines.append(f"URL: {sig.url}")
             lines.append("")
-        
+
         return "\n".join(lines)
-    
-    def _get_detailed_signals(self, signals: List[LaunchSignal], limit: int = 5) -> str:
+
+    def _get_detailed_signals(self, signals: list[LaunchSignal], limit: int = 5) -> str:
         """Get detailed content from top signals for validation."""
         # Sort by engagement if available
         sorted_signals = sorted(signals, key=lambda x: x.engagement, reverse=True)
-        
+
         lines = []
         for sig in sorted_signals[:limit]:
             lines.append(f"=== [{sig.source.upper()}] ===")
             lines.append(sig.content)
             lines.append("")
-        
+
         return "\n".join(lines) if lines else "No detailed signals available"
-    
-    def _get_signal_sources(self, signals: List[LaunchSignal]) -> List[str]:
+
+    def _get_signal_sources(self, signals: list[LaunchSignal]) -> list[str]:
         """Get unique sources from signals."""
         return list(set(sig.source for sig in signals))
-    
-    def _analyze_scanner_response(
-        self, 
-        response: str, 
-        signals: List[LaunchSignal]
-    ) -> tuple[bool, float]:
+
+    def _analyze_scanner_response(self, response: str, signals: list[LaunchSignal]) -> tuple[bool, float]:
         """Analyze scanner response to determine launch detection."""
         response_lower = response.lower()
-        
+
         # Count keyword matches
-        keyword_matches = sum(
-            1 for kw in self.launch_keywords 
-            if kw in response_lower
-        )
-        
+        keyword_matches = sum(1 for kw in self.launch_keywords if kw in response_lower)
+
         # Check signal content for launch keywords
-        signal_matches = sum(
-            1 for sig in signals
-            if any(kw in sig.content.lower() for kw in self.launch_keywords)
-        )
-        
+        signal_matches = sum(1 for sig in signals if any(kw in sig.content.lower() for kw in self.launch_keywords))
+
         # Calculate confidence
         base_confidence = 0.0
-        
+
         if keyword_matches >= 3:
             base_confidence += 0.4
         elif keyword_matches >= 1:
             base_confidence += 0.2
-        
+
         if signal_matches >= 2:
             base_confidence += 0.4
         elif signal_matches >= 1:
             base_confidence += 0.2
-        
+
         # Boost for strong indicators
         strong_indicators = ["announcing", "introducing", "launching today", "now available"]
         if any(ind in response_lower for ind in strong_indicators):
             base_confidence += 0.2
-        
+
         confidence = min(base_confidence, 1.0)
         launch_detected = confidence >= self.min_confidence
-        
+
         return launch_detected, confidence
-    
+
     def _parse_validator_json(self, response: str) -> dict:
         """Parse the JSON validation result."""
         default = {
@@ -608,9 +594,9 @@ End with a structured JSON block:
             "key_features": [],
             "target_market": "Unknown",
             "estimated_price": None,
-            "launch_date": "TBD"
+            "launch_date": "TBD",
         }
-        
+
         try:
             if "```json" in response:
                 json_str = response.split("```json")[1].split("```")[0]
@@ -618,14 +604,14 @@ End with a structured JSON block:
                 json_str = response.split("```")[1].split("```")[0]
             else:
                 return default
-            
+
             parsed = json.loads(json_str.strip())
             return {**default, **parsed}
-            
+
         except Exception as e:
             logger.warning(f"Failed to parse validator JSON: {e}")
             return default
-    
+
     def _parse_assessor_json(self, response: str) -> dict:
         """Parse the JSON assessment result."""
         default = {
@@ -636,9 +622,9 @@ End with a structured JSON block:
             "at_risk_segments": [],
             "immediate_actions": [],
             "strategic_actions": [],
-            "monitoring_priorities": []
+            "monitoring_priorities": [],
         }
-        
+
         try:
             if "```json" in response:
                 json_str = response.split("```json")[1].split("```")[0]
@@ -646,36 +632,36 @@ End with a structured JSON block:
                 json_str = response.split("```")[1].split("```")[0]
             else:
                 return default
-            
+
             parsed = json.loads(json_str.strip())
             return {**default, **parsed}
-            
+
         except Exception as e:
             logger.warning(f"Failed to parse assessor JSON: {e}")
             return default
-    
+
     # =========================================================================
     # FULL ORCHESTRATION
     # =========================================================================
-    
+
     async def analyze(
         self,
-        signals: List[LaunchSignal],
+        signals: list[LaunchSignal],
         competitor_name: str,
         your_product: str,
-        image_data: Optional[bytes] = None,
-        image_type: str = "png"
-    ) -> AsyncGenerator[LaunchMessage, None]:
+        image_data: bytes | None = None,
+        image_type: str = "png",
+    ) -> AsyncGenerator[LaunchMessage]:
         """
         Run the full launch detection pipeline.
-        
+
         Args:
             signals: List of social/news signals to analyze
             competitor_name: Name of competitor being monitored
             your_product: Name of your product (for threat assessment)
             image_data: Optional product screenshot for multimodal analysis
             image_type: Image MIME subtype (png, jpeg, etc.)
-            
+
         Yields:
             LaunchMessage objects from each agent in sequence
         """
@@ -685,17 +671,17 @@ End with a structured JSON block:
                 thought_type=ThoughtType.DECISION,
                 content=f"⚠️ Insufficient data: {len(signals)} signals (minimum: {self.min_signals})",
                 is_final=True,
-                metadata={"error": "insufficient_data"}
+                metadata={"error": "insufficient_data"},
             )
             return
-        
+
         # Phase 1: Scanner Agent
         scan_result = {}
         async for msg in self.run_scanner_agent(signals, competitor_name, image_data, image_type):
             yield msg
             if msg.is_final and msg.metadata.get("scan_result"):
                 scan_result = msg.metadata["scan_result"]
-        
+
         # If no launch detected, stop here (early exit)
         if not scan_result.get("launch_detected", False):
             yield LaunchMessage(
@@ -703,26 +689,26 @@ End with a structured JSON block:
                 thought_type=ThoughtType.DECISION,
                 content="✅ No product launch detected. Monitoring complete.",
                 is_final=True,
-                metadata={"status": "no_launch", "scan_result": scan_result}
+                metadata={"status": "no_launch", "scan_result": scan_result},
             )
             return
-        
+
         # Phase 2: Validator Agent
         validated = {}
         async for msg in self.run_validator_agent(scan_result, competitor_name, signals):
             yield msg
             if msg.is_final and msg.metadata.get("validated"):
                 validated = msg.metadata["validated"]
-        
+
         # If validation failed or low confidence, note it but continue
         if not validated.get("is_confirmed_launch", False) and validated.get("confidence", 0) < 30:
             yield LaunchMessage(
                 agent=LaunchAgent.VALIDATOR,
                 thought_type=ThoughtType.DECISION,
                 content="⚠️ Launch could not be confirmed with high confidence. Proceeding with assessment anyway.",
-                is_final=False
+                is_final=False,
             )
-        
+
         # Phase 3: Assessor Agent
         async for msg in self.run_assessor_agent(scan_result, validated, competitor_name, your_product):
             yield msg
@@ -730,6 +716,3 @@ End with a structured JSON block:
 
 # Singleton instance
 launch_detector = LaunchDetector()
-
-
-

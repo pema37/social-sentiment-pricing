@@ -1,20 +1,19 @@
 # backend/api/v1/routes/alerts/management.py
 """Alert management endpoints (list, acknowledge, resolve)."""
 
-from datetime import datetime, timedelta, UTC
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
+from db.session import get_session
+from models.alert import Alert, AlertSeverity, AlertStatus, AlertType
 from models.user import User
-from models.alert import Alert, AlertType, AlertSeverity, AlertStatus
 from schemas.alert import AlertRead, AlertStats
 from schemas.common import PaginatedResponse, PaginationParams
 
@@ -25,20 +24,21 @@ router = APIRouter()
 # STATIC ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @router.get("/", response_model=PaginatedResponse[AlertRead])
 async def list_alerts(
     request: Request,
-    status_filter: Optional[AlertStatus] = Query(None, alias="status"),
-    severity: Optional[AlertSeverity] = None,
-    alert_type: Optional[AlertType] = None,
-    product_id: Optional[UUID] = None,
+    status_filter: AlertStatus | None = Query(None, alias="status"),
+    severity: AlertSeverity | None = None,
+    alert_type: AlertType | None = None,
+    product_id: UUID | None = None,
     pagination: PaginationParams = Depends(),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List alerts for the current user with filtering and pagination."""
     query = select(Alert).where(Alert.user_id == current_user.id)
-    
+
     if status_filter:
         query = query.where(Alert.status == status_filter)
     if severity:
@@ -47,19 +47,19 @@ async def list_alerts(
         query = query.where(Alert.alert_type == alert_type)
     if product_id:
         query = query.where(Alert.product_id == product_id)
-    
+
     count_query = select(func.count()).select_from(query.subquery())
     count_result = await session.execute(count_query)
     total = count_result.scalar() or 0
-    
+
     query = query.order_by(Alert.created_at.desc())
     query = query.offset(pagination.offset).limit(pagination.page_size)
-    
+
     result = await session.execute(query)
     alerts = list(result.scalars().all())
-    
+
     total_pages = (total + pagination.page_size - 1) // pagination.page_size
-    
+
     return PaginatedResponse(
         items=alerts,
         total=total,
@@ -83,11 +83,11 @@ async def get_alert_stats(
         )
     )
     unread_count = unread_result.scalar() or 0
-    
+
     severity_counts: dict[str, int] = {}
     for sev in AlertSeverity:
         try:
-            sev_value = sev.value if hasattr(sev, 'value') else str(sev)
+            sev_value = sev.value if hasattr(sev, "value") else str(sev)
             sev_result = await session.execute(
                 select(func.count(Alert.id)).where(
                     Alert.user_id == current_user.id,
@@ -99,11 +99,11 @@ async def get_alert_stats(
             severity_counts[sev_value] = count
         except Exception:
             continue
-    
+
     type_counts: dict[str, int] = {}
     for at in AlertType:
         try:
-            at_value = at.value if hasattr(at, 'value') else str(at)
+            at_value = at.value if hasattr(at, "value") else str(at)
             type_result = await session.execute(
                 select(func.count(Alert.id)).where(
                     Alert.user_id == current_user.id,
@@ -116,7 +116,7 @@ async def get_alert_stats(
                 type_counts[at_value] = count
         except Exception:
             continue
-    
+
     cutoff = datetime.now(UTC) - timedelta(hours=24)
     recent_result = await session.execute(
         select(func.count(Alert.id)).where(
@@ -125,7 +125,7 @@ async def get_alert_stats(
         )
     )
     recent_count = recent_result.scalar() or 0
-    
+
     return AlertStats(
         total_unread=unread_count,
         by_severity=severity_counts,
@@ -155,8 +155,8 @@ async def get_unread_count(
 @limiter.limit(WRITE_RATE_LIMIT)
 async def acknowledge_all_alerts(
     request: Request,
-    severity: Optional[AlertSeverity] = None,
-    alert_type: Optional[AlertType] = None,
+    severity: AlertSeverity | None = None,
+    alert_type: AlertType | None = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -165,30 +165,31 @@ async def acknowledge_all_alerts(
         Alert.user_id == current_user.id,
         Alert.status == AlertStatus.PENDING,
     )
-    
+
     if severity:
         query = query.where(Alert.severity == severity)
     if alert_type:
         query = query.where(Alert.alert_type == alert_type)
-    
+
     result = await session.execute(query)
     alerts = list(result.scalars().all())
     now = datetime.now(UTC)
-    
+
     for alert in alerts:
         alert.status = AlertStatus.ACKNOWLEDGED
         alert.acknowledged_at = now
         alert.acknowledged_by = current_user.id
         session.add(alert)
-    
+
     await session.commit()
-    
+
     return {"acknowledged_count": len(alerts)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DYNAMIC ROUTES (must come after all static routes)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @router.get("/{alert_id}", response_model=AlertRead)
 async def get_alert(
@@ -205,7 +206,7 @@ async def get_alert(
         )
     )
     alert = result.scalars().first()
-    
+
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return alert
@@ -227,20 +228,17 @@ async def acknowledge_alert(
         )
     )
     alert = result.scalars().first()
-    
+
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
     if alert.status != AlertStatus.PENDING:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot acknowledge alert with status: {alert.status.value}"
-        )
-    
+        raise HTTPException(status_code=400, detail=f"Cannot acknowledge alert with status: {alert.status.value}")
+
     alert.status = AlertStatus.ACKNOWLEDGED
     alert.acknowledged_at = datetime.now(UTC)
     alert.acknowledged_by = current_user.id
-    
+
     session.add(alert)
     await session.commit()
     await session.refresh(alert)
@@ -263,22 +261,21 @@ async def resolve_alert(
         )
     )
     alert = result.scalars().first()
-    
+
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
     if alert.status == AlertStatus.RESOLVED:
         raise HTTPException(status_code=400, detail="Alert is already resolved")
-    
+
     alert.status = AlertStatus.RESOLVED
     alert.resolved_at = datetime.now(UTC)
-    
+
     if not alert.acknowledged_at:
         alert.acknowledged_at = datetime.now(UTC)
         alert.acknowledged_by = current_user.id
-    
+
     session.add(alert)
     await session.commit()
     await session.refresh(alert)
     return alert
-

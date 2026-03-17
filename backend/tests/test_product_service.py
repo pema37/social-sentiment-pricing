@@ -13,13 +13,13 @@ Covers:
   data_source flags (both, competitor_only, sentiment_only, none)
 """
 
-import sys
 import os
-from types import ModuleType
+import sys
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 
 import pytest
 
@@ -28,8 +28,11 @@ import pytest
 # ---------------------------------------------------------------------------
 _MOCKED = [
     "db.session",
-    "models.product", "models.user", "models.sentiment",
-    "models.competitor_product", "models.competitor",
+    "models.product",
+    "models.user",
+    "models.sentiment",
+    "models.competitor_product",
+    "models.competitor",
     "schemas.product",
     "services.pricing_engine",
     "services.products.cascade_delete",
@@ -38,7 +41,7 @@ _MOCKED = [
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
 # Ensure db.session stub
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -63,16 +66,34 @@ for _pkg, _subdir in [
 
 # --- Stub models ---
 
+
 class _ColumnMock:
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
-    def desc(self): return MagicMock()
-    def asc(self): return MagicMock()
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
+
+    def desc(self):
+        return MagicMock()
+
+    def asc(self):
+        return MagicMock()
 
 
 class _FakeProduct:
@@ -91,6 +112,7 @@ class _FakeProduct:
 
 class _FakeUser:
     id = MagicMock()
+
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
@@ -98,6 +120,7 @@ class _FakeUser:
 
 class _FakeSentiment:
     product_id = MagicMock()
+
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
@@ -107,6 +130,7 @@ class _FakeCompetitorProduct:
     product_id = MagicMock()
     competitor_id = MagicMock()
     is_active = MagicMock()
+
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
@@ -114,6 +138,7 @@ class _FakeCompetitorProduct:
 
 class _FakeCompetitor:
     id = MagicMock()
+
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
@@ -178,9 +203,9 @@ sys.modules["schemas.product"] = _schema_stub
 _pricing_stub = ModuleType("services.pricing_engine")
 _fake_pricing_engine = MagicMock()
 _pricing_stub.pricing_engine = _fake_pricing_engine
-_pricing_stub.CompetitorPriceData = type("CompetitorPriceData", (), {
-    "__init__": lambda self, **kw: [setattr(self, k, v) for k, v in kw.items()] and None
-})
+_pricing_stub.CompetitorPriceData = type(
+    "CompetitorPriceData", (), {"__init__": lambda self, **kw: [setattr(self, k, v) for k, v in kw.items()] and None}
+)
 sys.modules["services.pricing_engine"] = _pricing_stub
 
 # --- Stub cascade_delete ---
@@ -221,6 +246,7 @@ del _m
 # Helpers
 # ===========================================================================
 
+
 def _make_session():
     s = AsyncMock()
     s.add = MagicMock()
@@ -256,6 +282,7 @@ def _make_product(**overrides):
 # Tests
 # ===========================================================================
 
+
 class TestProductServiceInit:
     def test_stores_session(self):
         session = AsyncMock()
@@ -274,6 +301,7 @@ class TestCreate:
         # refresh sets the id
         async def fake_refresh(p):
             p.id = uuid4()
+
         session.refresh = fake_refresh
 
         product = await svc.create(uid, data)
@@ -464,8 +492,11 @@ class TestDelete:
         session.get = AsyncMock(return_value=prod)
         svc = ProductService(session)
 
-        with patch("services.products.product_service.cascade_delete_product",
-                    new_callable=AsyncMock, return_value={"sentiments": 3}):
+        with patch(
+            "services.products.product_service.cascade_delete_product",
+            new_callable=AsyncMock,
+            return_value={"sentiments": 3},
+        ):
             result = await svc.delete(prod.id, uid)
 
         assert result is True
@@ -490,8 +521,7 @@ class TestDelete:
         session.delete = AsyncMock(side_effect=Exception("db error"))
         svc = ProductService(session)
 
-        with patch("services.products.product_service.cascade_delete_product",
-                    new_callable=AsyncMock, return_value={}):
+        with patch("services.products.product_service.cascade_delete_product", new_callable=AsyncMock, return_value={}):
             with pytest.raises(Exception, match="db error"):
                 await svc.delete(prod.id, uid)
 
@@ -506,7 +536,7 @@ class TestFetchCompetitorPrices:
 
         cp = _FakeCompetitorProduct(
             current_price=Decimal("24.99"),
-            last_checked_at=datetime.now(timezone.utc),
+            last_checked_at=datetime.now(UTC),
             is_active=True,
         )
         comp = _FakeCompetitor(name="Amazon")
@@ -752,5 +782,3 @@ class TestGetPriceSuggestion:
             expected = Decimal(str(round((0.9 + 0.3 + 0.6) / 3, 3)))
             assert call_kwargs["sentiment_score"] == expected
             assert call_kwargs["mention_volume"] == 3
-
-            

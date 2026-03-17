@@ -22,14 +22,14 @@ Place at: backend/services/scoring/competitive_position.py
 from __future__ import annotations
 
 import statistics
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, UTC
-from typing import Optional, Sequence
-
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 # ──────────────────────────────────────────────────────────
 # INPUT TYPE
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class CompetitorPricePoint:
@@ -44,7 +44,7 @@ class CompetitorPricePoint:
     scraped_at: datetime
     competitor_name: str = ""
     is_on_sale: bool = False
-    sale_price: Optional[float] = None
+    sale_price: float | None = None
 
     @property
     def effective_price(self) -> float:
@@ -53,7 +53,7 @@ class CompetitorPricePoint:
             return self.sale_price
         return self.price
 
-    def age_hours(self, reference_time: Optional[datetime] = None) -> float:
+    def age_hours(self, reference_time: datetime | None = None) -> float:
         """Hours since this price was scraped."""
         ref = reference_time or datetime.now(UTC)
         delta = ref - self.scraped_at
@@ -63,6 +63,7 @@ class CompetitorPricePoint:
 # ──────────────────────────────────────────────────────────
 # RESULT TYPE
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class PositionResult:
@@ -77,28 +78,28 @@ class PositionResult:
     """
 
     # Core position
-    percentile: float             # 0-100. Higher = more expensive relative to competitors
-    position_index: float         # 0.0-1.0 (percentile / 100). For AnalystOutput.competitive_position_index
-    market_pressure: str          # "underpriced", "fairly_priced", "overpriced", "no_data"
+    percentile: float  # 0-100. Higher = more expensive relative to competitors
+    position_index: float  # 0.0-1.0 (percentile / 100). For AnalystOutput.competitive_position_index
+    market_pressure: str  # "underpriced", "fairly_priced", "overpriced", "no_data"
 
     # Price gaps (for magnitude calculation in score_fusion)
     our_price: float
     median_competitor_price: float
     avg_competitor_price: float
-    gap_to_median_pct: float      # (our_price - median) / median * 100. Positive = we're more expensive
-    gap_to_cheapest_pct: float    # (our_price - cheapest) / cheapest * 100
+    gap_to_median_pct: float  # (our_price - median) / median * 100. Positive = we're more expensive
+    gap_to_cheapest_pct: float  # (our_price - cheapest) / cheapest * 100
     gap_to_most_expensive_pct: float  # (our_price - most_expensive) / most_expensive * 100
 
     # CPI (from architecture doc)
-    cpi: float                    # (avg_competitor_price / our_price) * 100. >100 = we're cheaper
+    cpi: float  # (avg_competitor_price / our_price) * 100. >100 = we're cheaper
 
     # Data quality
-    competitor_count: int         # After filtering
-    competitors_removed: int      # Stale + outliers removed
-    confidence: float             # 0.0-1.0
+    competitor_count: int  # After filtering
+    competitors_removed: int  # Stale + outliers removed
+    confidence: float  # 0.0-1.0
 
     # Position label (matches ScoutOutput.our_position)
-    position_label: str           # "cheapest", "below_median", "at_median", "above_median", "most_expensive"
+    position_label: str  # "cheapest", "below_median", "at_median", "above_median", "most_expensive"
 
 
 # ──────────────────────────────────────────────────────────
@@ -109,19 +110,19 @@ class PositionResult:
 DEFAULT_MAX_AGE_HOURS: float = 168.0  # 7 days
 
 # Freshness decay: confidence degrades as prices age
-FULL_FRESHNESS_HOURS: float = 24.0    # < 24h old = full freshness
-HALF_FRESHNESS_HOURS: float = 96.0    # 4 days = 50% freshness weight
+FULL_FRESHNESS_HOURS: float = 24.0  # < 24h old = full freshness
+HALF_FRESHNESS_HOURS: float = 96.0  # 4 days = 50% freshness weight
 
 # Outlier filtering: prices beyond this many std devs from median are excluded
 OUTLIER_STD_DEVS: float = 3.0
 
 # Minimum competitors for meaningful position
 MIN_COMPETITORS_FOR_CONFIDENCE: int = 3  # Below this, confidence is degraded
-IDEAL_COMPETITORS: int = 5               # At this point, competitor count stops boosting confidence
+IDEAL_COMPETITORS: int = 5  # At this point, competitor count stops boosting confidence
 
 # Market pressure thresholds (on position_index 0.0-1.0)
-UNDERPRICED_THRESHOLD: float = 0.30     # Below 30th percentile
-OVERPRICED_THRESHOLD: float = 0.70      # Above 70th percentile
+UNDERPRICED_THRESHOLD: float = 0.30  # Below 30th percentile
+OVERPRICED_THRESHOLD: float = 0.70  # Above 70th percentile
 
 # Position label thresholds
 CHEAPEST_THRESHOLD: float = 0.10
@@ -133,6 +134,7 @@ ABOVE_MEDIAN_UPPER: float = 0.90
 # ──────────────────────────────────────────────────────────
 # CALCULATOR
 # ──────────────────────────────────────────────────────────
+
 
 class CompetitivePositionCalculator:
     """
@@ -167,7 +169,7 @@ class CompetitivePositionCalculator:
         self,
         our_price: float,
         competitors: Sequence[CompetitorPricePoint],
-        reference_time: Optional[datetime] = None,
+        reference_time: datetime | None = None,
     ) -> PositionResult:
         """
         Compute competitive position for a product.
@@ -228,10 +230,7 @@ class CompetitivePositionCalculator:
 
         gap_to_median = ((our_price - median_price) / median_price * 100.0) if median_price > 0 else 0.0
         gap_to_cheapest = ((our_price - cheapest) / cheapest * 100.0) if cheapest > 0 else 0.0
-        gap_to_most_expensive = (
-            ((our_price - most_expensive) / most_expensive * 100.0)
-            if most_expensive > 0 else 0.0
-        )
+        gap_to_most_expensive = ((our_price - most_expensive) / most_expensive * 100.0) if most_expensive > 0 else 0.0
 
         # Step 6: CPI per architecture doc
         # CPI = (avg_competitor_price / our_price) * 100
@@ -275,11 +274,7 @@ class CompetitivePositionCalculator:
         ref_time: datetime,
     ) -> list[CompetitorPricePoint]:
         """Remove prices older than max_age_hours."""
-        return [
-            c for c in competitors
-            if c.age_hours(ref_time) <= self._max_age_hours
-            and c.effective_price > 0
-        ]
+        return [c for c in competitors if c.age_hours(ref_time) <= self._max_age_hours and c.effective_price > 0]
 
     def _filter_outliers(
         self,
@@ -320,10 +315,7 @@ class CompetitivePositionCalculator:
         lower_bound = q1 - self._outlier_std_devs * iqr
         upper_bound = q3 + self._outlier_std_devs * iqr
 
-        filtered = [
-            c for c in competitors
-            if lower_bound <= c.effective_price <= upper_bound
-        ]
+        filtered = [c for c in competitors if lower_bound <= c.effective_price <= upper_bound]
         removed = len(competitors) - len(filtered)
         return filtered, removed
 
@@ -410,11 +402,7 @@ class CompetitivePositionCalculator:
 
         # Combine: geometric-ish weighting
         # Count matters most, freshness second, removal third
-        confidence = (
-            count_factor * 0.50
-            + freshness_factor * 0.35
-            + removal_factor * 0.15
-        )
+        confidence = count_factor * 0.50 + freshness_factor * 0.35 + removal_factor * 0.15
 
         return max(0.0, min(1.0, confidence))
 
@@ -444,6 +432,3 @@ class CompetitivePositionCalculator:
             confidence=0.0,
             position_label="at_median",
         )
-    
-
-    

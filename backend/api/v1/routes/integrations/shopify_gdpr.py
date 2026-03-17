@@ -10,14 +10,13 @@ Shopify REQUIRES these 3 endpoints for App Store submission:
 See: https://shopify.dev/docs/apps/build/privacy-law-compliance
 """
 
-import hmac as hmac_lib
-import hashlib
 import base64
+import hashlib
+import hmac as hmac_lib
 import json
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException, status, Header
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from core.config import settings
 
@@ -30,13 +29,11 @@ def verify_shopify_hmac(payload: bytes, hmac_header: str, secret: str) -> bool:
     """Verify Shopify webhook HMAC-SHA256 signature."""
     if not hmac_header or not secret:
         return False
-    computed = base64.b64encode(
-        hmac_lib.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
-    ).decode("utf-8")
+    computed = base64.b64encode(hmac_lib.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()).decode("utf-8")
     return hmac_lib.compare_digest(computed, hmac_header)
 
 
-async def _verify_webhook(request: Request, hmac_sha256: Optional[str]) -> bytes:
+async def _verify_webhook(request: Request, hmac_sha256: str | None) -> bytes:
     """Common HMAC verification for all GDPR webhooks."""
     body = await request.body()
 
@@ -59,7 +56,7 @@ async def _verify_webhook(request: Request, hmac_sha256: Optional[str]) -> bytes
 @router.post("/customers/data_request", status_code=200)
 async def customers_data_request(
     request: Request,
-    x_shopify_hmac_sha256: Optional[str] = Header(None, alias="X-Shopify-Hmac-Sha256"),
+    x_shopify_hmac_sha256: str | None = Header(None, alias="X-Shopify-Hmac-Sha256"),
 ):
     """Handle customer data request (GDPR)."""
     body = await _verify_webhook(request, x_shopify_hmac_sha256)
@@ -76,7 +73,7 @@ async def customers_data_request(
 @router.post("/customers/redact", status_code=200)
 async def customers_redact(
     request: Request,
-    x_shopify_hmac_sha256: Optional[str] = Header(None, alias="X-Shopify-Hmac-Sha256"),
+    x_shopify_hmac_sha256: str | None = Header(None, alias="X-Shopify-Hmac-Sha256"),
 ):
     """Handle customer data deletion request (GDPR)."""
     body = await _verify_webhook(request, x_shopify_hmac_sha256)
@@ -93,11 +90,11 @@ async def customers_redact(
 @router.post("/shop/redact", status_code=200)
 async def shop_redact(
     request: Request,
-    x_shopify_hmac_sha256: Optional[str] = Header(None, alias="X-Shopify-Hmac-Sha256"),
+    x_shopify_hmac_sha256: str | None = Header(None, alias="X-Shopify-Hmac-Sha256"),
 ):
     """
     Handle shop data deletion (48 hours after uninstall).
-    
+
     TODO: Implement full cleanup before going live:
     - Delete Integration record for this shop
     - Delete ProductIntegrationLinks
@@ -113,6 +110,3 @@ async def shop_redact(
         logger.info("GDPR shop redact received")
 
     return {"status": "acknowledged", "message": "Shop data redaction queued"}
-
-
-    

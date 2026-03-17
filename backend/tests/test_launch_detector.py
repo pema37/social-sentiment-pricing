@@ -14,10 +14,10 @@ Covers:
 - LaunchDetector.analyze orchestration (insufficient data, no launch, full pipeline)
 """
 
-import sys
 import json
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+import sys
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,16 +28,16 @@ for mod in ["db.session", "google.genai"]:
 
 from services.ai_trend_analysis.launch_detector import (
     LaunchAgent,
-    ThreatLevel,
-    LaunchType,
-    LaunchMessage,
-    LaunchSignal,
     LaunchAlert,
     LaunchDetector,
+    LaunchMessage,
+    LaunchSignal,
+    LaunchType,
+    ThreatLevel,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_signal(
     source="twitter",
@@ -52,7 +52,7 @@ def _make_signal(
         source=source,
         content=content,
         url=url,
-        timestamp=timestamp or datetime(2026, 2, 8, 12, 0, tzinfo=timezone.utc),
+        timestamp=timestamp or datetime(2026, 2, 8, 12, 0, tzinfo=UTC),
         engagement=engagement,
         author=author,
         image_data=image_data,
@@ -62,6 +62,7 @@ def _make_signal(
 # ==================================================================
 # Enums
 # ==================================================================
+
 
 class TestLaunchAgent:
     def test_scanner(self):
@@ -124,6 +125,7 @@ class TestLaunchType:
 # Dataclasses
 # ==================================================================
 
+
 class TestLaunchMessage:
     def test_basic_creation(self):
         msg = LaunchMessage(
@@ -173,7 +175,7 @@ class TestLaunchSignal:
             source="news",
             content="Big launch",
             url="https://example.com",
-            timestamp=datetime(2026, 2, 8, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 2, 8, tzinfo=UTC),
             engagement=500,
             author="journalist",
             image_data=b"fake_image",
@@ -219,8 +221,24 @@ class TestLaunchAlert:
         assert alert.sources == []
 
     def test_separate_default_lists(self):
-        a1 = LaunchAlert(is_launch=False, launch_type=LaunchType.UNKNOWN, threat_level=ThreatLevel.NONE, confidence=0, product_name="", competitor_name="", summary="")
-        a2 = LaunchAlert(is_launch=False, launch_type=LaunchType.UNKNOWN, threat_level=ThreatLevel.NONE, confidence=0, product_name="", competitor_name="", summary="")
+        a1 = LaunchAlert(
+            is_launch=False,
+            launch_type=LaunchType.UNKNOWN,
+            threat_level=ThreatLevel.NONE,
+            confidence=0,
+            product_name="",
+            competitor_name="",
+            summary="",
+        )
+        a2 = LaunchAlert(
+            is_launch=False,
+            launch_type=LaunchType.UNKNOWN,
+            threat_level=ThreatLevel.NONE,
+            confidence=0,
+            product_name="",
+            competitor_name="",
+            summary="",
+        )
         assert a1.key_features is not a2.key_features
         assert a1.recommended_actions is not a2.recommended_actions
         assert a1.sources is not a2.sources
@@ -229,6 +247,7 @@ class TestLaunchAlert:
 # ==================================================================
 # LaunchDetector.__init__
 # ==================================================================
+
 
 class TestLaunchDetectorInit:
     def test_default_thresholds(self):
@@ -247,6 +266,7 @@ class TestLaunchDetectorInit:
 # _prepare_signal_summary
 # ==================================================================
 
+
 class TestPrepareSignalSummary:
     def test_empty_signals(self):
         d = LaunchDetector()
@@ -262,7 +282,7 @@ class TestPrepareSignalSummary:
 
     def test_timestamp_formatted(self):
         d = LaunchDetector()
-        sig = _make_signal(timestamp=datetime(2026, 2, 8, 14, 30, tzinfo=timezone.utc))
+        sig = _make_signal(timestamp=datetime(2026, 2, 8, 14, 30, tzinfo=UTC))
         result = d._prepare_signal_summary([sig])
         assert "2026-02-08 14:30" in result
 
@@ -326,6 +346,7 @@ class TestPrepareSignalSummary:
 # _get_detailed_signals
 # ==================================================================
 
+
 class TestGetDetailedSignals:
     def test_empty_signals(self):
         d = LaunchDetector()
@@ -370,6 +391,7 @@ class TestGetDetailedSignals:
 # _get_signal_sources
 # ==================================================================
 
+
 class TestGetSignalSources:
     def test_empty_signals(self):
         d = LaunchDetector()
@@ -397,20 +419,17 @@ class TestGetSignalSources:
 # _analyze_scanner_response
 # ==================================================================
 
+
 class TestAnalyzeScannerResponse:
     def test_no_keywords_no_signals(self):
         d = LaunchDetector()
-        detected, confidence = d._analyze_scanner_response(
-            "Nothing interesting here", []
-        )
+        detected, confidence = d._analyze_scanner_response("Nothing interesting here", [])
         assert detected is False
         assert confidence == 0.0
 
     def test_one_keyword_in_response(self):
         d = LaunchDetector()
-        detected, confidence = d._analyze_scanner_response(
-            "They are launching something", []
-        )
+        detected, confidence = d._analyze_scanner_response("They are launching something", [])
         assert confidence >= 0.2
 
     def test_three_plus_keywords_in_response(self):
@@ -458,9 +477,7 @@ class TestAnalyzeScannerResponse:
 
     def test_launch_detected_when_above_min_confidence(self):
         d = LaunchDetector()
-        detected, confidence = d._analyze_scanner_response(
-            "They are launching and introducing a new product", []
-        )
+        detected, confidence = d._analyze_scanner_response("They are launching and introducing a new product", [])
         assert detected is True
         assert confidence >= d.min_confidence
 
@@ -475,6 +492,7 @@ class TestAnalyzeScannerResponse:
 # _parse_validator_json
 # ==================================================================
 
+
 class TestParseValidatorJson:
     def test_valid_json_block(self):
         d = LaunchDetector()
@@ -484,7 +502,7 @@ class TestParseValidatorJson:
             "confidence": 85,
             "product_name": "SuperWidget",
         }
-        response = f'Text\n```json\n{json.dumps(data)}\n```\nEnd'
+        response = f"Text\n```json\n{json.dumps(data)}\n```\nEnd"
         result = d._parse_validator_json(response)
         assert result["is_confirmed_launch"] is True
         assert result["product_name"] == "SuperWidget"
@@ -493,7 +511,7 @@ class TestParseValidatorJson:
     def test_generic_code_block(self):
         d = LaunchDetector()
         data = {"product_name": "Gadget"}
-        response = f'Text\n```\n{json.dumps(data)}\n```'
+        response = f"Text\n```\n{json.dumps(data)}\n```"
         result = d._parse_validator_json(response)
         assert result["product_name"] == "Gadget"
 
@@ -507,13 +525,13 @@ class TestParseValidatorJson:
 
     def test_invalid_json_returns_default(self):
         d = LaunchDetector()
-        result = d._parse_validator_json('```json\n{broken}\n```')
+        result = d._parse_validator_json("```json\n{broken}\n```")
         assert result["is_confirmed_launch"] is False
 
     def test_partial_json_merged_with_defaults(self):
         d = LaunchDetector()
         data = {"product_name": "Widget", "confidence": 70}
-        response = f'```json\n{json.dumps(data)}\n```'
+        response = f"```json\n{json.dumps(data)}\n```"
         result = d._parse_validator_json(response)
         assert result["product_name"] == "Widget"
         assert result["confidence"] == 70
@@ -532,6 +550,7 @@ class TestParseValidatorJson:
 # _parse_assessor_json
 # ==================================================================
 
+
 class TestParseAssessorJson:
     def test_valid_json_block(self):
         d = LaunchDetector()
@@ -541,7 +560,7 @@ class TestParseAssessorJson:
             "urgency": "immediate",
             "immediate_actions": ["Brief sales team"],
         }
-        response = f'Analysis\n```json\n{json.dumps(data)}\n```'
+        response = f"Analysis\n```json\n{json.dumps(data)}\n```"
         result = d._parse_assessor_json(response)
         assert result["threat_level"] == "high"
         assert result["threat_score"] == 80
@@ -557,13 +576,13 @@ class TestParseAssessorJson:
 
     def test_invalid_json_returns_default(self):
         d = LaunchDetector()
-        result = d._parse_assessor_json('```json\n{bad}\n```')
+        result = d._parse_assessor_json("```json\n{bad}\n```")
         assert result["threat_level"] == "medium"
 
     def test_partial_json_merged_with_defaults(self):
         d = LaunchDetector()
         data = {"threat_level": "critical", "urgency": "immediate"}
-        response = f'```json\n{json.dumps(data)}\n```'
+        response = f"```json\n{json.dumps(data)}\n```"
         result = d._parse_assessor_json(response)
         assert result["threat_level"] == "critical"
         assert result["urgency"] == "immediate"
@@ -580,6 +599,7 @@ class TestParseAssessorJson:
 # ==================================================================
 # analyze — orchestration
 # ==================================================================
+
 
 class TestAnalyze:
     @pytest.mark.asyncio
@@ -616,10 +636,7 @@ class TestAnalyze:
             mock_ai.stream_gemini3 = mock_stream
             mock_ai.analyze_image_stream = mock_image_stream
             messages = []
-            async for msg in d.analyze(
-                [], "Competitor", "MyProduct",
-                image_data=b"fake_image", image_type="png"
-            ):
+            async for msg in d.analyze([], "Competitor", "MyProduct", image_data=b"fake_image", image_type="png"):
                 messages.append(msg)
 
         # Should NOT have insufficient data error
@@ -668,5 +685,3 @@ class TestAnalyze:
                 messages.append(msg)
 
         assert not any("Insufficient data" in m.content for m in messages)
-
-        

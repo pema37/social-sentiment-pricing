@@ -18,9 +18,9 @@ Run: pytest backend/tests/unit/test_analyst_feedback.py -v
 """
 
 import sys
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
+import pytest
 
 # ──────────────────────────────────────────────────────────
 # sys.modules isolation
@@ -28,15 +28,18 @@ from datetime import datetime, UTC
 
 _saved_modules = {}
 
+
 def _save_modules():
     global _saved_modules
     _saved_modules = dict(sys.modules)
+
 
 def _restore_modules():
     current = set(sys.modules.keys())
     saved = set(_saved_modules.keys())
     for mod in current - saved:
         del sys.modules[mod]
+
 
 @pytest.fixture(autouse=True)
 def isolate_modules():
@@ -49,8 +52,10 @@ def isolate_modules():
 # Helpers
 # ──────────────────────────────────────────────────────────
 
+
 def _make_outcome(**kwargs):
     from services.scoring.learning.analyst_feedback import OutcomeWithComponents
+
     defaults = dict(
         recommendation_id="rec-001",
         category="electronics",
@@ -87,18 +92,20 @@ def _make_predictive_dataset(n=20):
     outcomes = []
     for i in range(n):
         is_success = i < n // 2
-        outcomes.append(_make_outcome(
-            recommendation_id=f"r-{i}",
-            action="accepted",
-            revenue_delta_pct=5.0 if is_success else -3.0,
-            # Elasticity: high for successes, low for failures
-            elasticity_score=0.8 if is_success else 0.2,
-            # Urgency: high for failures, low for successes (anti-predicts)
-            urgency_score=0.2 if is_success else 0.8,
-            # Position/quality: no signal
-            position_score=0.5,
-            data_quality_score=0.5,
-        ))
+        outcomes.append(
+            _make_outcome(
+                recommendation_id=f"r-{i}",
+                action="accepted",
+                revenue_delta_pct=5.0 if is_success else -3.0,
+                # Elasticity: high for successes, low for failures
+                elasticity_score=0.8 if is_success else 0.2,
+                # Urgency: high for failures, low for successes (anti-predicts)
+                urgency_score=0.2 if is_success else 0.8,
+                # Position/quality: no signal
+                position_score=0.5,
+                data_quality_score=0.5,
+            )
+        )
     return outcomes
 
 
@@ -106,8 +113,8 @@ def _make_predictive_dataset(n=20):
 # TESTS: OutcomeWithComponents
 # ──────────────────────────────────────────────────────────
 
-class TestOutcomeWithComponents:
 
+class TestOutcomeWithComponents:
     def test_was_successful(self):
         o = _make_outcome(action="accepted", revenue_delta_pct=5.0)
         assert o.was_successful is True
@@ -134,8 +141,10 @@ class TestOutcomeWithComponents:
 
     def test_component_scores(self):
         o = _make_outcome(
-            elasticity_score=0.6, position_score=0.5,
-            urgency_score=0.4, data_quality_score=0.7,
+            elasticity_score=0.6,
+            position_score=0.5,
+            urgency_score=0.4,
+            data_quality_score=0.7,
         )
         scores = o.component_scores
         assert scores["elasticity"] == 0.6
@@ -153,20 +162,21 @@ class TestOutcomeWithComponents:
 # TESTS: WeightAdjustmentRecommendation
 # ──────────────────────────────────────────────────────────
 
-class TestWeightAdjustmentRecommendation:
 
+class TestWeightAdjustmentRecommendation:
     def test_summary_with_changes(self):
         from services.scoring.learning.analyst_feedback import (
-            WeightAdjustmentRecommendation, ComponentAnalysis,
+            WeightAdjustmentRecommendation,
         )
+
         rec = WeightAdjustmentRecommendation(
-            category="electronics", n_outcomes=50,
-            n_successes=30, n_failures=20,
+            category="electronics",
+            n_outcomes=50,
+            n_successes=30,
+            n_failures=20,
             component_analyses=[],
-            recommended_weights={"elasticity": 0.35, "position": 0.25,
-                                 "urgency": 0.15, "data_quality": 0.25},
-            current_weights={"elasticity": 0.30, "position": 0.25,
-                             "urgency": 0.20, "data_quality": 0.25},
+            recommended_weights={"elasticity": 0.35, "position": 0.25, "urgency": 0.15, "data_quality": 0.25},
+            current_weights={"elasticity": 0.30, "position": 0.25, "urgency": 0.20, "data_quality": 0.25},
             max_weight_change=0.05,
             should_apply=True,
             apply_reason="test",
@@ -177,14 +187,15 @@ class TestWeightAdjustmentRecommendation:
 
     def test_summary_no_changes(self):
         from services.scoring.learning.analyst_feedback import WeightAdjustmentRecommendation
+
         rec = WeightAdjustmentRecommendation(
-            category="electronics", n_outcomes=50,
-            n_successes=30, n_failures=20,
+            category="electronics",
+            n_outcomes=50,
+            n_successes=30,
+            n_failures=20,
             component_analyses=[],
-            recommended_weights={"elasticity": 0.30, "position": 0.25,
-                                 "urgency": 0.20, "data_quality": 0.25},
-            current_weights={"elasticity": 0.30, "position": 0.25,
-                             "urgency": 0.20, "data_quality": 0.25},
+            recommended_weights={"elasticity": 0.30, "position": 0.25, "urgency": 0.20, "data_quality": 0.25},
+            current_weights={"elasticity": 0.30, "position": 0.25, "urgency": 0.20, "data_quality": 0.25},
             max_weight_change=0.0,
             should_apply=False,
         )
@@ -196,20 +207,32 @@ class TestWeightAdjustmentRecommendation:
 # TESTS: AnalystFeedbackReport
 # ──────────────────────────────────────────────────────────
 
-class TestAnalystFeedbackReport:
 
+class TestAnalystFeedbackReport:
     def test_categories_with_changes(self):
         from services.scoring.learning.analyst_feedback import (
-            AnalystFeedbackReport, WeightAdjustmentRecommendation,
+            AnalystFeedbackReport,
+            WeightAdjustmentRecommendation,
         )
+
         rec1 = WeightAdjustmentRecommendation(
-            category="a", n_outcomes=20, n_successes=10, n_failures=10,
-            component_analyses=[], recommended_weights={}, current_weights={},
+            category="a",
+            n_outcomes=20,
+            n_successes=10,
+            n_failures=10,
+            component_analyses=[],
+            recommended_weights={},
+            current_weights={},
             should_apply=True,
         )
         rec2 = WeightAdjustmentRecommendation(
-            category="b", n_outcomes=20, n_successes=10, n_failures=10,
-            component_analyses=[], recommended_weights={}, current_weights={},
+            category="b",
+            n_outcomes=20,
+            n_successes=10,
+            n_failures=10,
+            component_analyses=[],
+            recommended_weights={},
+            current_weights={},
             should_apply=False,
         )
         report = AnalystFeedbackReport(
@@ -221,6 +244,7 @@ class TestAnalystFeedbackReport:
 
     def test_summary_string(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackReport
+
         report = AnalystFeedbackReport(
             analyzed_at=datetime.now(UTC),
             total_outcomes=100,
@@ -233,10 +257,11 @@ class TestAnalystFeedbackReport:
 # TESTS: Analyzer — Happy Path
 # ──────────────────────────────────────────────────────────
 
-class TestAnalyzerHappyPath:
 
+class TestAnalyzerHappyPath:
     def _analyzer(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         return AnalystFeedbackAnalyzer()
 
     def test_empty_outcomes(self):
@@ -288,10 +313,11 @@ class TestAnalyzerHappyPath:
 # TESTS: Component Analysis
 # ──────────────────────────────────────────────────────────
 
-class TestComponentAnalysis:
 
+class TestComponentAnalysis:
     def _analyzer(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         return AnalystFeedbackAnalyzer()
 
     def test_predictive_component_positive_separation(self):
@@ -334,10 +360,11 @@ class TestComponentAnalysis:
 # TESTS: Weight Computation
 # ──────────────────────────────────────────────────────────
 
-class TestWeightComputation:
 
+class TestWeightComputation:
     def _analyzer(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         return AnalystFeedbackAnalyzer()
 
     def test_weights_sum_to_one(self):
@@ -378,14 +405,16 @@ class TestWeightComputation:
         outcomes = []
         for i in range(20):
             is_success = i < 10
-            outcomes.append(_make_outcome(
-                recommendation_id=f"r-{i}",
-                revenue_delta_pct=3.0 if is_success else -2.0,
-                elasticity_score=0.5,
-                position_score=0.5,
-                urgency_score=0.5,
-                data_quality_score=0.5,
-            ))
+            outcomes.append(
+                _make_outcome(
+                    recommendation_id=f"r-{i}",
+                    revenue_delta_pct=3.0 if is_success else -2.0,
+                    elasticity_score=0.5,
+                    position_score=0.5,
+                    urgency_score=0.5,
+                    data_quality_score=0.5,
+                )
+            )
         report = self._analyzer().analyze(outcomes)
         if report.category_recommendations:
             rec = report.category_recommendations[0]
@@ -397,10 +426,11 @@ class TestWeightComputation:
 # TESTS: Auto-Apply Logic
 # ──────────────────────────────────────────────────────────
 
-class TestAutoApplyLogic:
 
+class TestAutoApplyLogic:
     def _analyzer(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         return AnalystFeedbackAnalyzer()
 
     def test_small_change_auto_applies(self):
@@ -414,6 +444,7 @@ class TestAutoApplyLogic:
     def test_large_change_manual_review(self):
         """Change > 4% → should_apply=False, needs manual review."""
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         # We test the reason generation directly
         reason = AnalystFeedbackAnalyzer._get_apply_reason(0.06, [])
         assert "manual review" in reason.lower()
@@ -421,6 +452,7 @@ class TestAutoApplyLogic:
     def test_tiny_change_not_applied(self):
         """Change <= 0.5% → too small to matter."""
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         reason = AnalystFeedbackAnalyzer._get_apply_reason(0.003, [])
         assert "too small" in reason.lower()
 
@@ -429,10 +461,11 @@ class TestAutoApplyLogic:
 # TESTS: Pearson r Per-Component
 # ──────────────────────────────────────────────────────────
 
-class TestPearsonRPerComponent:
 
+class TestPearsonRPerComponent:
     def test_perfect_correlation(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         records = [
             _make_outcome(
                 recommendation_id=f"r-{i}",
@@ -447,22 +480,22 @@ class TestPearsonRPerComponent:
 
     def test_insufficient_pairs(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         records = [_make_outcome(recommendation_id=f"r-{i}") for i in range(3)]
         r = AnalystFeedbackAnalyzer._pearson_r("elasticity", records)
         assert r is None
 
     def test_none_revenue_excluded(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
-        records = [
-            _make_outcome(recommendation_id=f"r-{i}", revenue_delta_pct=None)
-            for i in range(10)
-        ]
+
+        records = [_make_outcome(recommendation_id=f"r-{i}", revenue_delta_pct=None) for i in range(10)]
         r = AnalystFeedbackAnalyzer._pearson_r("elasticity", records)
         assert r is None
 
     def test_correlation_present_in_analysis(self):
         """Component analysis includes correlation value."""
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         outcomes = _make_predictive_dataset(n=20)
         report = AnalystFeedbackAnalyzer().analyze(outcomes)
         rec = report.category_recommendations[0]
@@ -474,27 +507,36 @@ class TestPearsonRPerComponent:
 # TESTS: Multiple Categories
 # ──────────────────────────────────────────────────────────
 
-class TestMultipleCategories:
 
+class TestMultipleCategories:
     def _analyzer(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         return AnalystFeedbackAnalyzer()
 
     def test_separate_categories(self):
         """Different categories get independent analyses."""
-        elec = [_make_outcome(
-            recommendation_id=f"e-{i}", category="electronics",
-            action="accepted",
-            revenue_delta_pct=5.0 if i < 7 else -2.0,
-            elasticity_score=0.8 if i < 7 else 0.2,
-        ) for i in range(14)]
+        elec = [
+            _make_outcome(
+                recommendation_id=f"e-{i}",
+                category="electronics",
+                action="accepted",
+                revenue_delta_pct=5.0 if i < 7 else -2.0,
+                elasticity_score=0.8 if i < 7 else 0.2,
+            )
+            for i in range(14)
+        ]
 
-        fash = [_make_outcome(
-            recommendation_id=f"f-{i}", category="fashion",
-            action="accepted",
-            revenue_delta_pct=4.0 if i < 6 else -3.0,
-            position_score=0.8 if i < 6 else 0.2,
-        ) for i in range(12)]
+        fash = [
+            _make_outcome(
+                recommendation_id=f"f-{i}",
+                category="fashion",
+                action="accepted",
+                revenue_delta_pct=4.0 if i < 6 else -3.0,
+                position_score=0.8 if i < 6 else 0.2,
+            )
+            for i in range(12)
+        ]
 
         report = self._analyzer().analyze(elec + fash)
         categories = {r.category for r in report.category_recommendations}
@@ -506,10 +548,11 @@ class TestMultipleCategories:
 # TESTS: Edge Cases
 # ──────────────────────────────────────────────────────────
 
-class TestAnalystFeedbackEdgeCases:
 
+class TestAnalystFeedbackEdgeCases:
     def _analyzer(self):
         from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
+
         return AnalystFeedbackAnalyzer()
 
     def test_all_same_scores(self):
@@ -550,21 +593,24 @@ class TestAnalystFeedbackEdgeCases:
         """Scores at 0.0 and 1.0 boundaries."""
         outcomes = []
         for i in range(10):
-            outcomes.append(_make_success(
-                recommendation_id=f"s-{i}",
-                elasticity_score=1.0, urgency_score=0.0,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"s-{i}",
+                    elasticity_score=1.0,
+                    urgency_score=0.0,
+                )
+            )
         for i in range(10):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                elasticity_score=0.0, urgency_score=1.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    elasticity_score=0.0,
+                    urgency_score=1.0,
+                )
+            )
         report = self._analyzer().analyze(outcomes)
         assert len(report.category_recommendations) == 1
         rec = report.category_recommendations[0]
         # Even with extreme differences, weights stay in bounds
         for w in rec.recommended_weights.values():
             assert 0.10 <= w <= 0.50
-
-
-            

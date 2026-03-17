@@ -7,24 +7,24 @@ Produces: The final recommendation that becomes PriceRecommendation
 Stored in: strategist_evidence JSONB column on RecommendationOutcome
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from .shared import PriceDirection
 from .analyst import ConfidenceDecomposition
+from .shared import PriceDirection
 
 
 class GuardrailCheck(BaseModel):
     """Record of a guardrail that was evaluated."""
+
     name: str = Field(description="e.g. 'max_change_percent', 'min_price_floor', 'margin_protection'")
     passed: bool
-    original_value: Optional[str] = None
-    clamped_value: Optional[str] = None
-    reason: Optional[str] = None
+    original_value: str | None = None
+    clamped_value: str | None = None
+    reason: str | None = None
 
 
 class StrategistOutput(BaseModel):
@@ -45,7 +45,7 @@ class StrategistOutput(BaseModel):
     product_id: UUID
     scout_scouted_at: datetime
     analyst_analyzed_at: datetime
-    strategized_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    strategized_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # The recommendation (→ becomes PriceRecommendation fields)
     current_price: Decimal
@@ -54,14 +54,15 @@ class StrategistOutput(BaseModel):
         description="Percentage change: positive = increase, negative = decrease",
     )
     change_direction: PriceDirection
-    compare_at_price: Optional[Decimal] = Field(
+    compare_at_price: Decimal | None = Field(
         default=None,
         description="Strike-through price for sale display (Shopify compare_at_price)",
     )
 
     # Confidence (→ becomes recommendation.confidence_score)
     confidence_score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Overall confidence. From Analyst's decomposition, possibly adjusted.",
     )
     confidence_decomposition: ConfidenceDecomposition
@@ -81,24 +82,24 @@ class StrategistOutput(BaseModel):
         default=False,
         description="True if any guardrail modified the raw recommendation.",
     )
-    raw_recommended_price: Optional[Decimal] = Field(
+    raw_recommended_price: Decimal | None = Field(
         default=None,
         description="Price before guardrails. Null if no clamping occurred.",
     )
 
     # Merchant preference calibration (from outcome_calibration backward learning)
-    preference_prior_applied: Optional[float] = Field(
+    preference_prior_applied: float | None = Field(
         default=None,
         description="Scaling factor from merchant modification patterns. e.g. 0.7 = reduced by 30%.",
     )
-    pre_calibration_change_percent: Optional[Decimal] = Field(
+    pre_calibration_change_percent: Decimal | None = Field(
         default=None,
         description="Change percent before preference prior was applied.",
     )
 
     # Category context (from outcome_benchmarks cross-merchant intelligence)
     category_benchmark_used: bool = False
-    category_optimal_range: Optional[dict] = Field(
+    category_optimal_range: dict | None = Field(
         default=None,
         description="From get_category_benchmarks: {min, max, median} of successful changes.",
     )
@@ -109,8 +110,8 @@ class StrategistOutput(BaseModel):
         description="'full_pipeline', 'rule_based', 'crisis_override', 'manual'",
     )
     strategist_version: str = "1.0"
-    processing_time_ms: Optional[int] = None
-    total_pipeline_time_ms: Optional[int] = None
+    processing_time_ms: int | None = None
+    total_pipeline_time_ms: int | None = None
     model_used: str = Field(
         default="gemini-2.0-flash",
         description="Which LLM/model produced this recommendation",
@@ -142,6 +143,3 @@ class StrategistOutput(BaseModel):
             "reasoning": self.reasoning,
             "factors": self.factors,
         }
-    
-
-    

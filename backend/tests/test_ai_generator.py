@@ -14,11 +14,11 @@ Covers:
 - get_health: healthy/degraded
 """
 
-import sys
-import os
 import json
+import os
+import sys
 from types import ModuleType
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -26,8 +26,11 @@ import pytest
 # 1. sys.modules stub isolation
 # ---------------------------------------------------------------------------
 _MOCKED = [
-    "db.session", "core.config",
-    "google", "google.genai", "google.generativeai",
+    "db.session",
+    "core.config",
+    "google",
+    "google.genai",
+    "google.generativeai",
     "openai",
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
@@ -80,6 +83,7 @@ del _m
 # Helpers
 # ===========================================================================
 
+
 def _make_service(gemini_client=None, openai_client=None):
     svc = AIGeneratorService.__new__(AIGeneratorService)
     svc.gemini_client = gemini_client
@@ -93,6 +97,7 @@ def _make_service(gemini_client=None, openai_client=None):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestIsAvailable:
     def test_no_providers(self):
@@ -116,7 +121,10 @@ class TestGetAvailableProviders:
         assert _make_service(gemini_client=MagicMock()).get_available_providers() == ["gemini"]
 
     def test_both(self):
-        assert _make_service(gemini_client=MagicMock(), openai_client=MagicMock()).get_available_providers() == ["gemini", "openai"]
+        assert _make_service(gemini_client=MagicMock(), openai_client=MagicMock()).get_available_providers() == [
+            "gemini",
+            "openai",
+        ]
 
 
 class TestGetPrimaryProvider:
@@ -259,12 +267,14 @@ class TestGenerateProductDescription:
     @pytest.mark.asyncio
     async def test_success(self):
         svc = _make_service(gemini_client=MagicMock())
-        ai_response = json.dumps({
-            "description": "<p>Great widget</p>",
-            "seo_title": "Best Widget 2026",
-            "meta_description": "Buy the best widget",
-            "suggested_keywords": ["widget", "gadget"],
-        })
+        ai_response = json.dumps(
+            {
+                "description": "<p>Great widget</p>",
+                "seo_title": "Best Widget 2026",
+                "meta_description": "Buy the best widget",
+                "suggested_keywords": ["widget", "gadget"],
+            }
+        )
         svc._generate = AsyncMock(return_value=(ai_response, "gemini"))
 
         result = await svc.generate_product_description(name="Widget", category="Gadgets")
@@ -277,12 +287,14 @@ class TestGenerateProductDescription:
     @pytest.mark.asyncio
     async def test_seo_title_truncated(self):
         svc = _make_service(gemini_client=MagicMock())
-        ai_response = json.dumps({
-            "description": "desc",
-            "seo_title": "A" * 100,
-            "meta_description": "B" * 200,
-            "suggested_keywords": list(range(20)),
-        })
+        ai_response = json.dumps(
+            {
+                "description": "desc",
+                "seo_title": "A" * 100,
+                "meta_description": "B" * 200,
+                "suggested_keywords": list(range(20)),
+            }
+        )
         svc._generate = AsyncMock(return_value=(ai_response, "gemini"))
 
         result = await svc.generate_product_description(name="Widget")
@@ -309,10 +321,14 @@ class TestGenerateProductDescription:
     @pytest.mark.asyncio
     async def test_includes_optional_context(self):
         svc = _make_service(gemini_client=MagicMock())
-        ai_response = json.dumps({
-            "description": "d", "seo_title": "t",
-            "meta_description": "m", "suggested_keywords": [],
-        })
+        ai_response = json.dumps(
+            {
+                "description": "d",
+                "seo_title": "t",
+                "meta_description": "m",
+                "suggested_keywords": [],
+            }
+        )
         svc._generate = AsyncMock(return_value=(ai_response, "gemini"))
 
         await svc.generate_product_description(
@@ -335,11 +351,13 @@ class TestGeneratePricingExplanation:
     @pytest.mark.asyncio
     async def test_success(self):
         svc = _make_service(gemini_client=MagicMock())
-        ai_response = json.dumps({
-            "explanation": "Price should increase due to demand.",
-            "key_factors": ["demand", "sentiment"],
-            "confidence_reason": "Strong data signals",
-        })
+        ai_response = json.dumps(
+            {
+                "explanation": "Price should increase due to demand.",
+                "key_factors": ["demand", "sentiment"],
+                "confidence_reason": "Strong data signals",
+            }
+        )
         svc._generate = AsyncMock(return_value=(ai_response, "gemini"))
 
         result = await svc.generate_pricing_explanation(
@@ -419,5 +437,3 @@ class TestGetHealth:
         result = svc.get_health()
         assert result["gemini_model"] == "gemini-2.0-flash-exp"
         assert result["openai_model"] is None
-
-        

@@ -13,8 +13,7 @@ Total: ~25 tests
 """
 
 import sys
-import time
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 for mod in ["db.session"]:
     if mod not in sys.modules:
@@ -22,16 +21,15 @@ for mod in ["db.session"]:
 
 import pytest
 
-from services.competitor_matching.schemas import SearchProvider, ProviderResult
 from services.competitor_matching.providers.duckduckgo import DuckDuckGoProvider
-
+from services.competitor_matching.schemas import SearchProvider
 
 # ============================================================
 # 1. Provider Properties
 # ============================================================
 
-class TestDuckDuckGoProperties:
 
+class TestDuckDuckGoProperties:
     def test_provider_name(self):
         p = DuckDuckGoProvider()
         assert p.provider_name == SearchProvider.DUCKDUCKGO
@@ -65,8 +63,8 @@ class TestDuckDuckGoProperties:
 # 2. _extract_real_url
 # ============================================================
 
-class TestExtractRealUrl:
 
+class TestExtractRealUrl:
     def setup_method(self):
         self.p = DuckDuckGoProvider()
 
@@ -107,8 +105,8 @@ class TestExtractRealUrl:
 # 3. _search with mocked httpx
 # ============================================================
 
-class TestDuckDuckGoSearch:
 
+class TestDuckDuckGoSearch:
     @pytest.mark.asyncio
     async def test_successful_search(self):
         p = DuckDuckGoProvider(delay_between_requests=0)
@@ -138,6 +136,7 @@ class TestDuckDuckGoSearch:
     @pytest.mark.asyncio
     async def test_timeout_error(self):
         import httpx as httpx_mod
+
         p = DuckDuckGoProvider(delay_between_requests=0)
         p._last_request_time = 0
 
@@ -175,14 +174,11 @@ class TestDuckDuckGoSearch:
 # 4. get_usage_stats
 # ============================================================
 
-class TestGetUsageStats:
 
+class TestGetUsageStats:
     def test_returns_dict(self):
         p = DuckDuckGoProvider()
         stats = p.get_usage_stats()
         assert stats["provider"] == "duckduckgo"
         assert stats["requires_api_key"] is False
         assert stats["cost"] == "Free"
-
-
-        

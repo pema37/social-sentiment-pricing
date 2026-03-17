@@ -11,12 +11,11 @@ Covers:
   adjustment capping, factor combinations
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
-from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
@@ -31,7 +30,7 @@ _MOCKED = [
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -53,13 +52,26 @@ _sm_stub = ModuleType("models.social_mention")
 
 
 class _ColumnMock:
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
 
 
 class _FakeSocialMention:
@@ -81,17 +93,21 @@ _agg_stub = ModuleType("services.analysis.sentiment_aggregator")
 class _FakeSentimentAggregator:
     def __init__(self, db):
         self.db = db
-        self.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0,
-            "volume_change": 0.0,
-            "trend": "stable",
-            "current_sentiment": 0.0,
-            "previous_sentiment": 0.0,
-        })
-        self.get_product_sentiment = AsyncMock(return_value={
-            "avg_sentiment": 0.0,
-            "mention_count": 0,
-        })
+        self.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.0,
+                "previous_sentiment": 0.0,
+            }
+        )
+        self.get_product_sentiment = AsyncMock(
+            return_value={
+                "avg_sentiment": 0.0,
+                "mention_count": 0,
+            }
+        )
 
 
 _agg_stub.SentimentAggregator = _FakeSentimentAggregator
@@ -121,6 +137,7 @@ del _m
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _make_session():
     s = AsyncMock()
@@ -156,6 +173,7 @@ def _mock_query_returns_sequence(session, *mention_lists):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestTrendDetectorInit:
     def test_stores_db(self):
@@ -213,12 +231,14 @@ class TestDetectAll:
         td.detect_volume_spike = AsyncMock(return_value=None)
         td.detect_sentiment_shift = AsyncMock(return_value=None)
         td.detect_viral_mentions = AsyncMock(return_value=None)
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.15,
-            "volume_change": 1.5,
-            "trend": "improving",
-            "current_sentiment": 0.6,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.15,
+                "volume_change": 1.5,
+                "trend": "improving",
+                "current_sentiment": 0.6,
+            }
+        )
 
         result = await td.detect_all(uuid4())
         assert result["metrics"]["sentiment_velocity"] == 0.15
@@ -284,10 +304,15 @@ class TestDetectSentimentShift:
     @pytest.mark.asyncio
     async def test_no_shift(self):
         td = _make_detector()
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0,
-            "trend": "stable", "current_sentiment": 0.5, "previous_sentiment": 0.4,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.5,
+                "previous_sentiment": 0.4,
+            }
+        )
 
         result = await td.detect_sentiment_shift(uuid4())
         assert result is None  # 0.1 < 0.3 threshold
@@ -295,10 +320,15 @@ class TestDetectSentimentShift:
     @pytest.mark.asyncio
     async def test_sentiment_drop_high(self):
         td = _make_detector()
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": -0.35, "volume_change": 0.0,
-            "trend": "declining", "current_sentiment": 0.1, "previous_sentiment": 0.45,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": -0.35,
+                "volume_change": 0.0,
+                "trend": "declining",
+                "current_sentiment": 0.1,
+                "previous_sentiment": 0.45,
+            }
+        )
 
         result = await td.detect_sentiment_shift(uuid4())
         assert result is not None
@@ -309,10 +339,15 @@ class TestDetectSentimentShift:
     @pytest.mark.asyncio
     async def test_sentiment_drop_critical(self):
         td = _make_detector()
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": -0.6, "volume_change": 0.0,
-            "trend": "declining", "current_sentiment": -0.2, "previous_sentiment": 0.4,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": -0.6,
+                "volume_change": 0.0,
+                "trend": "declining",
+                "current_sentiment": -0.2,
+                "previous_sentiment": 0.4,
+            }
+        )
 
         result = await td.detect_sentiment_shift(uuid4())
         assert result["type"] == "sentiment_drop"
@@ -321,10 +356,15 @@ class TestDetectSentimentShift:
     @pytest.mark.asyncio
     async def test_sentiment_spike_info(self):
         td = _make_detector()
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.35, "volume_change": 0.0,
-            "trend": "improving", "current_sentiment": 0.7, "previous_sentiment": 0.35,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.35,
+                "volume_change": 0.0,
+                "trend": "improving",
+                "current_sentiment": 0.7,
+                "previous_sentiment": 0.35,
+            }
+        )
 
         result = await td.detect_sentiment_shift(uuid4())
         assert result["type"] == "sentiment_spike"
@@ -333,10 +373,15 @@ class TestDetectSentimentShift:
     @pytest.mark.asyncio
     async def test_sentiment_spike_high(self):
         td = _make_detector()
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.55, "volume_change": 0.0,
-            "trend": "improving", "current_sentiment": 0.8, "previous_sentiment": 0.25,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.55,
+                "volume_change": 0.0,
+                "trend": "improving",
+                "current_sentiment": 0.8,
+                "previous_sentiment": 0.25,
+            }
+        )
 
         result = await td.detect_sentiment_shift(uuid4())
         assert result["type"] == "sentiment_spike"
@@ -452,10 +497,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.1})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0, "trend": "stable",
-            "current_sentiment": 0.1, "previous_sentiment": 0.1,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.1,
+                "previous_sentiment": 0.1,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["signal"] == "hold"
@@ -467,10 +517,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.7})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0, "trend": "stable",
-            "current_sentiment": 0.7, "previous_sentiment": 0.7,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.7,
+                "previous_sentiment": 0.7,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["signal"] == "increase"
@@ -481,10 +536,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": -0.5})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0, "trend": "stable",
-            "current_sentiment": -0.5, "previous_sentiment": -0.5,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": -0.5,
+                "previous_sentiment": -0.5,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["signal"] == "decrease"
@@ -494,10 +554,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.6})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.1, "volume_change": 0.0, "trend": "improving",
-            "current_sentiment": 0.6, "previous_sentiment": 0.5,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.1,
+                "volume_change": 0.0,
+                "trend": "improving",
+                "current_sentiment": 0.6,
+                "previous_sentiment": 0.5,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["signal"] == "increase"
@@ -508,10 +573,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.6})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": -0.1, "volume_change": 0.0, "trend": "declining",
-            "current_sentiment": 0.6, "previous_sentiment": 0.6,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": -0.1,
+                "volume_change": 0.0,
+                "trend": "declining",
+                "current_sentiment": 0.6,
+                "previous_sentiment": 0.6,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["signal"] == "decrease"
@@ -521,10 +591,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.6})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 1.5, "trend": "stable",
-            "current_sentiment": 0.6, "previous_sentiment": 0.6,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 1.5,
+                "trend": "stable",
+                "current_sentiment": 0.6,
+                "previous_sentiment": 0.6,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["strength"] >= 0.5  # sentiment (0.3) + volume (0.2)
@@ -532,15 +607,21 @@ class TestGetPricingSignal:
     @pytest.mark.asyncio
     async def test_viral_positive_boosts_adjustment(self):
         td = _make_detector()
-        td.detect_all = AsyncMock(return_value={
-            "alerts": [{"type": "viral_mention", "severity": "high",
-                        "data": {"overall_sentiment": "positive"}}]
-        })
+        td.detect_all = AsyncMock(
+            return_value={
+                "alerts": [{"type": "viral_mention", "severity": "high", "data": {"overall_sentiment": "positive"}}]
+            }
+        )
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.6})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0, "trend": "stable",
-            "current_sentiment": 0.6, "previous_sentiment": 0.6,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.6,
+                "previous_sentiment": 0.6,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["recommended_adjustment_pct"] > 3.0  # base 3 + viral 2
@@ -548,15 +629,21 @@ class TestGetPricingSignal:
     @pytest.mark.asyncio
     async def test_viral_negative_forces_decrease(self):
         td = _make_detector()
-        td.detect_all = AsyncMock(return_value={
-            "alerts": [{"type": "viral_mention", "severity": "critical",
-                        "data": {"overall_sentiment": "negative"}}]
-        })
+        td.detect_all = AsyncMock(
+            return_value={
+                "alerts": [{"type": "viral_mention", "severity": "critical", "data": {"overall_sentiment": "negative"}}]
+            }
+        )
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.0})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0, "trend": "stable",
-            "current_sentiment": 0.0, "previous_sentiment": 0.0,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.0,
+                "previous_sentiment": 0.0,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["signal"] == "decrease"
@@ -567,10 +654,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.8})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.2, "volume_change": 2.0, "trend": "improving",
-            "current_sentiment": 0.8, "previous_sentiment": 0.6,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.2,
+                "volume_change": 2.0,
+                "trend": "improving",
+                "current_sentiment": 0.8,
+                "previous_sentiment": 0.6,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["strength"] <= 1.0
@@ -578,17 +670,24 @@ class TestGetPricingSignal:
     @pytest.mark.asyncio
     async def test_adjustment_capped_at_10(self):
         td = _make_detector()
-        td.detect_all = AsyncMock(return_value={
-            "alerts": [
-                {"type": "viral_mention", "data": {"overall_sentiment": "positive"}},
-                {"type": "viral_mention", "data": {"overall_sentiment": "positive"}},
-            ]
-        })
+        td.detect_all = AsyncMock(
+            return_value={
+                "alerts": [
+                    {"type": "viral_mention", "data": {"overall_sentiment": "positive"}},
+                    {"type": "viral_mention", "data": {"overall_sentiment": "positive"}},
+                ]
+            }
+        )
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.9})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.3, "volume_change": 3.0, "trend": "improving",
-            "current_sentiment": 0.9, "previous_sentiment": 0.6,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.3,
+                "volume_change": 3.0,
+                "trend": "improving",
+                "current_sentiment": 0.9,
+                "previous_sentiment": 0.6,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert result["recommended_adjustment_pct"] <= 10.0
@@ -598,12 +697,15 @@ class TestGetPricingSignal:
         td = _make_detector()
         td.detect_all = AsyncMock(return_value={"alerts": []})
         td.aggregator.get_product_sentiment = AsyncMock(return_value={"avg_sentiment": 0.0})
-        td.aggregator.get_sentiment_velocity = AsyncMock(return_value={
-            "velocity": 0.0, "volume_change": 0.0, "trend": "stable",
-            "current_sentiment": 0.0, "previous_sentiment": 0.0,
-        })
+        td.aggregator.get_sentiment_velocity = AsyncMock(
+            return_value={
+                "velocity": 0.0,
+                "volume_change": 0.0,
+                "trend": "stable",
+                "current_sentiment": 0.0,
+                "previous_sentiment": 0.0,
+            }
+        )
 
         result = await td.get_pricing_signal(uuid4())
         assert "generated_at" in result
-
-        

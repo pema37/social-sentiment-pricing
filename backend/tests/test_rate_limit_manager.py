@@ -5,31 +5,26 @@ CircuitState enum, CircuitBreaker dataclass, RateLimitManager singleton,
 module-level convenience functions.
 """
 
-import sys
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 # ── Import isolation ──────────────────────────────────────────────
 # core.logging is handled by conftest.py (autouse).
-
 from services.rate_limit_manager import (
-    CircuitState,
     CircuitBreaker,
+    CircuitState,
     RateLimitManager,
     get_rate_limit_manager,
     is_api_available,
-    record_api_success,
-    record_api_rate_limit,
     record_api_failure,
+    record_api_rate_limit,
+    record_api_success,
 )
+
 
 # ──────────────────────────────────────────────
 # CircuitState enum
 # ──────────────────────────────────────────────
 class TestCircuitState:
-
     def test_closed(self):
         assert CircuitState.CLOSED.value == "closed"
 
@@ -47,7 +42,6 @@ class TestCircuitState:
 # CircuitBreaker — init defaults
 # ──────────────────────────────────────────────
 class TestCircuitBreakerDefaults:
-
     def test_name(self):
         cb = CircuitBreaker(name="openai")
         assert cb.name == "openai"
@@ -81,7 +75,6 @@ class TestCircuitBreakerDefaults:
 # CircuitBreaker.is_available
 # ──────────────────────────────────────────────
 class TestIsAvailable:
-
     def test_closed_is_available(self):
         cb = CircuitBreaker(name="x")
         assert cb.is_available() is True
@@ -89,20 +82,20 @@ class TestIsAvailable:
     def test_open_not_available(self):
         cb = CircuitBreaker(name="x")
         cb.state = CircuitState.OPEN
-        cb.opened_at = datetime.now(timezone.utc)
+        cb.opened_at = datetime.now(UTC)
         assert cb.is_available() is False
 
     def test_open_becomes_half_open_after_cooldown(self):
         cb = CircuitBreaker(name="x", cooldown_seconds=30)
         cb.state = CircuitState.OPEN
-        cb.opened_at = datetime.now(timezone.utc) - timedelta(seconds=31)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=31)
         assert cb.is_available() is True
         assert cb.state == CircuitState.HALF_OPEN
 
     def test_open_stays_open_before_cooldown(self):
         cb = CircuitBreaker(name="x", cooldown_seconds=60)
         cb.state = CircuitState.OPEN
-        cb.opened_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=10)
         assert cb.is_available() is False
         assert cb.state == CircuitState.OPEN
 
@@ -122,7 +115,6 @@ class TestIsAvailable:
 # CircuitBreaker.record_success
 # ──────────────────────────────────────────────
 class TestRecordSuccess:
-
     def test_resets_to_closed(self):
         cb = CircuitBreaker(name="x")
         cb.state = CircuitState.HALF_OPEN
@@ -137,7 +129,7 @@ class TestRecordSuccess:
 
     def test_clears_opened_at(self):
         cb = CircuitBreaker(name="x")
-        cb.opened_at = datetime.now(timezone.utc)
+        cb.opened_at = datetime.now(UTC)
         cb.record_success()
         assert cb.opened_at is None
 
@@ -157,7 +149,6 @@ class TestRecordSuccess:
 # CircuitBreaker.record_failure
 # ──────────────────────────────────────────────
 class TestRecordFailure:
-
     def test_increments_failure_count(self):
         cb = CircuitBreaker(name="x")
         cb.record_failure("err1")
@@ -200,7 +191,6 @@ class TestRecordFailure:
 # CircuitBreaker.get_status
 # ──────────────────────────────────────────────
 class TestGetStatus:
-
     def test_returns_dict(self):
         cb = CircuitBreaker(name="openai")
         status = cb.get_status()
@@ -221,14 +211,14 @@ class TestGetStatus:
     def test_cooldown_remaining_when_open(self):
         cb = CircuitBreaker(name="x", cooldown_seconds=60)
         cb.state = CircuitState.OPEN
-        cb.opened_at = datetime.now(timezone.utc) - timedelta(seconds=20)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=20)
         remaining = cb.get_status()["cooldown_remaining"]
         assert 35 <= remaining <= 41  # ~40s remaining
 
     def test_cooldown_remaining_never_negative(self):
         cb = CircuitBreaker(name="x", cooldown_seconds=10)
         cb.state = CircuitState.OPEN
-        cb.opened_at = datetime.now(timezone.utc) - timedelta(seconds=100)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=100)
         assert cb.get_status()["cooldown_remaining"] == 0
 
     def test_failure_count(self):
@@ -241,7 +231,6 @@ class TestGetStatus:
 # RateLimitManager
 # ──────────────────────────────────────────────
 class TestRateLimitManager:
-
     def setup_method(self):
         # Reset singleton
         RateLimitManager._instance = None
@@ -335,11 +324,11 @@ class TestRateLimitManager:
 # Module-level convenience functions
 # ──────────────────────────────────────────────
 class TestConvenienceFunctions:
-
     def setup_method(self):
         # Reset global state
         RateLimitManager._instance = None
         import services.rate_limit_manager as mod
+
         mod._manager = None
 
     def test_get_rate_limit_manager_returns_instance(self):
@@ -379,7 +368,6 @@ class TestConvenienceFunctions:
 # Integration — full lifecycle
 # ──────────────────────────────────────────────
 class TestIntegrationLifecycle:
-
     def test_full_cycle(self):
         """CLOSED → failures → OPEN → cooldown → HALF_OPEN → success → CLOSED."""
         cb = CircuitBreaker(name="api", cooldown_seconds=1, failure_threshold=2)
@@ -399,7 +387,7 @@ class TestIntegrationLifecycle:
         assert cb.is_available() is False
 
         # Simulate cooldown elapsed
-        cb.opened_at = datetime.now(timezone.utc) - timedelta(seconds=2)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=2)
         assert cb.is_available() is True
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -424,14 +412,10 @@ class TestIntegrationLifecycle:
         assert cb.state == CircuitState.OPEN
 
         # Transition to HALF_OPEN
-        cb.opened_at = datetime.now(timezone.utc) - timedelta(seconds=2)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=2)
         cb.is_available()
         assert cb.state == CircuitState.HALF_OPEN
 
         # Failure in HALF_OPEN — back to OPEN
         cb.record_failure("still failing", is_rate_limit=True)
         assert cb.state == CircuitState.OPEN
-
-
-
-        

@@ -12,10 +12,10 @@ Covers:
   get_transactions, submit_transfer (str/dict), get_ticket
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -35,7 +35,7 @@ _MOCKED = [
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
 # Ensure db.session stub
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -91,6 +91,7 @@ sys.modules["services.payment.exceptions"] = _exc_stub
 # Force fresh import — other test files may have cached this with different exception classes
 sys.modules.pop("services.payment.mnee_client", None)
 from services.payment.mnee_client import MneeClient, MneeEnvironment
+
 # ---------------------------------------------------------------------------
 # 3. Restore sys.modules
 # ---------------------------------------------------------------------------
@@ -105,6 +106,7 @@ del _m
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _make_response(status_code=200, headers=None, json_data=None, text="", content_type="application/json"):
     """Build a fake httpx.Response-like object."""
@@ -126,6 +128,7 @@ def _make_client(api_key="test-key-123", environment="sandbox", timeout=30.0):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestMneeEnvironment:
     """Test the MneeEnvironment enum."""
@@ -282,9 +285,7 @@ class TestRequest:
 
         result = await c._request("GET", "/v1/config")
         assert result == {"approver": "0x123"}
-        mock_client.request.assert_awaited_once_with(
-            method="GET", url="/v1/config", params=None, json=None
-        )
+        mock_client.request.assert_awaited_once_with(method="GET", url="/v1/config", params=None, json=None)
 
     @pytest.mark.asyncio
     async def test_success_text_response(self):
@@ -327,6 +328,7 @@ class TestRequest:
     @pytest.mark.asyncio
     async def test_timeout_raises_network_error(self):
         import httpx as _httpx
+
         c = _make_client()
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(side_effect=_httpx.TimeoutException("timeout"))
@@ -340,11 +342,10 @@ class TestRequest:
     @pytest.mark.asyncio
     async def test_request_error_raises_network_error(self):
         import httpx as _httpx
+
         c = _make_client()
         mock_client = AsyncMock()
-        mock_client.request = AsyncMock(
-            side_effect=_httpx.RequestError("conn refused", request=MagicMock())
-        )
+        mock_client.request = AsyncMock(side_effect=_httpx.RequestError("conn refused", request=MagicMock()))
         mock_client.is_closed = False
         c._client = mock_client
 
@@ -429,7 +430,8 @@ class TestGetUtxos:
         c._request = AsyncMock(return_value=[])
         await c.get_utxos(["addr1"])
         c._request.assert_awaited_once_with(
-            "POST", "/v2/utxos",
+            "POST",
+            "/v2/utxos",
             params={"page": "1", "size": "10"},
             json_data=["addr1"],
         )
@@ -440,7 +442,8 @@ class TestGetUtxos:
         c._request = AsyncMock(return_value=[])
         await c.get_utxos(["addr1"], page=3, size=25)
         c._request.assert_awaited_once_with(
-            "POST", "/v2/utxos",
+            "POST",
+            "/v2/utxos",
             params={"page": "3", "size": "25"},
             json_data=["addr1"],
         )
@@ -466,27 +469,21 @@ class TestGetTransactions:
         c = _make_client()
         c._request = AsyncMock(return_value=[])
         await c.get_transactions(["addr1"])
-        c._request.assert_awaited_once_with(
-            "POST", "/v1/sync", params={"limit": 100}, json_data=["addr1"]
-        )
+        c._request.assert_awaited_once_with("POST", "/v1/sync", params={"limit": 100}, json_data=["addr1"])
 
     @pytest.mark.asyncio
     async def test_custom_limit(self):
         c = _make_client()
         c._request = AsyncMock(return_value=[])
         await c.get_transactions(["addr1"], limit=50)
-        c._request.assert_awaited_once_with(
-            "POST", "/v1/sync", params={"limit": 50}, json_data=["addr1"]
-        )
+        c._request.assert_awaited_once_with("POST", "/v1/sync", params={"limit": 50}, json_data=["addr1"])
 
     @pytest.mark.asyncio
     async def test_with_from_score(self):
         c = _make_client()
         c._request = AsyncMock(return_value=[])
         await c.get_transactions(["addr1"], from_score=999)
-        c._request.assert_awaited_once_with(
-            "POST", "/v1/sync", params={"limit": 100, "from": 999}, json_data=["addr1"]
-        )
+        c._request.assert_awaited_once_with("POST", "/v1/sync", params={"limit": 100, "from": 999}, json_data=["addr1"])
 
     @pytest.mark.asyncio
     async def test_from_score_zero_not_included(self):
@@ -535,6 +532,3 @@ class TestGetTicket:
         result = await c.get_ticket("abc")
         c._request.assert_awaited_once_with("GET", "/v2/ticket", params={"ticketID": "abc"})
         assert result == expected
-
-
-        

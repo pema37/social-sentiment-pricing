@@ -21,8 +21,7 @@ Place at: backend/services/scoring/guardrails.py
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, UTC
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from .fusion_types import (
     GuardrailConfig,
@@ -45,7 +44,7 @@ class GuardrailEnforcer:
         )
     """
 
-    def __init__(self, config: Optional[GuardrailConfig] = None):
+    def __init__(self, config: GuardrailConfig | None = None):
         self._config = config or GuardrailConfig()
 
     def apply(
@@ -67,7 +66,9 @@ class GuardrailEnforcer:
 
         # ── Guardrail 1: Rate limit ──
         rate_passed, price, clamped = self._check_rate_limit(
-            price, product, g,
+            price,
+            product,
+            g,
         )
         results.append(rate_passed)
         if clamped:
@@ -77,7 +78,10 @@ class GuardrailEnforcer:
 
         # ── Guardrail 2: Velocity cap ──
         velocity_result, price, clamped = self._check_velocity_cap(
-            price, raw_change_pct, product, g,
+            price,
+            raw_change_pct,
+            product,
+            g,
         )
         results.append(velocity_result)
         if clamped:
@@ -85,7 +89,9 @@ class GuardrailEnforcer:
 
         # ── Guardrail 3: Max single change ──
         max_change_result, price, clamped = self._check_max_change(
-            price, product, g,
+            price,
+            product,
+            g,
         )
         results.append(max_change_result)
         if clamped:
@@ -93,7 +99,10 @@ class GuardrailEnforcer:
 
         # ── Guardrail 4: Margin floor (absolute — checked LAST) ──
         margin_result, price, clamped = self._check_margin_floor(
-            price, raw_price, product, g,
+            price,
+            raw_price,
+            product,
+            g,
         )
         if margin_result is not None:
             results.append(margin_result)
@@ -155,15 +164,10 @@ class GuardrailEnforcer:
         if product.recent_changes and product.current_price > 0:
             now = datetime.now(UTC)
             window_start = now - timedelta(days=config.velocity_window_days)
-            window_changes = [
-                c for c in product.recent_changes
-                if c.changed_at >= window_start
-            ]
+            window_changes = [c for c in product.recent_changes if c.changed_at >= window_start]
             if window_changes:
                 total_prior_change = sum(abs(c.change_pct) for c in window_changes)
-                proposed_change = abs(
-                    (price - product.current_price) / product.current_price
-                )
+                proposed_change = abs((price - product.current_price) / product.current_price)
 
                 if total_prior_change + proposed_change > config.velocity_cap_pct:
                     remaining = max(0.0, config.velocity_cap_pct - total_prior_change)
@@ -184,21 +188,30 @@ class GuardrailEnforcer:
 
                     clamped_pct = (
                         f"{((price - product.current_price) / product.current_price):+.2%}"
-                        if product.current_price > 0 else "+0.00%"
+                        if product.current_price > 0
+                        else "+0.00%"
                     )
 
-                    return GuardrailResult(
-                        guardrail_type=GuardrailType.VELOCITY_CAP,
-                        passed=False,
-                        original_value=original_pct,
-                        clamped_value=clamped_pct,
-                        reason=f"Velocity cap: {config.velocity_cap_pct:.0%} in {config.velocity_window_days}d",
-                    ), price, True
+                    return (
+                        GuardrailResult(
+                            guardrail_type=GuardrailType.VELOCITY_CAP,
+                            passed=False,
+                            original_value=original_pct,
+                            clamped_value=clamped_pct,
+                            reason=f"Velocity cap: {config.velocity_cap_pct:.0%} in {config.velocity_window_days}d",
+                        ),
+                        price,
+                        True,
+                    )
 
-        return GuardrailResult(
-            guardrail_type=GuardrailType.VELOCITY_CAP,
-            passed=True,
-        ), price, False
+        return (
+            GuardrailResult(
+                guardrail_type=GuardrailType.VELOCITY_CAP,
+                passed=True,
+            ),
+            price,
+            False,
+        )
 
     @staticmethod
     def _check_max_change(
@@ -213,20 +226,26 @@ class GuardrailEnforcer:
         either direction.
         """
         if product.current_price <= 0:
-            return GuardrailResult(
-                guardrail_type=GuardrailType.MAX_CHANGE,
-                passed=True,
-            ), price, False
+            return (
+                GuardrailResult(
+                    guardrail_type=GuardrailType.MAX_CHANGE,
+                    passed=True,
+                ),
+                price,
+                False,
+            )
 
-        actual_change_pct = abs(
-            (price - product.current_price) / product.current_price
-        )
+        actual_change_pct = abs((price - product.current_price) / product.current_price)
 
         if actual_change_pct <= config.max_change_pct:
-            return GuardrailResult(
-                guardrail_type=GuardrailType.MAX_CHANGE,
-                passed=True,
-            ), price, False
+            return (
+                GuardrailResult(
+                    guardrail_type=GuardrailType.MAX_CHANGE,
+                    passed=True,
+                ),
+                price,
+                False,
+            )
 
         # Clamp
         if price > product.current_price:
@@ -234,13 +253,17 @@ class GuardrailEnforcer:
         else:
             clamped_price = product.current_price * (1.0 - config.max_change_pct)
 
-        return GuardrailResult(
-            guardrail_type=GuardrailType.MAX_CHANGE,
-            passed=False,
-            original_value=f"{actual_change_pct:.2%}",
-            clamped_value=f"{config.max_change_pct:.2%}",
-            reason=f"Max single change: {config.max_change_pct:.0%}",
-        ), clamped_price, True
+        return (
+            GuardrailResult(
+                guardrail_type=GuardrailType.MAX_CHANGE,
+                passed=False,
+                original_value=f"{actual_change_pct:.2%}",
+                clamped_value=f"{config.max_change_pct:.2%}",
+                reason=f"Max single change: {config.max_change_pct:.0%}",
+            ),
+            clamped_price,
+            True,
+        )
 
     @staticmethod
     def _check_margin_floor(
@@ -248,7 +271,7 @@ class GuardrailEnforcer:
         raw_price: float,
         product: ProductContext,
         config: GuardrailConfig,
-    ) -> tuple[Optional[GuardrailResult], float, bool]:
+    ) -> tuple[GuardrailResult | None, float, bool]:
         """
         Guardrail 4: new_price >= cost × (1 + min_margin_pct).
 
@@ -261,18 +284,23 @@ class GuardrailEnforcer:
         margin_floor_price = product.cost * (1.0 + config.min_margin_pct)
 
         if price >= margin_floor_price:
-            return GuardrailResult(
+            return (
+                GuardrailResult(
+                    guardrail_type=GuardrailType.MARGIN_FLOOR,
+                    passed=True,
+                ),
+                price,
+                False,
+            )
+
+        return (
+            GuardrailResult(
                 guardrail_type=GuardrailType.MARGIN_FLOOR,
-                passed=True,
-            ), price, False
-
-        return GuardrailResult(
-            guardrail_type=GuardrailType.MARGIN_FLOOR,
-            passed=False,
-            original_value=f"{raw_price:.2f}",
-            clamped_value=f"{margin_floor_price:.2f}",
-            reason=f"Margin floor: cost ${product.cost:.2f} × {1 + config.min_margin_pct:.2f}",
-        ), margin_floor_price, True
-    
-
-    
+                passed=False,
+                original_value=f"{raw_price:.2f}",
+                clamped_value=f"{margin_floor_price:.2f}",
+                reason=f"Margin floor: cost ${product.cost:.2f} × {1 + config.min_margin_pct:.2f}",
+            ),
+            margin_floor_price,
+            True,
+        )

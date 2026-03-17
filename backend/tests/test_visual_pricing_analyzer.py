@@ -14,7 +14,6 @@ Covers:
 """
 
 import sys
-import json
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,21 +27,21 @@ mock_settings = MagicMock()
 mock_settings.OPENAI_API_KEY = "test"
 mock_settings.GEMINI_API_KEY = "test"
 
+from services.ai_trend_analysis.ai_clients import (
+    ImageAnalysisResult,
+    StreamChunk,
+    ThoughtType,
+)
 from services.ai_trend_analysis.visual_analyzer import (
-    AgentRole,
     AgentMessage,
-    ProductInfo,
+    AgentRole,
     PricingRecommendation,
+    ProductInfo,
     VisualPricingAnalyzer,
 )
-from services.ai_trend_analysis.ai_clients import (
-    ThoughtType,
-    StreamChunk,
-    ImageAnalysisResult,
-)
-
 
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_product(**overrides):
     defaults = dict(
@@ -73,6 +72,7 @@ def _make_competitor_data(**overrides):
 # Enums
 # ==================================================================
 
+
 class TestAgentRole:
     def test_scout(self):
         assert AgentRole.SCOUT == "scout"
@@ -90,6 +90,7 @@ class TestAgentRole:
 # ==================================================================
 # Dataclasses
 # ==================================================================
+
 
 class TestAgentMessage:
     def test_basic(self):
@@ -186,6 +187,7 @@ class TestPricingRecommendation:
 # __init__
 # ==================================================================
 
+
 class TestInit:
     def test_model_set(self):
         analyzer = VisualPricingAnalyzer()
@@ -195,6 +197,7 @@ class TestInit:
 # ==================================================================
 # _parse_recommendation
 # ==================================================================
+
 
 class TestParseRecommendation:
     def setup_method(self):
@@ -243,7 +246,7 @@ class TestParseRecommendation:
         assert result.price_change_percent == 0
 
     def test_invalid_json_returns_fallback(self):
-        response = '```json\n{broken json\n```'
+        response = "```json\n{broken json\n```"
         result = self.analyzer._parse_recommendation(response, self.product)
         assert result.recommended_price == self.product.price
         assert result.confidence == 0.3
@@ -260,6 +263,7 @@ class TestParseRecommendation:
 # ==================================================================
 # run_scout_agent
 # ==================================================================
+
 
 class TestRunScoutAgent:
     @pytest.mark.asyncio
@@ -279,9 +283,7 @@ class TestRunScoutAgent:
             confidence=0.9,
         )
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.analyze_image_stream = mock_image_stream
             mock_ai.analyze_image = AsyncMock(return_value=mock_structured)
 
@@ -302,9 +304,7 @@ class TestRunScoutAgent:
         async def mock_image_stream(*args, **kwargs):
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.analyze_image_stream = mock_image_stream
             mock_ai.analyze_image = AsyncMock(return_value=ImageAnalysisResult())
 
@@ -319,6 +319,7 @@ class TestRunScoutAgent:
 # run_analyst_agent
 # ==================================================================
 
+
 class TestRunAnalystAgent:
     @pytest.mark.asyncio
     async def test_yields_messages_with_analysis(self):
@@ -330,9 +331,7 @@ class TestRunAnalystAgent:
             yield StreamChunk(text="Comparing products", thought_type=ThoughtType.ANALYSIS)
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -355,9 +354,7 @@ class TestRunAnalystAgent:
         async def mock_stream(*args, **kwargs):
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -377,9 +374,7 @@ class TestRunAnalystAgent:
         async def mock_stream(*args, **kwargs):
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -399,9 +394,7 @@ class TestRunAnalystAgent:
         async def mock_stream(*args, **kwargs):
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -420,9 +413,7 @@ class TestRunAnalystAgent:
         async def mock_stream(*args, **kwargs):
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -441,9 +432,7 @@ class TestRunAnalystAgent:
         async def mock_stream(*args, **kwargs):
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -457,6 +446,7 @@ class TestRunAnalystAgent:
 # ==================================================================
 # run_strategist_agent
 # ==================================================================
+
 
 class TestRunStrategistAgent:
     @pytest.mark.asyncio
@@ -473,9 +463,7 @@ class TestRunStrategistAgent:
             )
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -498,9 +486,7 @@ class TestRunStrategistAgent:
             yield StreamChunk(text="No JSON here", thought_type=ThoughtType.RECOMMENDATION)
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.visual_analyzer.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.visual_analyzer.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -518,6 +504,7 @@ class TestRunStrategistAgent:
 # analyze (full orchestration)
 # ==================================================================
 
+
 class TestAnalyze:
     @pytest.mark.asyncio
     async def test_runs_all_three_agents(self):
@@ -526,10 +513,14 @@ class TestAnalyze:
         # Mock scout
         async def mock_scout(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.SCOUT, ThoughtType.OBSERVATION, "Scanning...",
+                AgentRole.SCOUT,
+                ThoughtType.OBSERVATION,
+                "Scanning...",
             )
             yield AgentMessage(
-                AgentRole.SCOUT, ThoughtType.DECISION, "Done",
+                AgentRole.SCOUT,
+                ThoughtType.DECISION,
+                "Done",
                 is_final=True,
                 metadata={"extracted_data": _make_competitor_data()},
             )
@@ -537,10 +528,14 @@ class TestAnalyze:
         # Mock analyst
         async def mock_analyst(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.ANALYST, ThoughtType.ANALYSIS, "Comparing...",
+                AgentRole.ANALYST,
+                ThoughtType.ANALYSIS,
+                "Comparing...",
             )
             yield AgentMessage(
-                AgentRole.ANALYST, ThoughtType.DECISION, "Done",
+                AgentRole.ANALYST,
+                ThoughtType.DECISION,
+                "Done",
                 is_final=True,
                 metadata={"analysis": {"market_position": "competitive", "price_differential_percent": 2.0}},
             )
@@ -548,10 +543,14 @@ class TestAnalyze:
         # Mock strategist
         async def mock_strategist(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.STRATEGIST, ThoughtType.RECOMMENDATION, "Recommending...",
+                AgentRole.STRATEGIST,
+                ThoughtType.RECOMMENDATION,
+                "Recommending...",
             )
             yield AgentMessage(
-                AgentRole.STRATEGIST, ThoughtType.RECOMMENDATION, "Done",
+                AgentRole.STRATEGIST,
+                ThoughtType.RECOMMENDATION,
+                "Done",
                 is_final=True,
                 metadata={"recommendation": {"recommended_price": 29.99}},
             )
@@ -561,9 +560,7 @@ class TestAnalyze:
         analyzer.run_strategist_agent = mock_strategist
 
         messages = []
-        async for msg in analyzer.analyze(
-            b"img", "png", "Widget Pro", 29.99, "USD", ["Fast"]
-        ):
+        async for msg in analyzer.analyze(b"img", "png", "Widget Pro", 29.99, "USD", ["Fast"]):
             messages.append(msg)
 
         agents = set(m.agent for m in messages)
@@ -577,11 +574,15 @@ class TestAnalyze:
 
         async def mock_scout(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.SCOUT, ThoughtType.OBSERVATION, "Scanning...",
+                AgentRole.SCOUT,
+                ThoughtType.OBSERVATION,
+                "Scanning...",
             )
             # Final message WITHOUT extracted_data
             yield AgentMessage(
-                AgentRole.SCOUT, ThoughtType.DECISION, "Failed",
+                AgentRole.SCOUT,
+                ThoughtType.DECISION,
+                "Failed",
                 is_final=True,
                 metadata={},
             )
@@ -597,9 +598,7 @@ class TestAnalyze:
         analyzer.run_analyst_agent = mock_analyst
 
         messages = []
-        async for msg in analyzer.analyze(
-            b"img", "png", "Widget", 29.99
-        ):
+        async for msg in analyzer.analyze(b"img", "png", "Widget", 29.99):
             messages.append(msg)
 
         # Should have error message and analyst never called
@@ -614,7 +613,9 @@ class TestAnalyze:
 
         async def mock_scout(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.SCOUT, ThoughtType.DECISION, "Done",
+                AgentRole.SCOUT,
+                ThoughtType.DECISION,
+                "Done",
                 is_final=True,
                 metadata={"extracted_data": _make_competitor_data()},
             )
@@ -623,14 +624,18 @@ class TestAnalyze:
             nonlocal captured_product
             captured_product = product
             yield AgentMessage(
-                AgentRole.ANALYST, ThoughtType.DECISION, "Done",
+                AgentRole.ANALYST,
+                ThoughtType.DECISION,
+                "Done",
                 is_final=True,
                 metadata={"analysis": {}},
             )
 
         async def mock_strategist(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.STRATEGIST, ThoughtType.RECOMMENDATION, "Done",
+                AgentRole.STRATEGIST,
+                ThoughtType.RECOMMENDATION,
+                "Done",
                 is_final=True,
                 metadata={"recommendation": {}},
             )
@@ -640,9 +645,7 @@ class TestAnalyze:
         analyzer.run_strategist_agent = mock_strategist
 
         messages = []
-        async for msg in analyzer.analyze(
-            b"img", "png", "MyWidget", 39.99, "EUR", ["Feature1"]
-        ):
+        async for msg in analyzer.analyze(b"img", "png", "MyWidget", 39.99, "EUR", ["Feature1"]):
             messages.append(msg)
 
         assert captured_product is not None
@@ -659,7 +662,9 @@ class TestAnalyze:
 
         async def mock_scout(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.SCOUT, ThoughtType.DECISION, "Done",
+                AgentRole.SCOUT,
+                ThoughtType.DECISION,
+                "Done",
                 is_final=True,
                 metadata={"extracted_data": _make_competitor_data()},
             )
@@ -668,14 +673,18 @@ class TestAnalyze:
             nonlocal captured_product
             captured_product = product
             yield AgentMessage(
-                AgentRole.ANALYST, ThoughtType.DECISION, "Done",
+                AgentRole.ANALYST,
+                ThoughtType.DECISION,
+                "Done",
                 is_final=True,
                 metadata={"analysis": {}},
             )
 
         async def mock_strategist(*args, **kwargs):
             yield AgentMessage(
-                AgentRole.STRATEGIST, ThoughtType.RECOMMENDATION, "Done",
+                AgentRole.STRATEGIST,
+                ThoughtType.RECOMMENDATION,
+                "Done",
                 is_final=True,
                 metadata={"recommendation": {}},
             )
@@ -685,13 +694,7 @@ class TestAnalyze:
         analyzer.run_strategist_agent = mock_strategist
 
         messages = []
-        async for msg in analyzer.analyze(
-            b"img", "png", "Widget", 10.00
-        ):
+        async for msg in analyzer.analyze(b"img", "png", "Widget", 10.00):
             messages.append(msg)
 
         assert captured_product.features == []
-
-
-
-        

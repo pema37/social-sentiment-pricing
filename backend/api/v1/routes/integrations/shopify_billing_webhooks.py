@@ -27,13 +27,12 @@ Verification:
   HMAC-SHA256 with SHOPIFY_CLIENT_SECRET, must return 200 within 5s.
 """
 
-import hmac as hmac_lib
-import hashlib
 import base64
+import hashlib
+import hmac as hmac_lib
 import json
 import logging
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +40,7 @@ from sqlmodel import select
 
 from core.config import settings
 from db.session import get_session
-from models.integration import Integration, EcommercePlatform, IntegrationStatus
+from models.integration import EcommercePlatform, Integration, IntegrationStatus
 from models.subscription import Subscription
 
 logger = logging.getLogger(__name__)
@@ -53,17 +52,16 @@ router = APIRouter(prefix="/shopify/billing", tags=["shopify-billing-webhooks"])
 # HMAC Verification (same pattern as shopify_gdpr.py)
 # =============================================================================
 
+
 def _verify_shopify_hmac(payload: bytes, hmac_header: str, secret: str) -> bool:
     """Verify Shopify webhook HMAC-SHA256 signature."""
     if not hmac_header or not secret:
         return False
-    computed = base64.b64encode(
-        hmac_lib.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
-    ).decode("utf-8")
+    computed = base64.b64encode(hmac_lib.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()).decode("utf-8")
     return hmac_lib.compare_digest(computed, hmac_header)
 
 
-async def _verify_webhook(request: Request, hmac_sha256: Optional[str]) -> bytes:
+async def _verify_webhook(request: Request, hmac_sha256: str | None) -> bytes:
     """Read body and verify HMAC. Raises 401 on failure."""
     body = await request.body()
 
@@ -76,18 +74,14 @@ async def _verify_webhook(request: Request, hmac_sha256: Optional[str]) -> bytes
         )
 
     if not hmac_sha256:
-        logger.warning(
-            f"Missing HMAC header on billing webhook from {request.client.host}"
-        )
+        logger.warning(f"Missing HMAC header on billing webhook from {request.client.host}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing HMAC signature",
         )
 
     if not _verify_shopify_hmac(body, hmac_sha256, secret):
-        logger.warning(
-            f"Invalid HMAC on billing webhook from {request.client.host}"
-        )
+        logger.warning(f"Invalid HMAC on billing webhook from {request.client.host}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid HMAC signature",
@@ -100,9 +94,8 @@ async def _verify_webhook(request: Request, hmac_sha256: Optional[str]) -> bytes
 # HELPERS
 # =============================================================================
 
-async def _get_integration_by_shop(
-    db: AsyncSession, shop_domain: str
-) -> Optional[Integration]:
+
+async def _get_integration_by_shop(db: AsyncSession, shop_domain: str) -> Integration | None:
     """Find a Shopify integration by shop domain regardless of status."""
     stmt = select(Integration).where(
         Integration.platform == EcommercePlatform.SHOPIFY,
@@ -114,9 +107,7 @@ async def _get_integration_by_shop(
 
 async def _downgrade_subscription(db: AsyncSession, user_id) -> None:
     """Downgrade a user's local subscription to free."""
-    result = await db.execute(
-        select(Subscription).where(Subscription.user_id == user_id)
-    )
+    result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
     subscription = result.scalar_one_or_none()
 
     now = datetime.now(UTC)
@@ -146,16 +137,13 @@ async def _downgrade_subscription(db: AsyncSession, user_id) -> None:
 # WEBHOOK: app/subscriptions_update
 # =============================================================================
 
+
 @router.post("/webhook/subscriptions-update", status_code=200)
 async def handle_subscription_update(
     request: Request,
     db: AsyncSession = Depends(get_session),
-    x_shopify_hmac_sha256: Optional[str] = Header(
-        None, alias="X-Shopify-Hmac-Sha256"
-    ),
-    x_shopify_shop_domain: Optional[str] = Header(
-        None, alias="X-Shopify-Shop-Domain"
-    ),
+    x_shopify_hmac_sha256: str | None = Header(None, alias="X-Shopify-Hmac-Sha256"),
+    x_shopify_shop_domain: str | None = Header(None, alias="X-Shopify-Shop-Domain"),
 ):
     """
     Handle APP_SUBSCRIPTIONS_UPDATE webhook from Shopify.
@@ -198,10 +186,7 @@ async def handle_subscription_update(
     new_status = app_sub.get("status", "").upper()
     plan_name = app_sub.get("name", "")
 
-    logger.info(
-        f"Billing webhook: subscriptions_update "
-        f"shop={shop_domain} status={new_status} plan={plan_name}"
-    )
+    logger.info(f"Billing webhook: subscriptions_update shop={shop_domain} status={new_status} plan={plan_name}")
 
     if not shop_domain:
         logger.warning("subscriptions_update webhook missing X-Shopify-Shop-Domain")
@@ -209,9 +194,7 @@ async def handle_subscription_update(
 
     integration = await _get_integration_by_shop(db, shop_domain)
     if not integration:
-        logger.warning(
-            f"subscriptions_update: no integration found for {shop_domain}"
-        )
+        logger.warning(f"subscriptions_update: no integration found for {shop_domain}")
         return {"status": "acknowledged", "message": "Integration not found"}
 
     user_id = integration.user_id
@@ -224,9 +207,7 @@ async def handle_subscription_update(
         # but this webhook is the safety net for cases where the verify call
         # was missed (e.g., browser closed before redirect completed).
         if integration.user_id:
-            result = await db.execute(
-                select(Subscription).where(Subscription.user_id == user_id)
-            )
+            result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
             subscription = result.scalar_one_or_none()
 
             if subscription and subscription.status != "active":
@@ -243,8 +224,7 @@ async def handle_subscription_update(
         if user_id:
             await _downgrade_subscription(db, user_id)
             logger.info(
-                f"Billing webhook: downgraded user {user_id} to free "
-                f"(Shopify status={new_status}, shop={shop_domain})"
+                f"Billing webhook: downgraded user {user_id} to free (Shopify status={new_status}, shop={shop_domain})"
             )
 
     # ── FROZEN — store's own billing is paused by Shopify ─────────────────
@@ -253,25 +233,18 @@ async def handle_subscription_update(
         # know not to push prices or run syncs for this store.
         # Shopify will send ACTIVE or CANCELLED when resolved.
         if user_id:
-            result = await db.execute(
-                select(Subscription).where(Subscription.user_id == user_id)
-            )
+            result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
             subscription = result.scalar_one_or_none()
             if subscription:
                 subscription.status = "frozen"
                 subscription.updated_at = now
                 db.add(subscription)
-                logger.info(
-                    f"Billing webhook: subscription frozen for user {user_id} "
-                    f"(shop={shop_domain})"
-                )
+                logger.info(f"Billing webhook: subscription frozen for user {user_id} (shop={shop_domain})")
 
     # ── PENDING — charge created, waiting for approval ────────────────────
     # No local action needed — /subscribe already set pending state.
     else:
-        logger.info(
-            f"Billing webhook: unhandled status {new_status} for {shop_domain} — no action"
-        )
+        logger.info(f"Billing webhook: unhandled status {new_status} for {shop_domain} — no action")
 
     await db.commit()
 
@@ -282,16 +255,13 @@ async def handle_subscription_update(
 # WEBHOOK: app/uninstalled
 # =============================================================================
 
+
 @router.post("/webhook/app-uninstalled", status_code=200)
 async def handle_app_uninstalled(
     request: Request,
     db: AsyncSession = Depends(get_session),
-    x_shopify_hmac_sha256: Optional[str] = Header(
-        None, alias="X-Shopify-Hmac-Sha256"
-    ),
-    x_shopify_shop_domain: Optional[str] = Header(
-        None, alias="X-Shopify-Shop-Domain"
-    ),
+    x_shopify_hmac_sha256: str | None = Header(None, alias="X-Shopify-Hmac-Sha256"),
+    x_shopify_shop_domain: str | None = Header(None, alias="X-Shopify-Shop-Domain"),
 ):
     """
     Handle APP_UNINSTALLED webhook from Shopify.
@@ -321,11 +291,7 @@ async def handle_app_uninstalled(
         logger.error("Invalid JSON in app/uninstalled webhook")
         return {"status": "acknowledged", "message": "Invalid payload"}
 
-    shop_domain = (
-        x_shopify_shop_domain
-        or payload.get("myshopify_domain")
-        or payload.get("domain")
-    )
+    shop_domain = x_shopify_shop_domain or payload.get("myshopify_domain") or payload.get("domain")
 
     logger.info(f"Billing webhook: app/uninstalled for shop={shop_domain}")
 
@@ -335,9 +301,7 @@ async def handle_app_uninstalled(
 
     integration = await _get_integration_by_shop(db, shop_domain)
     if not integration:
-        logger.info(
-            f"app/uninstalled: no integration found for {shop_domain} — already removed"
-        )
+        logger.info(f"app/uninstalled: no integration found for {shop_domain} — already removed")
         return {"status": "acknowledged"}
 
     now = datetime.now(UTC)
@@ -360,8 +324,3 @@ async def handle_app_uninstalled(
     await db.commit()
 
     return {"status": "acknowledged"}
-
-
-
-
-    

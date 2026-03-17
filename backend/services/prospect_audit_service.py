@@ -15,8 +15,7 @@ This is the top-of-funnel lead magnet.
 """
 
 import re
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, List, Tuple
+from decimal import ROUND_HALF_UP, Decimal
 from urllib.parse import urlparse
 
 import httpx
@@ -24,9 +23,9 @@ import httpx
 from core.logging import get_logger
 from schemas.prospect_audit import (
     ProspectAuditRequest,
-    ProspectProductRow,
-    ProspectProductResult,
     ProspectAuditTeaser,
+    ProspectProductResult,
+    ProspectProductRow,
 )
 
 logger = get_logger(__name__)
@@ -47,14 +46,12 @@ class ProspectAuditService:
     the store's public product data.
     """
 
-    async def generate_teaser(
-        self, request: ProspectAuditRequest
-    ) -> ProspectAuditTeaser:
+    async def generate_teaser(self, request: ProspectAuditRequest) -> ProspectAuditTeaser:
         """
         Generate teaser audit from either Shopify URL or pasted products.
         """
-        products: List[ProspectProductRow] = []
-        store_name: Optional[str] = None
+        products: list[ProspectProductRow] = []
+        store_name: str | None = None
 
         if request.store_url:
             store_name, products = await self._fetch_shopify_products(request.store_url)
@@ -78,9 +75,7 @@ class ProspectAuditService:
 
         # Sort by gap magnitude (worst offenders first)
         results_with_data = [r for r in results if r.gap_type != "no_data"]
-        results_with_data.sort(
-            key=lambda r: abs(float(r.gap_percent or 0)), reverse=True
-        )
+        results_with_data.sort(key=lambda r: abs(float(r.gap_percent or 0)), reverse=True)
 
         overpriced = [r for r in results if r.gap_type == "overpriced"]
         underpriced = [r for r in results if r.gap_type == "underpriced"]
@@ -92,8 +87,7 @@ class ProspectAuditService:
         avg_gap = None
         if results_with_data:
             avg_gap = (
-                sum(abs(r.gap_percent) for r in results_with_data)
-                / Decimal(str(len(results_with_data)))
+                sum(abs(r.gap_percent) for r in results_with_data) / Decimal(str(len(results_with_data)))
             ).quantize(Decimal("0.1"))
 
         # Top 5 for teaser, rest hidden behind email gate
@@ -112,25 +106,19 @@ class ProspectAuditService:
             remaining_products_count=remaining,
         )
 
-    def get_all_results(
-        self, products: List[ProspectProductRow]
-    ) -> List[ProspectProductResult]:
+    def get_all_results(self, products: list[ProspectProductRow]) -> list[ProspectProductResult]:
         """
         Get full results for all products (used for gated PDF).
         """
         results = self._analyze_products(products)
-        results.sort(
-            key=lambda r: abs(float(r.gap_percent or 0)), reverse=True
-        )
+        results.sort(key=lambda r: abs(float(r.gap_percent or 0)), reverse=True)
         return results
 
     # ══════════════════════════════════════════════════════════
     # SHOPIFY SCRAPER
     # ══════════════════════════════════════════════════════════
 
-    async def _fetch_shopify_products(
-        self, store_url: str
-    ) -> Tuple[Optional[str], List[ProspectProductRow]]:
+    async def _fetch_shopify_products(self, store_url: str) -> tuple[str | None, list[ProspectProductRow]]:
         """
         Fetch products from a Shopify store's public /products.json endpoint.
 
@@ -170,7 +158,7 @@ class ProspectAuditService:
             return store_name, []
 
         shopify_products = data.get("products", [])
-        rows: List[ProspectProductRow] = []
+        rows: list[ProspectProductRow] = []
 
         for p in shopify_products:
             title = p.get("title", "Unknown")
@@ -192,11 +180,13 @@ class ProspectAuditService:
             if price <= 0:
                 continue
 
-            rows.append(ProspectProductRow(
-                name=title[:500],
-                price=price,
-                sku=sku,
-            ))
+            rows.append(
+                ProspectProductRow(
+                    name=title[:500],
+                    price=price,
+                    sku=sku,
+                )
+            )
 
         logger.info(f"Fetched {len(rows)} products from {hostname}")
         return store_name, rows
@@ -205,9 +195,7 @@ class ProspectAuditService:
     # ANALYSIS ENGINE
     # ══════════════════════════════════════════════════════════
 
-    def _analyze_products(
-        self, products: List[ProspectProductRow]
-    ) -> List[ProspectProductResult]:
+    def _analyze_products(self, products: list[ProspectProductRow]) -> list[ProspectProductResult]:
         """
         Analyze products using internal catalog benchmarking.
 
@@ -236,7 +224,7 @@ class ProspectAuditService:
                 cat_avgs[cat] = sum(cat_prices) / Decimal(str(len(cat_prices)))
 
         # Build results
-        results: List[ProspectProductResult] = []
+        results: list[ProspectProductResult] = []
         product_to_cat = {}
         for cat, cat_products in categories.items():
             for p in cat_products:
@@ -244,12 +232,14 @@ class ProspectAuditService:
 
         for product in products:
             if product.price <= 0:
-                results.append(ProspectProductResult(
-                    name=product.name,
-                    sku=product.sku,
-                    your_price=product.price,
-                    gap_type="no_data",
-                ))
+                results.append(
+                    ProspectProductResult(
+                        name=product.name,
+                        sku=product.sku,
+                        your_price=product.price,
+                        gap_type="no_data",
+                    )
+                )
                 continue
 
             cat = product_to_cat.get(id(product), "other")
@@ -263,9 +253,7 @@ class ProspectAuditService:
             # Calculate gap
             if benchmark > 0:
                 gap_amount = product.price - benchmark
-                gap_percent = (gap_amount / benchmark * HUNDRED).quantize(
-                    Decimal("0.1"), rounding=ROUND_HALF_UP
-                )
+                gap_percent = (gap_amount / benchmark * HUNDRED).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
                 abs_ratio = abs(gap_amount) / benchmark
 
                 if abs_ratio <= ALIGNMENT_THRESHOLD:
@@ -278,41 +266,63 @@ class ProspectAuditService:
                 gap_percent = ZERO
                 gap_type = "no_data"
 
-            results.append(ProspectProductResult(
-                name=product.name,
-                sku=product.sku,
-                your_price=product.price,
-                market_avg_price=benchmark.quantize(Decimal("0.01")),
-                gap_percent=gap_percent,
-                gap_type=gap_type,
-                competitor_count=cat_size - 1 if cat_size > 1 else 0,
-            ))
+            results.append(
+                ProspectProductResult(
+                    name=product.name,
+                    sku=product.sku,
+                    your_price=product.price,
+                    market_avg_price=benchmark.quantize(Decimal("0.01")),
+                    gap_percent=gap_percent,
+                    gap_type=gap_type,
+                    competitor_count=cat_size - 1 if cat_size > 1 else 0,
+                )
+            )
 
         return results
 
-    def _categorize_products(
-        self, products: List[ProspectProductRow]
-    ) -> dict[str, List[ProspectProductRow]]:
+    def _categorize_products(self, products: list[ProspectProductRow]) -> dict[str, list[ProspectProductRow]]:
         """
         Simple keyword-based categorization.
         Groups products that share significant words in their names.
         """
         # Common stop words to ignore
         stop_words = {
-            "the", "a", "an", "and", "or", "for", "in", "on", "with",
-            "to", "of", "by", "at", "is", "it", "as", "be", "set",
-            "size", "color", "new", "free", "sale", "pack", "box",
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "for",
+            "in",
+            "on",
+            "with",
+            "to",
+            "of",
+            "by",
+            "at",
+            "is",
+            "it",
+            "as",
+            "be",
+            "set",
+            "size",
+            "color",
+            "new",
+            "free",
+            "sale",
+            "pack",
+            "box",
         }
 
         # Extract significant words per product
         def extract_keywords(name: str) -> set:
-            words = re.findall(r'[a-z]+', name.lower())
+            words = re.findall(r"[a-z]+", name.lower())
             return {w for w in words if len(w) > 2 and w not in stop_words}
 
         product_keywords = [(p, extract_keywords(p.name)) for p in products]
 
         # Simple approach: group by the most common keyword in each product name
-        categories: dict[str, List[ProspectProductRow]] = {}
+        categories: dict[str, list[ProspectProductRow]] = {}
 
         for product, keywords in product_keywords:
             if not keywords:
@@ -326,9 +336,7 @@ class ProspectAuditService:
 
         return categories
 
-    def _estimate_monthly_impact(
-        self, results: List[ProspectProductResult]
-    ) -> Decimal:
+    def _estimate_monthly_impact(self, results: list[ProspectProductResult]) -> Decimal:
         """
         Estimate monthly revenue impact from pricing gaps.
         Conservative: only counts overpriced products.
@@ -340,16 +348,8 @@ class ProspectAuditService:
                 continue
 
             # lost_units_per_day = daily_units × elasticity × gap%
-            lost_daily = (
-                Decimal(str(DEFAULT_DAILY_UNITS))
-                * ELASTICITY_FACTOR
-                * abs(r.gap_percent)
-            )
+            lost_daily = Decimal(str(DEFAULT_DAILY_UNITS)) * ELASTICITY_FACTOR * abs(r.gap_percent)
             daily_impact = lost_daily * r.your_price
             total += daily_impact * Decimal("30")  # monthly
 
         return total
-
-
-
-        

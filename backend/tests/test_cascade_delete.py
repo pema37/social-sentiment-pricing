@@ -5,15 +5,15 @@ cascade_delete_product — async cascade deletion with dry_run support.
 get_deletion_preview — convenience wrapper.
 """
 
+# ── Import isolation ──────────────────────────────────────────────
+import os as _os
 import sys
 import types
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-# ── Import isolation ──────────────────────────────────────────────
-import os as _os
 _backend_dir = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 
 _MOCKED = [
@@ -101,22 +101,27 @@ for mod_name, (cls_name, table_name) in _model_names.items():
 # Provide real enums on models.alert so Pydantic doesn't choke
 from enum import Enum
 
+
 class _AlertType(str, Enum):
     PRICE_CHANGE = "price_change"
     SENTIMENT_SHIFT = "sentiment_shift"
+
 
 class _AlertSeverity(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
+
 class _AlertChannel(str, Enum):
     EMAIL = "email"
     SLACK = "slack"
 
+
 class _AlertStatus(str, Enum):
     ACTIVE = "active"
     RESOLVED = "resolved"
+
 
 for _key, _attr in [
     ("models.alert", "AlertType"),
@@ -140,9 +145,9 @@ sys.modules["models.user"].User = MagicMock()
 sys.modules["models.product"].Product = MagicMock()
 
 from services.products.cascade_delete import (
+    PRODUCT_DEPENDENCIES,
     cascade_delete_product,
     get_deletion_preview,
-    PRODUCT_DEPENDENCIES,
 )
 
 # Restore
@@ -169,6 +174,7 @@ SVC_MOD = "services.products.cascade_delete"
 
 # ── Helpers ───────────────────────────────────────────────────────
 
+
 def _make_session(rowcount=0, scalar_value=0):
     """Create a mock AsyncSession."""
     session = AsyncMock()
@@ -188,7 +194,6 @@ def _make_session(rowcount=0, scalar_value=0):
 # PRODUCT_DEPENDENCIES constant
 # ──────────────────────────────────────────────
 class TestProductDependencies:
-
     def test_is_list(self):
         assert isinstance(PRODUCT_DEPENDENCIES, list)
 
@@ -213,7 +218,6 @@ class TestProductDependencies:
 # cascade_delete_product — delete mode
 # ──────────────────────────────────────────────
 class TestCascadeDeleteProduct:
-
     @pytest.mark.asyncio
     async def test_returns_dict(self):
         session = _make_session(rowcount=0)
@@ -260,7 +264,6 @@ class TestCascadeDeleteProduct:
 # cascade_delete_product — dry_run mode
 # ──────────────────────────────────────────────
 class TestCascadeDeleteDryRun:
-
     @pytest.mark.asyncio
     async def test_dry_run_returns_dict(self):
         session = _make_session(scalar_value=10)
@@ -296,7 +299,6 @@ class TestCascadeDeleteDryRun:
 # get_deletion_preview
 # ──────────────────────────────────────────────
 class TestGetDeletionPreview:
-
     @pytest.mark.asyncio
     async def test_returns_dict_structure(self):
         session = _make_session(scalar_value=5)
@@ -338,6 +340,3 @@ class TestGetDeletionPreview:
 
             mock_fn.assert_called_once_with(session, pid, dry_run=True)
             assert result["total_records"] == 5
-
-
-            

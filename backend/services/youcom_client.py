@@ -14,7 +14,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -39,6 +39,7 @@ RETRY_BACKOFF_BASE = 1.5
 
 class Freshness(str, Enum):
     """You.com freshness filter options."""
+
     DAY = "day"
     WEEK = "week"
     MONTH = "month"
@@ -49,18 +50,20 @@ class Freshness(str, Enum):
 # Data models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class WebResult:
     """Single web search result from You.com."""
+
     url: str
     title: str
     description: str
     snippets: list[str] = field(default_factory=list)
-    page_age: Optional[str] = None
+    page_age: str | None = None
     authors: list[str] = field(default_factory=list)
-    thumbnail_url: Optional[str] = None
-    favicon_url: Optional[str] = None
-    contents_markdown: Optional[str] = None
+    thumbnail_url: str | None = None
+    favicon_url: str | None = None
+    contents_markdown: str | None = None
 
     @classmethod
     def from_api(cls, data: dict) -> "WebResult":
@@ -81,11 +84,12 @@ class WebResult:
 @dataclass
 class NewsResult:
     """Single news result from You.com."""
+
     url: str
     title: str
     description: str
-    page_age: Optional[str] = None
-    thumbnail_url: Optional[str] = None
+    page_age: str | None = None
+    thumbnail_url: str | None = None
 
     @classmethod
     def from_api(cls, data: dict) -> "NewsResult":
@@ -101,11 +105,12 @@ class NewsResult:
 @dataclass
 class SearchResponse:
     """Combined search response with web and news results."""
+
     query: str
     web_results: list[WebResult] = field(default_factory=list)
     news_results: list[NewsResult] = field(default_factory=list)
     latency_ms: float = 0.0
-    request_id: Optional[str] = None
+    request_id: str | None = None
     cached: bool = False
 
     @property
@@ -120,11 +125,7 @@ class SearchResponse:
             parts.append("### Web Sources")
             for i, r in enumerate(self.web_results, 1):
                 snippets_text = " ".join(r.snippets[:3])
-                parts.append(
-                    f"{i}. **{r.title}**\n"
-                    f"   URL: {r.url}\n"
-                    f"   {snippets_text}\n"
-                )
+                parts.append(f"{i}. **{r.title}**\n   URL: {r.url}\n   {snippets_text}\n")
 
         if self.news_results:
             parts.append("\n### Recent News")
@@ -137,8 +138,7 @@ class SearchResponse:
                 )
 
         parts.append(
-            f"\n*{self.total_results} sources retrieved in {self.latency_ms:.0f}ms"
-            f"{' (cached)' if self.cached else ''}*"
+            f"\n*{self.total_results} sources retrieved in {self.latency_ms:.0f}ms{' (cached)' if self.cached else ''}*"
         )
         return "\n".join(parts)
 
@@ -146,6 +146,7 @@ class SearchResponse:
 # ---------------------------------------------------------------------------
 # In-memory TTL cache
 # ---------------------------------------------------------------------------
+
 
 class _TTLCache:
     """Simple TTL cache to avoid hammering You.com for repeated queries."""
@@ -158,7 +159,7 @@ class _TTLCache:
         raw = f"{query}|{json.dumps(kwargs, sort_keys=True)}"
         return hashlib.md5(raw.encode()).hexdigest()
 
-    def get(self, query: str, **kwargs) -> Optional[Any]:
+    def get(self, query: str, **kwargs) -> Any | None:
         key = self._key(query, **kwargs)
         if key in self._store:
             ts, value = self._store[key]
@@ -178,6 +179,7 @@ class _TTLCache:
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
+
 
 class YouComClient:
     """
@@ -201,7 +203,7 @@ class YouComClient:
         self._timeout = timeout
         self._max_retries = max_retries
         self._cache = _TTLCache(ttl=cache_ttl)
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
         self._request_count = 0
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -220,12 +222,10 @@ class YouComClient:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
-    async def _request_with_retry(
-        self, url: str, params: dict
-    ) -> dict:
+    async def _request_with_retry(self, url: str, params: dict) -> dict:
         """Execute HTTP GET with exponential backoff retry."""
         client = await self._get_client()
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -234,9 +234,7 @@ class YouComClient:
 
                 if resp.status_code == 429:
                     wait = RETRY_BACKOFF_BASE ** (attempt + 1)
-                    logger.warning(
-                        "You.com rate limited (429). Retrying in %.1fs", wait
-                    )
+                    logger.warning("You.com rate limited (429). Retrying in %.1fs", wait)
                     await asyncio.sleep(wait)
                     continue
 
@@ -267,11 +265,9 @@ class YouComClient:
                 logger.warning("You.com request error: %s", exc)
 
             if attempt < self._max_retries:
-                await asyncio.sleep(RETRY_BACKOFF_BASE ** attempt)
+                await asyncio.sleep(RETRY_BACKOFF_BASE**attempt)
 
-        raise ConnectionError(
-            f"You.com API failed after {self._max_retries + 1} attempts: {last_exc}"
-        )
+        raise ConnectionError(f"You.com API failed after {self._max_retries + 1} attempts: {last_exc}")
 
     # ----- Public API -----
 
@@ -279,9 +275,9 @@ class YouComClient:
         self,
         query: str,
         count: int = DEFAULT_SEARCH_COUNT,
-        freshness: Optional[Freshness] = None,
-        country: Optional[str] = None,
-        livecrawl: Optional[str] = None,
+        freshness: Freshness | None = None,
+        country: str | None = None,
+        livecrawl: str | None = None,
     ) -> SearchResponse:
         """
         Search You.com for web and news results.
@@ -323,14 +319,8 @@ class YouComClient:
 
         response = SearchResponse(
             query=query,
-            web_results=[
-                WebResult.from_api(r)
-                for r in results_data.get("web", [])
-            ],
-            news_results=[
-                NewsResult.from_api(r)
-                for r in results_data.get("news", [])
-            ],
+            web_results=[WebResult.from_api(r) for r in results_data.get("web", [])],
+            news_results=[NewsResult.from_api(r) for r in results_data.get("news", [])],
             latency_ms=elapsed_ms,
             request_id=metadata.get("request_uuid"),
         )
@@ -363,8 +353,8 @@ class YouComClient:
     async def search_competitor_prices(
         self,
         product_name: str,
-        category: Optional[str] = None,
-        brand: Optional[str] = None,
+        category: str | None = None,
+        brand: str | None = None,
     ) -> SearchResponse:
         """
         Specialized search for competitor pricing data.
@@ -389,7 +379,7 @@ class YouComClient:
     async def search_market_sentiment(
         self,
         product_name: str,
-        brand: Optional[str] = None,
+        brand: str | None = None,
     ) -> SearchResponse:
         """
         Search for social sentiment and reviews about a product.
@@ -422,7 +412,3 @@ class YouComClient:
     @property
     def request_count(self) -> int:
         return self._request_count
-    
-
-
-    

@@ -19,9 +19,9 @@ Run: pytest backend/tests/unit/test_calibrator.py -v
 """
 
 import sys
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
+import pytest
 
 # ──────────────────────────────────────────────────────────
 # sys.modules isolation
@@ -29,15 +29,18 @@ from datetime import datetime, UTC
 
 _saved_modules = {}
 
+
 def _save_modules():
     global _saved_modules
     _saved_modules = dict(sys.modules)
+
 
 def _restore_modules():
     current = set(sys.modules.keys())
     saved = set(_saved_modules.keys())
     for mod in current - saved:
         del sys.modules[mod]
+
 
 @pytest.fixture(autouse=True)
 def isolate_modules():
@@ -50,46 +53,55 @@ def isolate_modules():
 # Helpers
 # ──────────────────────────────────────────────────────────
 
+
 def _make_records(n=20, base_confidence=0.5, base_lift=3.0, category="all"):
     """Generate n CalibrationRecords spread across confidence range."""
     from services.scoring.learning.calibrator import CalibrationRecord
+
     records = []
     for i in range(n):
-        conf = (i / max(n - 1, 1))  # 0.0 to 1.0
+        conf = i / max(n - 1, 1)  # 0.0 to 1.0
         # Revenue correlates with confidence (well-calibrated scenario)
         lift = base_lift * conf + (i % 3 - 1) * 0.5  # Some noise
         action = "accepted" if i % 4 != 3 else "rejected"
-        records.append(CalibrationRecord(
-            confidence_score=round(conf, 4),
-            revenue_delta_pct=lift if action != "rejected" else -1.0,
-            action=action,
-            category=category,
-        ))
+        records.append(
+            CalibrationRecord(
+                confidence_score=round(conf, 4),
+                revenue_delta_pct=lift if action != "rejected" else -1.0,
+                action=action,
+                category=category,
+            )
+        )
     return records
 
 
 def _make_overconfident_records(n=30):
     """High confidence but poor outcomes → overconfident."""
     from services.scoring.learning.calibrator import CalibrationRecord
+
     records = []
     for i in range(n):
         conf = 0.7 + (i / n) * 0.3  # All in 0.7-1.0 range
         # Negative outcomes despite high confidence
         lift = -2.0 + (i % 5) * 0.5
-        records.append(CalibrationRecord(
-            confidence_score=round(conf, 4),
-            revenue_delta_pct=lift,
-            action="accepted",
-        ))
+        records.append(
+            CalibrationRecord(
+                confidence_score=round(conf, 4),
+                revenue_delta_pct=lift,
+                action="accepted",
+            )
+        )
     # Add some low-confidence records with good outcomes
     for i in range(n):
         conf = (i / n) * 0.4  # 0.0-0.4 range
         lift = 5.0 + (i % 3)
-        records.append(CalibrationRecord(
-            confidence_score=round(conf, 4),
-            revenue_delta_pct=lift,
-            action="accepted",
-        ))
+        records.append(
+            CalibrationRecord(
+                confidence_score=round(conf, 4),
+                revenue_delta_pct=lift,
+                action="accepted",
+            )
+        )
     return records
 
 
@@ -97,35 +109,41 @@ def _make_overconfident_records(n=30):
 # TESTS: CalibrationRecord
 # ──────────────────────────────────────────────────────────
 
-class TestCalibrationRecord:
 
+class TestCalibrationRecord:
     def test_was_successful_accepted_positive(self):
         from services.scoring.learning.calibrator import CalibrationRecord
+
         r = CalibrationRecord(confidence_score=0.8, revenue_delta_pct=5.0, action="accepted")
         assert r.was_successful is True
 
     def test_was_successful_modified_positive(self):
         from services.scoring.learning.calibrator import CalibrationRecord
+
         r = CalibrationRecord(confidence_score=0.8, revenue_delta_pct=2.0, action="modified")
         assert r.was_successful is True
 
     def test_not_successful_rejected(self):
         from services.scoring.learning.calibrator import CalibrationRecord
+
         r = CalibrationRecord(confidence_score=0.8, revenue_delta_pct=5.0, action="rejected")
         assert r.was_successful is False
 
     def test_not_successful_negative_revenue(self):
         from services.scoring.learning.calibrator import CalibrationRecord
+
         r = CalibrationRecord(confidence_score=0.8, revenue_delta_pct=-1.0, action="accepted")
         assert r.was_successful is False
 
     def test_not_successful_none_revenue(self):
         from services.scoring.learning.calibrator import CalibrationRecord
+
         r = CalibrationRecord(confidence_score=0.8, revenue_delta_pct=None, action="accepted")
         assert r.was_successful is False
 
     def test_not_successful_zero_revenue(self):
         from services.scoring.learning.calibrator import CalibrationRecord
+
         r = CalibrationRecord(confidence_score=0.8, revenue_delta_pct=0, action="accepted")
         assert r.was_successful is False
 
@@ -134,43 +152,71 @@ class TestCalibrationRecord:
 # TESTS: CalibrationBand
 # ──────────────────────────────────────────────────────────
 
-class TestCalibrationBand:
 
+class TestCalibrationBand:
     def test_band_label(self):
         from services.scoring.learning.calibrator import CalibrationBand
+
         band = CalibrationBand(
-            band_lower=0.6, band_upper=0.8, count=10,
-            positive_count=7, positive_rate=0.7, expected_rate=0.7,
-            gap=0.0, mean_confidence=0.7, mean_revenue_lift=3.0,
+            band_lower=0.6,
+            band_upper=0.8,
+            count=10,
+            positive_count=7,
+            positive_rate=0.7,
+            expected_rate=0.7,
+            gap=0.0,
+            mean_confidence=0.7,
+            mean_revenue_lift=3.0,
         )
         assert band.band_label == "0.6-0.8"
 
     def test_is_overconfident(self):
         from services.scoring.learning.calibrator import CalibrationBand
+
         band = CalibrationBand(
-            band_lower=0.8, band_upper=1.0, count=10,
-            positive_count=5, positive_rate=0.5, expected_rate=0.9,
-            gap=-0.4, mean_confidence=0.9, mean_revenue_lift=1.0,
+            band_lower=0.8,
+            band_upper=1.0,
+            count=10,
+            positive_count=5,
+            positive_rate=0.5,
+            expected_rate=0.9,
+            gap=-0.4,
+            mean_confidence=0.9,
+            mean_revenue_lift=1.0,
         )
         assert band.is_overconfident is True
         assert band.is_underconfident is False
 
     def test_is_underconfident(self):
         from services.scoring.learning.calibrator import CalibrationBand
+
         band = CalibrationBand(
-            band_lower=0.0, band_upper=0.2, count=10,
-            positive_count=8, positive_rate=0.8, expected_rate=0.1,
-            gap=0.7, mean_confidence=0.1, mean_revenue_lift=5.0,
+            band_lower=0.0,
+            band_upper=0.2,
+            count=10,
+            positive_count=8,
+            positive_rate=0.8,
+            expected_rate=0.1,
+            gap=0.7,
+            mean_confidence=0.1,
+            mean_revenue_lift=5.0,
         )
         assert band.is_underconfident is True
         assert band.is_overconfident is False
 
     def test_neither_over_nor_under(self):
         from services.scoring.learning.calibrator import CalibrationBand
+
         band = CalibrationBand(
-            band_lower=0.4, band_upper=0.6, count=10,
-            positive_count=5, positive_rate=0.5, expected_rate=0.5,
-            gap=0.0, mean_confidence=0.5, mean_revenue_lift=2.0,
+            band_lower=0.4,
+            band_upper=0.6,
+            count=10,
+            positive_count=5,
+            positive_rate=0.5,
+            expected_rate=0.5,
+            gap=0.0,
+            mean_confidence=0.5,
+            mean_revenue_lift=2.0,
         )
         assert band.is_overconfident is False
         assert band.is_underconfident is False
@@ -180,16 +226,23 @@ class TestCalibrationBand:
 # TESTS: CalibrationReport
 # ──────────────────────────────────────────────────────────
 
-class TestCalibrationReport:
 
+class TestCalibrationReport:
     def _make_report(self, quality="miscalibrated", **kwargs):
         from services.scoring.learning.calibrator import CalibrationReport
+
         defaults = dict(
-            category="all", analyzed_at=datetime.now(UTC), n_records=50,
-            pearson_r=0.2, bands=[], is_monotonic=True,
-            mean_absolute_gap=0.15, max_gap=0.3,
+            category="all",
+            analyzed_at=datetime.now(UTC),
+            n_records=50,
+            pearson_r=0.2,
+            bands=[],
+            is_monotonic=True,
+            mean_absolute_gap=0.15,
+            max_gap=0.3,
             calibration_quality=quality,
-            overconfident_bands=[], underconfident_bands=[],
+            overconfident_bands=[],
+            underconfident_bands=[],
         )
         defaults.update(kwargs)
         return CalibrationReport(**defaults)
@@ -221,10 +274,11 @@ class TestCalibrationReport:
 # TESTS: CalibrationMap
 # ──────────────────────────────────────────────────────────
 
-class TestCalibrationMap:
 
+class TestCalibrationMap:
     def _make_map(self, points="DEFAULT"):
         from services.scoring.learning.calibrator import CalibrationMap
+
         if points == "DEFAULT":
             points = [(0.0, 0.1), (0.5, 0.5), (1.0, 0.9)]
         return CalibrationMap(
@@ -278,6 +332,7 @@ class TestCalibrationMap:
     def test_to_dict_and_back(self):
         """Serialization roundtrip."""
         from services.scoring.learning.calibrator import CalibrationMap
+
         m = self._make_map()
         d = m.to_dict()
         m2 = CalibrationMap.from_dict(d)
@@ -296,10 +351,11 @@ class TestCalibrationMap:
 # TESTS: Calibrator.measure
 # ──────────────────────────────────────────────────────────
 
-class TestCalibratorMeasure:
 
+class TestCalibratorMeasure:
     def _cal(self):
         from services.scoring.learning.calibrator import Calibrator
+
         return Calibrator()
 
     def test_insufficient_data(self):
@@ -327,36 +383,33 @@ class TestCalibratorMeasure:
     def test_well_calibrated_diagnosis(self):
         """Strong correlation + monotonic + low gap → well_calibrated."""
         from services.scoring.learning.calibrator import Calibrator
+
         # Directly test the diagnosis logic
-        quality = Calibrator._diagnose_quality(
-            pearson_r=0.8, is_monotonic=True, mean_gap=0.05
-        )
+        quality = Calibrator._diagnose_quality(pearson_r=0.8, is_monotonic=True, mean_gap=0.05)
         assert quality == "well_calibrated"
 
     def test_acceptable_diagnosis(self):
         from services.scoring.learning.calibrator import Calibrator
-        quality = Calibrator._diagnose_quality(
-            pearson_r=0.4, is_monotonic=False, mean_gap=0.15
-        )
+
+        quality = Calibrator._diagnose_quality(pearson_r=0.4, is_monotonic=False, mean_gap=0.15)
         assert quality == "acceptable"
 
     def test_miscalibrated_diagnosis(self):
         from services.scoring.learning.calibrator import Calibrator
-        quality = Calibrator._diagnose_quality(
-            pearson_r=0.1, is_monotonic=False, mean_gap=0.25
-        )
+
+        quality = Calibrator._diagnose_quality(pearson_r=0.1, is_monotonic=False, mean_gap=0.25)
         assert quality == "miscalibrated"
 
     def test_insufficient_diagnosis_none_r(self):
         from services.scoring.learning.calibrator import Calibrator
-        quality = Calibrator._diagnose_quality(
-            pearson_r=None, is_monotonic=True, mean_gap=0.0
-        )
+
+        quality = Calibrator._diagnose_quality(pearson_r=None, is_monotonic=True, mean_gap=0.0)
         assert quality == "insufficient_data"
 
     def test_monotonicity_check_increasing(self):
         """Monotonically increasing positive rates → True."""
-        from services.scoring.learning.calibrator import Calibrator, CalibrationBand
+        from services.scoring.learning.calibrator import CalibrationBand, Calibrator
+
         bands = [
             CalibrationBand(0.0, 0.2, 5, 1, 0.2, 0.1, 0.1, 0.1, 1.0),
             CalibrationBand(0.4, 0.6, 5, 3, 0.5, 0.5, 0.0, 0.5, 3.0),
@@ -366,7 +419,8 @@ class TestCalibratorMeasure:
 
     def test_monotonicity_check_violation(self):
         """Non-monotonic → False."""
-        from services.scoring.learning.calibrator import Calibrator, CalibrationBand
+        from services.scoring.learning.calibrator import CalibrationBand, Calibrator
+
         bands = [
             CalibrationBand(0.0, 0.2, 5, 4, 0.8, 0.1, 0.7, 0.1, 5.0),
             CalibrationBand(0.4, 0.6, 5, 1, 0.2, 0.5, -0.3, 0.5, 1.0),
@@ -375,7 +429,8 @@ class TestCalibratorMeasure:
 
     def test_monotonicity_single_band(self):
         """Single band → trivially monotonic."""
-        from services.scoring.learning.calibrator import Calibrator, CalibrationBand
+        from services.scoring.learning.calibrator import CalibrationBand, Calibrator
+
         bands = [CalibrationBand(0.0, 0.2, 5, 3, 0.6, 0.1, 0.5, 0.1, 3.0)]
         assert Calibrator._check_monotonic(bands) is True
 
@@ -403,10 +458,9 @@ class TestCalibratorMeasure:
     def test_band_at_1_0_included(self):
         """Confidence score of exactly 1.0 is included in 0.8-1.0 band."""
         from services.scoring.learning.calibrator import CalibrationRecord
+
         records = _make_records(n=15)
-        records.append(CalibrationRecord(
-            confidence_score=1.0, revenue_delta_pct=10.0, action="accepted"
-        ))
+        records.append(CalibrationRecord(confidence_score=1.0, revenue_delta_pct=10.0, action="accepted"))
         report = self._cal().measure(records)
         last_band = report.bands[-1]
         assert last_band.count > 0
@@ -416,14 +470,16 @@ class TestCalibratorMeasure:
 # TESTS: Calibrator.build_calibration_map
 # ──────────────────────────────────────────────────────────
 
-class TestBuildCalibrationMap:
 
+class TestBuildCalibrationMap:
     def _cal(self):
         from services.scoring.learning.calibrator import Calibrator
+
         return Calibrator()
 
     def test_returns_calibration_map(self):
         from services.scoring.learning.calibrator import CalibrationMap
+
         records = _make_records(n=30)
         cal = self._cal()
         m = cal.build_calibration_map(records)
@@ -440,11 +496,9 @@ class TestBuildCalibrationMap:
     def test_single_band_map(self):
         """All records in one band → single anchor point at that band."""
         from services.scoring.learning.calibrator import CalibrationRecord
+
         # All records in one narrow band
-        records = [
-            CalibrationRecord(confidence_score=0.5, revenue_delta_pct=1.0, action="accepted")
-            for _ in range(20)
-        ]
+        records = [CalibrationRecord(confidence_score=0.5, revenue_delta_pct=1.0, action="accepted") for _ in range(20)]
         cal = self._cal()
         m = cal.build_calibration_map(records)
         # Single band populated → single anchor point
@@ -464,6 +518,7 @@ class TestBuildCalibrationMap:
     def test_pav_merges_violators(self):
         """PAV algorithm merges adjacent violators."""
         from services.scoring.learning.calibrator import Calibrator
+
         points = [(0.1, 0.8), (0.3, 0.2), (0.7, 0.6)]
         result = Calibrator._pav_isotonic(points)
         # After PAV, y-values should be non-decreasing
@@ -472,16 +527,19 @@ class TestBuildCalibrationMap:
 
     def test_pav_single_point(self):
         from services.scoring.learning.calibrator import Calibrator
+
         result = Calibrator._pav_isotonic([(0.5, 0.6)])
         assert result == [(0.5, 0.6)]
 
     def test_pav_empty(self):
         from services.scoring.learning.calibrator import Calibrator
+
         result = Calibrator._pav_isotonic([])
         assert result == []
 
     def test_pav_already_monotonic(self):
         from services.scoring.learning.calibrator import Calibrator
+
         points = [(0.1, 0.2), (0.5, 0.5), (0.9, 0.8)]
         result = Calibrator._pav_isotonic(points)
         assert len(result) == 3
@@ -498,10 +556,11 @@ class TestBuildCalibrationMap:
 # TESTS: Calibrator.calibrate
 # ──────────────────────────────────────────────────────────
 
-class TestCalibratorCalibrate:
 
+class TestCalibratorCalibrate:
     def _cal(self):
         from services.scoring.learning.calibrator import Calibrator
+
         return Calibrator()
 
     def test_no_map_returns_raw(self):
@@ -531,10 +590,11 @@ class TestCalibratorCalibrate:
 # TESTS: Pearson r
 # ──────────────────────────────────────────────────────────
 
-class TestPearsonR:
 
+class TestPearsonR:
     def test_perfect_positive(self):
         from services.scoring.learning.calibrator import CalibrationRecord, Calibrator
+
         records = [
             CalibrationRecord(confidence_score=float(i) / 10, revenue_delta_pct=float(i), action="accepted")
             for i in range(1, 11)
@@ -545,6 +605,7 @@ class TestPearsonR:
 
     def test_perfect_negative(self):
         from services.scoring.learning.calibrator import CalibrationRecord, Calibrator
+
         records = [
             CalibrationRecord(confidence_score=float(i) / 10, revenue_delta_pct=float(10 - i), action="accepted")
             for i in range(1, 11)
@@ -555,15 +616,14 @@ class TestPearsonR:
 
     def test_insufficient_pairs(self):
         from services.scoring.learning.calibrator import CalibrationRecord, Calibrator
-        records = [
-            CalibrationRecord(confidence_score=0.5, revenue_delta_pct=3.0, action="accepted")
-            for _ in range(3)
-        ]
+
+        records = [CalibrationRecord(confidence_score=0.5, revenue_delta_pct=3.0, action="accepted") for _ in range(3)]
         r = Calibrator._compute_pearson_r(records)
         assert r is None
 
     def test_none_revenue_excluded(self):
         from services.scoring.learning.calibrator import CalibrationRecord, Calibrator
+
         records = [
             CalibrationRecord(confidence_score=float(i) / 10, revenue_delta_pct=None, action="accepted")
             for i in range(10)
@@ -573,12 +633,7 @@ class TestPearsonR:
 
     def test_constant_values_returns_zero(self):
         from services.scoring.learning.calibrator import CalibrationRecord, Calibrator
-        records = [
-            CalibrationRecord(confidence_score=0.5, revenue_delta_pct=3.0, action="accepted")
-            for _ in range(10)
-        ]
+
+        records = [CalibrationRecord(confidence_score=0.5, revenue_delta_pct=3.0, action="accepted") for _ in range(10)]
         r = Calibrator._compute_pearson_r(records)
         assert r == 0.0
-
-
-        

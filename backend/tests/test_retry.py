@@ -4,16 +4,15 @@ Tests for services/integration/retry.py
 Retry logic with exponential backoff — pure functions, decorator, executor.
 """
 
-import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
-
-import httpx
-import pytest
+import os
 
 # Force fresh import — other test files replace parent packages with MagicMock
 import sys
-import os
 from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
 
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _pkg, _subdir in [
@@ -21,7 +20,7 @@ for _pkg, _subdir in [
     ("services.integration", "services/integration"),
 ]:
     _existing = sys.modules.get(_pkg)
-    if _existing is None or not hasattr(_existing, '__path__'):
+    if _existing is None or not hasattr(_existing, "__path__"):
         _mod = ModuleType(_pkg)
         _mod.__path__ = [os.path.join(_backend_dir, _subdir)]
         _mod.__package__ = _pkg
@@ -29,12 +28,11 @@ for _pkg, _subdir in [
 sys.modules.pop("services.integration.retry", None)
 
 from services.integration.retry import (
-
-    RetryConfig,
     DEFAULT_RETRY_CONFIG,
+    RetryConfig,
     calculate_backoff_delay,
-    should_retry,
     execute_with_retry,
+    should_retry,
     with_retry,
 )
 
@@ -43,7 +41,6 @@ from services.integration.retry import (
 # RetryConfig
 # ──────────────────────────────────────────────
 class TestRetryConfig:
-
     def test_defaults(self):
         cfg = RetryConfig()
         assert cfg.max_retries == 3
@@ -98,7 +95,6 @@ class TestRetryConfig:
 # DEFAULT_RETRY_CONFIG
 # ──────────────────────────────────────────────
 class TestDefaultRetryConfig:
-
     def test_exists(self):
         assert DEFAULT_RETRY_CONFIG is not None
 
@@ -113,7 +109,6 @@ class TestDefaultRetryConfig:
 # calculate_backoff_delay
 # ──────────────────────────────────────────────
 class TestCalculateBackoffDelay:
-
     def test_first_attempt_base_delay(self):
         cfg = RetryConfig(base_delay=1.0, jitter=0.0)
         delay = calculate_backoff_delay(0, cfg)
@@ -187,7 +182,6 @@ class TestCalculateBackoffDelay:
 # should_retry
 # ──────────────────────────────────────────────
 class TestShouldRetry:
-
     def test_exceeds_max_retries(self):
         cfg = RetryConfig(max_retries=3)
         assert should_retry(None, 500, 3, cfg) is False
@@ -258,7 +252,6 @@ class TestShouldRetry:
 # execute_with_retry
 # ──────────────────────────────────────────────
 class TestExecuteWithRetry:
-
     @pytest.mark.asyncio
     async def test_success_first_try(self):
         func = AsyncMock(return_value="ok")
@@ -407,9 +400,7 @@ class TestExecuteWithRetry:
         cfg = RetryConfig(max_retries=3, jitter=0.0, base_delay=0.01)
 
         # Should not raise — just verify it works
-        result = await execute_with_retry(
-            func, config=cfg, operation_name="test_op"
-        )
+        result = await execute_with_retry(func, config=cfg, operation_name="test_op")
         assert result == "ok"
 
     @pytest.mark.asyncio
@@ -435,7 +426,6 @@ class TestExecuteWithRetry:
 # with_retry decorator
 # ──────────────────────────────────────────────
 class TestWithRetryDecorator:
-
     @pytest.mark.asyncio
     async def test_wraps_function(self):
         @with_retry()
@@ -531,7 +521,6 @@ class TestWithRetryDecorator:
 # Edge cases
 # ──────────────────────────────────────────────
 class TestEdgeCases:
-
     def test_backoff_very_high_attempt(self):
         cfg = RetryConfig(jitter=0.0, max_delay=60.0)
         delay = calculate_backoff_delay(100, cfg)
@@ -585,5 +574,3 @@ class TestEdgeCases:
         func = AsyncMock(return_value={"key": "value"})
         result = await execute_with_retry(func)
         assert result == {"key": "value"}
-
-        

@@ -4,73 +4,73 @@ Place at: backend/tests/test_integration_trend_matching_schemas.py
 Run: pytest backend/tests/test_integration_trend_matching_schemas.py -v
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from schemas.integration import (
-    EcommercePlatform,
-    IntegrationStatus,
-    OAuthInitRequest,
-    OAuthInitResponse,
-    OAuthCallbackRequest,
-    WooCommerceConnectRequest,
-    IntegrationCreate,
-    IntegrationUpdate,
-    IntegrationResponse,
-    IntegrationListResponse,
-    SyncTriggerRequest,
-    SyncStatusResponse,
-    SyncLogResponse,
-    SyncLogsListResponse,
-    ProductLinkCreate,
-    ProductLinkResponse,
-    ProductLinkListResponse,
-    PricePushRequest,
-    PricePushResponse,
-    BulkPricePushRequest,
-    BulkPricePushResponse,
-    WebhookPayload,
-    IntegrationHealthResponse,
-)
-from schemas.trend_analysis import (
-    TrendDirection,
-    TrendCategory,
-    OpportunityType,
-    RiskLevel,
-    ConfidenceLevel,
-    TrendAnalysisRequest,
-    ProductOpportunityRequest,
-    RiskDetectionRequest,
-    InsightGenerationRequest,
-    TrendSignalResponse,
-    TrendPredictionResponse,
-    PricingOpportunityResponse,
-    RiskAlertResponse,
-    AIInsightResponse,
-    TrendAnalysisResponse,
-    RiskDetectionResponse,
-    QuickStatsResponse,
-)
 from schemas.competitor_matching import (
-    CompetitorSearchRequest,
-    ProductMatchRequest,
+    AutoLinkResultSchema,
     BulkMatchRequest,
-    MatchedProductSchema,
+    BulkMatchResponse,
+    BulkMatchResultSchema,
+    CacheClearResponse,
+    CompetitorSearchRequest,
     CompetitorSearchResponse,
+    MatchedProductSchema,
+    MatchingErrorResponse,
+    ProductMatchRequest,
     ProviderInfoSchema,
     ProvidersListResponse,
-    BulkMatchResultSchema,
-    BulkMatchResponse,
-    AutoLinkResultSchema,
-    CacheClearResponse,
-    MatchingErrorResponse,
+)
+from schemas.integration import (
+    BulkPricePushRequest,
+    BulkPricePushResponse,
+    EcommercePlatform,
+    IntegrationCreate,
+    IntegrationHealthResponse,
+    IntegrationListResponse,
+    IntegrationResponse,
+    IntegrationStatus,
+    IntegrationUpdate,
+    OAuthCallbackRequest,
+    OAuthInitRequest,
+    OAuthInitResponse,
+    PricePushRequest,
+    PricePushResponse,
+    ProductLinkCreate,
+    ProductLinkListResponse,
+    ProductLinkResponse,
+    SyncLogResponse,
+    SyncLogsListResponse,
+    SyncStatusResponse,
+    SyncTriggerRequest,
+    WebhookPayload,
+    WooCommerceConnectRequest,
+)
+from schemas.trend_analysis import (
+    AIInsightResponse,
+    ConfidenceLevel,
+    InsightGenerationRequest,
+    OpportunityType,
+    PricingOpportunityResponse,
+    ProductOpportunityRequest,
+    QuickStatsResponse,
+    RiskAlertResponse,
+    RiskDetectionRequest,
+    RiskDetectionResponse,
+    RiskLevel,
+    TrendAnalysisRequest,
+    TrendAnalysisResponse,
+    TrendCategory,
+    TrendDirection,
+    TrendPredictionResponse,
+    TrendSignalResponse,
 )
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 UID = uuid4()
 
 
@@ -78,23 +78,21 @@ UID = uuid4()
 # Integration Enums
 # =====================================================================
 
-class TestIntegrationEnums:
 
+class TestIntegrationEnums:
     def test_platforms(self):
         assert {p.value for p in EcommercePlatform} == {"shopify", "woocommerce"}
 
     def test_statuses(self):
-        assert {s.value for s in IntegrationStatus} == {
-            "active", "error", "paused", "disconnected"
-        }
+        assert {s.value for s in IntegrationStatus} == {"active", "error", "paused", "disconnected"}
 
 
 # =====================================================================
 # OAuth
 # =====================================================================
 
-class TestOAuth:
 
+class TestOAuth:
     def test_init_request(self):
         r = OAuthInitRequest(platform=EcommercePlatform.SHOPIFY, store_url="https://mystore.myshopify.com")
         assert r.store_url == "https://mystore.myshopify.com"
@@ -124,8 +122,8 @@ class TestOAuth:
 # WooCommerce Connect
 # =====================================================================
 
-class TestWooCommerceConnect:
 
+class TestWooCommerceConnect:
     def test_valid(self):
         r = WooCommerceConnectRequest(
             store_url="https://mystore.com",
@@ -164,8 +162,8 @@ class TestWooCommerceConnect:
 # Integration CRUD
 # =====================================================================
 
-class TestIntegrationCRUD:
 
+class TestIntegrationCRUD:
     def test_create(self):
         r = IntegrationCreate(
             platform=EcommercePlatform.WOOCOMMERCE,
@@ -216,8 +214,8 @@ class TestIntegrationCRUD:
 # Sync
 # =====================================================================
 
-class TestSync:
 
+class TestSync:
     def test_trigger_request_default(self):
         r = SyncTriggerRequest()
         assert r.sync_type == "full"
@@ -263,8 +261,8 @@ class TestSync:
 # Product Links
 # =====================================================================
 
-class TestProductLinks:
 
+class TestProductLinks:
     def test_link_create(self):
         r = ProductLinkCreate(
             product_id=UID,
@@ -297,8 +295,8 @@ class TestProductLinks:
 # Price Push
 # =====================================================================
 
-class TestPricePush:
 
+class TestPricePush:
     def test_push_request(self):
         r = PricePushRequest(
             product_link_id=UID,
@@ -340,8 +338,8 @@ class TestPricePush:
 # Webhook + Health
 # =====================================================================
 
-class TestWebhookAndHealth:
 
+class TestWebhookAndHealth:
     def test_webhook_payload(self):
         r = WebhookPayload(
             topic="products/update",
@@ -365,8 +363,8 @@ class TestWebhookAndHealth:
 # Trend Analysis – Enums
 # =====================================================================
 
-class TestTrendEnums:
 
+class TestTrendEnums:
     def test_trend_directions(self):
         assert {d.value for d in TrendDirection} == {"rising", "falling", "stable", "volatile"}
 
@@ -387,8 +385,8 @@ class TestTrendEnums:
 # Trend Analysis – Requests
 # =====================================================================
 
-class TestTrendRequests:
 
+class TestTrendRequests:
     def test_analysis_request_defaults(self):
         r = TrendAnalysisRequest()
         assert r.days == 30
@@ -428,8 +426,8 @@ class TestTrendRequests:
 # Trend Analysis – Responses
 # =====================================================================
 
-class TestTrendResponses:
 
+class TestTrendResponses:
     def test_trend_signal(self):
         r = TrendSignalResponse(
             signal_type="volume_spike",
@@ -566,8 +564,8 @@ class TestTrendResponses:
 # Competitor Matching – Requests
 # =====================================================================
 
-class TestCompetitorSearchRequest:
 
+class TestCompetitorSearchRequest:
     def test_valid_minimal(self):
         r = CompetitorSearchRequest(product_name="iPhone 15 Pro")
         assert r.max_results == 10
@@ -601,7 +599,6 @@ class TestCompetitorSearchRequest:
 
 
 class TestProductMatchRequest:
-
     def test_valid(self):
         r = ProductMatchRequest(product_id=UID)
         assert r.max_results == 10
@@ -614,7 +611,6 @@ class TestProductMatchRequest:
 
 
 class TestBulkMatchRequest:
-
     def test_valid(self):
         r = BulkMatchRequest(product_ids=[uuid4(), uuid4()])
         assert r.max_results_per_product == 5
@@ -628,8 +624,8 @@ class TestBulkMatchRequest:
 # Competitor Matching – Responses
 # =====================================================================
 
-class TestMatchedProductSchema:
 
+class TestMatchedProductSchema:
     def test_valid(self):
         m = MatchedProductSchema(
             title="iPhone 15 Pro",
@@ -649,7 +645,6 @@ class TestMatchedProductSchema:
 
 
 class TestCompetitorSearchResponse:
-
     def test_valid(self):
         r = CompetitorSearchResponse(
             success=True,
@@ -666,7 +661,6 @@ class TestCompetitorSearchResponse:
 
 
 class TestProviderSchemas:
-
     def test_provider_info(self):
         p = ProviderInfoSchema(
             name="serpapi_google_shopping",
@@ -678,13 +672,14 @@ class TestProviderSchemas:
 
     def test_providers_list(self):
         r = ProvidersListResponse(
-            providers=[], available_count=0, total_count=3,
+            providers=[],
+            available_count=0,
+            total_count=3,
         )
         assert r.total_count == 3
 
 
 class TestBulkMatchSchemas:
-
     def test_bulk_match_result(self):
         r = BulkMatchResultSchema(
             product_name="Widget",
@@ -702,7 +697,6 @@ class TestBulkMatchSchemas:
 
 
 class TestAutoLinkAndCache:
-
     def test_auto_link_result(self):
         r = AutoLinkResultSchema(
             product_id="prod_123",
@@ -717,7 +711,6 @@ class TestAutoLinkAndCache:
 
 
 class TestMatchingError:
-
     def test_minimal(self):
         r = MatchingErrorResponse(detail="Search failed")
         assert r.error_code is None
@@ -729,6 +722,3 @@ class TestMatchingError:
             provider_errors=["serpapi: Invalid API key"],
         )
         assert len(r.provider_errors) == 1
-
-
-        

@@ -16,11 +16,10 @@ Total: ~35 tests
 """
 
 import sys
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
-
 
 # === Import isolation ===
 # core.logging and core.config are handled by conftest.py (autouse).
@@ -29,23 +28,21 @@ for mod in [
 ]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
-        
 
-import pytest
 
+from services.ai_trend_analysis.parsers import ResponseParser
 from services.ai_trend_analysis.schemas import (
-    TrendDirection,
-    TrendCategory,
+    ConfidenceLevel,
     OpportunityType,
     RiskLevel,
-    ConfidenceLevel,
+    TrendCategory,
+    TrendDirection,
 )
-from services.ai_trend_analysis.parsers import ResponseParser
-
 
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def make_product(name="Widget Pro", price=Decimal("29.99"), product_id=None):
     p = MagicMock()
@@ -59,18 +56,20 @@ def make_product(name="Widget Pro", price=Decimal("29.99"), product_id=None):
 # 1. _parse_predictions
 # ============================================================
 
-class TestParsePredictions:
 
+class TestParsePredictions:
     def test_valid_prediction(self):
-        data = [{
-            "direction": "rising",
-            "category": "viral_positive",
-            "confidence": "high",
-            "confidence_score": 80,
-            "predicted_change": 15,
-            "timeframe_days": 14,
-            "reasoning": "Strong social signal",
-        }]
+        data = [
+            {
+                "direction": "rising",
+                "category": "viral_positive",
+                "confidence": "high",
+                "confidence_score": 80,
+                "predicted_change": 15,
+                "timeframe_days": 14,
+                "reasoning": "Strong social signal",
+            }
+        ]
         result = ResponseParser._parse_predictions(data)
         assert len(result) == 1
         assert result[0].direction == TrendDirection.RISING
@@ -113,22 +112,24 @@ class TestParsePredictions:
 # 2. _parse_opportunities
 # ============================================================
 
-class TestParseOpportunities:
 
+class TestParseOpportunities:
     def test_valid_opportunity_with_product(self):
         product = make_product(name="Widget", price=Decimal("50.00"))
         now = datetime.now(UTC)
-        data = [{
-            "product_id": str(product.id),
-            "opportunity_type": "price_increase",
-            "confidence": "high",
-            "confidence_score": 75,
-            "current_price": 50,
-            "suggested_price": 55,
-            "expected_impact": "+10% revenue",
-            "reasoning": "High demand",
-            "triggers": ["viral_post"],
-        }]
+        data = [
+            {
+                "product_id": str(product.id),
+                "opportunity_type": "price_increase",
+                "confidence": "high",
+                "confidence_score": 75,
+                "current_price": 50,
+                "suggested_price": 55,
+                "expected_impact": "+10% revenue",
+                "reasoning": "High demand",
+                "triggers": ["viral_post"],
+            }
+        ]
         result = ResponseParser._parse_opportunities(data, [product], now)
         assert len(result) == 1
         assert result[0].opportunity_type == OpportunityType.PRICE_INCREASE
@@ -137,12 +138,14 @@ class TestParseOpportunities:
 
     def test_unknown_product_id(self):
         now = datetime.now(UTC)
-        data = [{
-            "product_id": "nonexistent-id",
-            "product_name": "Fallback Name",
-            "current_price": 30,
-            "suggested_price": 35,
-        }]
+        data = [
+            {
+                "product_id": "nonexistent-id",
+                "product_name": "Fallback Name",
+                "current_price": 30,
+                "suggested_price": 35,
+            }
+        ]
         result = ResponseParser._parse_opportunities(data, [], now)
         assert len(result) == 1
         assert result[0].product_name == "Fallback Name"
@@ -168,19 +171,21 @@ class TestParseOpportunities:
 # 3. _parse_risks
 # ============================================================
 
-class TestParseRisks:
 
+class TestParseRisks:
     def test_valid_risk(self):
         now = datetime.now(UTC)
-        data = [{
-            "risk_level": "high",
-            "risk_type": "competitor_price_war",
-            "title": "Price War Alert",
-            "description": "Competitor dropped 20%",
-            "affected_products": ["product-1"],
-            "recommended_actions": ["Monitor", "Prepare response"],
-            "urgency_hours": 12,
-        }]
+        data = [
+            {
+                "risk_level": "high",
+                "risk_type": "competitor_price_war",
+                "title": "Price War Alert",
+                "description": "Competitor dropped 20%",
+                "affected_products": ["product-1"],
+                "recommended_actions": ["Monitor", "Prepare response"],
+                "urgency_hours": 12,
+            }
+        ]
         result = ResponseParser._parse_risks(data, now)
         assert len(result) == 1
         assert result[0].risk_level == RiskLevel.HIGH
@@ -216,8 +221,8 @@ class TestParseRisks:
 # 4. parse_risk_response (standalone)
 # ============================================================
 
-class TestParseRiskResponse:
 
+class TestParseRiskResponse:
     def test_parses_risks_key(self):
         response = {"risks": [{"risk_level": "medium", "title": "Test Risk"}]}
         result = ResponseParser.parse_risk_response(response)
@@ -233,8 +238,8 @@ class TestParseRiskResponse:
 # 5. parse_opportunity_response (single product)
 # ============================================================
 
-class TestParseOpportunityResponse:
 
+class TestParseOpportunityResponse:
     def test_increase_recommendation(self):
         product = make_product(price=Decimal("100.00"))
         ai_response = {
@@ -297,8 +302,8 @@ class TestParseOpportunityResponse:
 # 6. parse_insight_response
 # ============================================================
 
-class TestParseInsightResponse:
 
+class TestParseInsightResponse:
     def test_full_response(self):
         ai_response = {
             "title": "Market Shift Detected",
@@ -322,8 +327,8 @@ class TestParseInsightResponse:
 # 7. parse_analysis_response (full orchestration)
 # ============================================================
 
-class TestParseAnalysisResponse:
 
+class TestParseAnalysisResponse:
     def test_full_response(self):
         product = make_product()
         ai_response = {
@@ -355,18 +360,25 @@ class TestParseAnalysisResponse:
     def test_invalid_sentiment_defaults_to_stable(self):
         ai_response = {"market_sentiment": "sideways"}
         result = ResponseParser.parse_analysis_response(
-            "user-1", ai_response, [], "model", 7, 0,
+            "user-1",
+            ai_response,
+            [],
+            "model",
+            7,
+            0,
         )
         assert result.market_sentiment == TrendDirection.STABLE
 
     def test_empty_response(self):
         result = ResponseParser.parse_analysis_response(
-            "user-1", {}, [], "model", 7, 0,
+            "user-1",
+            {},
+            [],
+            "model",
+            7,
+            0,
         )
         assert result.predictions == []
         assert result.opportunities == []
         assert result.risks == []
         assert result.insights == []
-
-
-        

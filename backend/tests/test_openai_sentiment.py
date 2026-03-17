@@ -10,12 +10,12 @@ Covers:
 - analyze_batch: empty list, multiple texts, exception → fallback replacement
 """
 
-import sys
-import os
 import json
-from types import ModuleType
+import os
+import sys
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -24,7 +24,9 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _MOCKED = [
-    "db.session", "core.config", "openai",
+    "db.session",
+    "core.config",
+    "openai",
 ]
 
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
@@ -78,6 +80,7 @@ del _m
 # Helpers
 # ===========================================================================
 
+
 def _make_analyzer(client=None):
     """Create analyzer with injected client."""
     svc = OpenAISentimentAnalyzer.__new__(OpenAISentimentAnalyzer)
@@ -115,6 +118,7 @@ def _valid_ai_json(**overrides):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestInit:
     def test_with_api_key(self):
@@ -158,9 +162,7 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_success(self):
         mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(
-            return_value=_mock_openai_response(_valid_ai_json())
-        )
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_openai_response(_valid_ai_json()))
         svc = _make_analyzer(client=mock_client)
 
         result = await svc.analyze("This product is amazing!")
@@ -175,9 +177,7 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_with_context(self):
         mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(
-            return_value=_mock_openai_response(_valid_ai_json())
-        )
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_openai_response(_valid_ai_json()))
         svc = _make_analyzer(client=mock_client)
 
         await svc.analyze("Great product!", context="Electronics review")
@@ -190,9 +190,7 @@ class TestAnalyze:
     async def test_markdown_fenced_json(self):
         mock_client = AsyncMock()
         fenced = f"```json\n{_valid_ai_json()}\n```"
-        mock_client.chat.completions.create = AsyncMock(
-            return_value=_mock_openai_response(fenced)
-        )
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_openai_response(fenced))
         svc = _make_analyzer(client=mock_client)
 
         result = await svc.analyze("Test text")
@@ -201,9 +199,7 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_json_parse_failure_returns_fallback(self):
         mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(
-            return_value=_mock_openai_response("not valid json at all")
-        )
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_openai_response("not valid json at all"))
         svc = _make_analyzer(client=mock_client)
 
         result = await svc.analyze("Test text")
@@ -213,9 +209,7 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_api_error_returns_fallback(self):
         mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(
-            side_effect=Exception("API rate limit")
-        )
+        mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API rate limit"))
         svc = _make_analyzer(client=mock_client)
 
         result = await svc.analyze("Test text")
@@ -233,14 +227,16 @@ class TestAnalyze:
     async def test_negative_sentiment(self):
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(
-            return_value=_mock_openai_response(_valid_ai_json(
-                sentiment_score=-0.8,
-                sentiment_label="very_negative",
-                positive_score=0.05,
-                negative_score=0.85,
-                neutral_score=0.1,
-                is_sarcastic=True,
-            ))
+            return_value=_mock_openai_response(
+                _valid_ai_json(
+                    sentiment_score=-0.8,
+                    sentiment_label="very_negative",
+                    positive_score=0.05,
+                    negative_score=0.85,
+                    neutral_score=0.1,
+                    is_sarcastic=True,
+                )
+            )
         )
         svc = _make_analyzer(client=mock_client)
 
@@ -253,9 +249,7 @@ class TestAnalyze:
     async def test_missing_fields_use_defaults(self):
         mock_client = AsyncMock()
         # Minimal JSON with only some fields
-        mock_client.chat.completions.create = AsyncMock(
-            return_value=_mock_openai_response('{"sentiment_score": 0.5}')
-        )
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_openai_response('{"sentiment_score": 0.5}'))
         svc = _make_analyzer(client=mock_client)
 
         result = await svc.analyze("Okay product")
@@ -275,10 +269,12 @@ class TestAnalyzeBatch:
     @pytest.mark.asyncio
     async def test_multiple_texts(self):
         svc = _make_analyzer(client=MagicMock())
-        svc.analyze = AsyncMock(side_effect=[
-            {"compound": Decimal("0.5"), "label": "positive"},
-            {"compound": Decimal("-0.3"), "label": "negative"},
-        ])
+        svc.analyze = AsyncMock(
+            side_effect=[
+                {"compound": Decimal("0.5"), "label": "positive"},
+                {"compound": Decimal("-0.3"), "label": "negative"},
+            ]
+        )
 
         results = await svc.analyze_batch(["Great!", "Bad!"])
         assert len(results) == 2
@@ -288,10 +284,12 @@ class TestAnalyzeBatch:
     @pytest.mark.asyncio
     async def test_exception_replaced_with_fallback(self):
         svc = _make_analyzer(client=MagicMock())
-        svc.analyze = AsyncMock(side_effect=[
-            {"compound": Decimal("0.5"), "label": "positive"},
-            Exception("API error"),
-        ])
+        svc.analyze = AsyncMock(
+            side_effect=[
+                {"compound": Decimal("0.5"), "label": "positive"},
+                Exception("API error"),
+            ]
+        )
 
         results = await svc.analyze_batch(["Good!", "Crash!"])
         assert len(results) == 2
@@ -317,5 +315,3 @@ class TestAnalyzeBatch:
 
         assert len(results) == 15
         assert call_count == 15
-
-        

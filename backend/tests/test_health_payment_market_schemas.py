@@ -4,44 +4,43 @@ Place at: backend/tests/test_health_payment_market_schemas.py
 Run: pytest backend/tests/test_health_payment_market_schemas.py -v
 """
 
-from datetime import datetime, timezone
-from uuid import uuid4
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
 from schemas.health import HealthResponse
-from schemas.payment import (
-    PlanInfo,
-    PlanListResponse,
-    SubscriptionInfo,
-    SubscribeRequest,
-    PaymentRequest,
-    PaymentInfo,
-    PaymentHistoryResponse,
-    ConfirmPaymentRequest,
-    ConfirmPaymentResponse,
-    TransactionVerification,
-    PaymentError,
-)
 from schemas.market_trends import (
-    TrendingProductSchema,
+    CategorySchema,
     MarketTrendsRequest,
     MarketTrendsResponse,
-    CategorySchema,
     TrendCategoriesResponse,
+    TrendingProductSchema,
     TrendSourcesResponse,
 )
+from schemas.payment import (
+    ConfirmPaymentRequest,
+    ConfirmPaymentResponse,
+    PaymentError,
+    PaymentHistoryResponse,
+    PaymentInfo,
+    PaymentRequest,
+    PlanInfo,
+    PlanListResponse,
+    SubscribeRequest,
+    SubscriptionInfo,
+    TransactionVerification,
+)
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 # =====================================================================
 # HealthResponse
 # =====================================================================
 
-class TestHealthResponse:
 
+class TestHealthResponse:
     def test_valid(self):
         h = HealthResponse(
             status="ok",
@@ -62,8 +61,8 @@ class TestHealthResponse:
 # Payment – Plans
 # =====================================================================
 
-class TestPlanInfo:
 
+class TestPlanInfo:
     def test_valid(self):
         p = PlanInfo(
             tier="starter",
@@ -80,8 +79,12 @@ class TestPlanInfo:
         r = PlanListResponse(
             plans=[
                 PlanInfo(
-                    tier="starter", name="Starter", price_monthly=149,
-                    price_yearly=1490, product_limit=50, features=[],
+                    tier="starter",
+                    name="Starter",
+                    price_monthly=149,
+                    price_yearly=1490,
+                    product_limit=50,
+                    features=[],
                 )
             ]
         )
@@ -92,8 +95,8 @@ class TestPlanInfo:
 # Payment – Subscription
 # =====================================================================
 
-class TestSubscription:
 
+class TestSubscription:
     def test_subscription_info(self):
         s = SubscriptionInfo(
             tier="professional",
@@ -107,7 +110,9 @@ class TestSubscription:
 
     def test_subscription_info_defaults(self):
         s = SubscriptionInfo(
-            tier="starter", status="active", product_limit=50,
+            tier="starter",
+            status="active",
+            product_limit=50,
         )
         assert s.products_used == 0
         assert s.current_period_start is None
@@ -130,8 +135,8 @@ class TestSubscription:
 # Payment – PaymentRequest / PaymentInfo
 # =====================================================================
 
-class TestPaymentSchemas:
 
+class TestPaymentSchemas:
     def test_payment_request(self):
         p = PaymentRequest(
             payment_id="pay_123",
@@ -170,7 +175,10 @@ class TestPaymentSchemas:
 
     def test_payment_history(self):
         r = PaymentHistoryResponse(
-            payments=[], total=0, limit=20, offset=0,
+            payments=[],
+            total=0,
+            limit=20,
+            offset=0,
         )
         assert r.total == 0
 
@@ -179,8 +187,8 @@ class TestPaymentSchemas:
 # Payment – Confirmation
 # =====================================================================
 
-class TestPaymentConfirmation:
 
+class TestPaymentConfirmation:
     def test_confirm_request_minimal(self):
         r = ConfirmPaymentRequest(transaction_hash="0xabc123")
         assert r.network == "bsv"
@@ -216,8 +224,8 @@ class TestPaymentConfirmation:
 # Payment – Transaction Verification
 # =====================================================================
 
-class TestTransactionVerification:
 
+class TestTransactionVerification:
     def test_minimal(self):
         t = TransactionVerification(
             verified=True,
@@ -257,8 +265,8 @@ class TestTransactionVerification:
 # Payment – Error
 # =====================================================================
 
-class TestPaymentError:
 
+class TestPaymentError:
     def test_valid(self):
         e = PaymentError(
             error="Insufficient funds",
@@ -279,8 +287,8 @@ class TestPaymentError:
 # Market Trends – TrendingProductSchema
 # =====================================================================
 
-class TestTrendingProductSchema:
 
+class TestTrendingProductSchema:
     def test_valid(self):
         t = TrendingProductSchema(
             rank=1,
@@ -298,17 +306,27 @@ class TestTrendingProductSchema:
     def test_trend_score_range(self):
         with pytest.raises(ValidationError):
             TrendingProductSchema(
-                rank=1, name="X", category="Y", price_range="$10",
-                trend_score=101, sentiment="positive",
-                source="Amazon", reason="test",
+                rank=1,
+                name="X",
+                category="Y",
+                price_range="$10",
+                trend_score=101,
+                sentiment="positive",
+                source="Amazon",
+                reason="test",
             )
 
     def test_trend_score_below_zero(self):
         with pytest.raises(ValidationError):
             TrendingProductSchema(
-                rank=1, name="X", category="Y", price_range="$10",
-                trend_score=-1, sentiment="positive",
-                source="Amazon", reason="test",
+                rank=1,
+                name="X",
+                category="Y",
+                price_range="$10",
+                trend_score=-1,
+                sentiment="positive",
+                source="Amazon",
+                reason="test",
             )
 
 
@@ -316,8 +334,8 @@ class TestTrendingProductSchema:
 # Market Trends – Request / Response
 # =====================================================================
 
-class TestMarketTrendsRequest:
 
+class TestMarketTrendsRequest:
     def test_defaults(self):
         r = MarketTrendsRequest()
         assert r.category is None
@@ -338,7 +356,6 @@ class TestMarketTrendsRequest:
 
 
 class TestMarketTrendsResponse:
-
     def test_valid(self):
         r = MarketTrendsResponse(
             trends=[],
@@ -359,7 +376,6 @@ class TestMarketTrendsResponse:
 
 
 class TestTrendCategoriesAndSources:
-
     def test_categories_response(self):
         r = TrendCategoriesResponse(
             categories=[
@@ -372,7 +388,3 @@ class TestTrendCategoriesAndSources:
     def test_sources_response(self):
         r = TrendSourcesResponse(sources=["amazon", "walmart", "tiktok"])
         assert len(r.sources) == 3
-
-
-
-        

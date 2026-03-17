@@ -25,21 +25,21 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, UTC
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Optional, Sequence
-
 
 # ──────────────────────────────────────────────────────────
 # DRIFT SEVERITY
 # ──────────────────────────────────────────────────────────
 
+
 class DriftSeverity(str, Enum):
     NONE = "none"
-    LOW = "low"          # Noticeable but not actionable
-    MEDIUM = "medium"    # Worth investigating
-    HIGH = "high"        # Retraining recommended
+    LOW = "low"  # Noticeable but not actionable
+    MEDIUM = "medium"  # Worth investigating
+    HIGH = "high"  # Retraining recommended
     CRITICAL = "critical"  # Immediate action required
 
 
@@ -47,14 +47,16 @@ class DriftSeverity(str, Enum):
 # INPUT: Timestamped outcome records
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class DriftRecord:
     """Minimal timestamped record for drift detection."""
+
     recommendation_id: str
     category: str
     timestamp: datetime
     confidence_score: float
-    revenue_delta_pct: Optional[float]
+    revenue_delta_pct: float | None
     action: str  # accepted, modified, rejected, ignored
 
     @property
@@ -74,9 +76,11 @@ class DriftRecord:
 # DRIFT SIGNALS
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class DriftSignal:
     """One detected drift signal."""
+
     signal_type: str
     """Type: 'correlation_drop', 'acceptance_decline', 'lift_decline',
     'distribution_shift', 'volume_drop'."""
@@ -136,8 +140,8 @@ _CORRELATION_ACCEPTABLE = 0.3
 _CORRELATION_CRITICAL = 0.1
 _MIN_WINDOW_SIZE = 10
 _ACCEPTANCE_DROP_THRESHOLD = 0.10  # 10% drop is concerning
-_LIFT_DROP_THRESHOLD = 1.0         # 1pp drop in mean lift
-_KS_THRESHOLD = 0.15              # Kolmogorov-Smirnov statistic threshold
+_LIFT_DROP_THRESHOLD = 1.0  # 1pp drop in mean lift
+_KS_THRESHOLD = 0.15  # Kolmogorov-Smirnov statistic threshold
 
 
 class DriftDetector:
@@ -171,7 +175,7 @@ class DriftDetector:
         self,
         records: Sequence[DriftRecord],
         category: str = "all",
-        reference_time: Optional[datetime] = None,
+        reference_time: datetime | None = None,
     ) -> DriftReport:
         """
         Run drift detection for a category.
@@ -228,14 +232,11 @@ class DriftDetector:
     def detect_all_categories(
         self,
         records: Sequence[DriftRecord],
-        reference_time: Optional[datetime] = None,
+        reference_time: datetime | None = None,
     ) -> list[DriftReport]:
         """Run drift detection for every category present in records."""
         categories = set(r.category for r in records)
-        return [
-            self.detect(records, cat, reference_time)
-            for cat in sorted(categories)
-        ]
+        return [self.detect(records, cat, reference_time) for cat in sorted(categories)]
 
     # ──────────────────────────────────────────────
     # SIGNAL DETECTORS
@@ -272,18 +273,17 @@ class DriftDetector:
         else:
             severity = DriftSeverity.NONE
 
-        return [DriftSignal(
-            signal_type="correlation_drop",
-            severity=severity,
-            current_value=round(r_recent, 4),
-            baseline_value=round(r_baseline, 4),
-            delta=round(delta, 4),
-            description=(
-                f"Confidence-outcome correlation: "
-                f"{r_baseline:.3f} → {r_recent:.3f} (Δ={delta:+.3f})"
-            ),
-            category=category,
-        )]
+        return [
+            DriftSignal(
+                signal_type="correlation_drop",
+                severity=severity,
+                current_value=round(r_recent, 4),
+                baseline_value=round(r_baseline, 4),
+                delta=round(delta, 4),
+                description=(f"Confidence-outcome correlation: {r_baseline:.3f} → {r_recent:.3f} (Δ={delta:+.3f})"),
+                category=category,
+            )
+        ]
 
     def _check_acceptance(
         self,
@@ -305,18 +305,17 @@ class DriftDetector:
         else:
             severity = DriftSeverity.NONE
 
-        return [DriftSignal(
-            signal_type="acceptance_decline",
-            severity=severity,
-            current_value=round(recent_rate, 4),
-            baseline_value=round(baseline_rate, 4),
-            delta=round(delta, 4),
-            description=(
-                f"Acceptance rate: {baseline_rate:.1%} → {recent_rate:.1%} "
-                f"(Δ={delta:+.1%})"
-            ),
-            category=category,
-        )]
+        return [
+            DriftSignal(
+                signal_type="acceptance_decline",
+                severity=severity,
+                current_value=round(recent_rate, 4),
+                baseline_value=round(baseline_rate, 4),
+                delta=round(delta, 4),
+                description=(f"Acceptance rate: {baseline_rate:.1%} → {recent_rate:.1%} (Δ={delta:+.1%})"),
+                category=category,
+            )
+        ]
 
     def _check_lift(
         self,
@@ -325,14 +324,8 @@ class DriftDetector:
         category: str,
     ) -> list[DriftSignal]:
         """Check if average revenue lift is declining."""
-        recent_lifts = [
-            r.revenue_delta_pct for r in recent
-            if r.revenue_delta_pct is not None and r.was_acted_on
-        ]
-        baseline_lifts = [
-            r.revenue_delta_pct for r in baseline
-            if r.revenue_delta_pct is not None and r.was_acted_on
-        ]
+        recent_lifts = [r.revenue_delta_pct for r in recent if r.revenue_delta_pct is not None and r.was_acted_on]
+        baseline_lifts = [r.revenue_delta_pct for r in baseline if r.revenue_delta_pct is not None and r.was_acted_on]
 
         if not recent_lifts or not baseline_lifts:
             return []
@@ -350,18 +343,17 @@ class DriftDetector:
         else:
             severity = DriftSeverity.NONE
 
-        return [DriftSignal(
-            signal_type="lift_decline",
-            severity=severity,
-            current_value=round(recent_mean, 4),
-            baseline_value=round(baseline_mean, 4),
-            delta=round(delta, 4),
-            description=(
-                f"Mean revenue lift: {baseline_mean:.2f}% → {recent_mean:.2f}% "
-                f"(Δ={delta:+.2f}pp)"
-            ),
-            category=category,
-        )]
+        return [
+            DriftSignal(
+                signal_type="lift_decline",
+                severity=severity,
+                current_value=round(recent_mean, 4),
+                baseline_value=round(baseline_mean, 4),
+                delta=round(delta, 4),
+                description=(f"Mean revenue lift: {baseline_mean:.2f}% → {recent_mean:.2f}% (Δ={delta:+.2f}pp)"),
+                category=category,
+            )
+        ]
 
     def _check_distribution(
         self,
@@ -392,18 +384,19 @@ class DriftDetector:
         recent_mean = statistics.mean(recent_confs)
         baseline_mean = statistics.mean(baseline_confs)
 
-        return [DriftSignal(
-            signal_type="distribution_shift",
-            severity=severity,
-            current_value=round(recent_mean, 4),
-            baseline_value=round(baseline_mean, 4),
-            delta=round(ks_stat, 4),
-            description=(
-                f"Confidence distribution KS={ks_stat:.3f} "
-                f"(mean: {baseline_mean:.3f} → {recent_mean:.3f})"
-            ),
-            category=category,
-        )]
+        return [
+            DriftSignal(
+                signal_type="distribution_shift",
+                severity=severity,
+                current_value=round(recent_mean, 4),
+                baseline_value=round(baseline_mean, 4),
+                delta=round(ks_stat, 4),
+                description=(
+                    f"Confidence distribution KS={ks_stat:.3f} (mean: {baseline_mean:.3f} → {recent_mean:.3f})"
+                ),
+                category=category,
+            )
+        ]
 
     def _check_volume(
         self,
@@ -431,18 +424,17 @@ class DriftDetector:
         else:
             severity = DriftSeverity.NONE
 
-        return [DriftSignal(
-            signal_type="volume_drop",
-            severity=severity,
-            current_value=round(recent_per_day, 2),
-            baseline_value=round(baseline_per_day, 2),
-            delta=round(delta, 4),
-            description=(
-                f"Volume: {baseline_per_day:.1f}/day → {recent_per_day:.1f}/day "
-                f"(ratio={ratio:.2f})"
-            ),
-            category=category,
-        )]
+        return [
+            DriftSignal(
+                signal_type="volume_drop",
+                severity=severity,
+                current_value=round(recent_per_day, 2),
+                baseline_value=round(baseline_per_day, 2),
+                delta=round(delta, 4),
+                description=(f"Volume: {baseline_per_day:.1f}/day → {recent_per_day:.1f}/day (ratio={ratio:.2f})"),
+                category=category,
+            )
+        ]
 
     # ──────────────────────────────────────────────
     # OVERALL ASSESSMENT
@@ -495,13 +487,10 @@ class DriftDetector:
 # HELPERS
 # ──────────────────────────────────────────────────────────
 
-def _pearson_r_drift(records: list[DriftRecord]) -> Optional[float]:
+
+def _pearson_r_drift(records: list[DriftRecord]) -> float | None:
     """Pearson r between confidence and revenue_delta for drift records."""
-    pairs = [
-        (r.confidence_score, r.revenue_delta_pct)
-        for r in records
-        if r.revenue_delta_pct is not None
-    ]
+    pairs = [(r.confidence_score, r.revenue_delta_pct) for r in records if r.revenue_delta_pct is not None]
     n = len(pairs)
     if n < 5:
         return None
@@ -553,5 +542,3 @@ def _simplified_ks(sample_a: list[float], sample_b: list[float]) -> float:
             max_diff = diff
 
     return max_diff
-
-

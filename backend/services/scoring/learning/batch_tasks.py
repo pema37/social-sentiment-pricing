@@ -27,13 +27,14 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, UTC
-from typing import Any, Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
-from .feature_engineer import FeatureEngineer, OutcomeRecord, CategoryFeatures
-from .prior_updater import PriorUpdater, UpdateConfig, UpdateResult
 from .context_injector import ContextInjector, ScoringContext
+from .feature_engineer import CategoryFeatures, FeatureEngineer, OutcomeRecord
+from .prior_updater import PriorUpdater, UpdateConfig, UpdateResult
 
 logger = logging.getLogger(__name__)
 
@@ -42,13 +43,14 @@ logger = logging.getLogger(__name__)
 # CYCLE RESULT: Full audit of a learning cycle
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class CycleResult:
     """Complete audit trail for one weekly learning cycle."""
 
     cycle_id: str
     started_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
     # Step 1: Data fetch
     outcome_records_fetched: int = 0
@@ -59,7 +61,7 @@ class CycleResult:
     features_time_ms: float = 0
 
     # Step 3: Prior updates
-    prior_update_result: Optional[UpdateResult] = None
+    prior_update_result: UpdateResult | None = None
     prior_time_ms: float = 0
 
     # Step 4: Cache refresh
@@ -69,7 +71,7 @@ class CycleResult:
     # Overall
     total_time_ms: float = 0
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def summary(self) -> str:
@@ -92,6 +94,7 @@ class CycleResult:
 # FEATURE CACHE: In-memory (swap for Redis in production)
 # ──────────────────────────────────────────────────────────
 
+
 class FeatureCache:
     """
     Cache for CategoryFeatures consumed by ContextInjector.
@@ -106,14 +109,14 @@ class FeatureCache:
 
     def __init__(self):
         self._store: dict[str, CategoryFeatures] = {}
-        self._updated_at: Optional[datetime] = None
+        self._updated_at: datetime | None = None
 
     def set(self, category: str, features: CategoryFeatures) -> None:
         """Cache features for a category."""
         self._store[category] = features
         self._updated_at = datetime.now(UTC)
 
-    def get(self, category: str) -> Optional[CategoryFeatures]:
+    def get(self, category: str) -> CategoryFeatures | None:
         """Retrieve cached features. Returns None if not cached."""
         return self._store.get(category)
 
@@ -129,7 +132,7 @@ class FeatureCache:
         return list(self._store.keys())
 
     @property
-    def updated_at(self) -> Optional[datetime]:
+    def updated_at(self) -> datetime | None:
         return self._updated_at
 
     @property
@@ -145,6 +148,7 @@ class FeatureCache:
 # ──────────────────────────────────────────────────────────
 # ORCHESTRATOR: Framework-agnostic learning cycle
 # ──────────────────────────────────────────────────────────
+
 
 class LearningCycleOrchestrator:
     """
@@ -173,7 +177,7 @@ class LearningCycleOrchestrator:
         outcome_fetcher: Callable[[int], Sequence[OutcomeRecord]],
         prior_store: Any,  # CategoryPriorStore (duck-typed)
         feature_cache: FeatureCache,
-        update_config: Optional[UpdateConfig] = None,
+        update_config: UpdateConfig | None = None,
         lookback_days: int = 90,
     ):
         self._fetcher = outcome_fetcher
@@ -204,7 +208,7 @@ class LearningCycleOrchestrator:
     def history(self) -> list[CycleResult]:
         return list(self._history)
 
-    def run_full_cycle(self, cycle_id: Optional[str] = None) -> CycleResult:
+    def run_full_cycle(self, cycle_id: str | None = None) -> CycleResult:
         """
         Execute the complete learning cycle:
           1. Fetch outcomes
@@ -259,7 +263,7 @@ class LearningCycleOrchestrator:
             result.success = True
 
         except Exception as e:
-            result.error = f"{type(e).__name__}: {str(e)}"
+            result.error = f"{type(e).__name__}: {e!s}"
             logger.exception("Learning cycle %s failed: %s", cycle_id, result.error)
 
         result.completed_at = datetime.now(UTC)
@@ -286,7 +290,7 @@ class LearningCycleOrchestrator:
         """
         return self._prior_updater.update_all(features_dict)
 
-    def get_context_for_category(self, category: str) -> tuple[Optional[ScoringContext], str]:
+    def get_context_for_category(self, category: str) -> tuple[ScoringContext | None, str]:
         """
         Get cached context for a category at recommendation time.
 
@@ -301,6 +305,7 @@ class LearningCycleOrchestrator:
 # ──────────────────────────────────────────────────────────
 # DB QUERY BUILDER (production implementation sketch)
 # ──────────────────────────────────────────────────────────
+
 
 def build_outcome_fetcher_sql(lookback_days: int = 90) -> str:
     """
@@ -425,10 +430,12 @@ CELERY_BEAT_SCHEDULE = {
 #   )
 # ──────────────────────────────────────────────────────────
 
+
 def _get_celery_app():
     """Deferred import of the Celery app."""
     try:
         from workers.celery_app import celery_app
+
         return celery_app
     except ImportError:
         return None
@@ -471,7 +478,7 @@ def _get_orchestrator() -> LearningCycleOrchestrator:
 
 
 # Module-level cache singleton (replaced by Redis in production)
-_feature_cache: Optional[FeatureCache] = None
+_feature_cache: FeatureCache | None = None
 
 
 def get_feature_cache() -> FeatureCache:
@@ -485,5 +492,3 @@ def get_feature_cache() -> FeatureCache:
     if _feature_cache is None:
         _feature_cache = FeatureCache()
     return _feature_cache
-
-

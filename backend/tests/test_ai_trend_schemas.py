@@ -1,27 +1,28 @@
 """Tests for services/ai_trend_analysis/schemas.py"""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+
 from services.ai_trend_analysis.schemas import (
-    TrendDirection,
-    TrendCategory,
-    OpportunityType,
-    RiskLevel,
+    AIInsight,
     ConfidenceLevel,
-    TrendSignal,
-    TrendPrediction,
+    OpportunityType,
     PricingOpportunity,
     RiskAlert,
-    AIInsight,
+    RiskLevel,
     TrendAnalysisResult,
+    TrendCategory,
+    TrendDirection,
+    TrendPrediction,
+    TrendSignal,
 )
-
 
 # ════════════════════════════════════════
 # ENUMS
 # ════════════════════════════════════════
+
 
 class TestTrendDirection:
     def test_values(self):
@@ -78,7 +79,7 @@ class TestConfidenceLevel:
 # DATACLASSES
 # ════════════════════════════════════════
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 class TestTrendSignal:
@@ -191,6 +192,7 @@ class TestAIInsight:
 # ════════════════════════════════════════
 # TrendAnalysisResult + to_dict()
 # ════════════════════════════════════════
+
 
 class TestTrendAnalysisResult:
     @pytest.fixture
@@ -312,6 +314,3 @@ class TestTrendAnalysisResult:
         assert "T" in d["opportunities"][0]["valid_until"]
         assert "T" in d["risks"][0]["detected_at"]
         assert "T" in d["insights"][0]["generated_at"]
-
-
-        

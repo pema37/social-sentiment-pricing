@@ -11,17 +11,17 @@ Covers:
   - _create_product_from_row field mapping
 """
 
-import pytest
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
+
+import pytest
 
 from services.products.import_service import (
     ImportProductRow,
     ImportResult,
     ProductImportService,
 )
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -48,8 +48,8 @@ def make_service(existing_skus: set = None) -> ProductImportService:
 
 # ── ImportProductRow Validation ────────────────────────────────────────────────
 
-class TestImportProductRow:
 
+class TestImportProductRow:
     def test_basic_creation(self):
         row = ImportProductRow(name="Widget", base_price=Decimal("19.99"))
         assert row.name == "Widget"
@@ -113,27 +113,31 @@ class TestImportProductRow:
 
 # ── parse_csv_row ──────────────────────────────────────────────────────────────
 
-class TestParseCsvRow:
 
+class TestParseCsvRow:
     def test_standard_fields(self):
-        row = ProductImportService.parse_csv_row({
-            "name": "Standard Widget",
-            "base_price": "19.99",
-            "sku": "STD-001",
-        })
+        row = ProductImportService.parse_csv_row(
+            {
+                "name": "Standard Widget",
+                "base_price": "19.99",
+                "sku": "STD-001",
+            }
+        )
         assert row.name == "Standard Widget"
         assert row.base_price == Decimal("19.99")
         assert row.sku == "STD-001"
 
     def test_shopify_field_names(self):
-        row = ProductImportService.parse_csv_row({
-            "Title": "Shopify Product",
-            "Variant Price": "39.99",
-            "Variant SKU": "SHOP-001",
-            "Body (HTML)": "<p>Description</p>",
-            "Type": "Apparel",
-            "Image Src": "https://cdn.shopify.com/img.jpg",
-        })
+        row = ProductImportService.parse_csv_row(
+            {
+                "Title": "Shopify Product",
+                "Variant Price": "39.99",
+                "Variant SKU": "SHOP-001",
+                "Body (HTML)": "<p>Description</p>",
+                "Type": "Apparel",
+                "Image Src": "https://cdn.shopify.com/img.jpg",
+            }
+        )
         assert row.name == "Shopify Product"
         assert row.base_price == Decimal("39.99")
         assert row.sku == "SHOP-001"
@@ -142,22 +146,26 @@ class TestParseCsvRow:
         assert row.image_url == "https://cdn.shopify.com/img.jpg"
 
     def test_woocommerce_field_names(self):
-        row = ProductImportService.parse_csv_row({
-            "Name": "WooCommerce Product",
-            "regular_price": "24.99",
-            "SKU": "WOO-001",
-            "Description": "A great product",
-            "Category": "Electronics",
-        })
+        row = ProductImportService.parse_csv_row(
+            {
+                "Name": "WooCommerce Product",
+                "regular_price": "24.99",
+                "SKU": "WOO-001",
+                "Description": "A great product",
+                "Category": "Electronics",
+            }
+        )
         assert row.name == "WooCommerce Product"
         assert row.base_price == Decimal("24.99")
         assert row.sku == "WOO-001"
 
     def test_missing_optional_fields_are_none(self):
-        row = ProductImportService.parse_csv_row({
-            "name": "Minimal Product",
-            "price": "9.99",
-        })
+        row = ProductImportService.parse_csv_row(
+            {
+                "name": "Minimal Product",
+                "price": "9.99",
+            }
+        )
         assert row.sku is None
         assert row.description is None
         assert row.category is None
@@ -166,8 +174,8 @@ class TestParseCsvRow:
 
 # ── _create_product_from_row ───────────────────────────────────────────────────
 
-class TestCreateProductFromRow:
 
+class TestCreateProductFromRow:
     def test_basic_product_creation(self):
         service = make_service()
         row = make_row(name="  Widget  ", sku="  W-001  ")
@@ -203,8 +211,8 @@ class TestCreateProductFromRow:
 
 # ── import_products ────────────────────────────────────────────────────────────
 
-class TestImportProducts:
 
+class TestImportProducts:
     @pytest.mark.asyncio
     async def test_creates_new_products(self):
         service = make_service()
@@ -305,6 +313,3 @@ class TestImportProducts:
 
         assert result.failed == 100
         assert len(result.errors) <= ProductImportService.MAX_ERRORS
-
-
-        

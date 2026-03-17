@@ -14,34 +14,28 @@ Coverage:
 Run: pytest tests/test_market_intelligence.py -v
 """
 
-import asyncio
 import json
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.youcom_client import (
-    YouComClient,
-    WebResult,
-    NewsResult,
-    SearchResponse,
-    Freshness,
-    _TTLCache,
-    YOUCOM_SEARCH_ENDPOINT,
-)
 from services.market_intelligence import (
     AgentEvent,
     AgentRole,
-    ThoughtType,
     IntelligenceRequest,
-    PriceRecommendation,
     MarketIntelligencePipeline,
-    ScoutAgent,
-    AnalystAgent,
-    StrategistAgent,
+    PriceRecommendation,
+    ThoughtType,
 )
-
+from services.youcom_client import (
+    Freshness,
+    NewsResult,
+    SearchResponse,
+    WebResult,
+    YouComClient,
+    _TTLCache,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FIXTURES & HELPERS
@@ -260,9 +254,7 @@ class TestYouComClient:
         mock_client.is_closed = False
         client._client = mock_client
 
-        result = await client.search_competitor_prices(
-            product_name="Air Max 90", brand="Nike", category="Shoes"
-        )
+        result = await client.search_competitor_prices(product_name="Air Max 90", brand="Nike", category="Shoes")
 
         # Verify query was constructed correctly
         call_args = mock_client.get.call_args
@@ -283,9 +275,7 @@ class TestYouComClient:
         mock_client.is_closed = False
         client._client = mock_client
 
-        result = await client.search_market_sentiment(
-            product_name="Air Max 90", brand="Nike"
-        )
+        result = await client.search_market_sentiment(product_name="Air Max 90", brand="Nike")
 
         call_args = mock_client.get.call_args
         params = call_args[1]["params"] if "params" in call_args[1] else call_args[0][1]
@@ -514,9 +504,7 @@ class TestMarketIntelligencePipeline:
             assert AgentRole.STRATEGIST in final_agents
 
             # Strategist final should have recommendation
-            strat_final = [
-                e for e in final_events if e.agent == AgentRole.STRATEGIST
-            ]
+            strat_final = [e for e in final_events if e.agent == AgentRole.STRATEGIST]
             assert len(strat_final) == 1
             assert strat_final[0].metadata is not None
             assert "recommendation" in strat_final[0].metadata
@@ -558,10 +546,7 @@ class TestMarketIntelligencePipeline:
             assert AgentRole.STRATEGIST in agents_seen
 
             # Should have fallback recommendation
-            strat_final = [
-                e for e in events
-                if e.agent == AgentRole.STRATEGIST and e.is_final
-            ]
+            strat_final = [e for e in events if e.agent == AgentRole.STRATEGIST and e.is_final]
             assert len(strat_final) == 1
             rec = strat_final[0].metadata.get("recommendation")
             assert rec is not None
@@ -627,6 +612,3 @@ class TestIntelligenceRouter:
 
         with pytest.raises(Exception):  # ValidationError
             IntelligenceQueryRequest(product_name="Test", current_price=-10)
-
-
-            

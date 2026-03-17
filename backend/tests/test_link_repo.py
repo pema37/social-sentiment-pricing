@@ -5,7 +5,7 @@ Tests for services.integration.repositories.link_repo
 import sys
 import types
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -16,9 +16,12 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 for _mod_name in (
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "models", "models.integration",
+    "models",
+    "models.integration",
 ):
     if _mod_name not in sys.modules:
         _stubs[_mod_name] = types.ModuleType(_mod_name)
@@ -58,6 +61,7 @@ for _name, _mod in _stubs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_repo(db=None):
     db = db or AsyncMock()
@@ -230,9 +234,15 @@ class TestDisableMissing:
         repo, db = _make_repo()
         int_id = uuid4()
 
-        link_a = _FakeLink(id=uuid4(), external_product_id="ext-1", external_variant_id=None, sync_enabled=True, updated_at=None)
-        link_b = _FakeLink(id=uuid4(), external_product_id="ext-2", external_variant_id=None, sync_enabled=True, updated_at=None)
-        link_c = _FakeLink(id=uuid4(), external_product_id="ext-3", external_variant_id=None, sync_enabled=True, updated_at=None)
+        link_a = _FakeLink(
+            id=uuid4(), external_product_id="ext-1", external_variant_id=None, sync_enabled=True, updated_at=None
+        )
+        link_b = _FakeLink(
+            id=uuid4(), external_product_id="ext-2", external_variant_id=None, sync_enabled=True, updated_at=None
+        )
+        link_c = _FakeLink(
+            id=uuid4(), external_product_id="ext-3", external_variant_id=None, sync_enabled=True, updated_at=None
+        )
 
         scalars = MagicMock()
         scalars.all.return_value = [link_a, link_b, link_c]
@@ -252,7 +262,9 @@ class TestDisableMissing:
     @pytest.mark.asyncio
     async def test_zero_when_all_seen(self):
         repo, db = _make_repo()
-        link = _FakeLink(id=uuid4(), external_product_id="ext-1", external_variant_id=None, sync_enabled=True, updated_at=None)
+        link = _FakeLink(
+            id=uuid4(), external_product_id="ext-1", external_variant_id=None, sync_enabled=True, updated_at=None
+        )
 
         scalars = MagicMock()
         scalars.all.return_value = [link]
@@ -276,7 +288,3 @@ class TestDisableMissing:
 
         count = await repo.disable_missing(uuid4(), {"ext-1"})
         assert count == 0
-
-
-
-        

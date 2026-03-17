@@ -21,9 +21,9 @@ Total: ~50 tests
 """
 
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # === Import isolation ===
 for mod in [
@@ -38,8 +38,12 @@ for mod in [
 import pytest
 
 from services.competitor_matching.schemas import (
-    SearchProvider, MatchStatus, MatchedProduct,
-    ProviderResult, MatchSearchRequest, MatchSearchResponse,
+    MatchedProduct,
+    MatchSearchRequest,
+    MatchSearchResponse,
+    MatchStatus,
+    ProviderResult,
+    SearchProvider,
 )
 from services.competitor_matching.service import (
     CacheEntry,
@@ -53,22 +57,28 @@ SERVICE_PATH = "services.competitor_matching.service"
 # Helpers
 # ============================================================
 
+
 def make_product(
-    title="Widget Pro", url="https://amazon.com/widget",
-    price=Decimal("29.99"), merchant="Amazon",
-    merchant_domain="amazon.com", confidence_score=0.8,
+    title="Widget Pro",
+    url="https://amazon.com/widget",
+    price=Decimal("29.99"),
+    merchant="Amazon",
+    merchant_domain="amazon.com",
+    confidence_score=0.8,
 ):
     return MatchedProduct(
-        title=title, url=url, price=price,
-        merchant=merchant, merchant_domain=merchant_domain,
+        title=title,
+        url=url,
+        price=price,
+        merchant=merchant,
+        merchant_domain=merchant_domain,
         confidence_score=confidence_score,
     )
 
 
 def make_svc(**kwargs):
     """Create service with mocked dependencies."""
-    with patch(f"{SERVICE_PATH}.provider_registry") as mock_reg, \
-         patch(f"{SERVICE_PATH}.setup_providers"):
+    with patch(f"{SERVICE_PATH}.provider_registry") as mock_reg, patch(f"{SERVICE_PATH}.setup_providers"):
         mock_reg.available_count = 1
         return CompetitorMatchingService(**kwargs)
 
@@ -77,26 +87,26 @@ def make_svc(**kwargs):
 # 1. CacheEntry
 # ============================================================
 
-class TestCacheEntry:
 
+class TestCacheEntry:
     def test_not_expired(self):
         entry = CacheEntry(
             response=MagicMock(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         assert entry.is_expired(ttl_hours=24) is False
 
     def test_expired(self):
         entry = CacheEntry(
             response=MagicMock(),
-            created_at=datetime.now(timezone.utc) - timedelta(hours=25),
+            created_at=datetime.now(UTC) - timedelta(hours=25),
         )
         assert entry.is_expired(ttl_hours=24) is True
 
     def test_exactly_at_ttl(self):
         entry = CacheEntry(
             response=MagicMock(),
-            created_at=datetime.now(timezone.utc) - timedelta(hours=24, seconds=1),
+            created_at=datetime.now(UTC) - timedelta(hours=24, seconds=1),
         )
         assert entry.is_expired(ttl_hours=24) is True
 
@@ -105,8 +115,8 @@ class TestCacheEntry:
 # 2. Init
 # ============================================================
 
-class TestCompetitorMatchingServiceInit:
 
+class TestCompetitorMatchingServiceInit:
     def test_default_params(self):
         svc = make_svc()
         assert svc.cache_ttl_hours == 24
@@ -120,8 +130,10 @@ class TestCompetitorMatchingServiceInit:
         assert svc.min_confidence == 0.5
 
     def test_calls_setup_when_no_providers(self):
-        with patch(f"{SERVICE_PATH}.provider_registry") as mock_reg, \
-             patch(f"{SERVICE_PATH}.setup_providers") as mock_setup:
+        with (
+            patch(f"{SERVICE_PATH}.provider_registry") as mock_reg,
+            patch(f"{SERVICE_PATH}.setup_providers") as mock_setup,
+        ):
             mock_reg.available_count = 0
             CompetitorMatchingService()
             mock_setup.assert_called_once()
@@ -131,8 +143,8 @@ class TestCompetitorMatchingServiceInit:
 # 3. Cache key
 # ============================================================
 
-class TestBuildCacheKey:
 
+class TestBuildCacheKey:
     def test_deterministic(self):
         svc = make_svc()
         req = MatchSearchRequest(product_name="Widget", keywords=["red"])
@@ -157,8 +169,8 @@ class TestBuildCacheKey:
 # 4. Cache operations
 # ============================================================
 
-class TestCacheOperations:
 
+class TestCacheOperations:
     def test_get_from_empty_cache(self):
         svc = make_svc()
         assert svc._get_from_cache("nonexistent") is None
@@ -175,7 +187,7 @@ class TestCacheOperations:
         response = MatchSearchResponse(status=MatchStatus.SUCCESS)
         svc._cache["key1"] = CacheEntry(
             response=response,
-            created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            created_at=datetime.now(UTC) - timedelta(hours=2),
         )
         assert svc._get_from_cache("key1") is None
         assert "key1" not in svc._cache
@@ -203,8 +215,8 @@ class TestCacheOperations:
 # 5. _normalize_url
 # ============================================================
 
-class TestNormalizeUrl:
 
+class TestNormalizeUrl:
     def setup_method(self):
         self.svc = make_svc()
 
@@ -231,8 +243,8 @@ class TestNormalizeUrl:
 # 6. _select_providers
 # ============================================================
 
-class TestSelectProviders:
 
+class TestSelectProviders:
     def test_returns_requested_providers(self):
         svc = make_svc()
         mock_provider = MagicMock()
@@ -264,16 +276,19 @@ class TestSelectProviders:
 # 7. _aggregate_results
 # ============================================================
 
-class TestAggregateResults:
 
+class TestAggregateResults:
     def setup_method(self):
         self.svc = make_svc()
 
     def test_success_status(self):
-        results = [ProviderResult(
-            provider=SearchProvider.DUCKDUCKGO, success=True,
-            products=[make_product()],
-        )]
+        results = [
+            ProviderResult(
+                provider=SearchProvider.DUCKDUCKGO,
+                success=True,
+                products=[make_product()],
+            )
+        ]
         req = MatchSearchRequest(product_name="Widget")
         resp = self.svc._aggregate_results(results, req)
         assert resp.status == MatchStatus.SUCCESS
@@ -309,9 +324,13 @@ class TestAggregateResults:
     def test_excludes_domains(self):
         p1 = make_product(merchant_domain="mystore.com")
         p2 = make_product(url="https://amazon.com/w", merchant_domain="amazon.com")
-        results = [ProviderResult(
-            provider=SearchProvider.DUCKDUCKGO, success=True, products=[p1, p2],
-        )]
+        results = [
+            ProviderResult(
+                provider=SearchProvider.DUCKDUCKGO,
+                success=True,
+                products=[p1, p2],
+            )
+        ]
         req = MatchSearchRequest(product_name="Widget", exclude_domains=["mystore.com"])
         resp = self.svc._aggregate_results(results, req)
         assert len(resp.products) == 1
@@ -322,8 +341,8 @@ class TestAggregateResults:
 # 8. _score_and_filter
 # ============================================================
 
-class TestScoreAndFilter:
 
+class TestScoreAndFilter:
     def test_filters_below_min_confidence(self):
         svc = make_svc()
         products = [
@@ -355,15 +374,17 @@ class TestScoreAndFilter:
 # 9. _apply_merchant_preferences
 # ============================================================
 
-class TestApplyMerchantPreferences:
 
+class TestApplyMerchantPreferences:
     def setup_method(self):
         self.svc = make_svc()
 
     def test_preferred_first(self):
         products = [
             make_product(merchant="BestBuy", merchant_domain="bestbuy.com", confidence_score=0.9),
-            make_product(url="https://amazon.com/x", merchant="Amazon", merchant_domain="amazon.com", confidence_score=0.8),
+            make_product(
+                url="https://amazon.com/x", merchant="Amazon", merchant_domain="amazon.com", confidence_score=0.8
+            ),
         ]
         result = self.svc._apply_merchant_preferences(products, ["Amazon"])
         assert result[0].merchant == "Amazon"
@@ -371,7 +392,9 @@ class TestApplyMerchantPreferences:
     def test_preserves_confidence_order_within_tier(self):
         products = [
             make_product(merchant="Amazon", merchant_domain="amazon.com", confidence_score=0.7),
-            make_product(url="https://amazon.com/x2", merchant="Amazon US", merchant_domain="amazon.com", confidence_score=0.9),
+            make_product(
+                url="https://amazon.com/x2", merchant="Amazon US", merchant_domain="amazon.com", confidence_score=0.9
+            ),
         ]
         result = self.svc._apply_merchant_preferences(products, ["Amazon"])
         assert result[0].confidence_score >= result[1].confidence_score
@@ -381,8 +404,8 @@ class TestApplyMerchantPreferences:
 # 10. find_competitors (orchestration)
 # ============================================================
 
-class TestFindCompetitors:
 
+class TestFindCompetitors:
     @pytest.mark.asyncio
     async def test_returns_cached_result(self):
         svc = make_svc()
@@ -416,13 +439,12 @@ class TestFindCompetitors:
         svc._select_providers = MagicMock(return_value=[mock_provider])
 
         provider_result = ProviderResult(
-            provider=SearchProvider.DUCKDUCKGO, success=True,
+            provider=SearchProvider.DUCKDUCKGO,
+            success=True,
             products=[make_product()],
         )
         svc._search_all_providers = AsyncMock(return_value=[provider_result])
-        svc.scorer.calculate_batch = MagicMock(
-            side_effect=lambda products, **kw: products
-        )
+        svc.scorer.calculate_batch = MagicMock(side_effect=lambda products, **kw: products)
 
         result = await svc.find_competitors("Widget")
         assert result.status == MatchStatus.SUCCESS
@@ -436,18 +458,14 @@ class TestFindCompetitors:
         mock_provider.provider_name = SearchProvider.DUCKDUCKGO
         svc._select_providers = MagicMock(return_value=[mock_provider])
 
-        products = [
-            make_product(url=f"https://example.com/{i}", confidence_score=0.8)
-            for i in range(20)
-        ]
+        products = [make_product(url=f"https://example.com/{i}", confidence_score=0.8) for i in range(20)]
         provider_result = ProviderResult(
-            provider=SearchProvider.DUCKDUCKGO, success=True,
+            provider=SearchProvider.DUCKDUCKGO,
+            success=True,
             products=products,
         )
         svc._search_all_providers = AsyncMock(return_value=[provider_result])
-        svc.scorer.calculate_batch = MagicMock(
-            side_effect=lambda products, **kw: products
-        )
+        svc.scorer.calculate_batch = MagicMock(side_effect=lambda products, **kw: products)
 
         result = await svc.find_competitors("Widget", max_results=5)
         assert len(result.products) <= 5
@@ -467,8 +485,8 @@ class TestFindCompetitors:
 # 11. get_available_providers
 # ============================================================
 
-class TestGetAvailableProviders:
 
+class TestGetAvailableProviders:
     def test_returns_provider_info(self):
         svc = make_svc()
         mock_provider = MagicMock()
@@ -490,8 +508,8 @@ class TestGetAvailableProviders:
 # 12. _search_all_providers
 # ============================================================
 
-class TestSearchAllProviders:
 
+class TestSearchAllProviders:
     @pytest.mark.asyncio
     async def test_handles_provider_exception(self):
         svc = make_svc()
@@ -512,14 +530,20 @@ class TestSearchAllProviders:
         svc = make_svc()
         mock_p1 = MagicMock()
         mock_p1.provider_name = SearchProvider.DUCKDUCKGO
-        mock_p1.search = AsyncMock(return_value=ProviderResult(
-            provider=SearchProvider.DUCKDUCKGO, success=True,
-        ))
+        mock_p1.search = AsyncMock(
+            return_value=ProviderResult(
+                provider=SearchProvider.DUCKDUCKGO,
+                success=True,
+            )
+        )
         mock_p2 = MagicMock()
         mock_p2.provider_name = SearchProvider.SERPAPI_GOOGLE_SHOPPING
-        mock_p2.search = AsyncMock(return_value=ProviderResult(
-            provider=SearchProvider.SERPAPI_GOOGLE_SHOPPING, success=True,
-        ))
+        mock_p2.search = AsyncMock(
+            return_value=ProviderResult(
+                provider=SearchProvider.SERPAPI_GOOGLE_SHOPPING,
+                success=True,
+            )
+        )
 
         results = await svc._search_all_providers(
             MatchSearchRequest(product_name="Widget"),
@@ -527,7 +551,3 @@ class TestSearchAllProviders:
         )
         assert len(results) == 2
         assert all(r.success for r in results)
-
-
-
-        

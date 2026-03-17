@@ -15,11 +15,12 @@ These handlers bridge AI reasoning and real-world execution:
 Run: pytest backend/tests/test_autonomous_tool_handlers.py -v
 """
 
+import sys
+import types as _types
+from unittest.mock import MagicMock
+
 import pytest
 
-import sys
-from unittest.mock import MagicMock
-import types as _types
 _google = _types.ModuleType("google")
 _genai = _types.ModuleType("google.genai")
 _genai.Client = MagicMock()
@@ -38,20 +39,20 @@ for mod in ["db.session"]:
         sys.modules[mod] = MagicMock()
 
 from services.ai_trend_analysis.autonomous_orchestrator import (
-    handle_tool_call,
-    _handle_fetch_competitor_price,
-    _handle_detect_price_change,
     _handle_analyze_sentiment,
-    _handle_calculate_elasticity,
     _handle_assess_risk,
+    _handle_calculate_elasticity,
     _handle_calculate_optimal_price,
+    _handle_detect_price_change,
+    _handle_fetch_competitor_price,
     _handle_write_price_to_chain,
+    handle_tool_call,
 )
-
 
 # ---------------------------------------------------------------------------
 # handle_tool_call dispatcher
 # ---------------------------------------------------------------------------
+
 
 class TestToolCallDispatcher:
     """The central dispatcher routes function names to handlers."""
@@ -88,8 +89,8 @@ class TestToolCallDispatcher:
 # fetch_competitor_price
 # ---------------------------------------------------------------------------
 
-class TestFetchCompetitorPrice:
 
+class TestFetchCompetitorPrice:
     @pytest.mark.asyncio
     async def test_returns_required_fields(self):
         result = await _handle_fetch_competitor_price({"product_category": "electronics"})
@@ -120,65 +121,77 @@ class TestFetchCompetitorPrice:
 # detect_price_change
 # ---------------------------------------------------------------------------
 
-class TestDetectPriceChange:
 
+class TestDetectPriceChange:
     @pytest.mark.asyncio
     async def test_detects_significant_drop(self):
-        result = await _handle_detect_price_change({
-            "current_price": 85.0,
-            "last_known_price": 100.0,
-            "product_id": "test-001",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 85.0,
+                "last_known_price": 100.0,
+                "product_id": "test-001",
+            }
+        )
         assert result["change_detected"] is True
         assert result["change_pct"] == -15.0
         assert result["signal_type"] == "price_drop"
 
     @pytest.mark.asyncio
     async def test_detects_significant_increase(self):
-        result = await _handle_detect_price_change({
-            "current_price": 110.0,
-            "last_known_price": 100.0,
-            "product_id": "test-001",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 110.0,
+                "last_known_price": 100.0,
+                "product_id": "test-001",
+            }
+        )
         assert result["change_detected"] is True
         assert result["change_pct"] == 10.0
         assert result["signal_type"] == "price_increase"
 
     @pytest.mark.asyncio
     async def test_stable_when_change_below_threshold(self):
-        result = await _handle_detect_price_change({
-            "current_price": 99.0,
-            "last_known_price": 100.0,
-            "product_id": "test-001",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 99.0,
+                "last_known_price": 100.0,
+                "product_id": "test-001",
+            }
+        )
         assert result["change_detected"] is False
         assert result["signal_type"] == "stable"
 
     @pytest.mark.asyncio
     async def test_high_significance_for_large_changes(self):
-        result = await _handle_detect_price_change({
-            "current_price": 80.0,
-            "last_known_price": 100.0,
-            "product_id": "test-001",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 80.0,
+                "last_known_price": 100.0,
+                "product_id": "test-001",
+            }
+        )
         assert result["significance"] == "high"
 
     @pytest.mark.asyncio
     async def test_medium_significance_for_moderate_changes(self):
-        result = await _handle_detect_price_change({
-            "current_price": 93.0,
-            "last_known_price": 100.0,
-            "product_id": "test-001",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 93.0,
+                "last_known_price": 100.0,
+                "product_id": "test-001",
+            }
+        )
         assert result["significance"] == "medium"
 
     @pytest.mark.asyncio
     async def test_handles_zero_last_price_gracefully(self):
-        result = await _handle_detect_price_change({
-            "current_price": 50.0,
-            "last_known_price": 0,
-            "product_id": "test-001",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 50.0,
+                "last_known_price": 0,
+                "product_id": "test-001",
+            }
+        )
         assert result["change_pct"] == 0
         assert result["change_detected"] is False
 
@@ -187,8 +200,8 @@ class TestDetectPriceChange:
 # analyze_sentiment
 # ---------------------------------------------------------------------------
 
-class TestAnalyzeSentiment:
 
+class TestAnalyzeSentiment:
     @pytest.mark.asyncio
     async def test_returns_sentiment_structure(self):
         result = await _handle_analyze_sentiment({"product_category": "electronics"})
@@ -211,10 +224,12 @@ class TestAnalyzeSentiment:
 
     @pytest.mark.asyncio
     async def test_respects_timeframe_parameter(self):
-        result = await _handle_analyze_sentiment({
-            "product_category": "test",
-            "timeframe_hours": 48,
-        })
+        result = await _handle_analyze_sentiment(
+            {
+                "product_category": "test",
+                "timeframe_hours": 48,
+            }
+        )
         assert result["timeframe_hours"] == 48
 
     @pytest.mark.asyncio
@@ -227,8 +242,8 @@ class TestAnalyzeSentiment:
 # calculate_elasticity
 # ---------------------------------------------------------------------------
 
-class TestCalculateElasticity:
 
+class TestCalculateElasticity:
     @pytest.mark.asyncio
     async def test_returns_elasticity_structure(self):
         result = await _handle_calculate_elasticity({"product_id": "test-001"})
@@ -251,8 +266,8 @@ class TestCalculateElasticity:
 # assess_risk
 # ---------------------------------------------------------------------------
 
-class TestAssessRisk:
 
+class TestAssessRisk:
     @pytest.mark.asyncio
     async def test_returns_risk_structure(self):
         result = await _handle_assess_risk({"signal": {}, "sentiment_score": -0.5})
@@ -276,61 +291,73 @@ class TestAssessRisk:
 # calculate_optimal_price
 # ---------------------------------------------------------------------------
 
-class TestCalculateOptimalPrice:
 
+class TestCalculateOptimalPrice:
     @pytest.mark.asyncio
     async def test_decrease_direction_lowers_price(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "decrease"},
-            "signal": {},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "decrease"},
+                "signal": {},
+            }
+        )
         assert result["optimal_price"] < 100.0
 
     @pytest.mark.asyncio
     async def test_increase_direction_raises_price(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "increase"},
-            "signal": {},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "increase"},
+                "signal": {},
+            }
+        )
         assert result["optimal_price"] > 100.0
 
     @pytest.mark.asyncio
     async def test_hold_direction_keeps_price(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "hold"},
-            "signal": {},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "hold"},
+                "signal": {},
+            }
+        )
         assert result["optimal_price"] == 100.0
 
     @pytest.mark.asyncio
     async def test_returns_confidence_score(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "decrease"},
-            "signal": {},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "decrease"},
+                "signal": {},
+            }
+        )
         assert 0.0 <= result["confidence"] <= 1.0
 
     @pytest.mark.asyncio
     async def test_returns_weighted_factors(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {},
-            "signal": {},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {},
+                "signal": {},
+            }
+        )
         factors = result["factors_weighted"]
         assert sum(factors.values()) == pytest.approx(1.0, abs=0.01)
 
     @pytest.mark.asyncio
     async def test_change_pct_consistent_with_prices(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "decrease"},
-            "signal": {},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "decrease"},
+                "signal": {},
+            }
+        )
         expected_pct = (result["optimal_price"] - 100.0) / 100.0 * 100
         assert result["change_pct"] == pytest.approx(expected_pct, abs=0.1)
 
@@ -339,36 +366,42 @@ class TestCalculateOptimalPrice:
 # write_price_to_chain
 # ---------------------------------------------------------------------------
 
-class TestWritePriceToChain:
 
+class TestWritePriceToChain:
     @pytest.mark.asyncio
     async def test_returns_success_with_tx_hash(self):
-        result = await _handle_write_price_to_chain({
-            "product_id": "test-001",
-            "new_price": 87.99,
-            "confidence": 0.87,
-        })
+        result = await _handle_write_price_to_chain(
+            {
+                "product_id": "test-001",
+                "new_price": 87.99,
+                "confidence": 0.87,
+            }
+        )
         assert result["success"] is True
         assert result["tx_hash"] is not None
         assert result["tx_hash"].startswith("0x")
 
     @pytest.mark.asyncio
     async def test_tx_hash_is_valid_length(self):
-        result = await _handle_write_price_to_chain({
-            "product_id": "test-001",
-            "new_price": 87.99,
-            "confidence": 0.87,
-        })
+        result = await _handle_write_price_to_chain(
+            {
+                "product_id": "test-001",
+                "new_price": 87.99,
+                "confidence": 0.87,
+            }
+        )
         # Ethereum-style tx hashes are 66 chars (0x + 64 hex)
         assert len(result["tx_hash"]) == 66
 
     @pytest.mark.asyncio
     async def test_returns_chain_metadata(self):
-        result = await _handle_write_price_to_chain({
-            "product_id": "test-001",
-            "new_price": 87.99,
-            "confidence": 0.87,
-        })
+        result = await _handle_write_price_to_chain(
+            {
+                "product_id": "test-001",
+                "new_price": 87.99,
+                "confidence": 0.87,
+            }
+        )
         assert "chain" in result
         assert "block_number" in result
         assert "gas_used" in result
@@ -376,23 +409,23 @@ class TestWritePriceToChain:
 
     @pytest.mark.asyncio
     async def test_explorer_url_contains_tx_hash(self):
-        result = await _handle_write_price_to_chain({
-            "product_id": "test-001",
-            "new_price": 87.99,
-            "confidence": 0.87,
-        })
+        result = await _handle_write_price_to_chain(
+            {
+                "product_id": "test-001",
+                "new_price": 87.99,
+                "confidence": 0.87,
+            }
+        )
         assert result["tx_hash"] in result["explorer_url"]
 
     @pytest.mark.asyncio
     async def test_returns_execution_timestamp(self):
-        result = await _handle_write_price_to_chain({
-            "product_id": "test-001",
-            "new_price": 87.99,
-            "confidence": 0.87,
-        })
+        result = await _handle_write_price_to_chain(
+            {
+                "product_id": "test-001",
+                "new_price": 87.99,
+                "confidence": 0.87,
+            }
+        )
         assert "executed_at" in result
         assert result["executed_at"] is not None
-
-
-
-        

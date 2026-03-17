@@ -9,8 +9,8 @@ Handles MNEE payment operations:
 
 from fastapi import APIRouter
 
-from .wallet import router as wallet_router
 from .subscription import router as subscription_router
+from .wallet import router as wallet_router
 from .webhook import router as webhook_router
 
 router = APIRouter(prefix="/payments", tags=["Payments"])

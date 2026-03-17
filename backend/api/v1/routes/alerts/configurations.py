@@ -1,23 +1,22 @@
 # backend/api/v1/routes/alerts/configurations.py
 """Alert configuration CRUD endpoints."""
 
-from datetime import datetime, UTC
-from typing import Optional, List
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
-from models.user import User
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
+from db.session import get_session
 from models.alert import AlertConfiguration, AlertType
+from models.user import User
 from schemas.alert import (
     AlertConfigurationCreate,
-    AlertConfigurationUpdate,
     AlertConfigurationRead,
+    AlertConfigurationUpdate,
 )
 
 router = APIRouter()
@@ -51,24 +50,22 @@ async def create_alert_configuration(
     return db_config
 
 
-@router.get("/configurations", response_model=List[AlertConfigurationRead])
+@router.get("/configurations", response_model=list[AlertConfigurationRead])
 async def list_alert_configurations(
     request: Request,
-    alert_type: Optional[AlertType] = None,
-    is_active: Optional[bool] = None,
+    alert_type: AlertType | None = None,
+    is_active: bool | None = None,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List all alert configurations for the current user."""
-    query = select(AlertConfiguration).where(
-        AlertConfiguration.user_id == current_user.id
-    )
-    
+    query = select(AlertConfiguration).where(AlertConfiguration.user_id == current_user.id)
+
     if alert_type:
         query = query.where(AlertConfiguration.alert_type == alert_type)
     if is_active is not None:
         query = query.where(AlertConfiguration.is_active == is_active)
-    
+
     query = query.order_by(AlertConfiguration.created_at.desc())
     result = await session.execute(query)
     configs = list(result.scalars().all())
@@ -90,7 +87,7 @@ async def get_alert_configuration(
         )
     )
     config = result.scalars().first()
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Alert configuration not found")
     return config
@@ -113,18 +110,18 @@ async def update_alert_configuration(
         )
     )
     config = result.scalars().first()
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Alert configuration not found")
-    
+
     update_data = updates.model_dump(exclude_unset=True)
-    
-    if "channels" in update_data and update_data["channels"]:
+
+    if update_data.get("channels"):
         update_data["channels"] = [c.value for c in update_data["channels"]]
-    
+
     for field, value in update_data.items():
         setattr(config, field, value)
-    
+
     config.updated_at = datetime.now(UTC)
     session.add(config)
     await session.commit()
@@ -148,9 +145,9 @@ async def delete_alert_configuration(
         )
     )
     config = result.scalars().first()
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Alert configuration not found")
-    
+
     await session.delete(config)
     await session.commit()

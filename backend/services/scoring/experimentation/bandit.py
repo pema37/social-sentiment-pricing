@@ -22,9 +22,8 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -40,14 +39,14 @@ class ArmState:
     """
 
     strategy_name: str
-    alpha: float = 1.0        # Successes + prior
-    beta: float = 19.0        # Failures + prior
-    n_selections: int = 0     # Times this arm was chosen
-    n_rewards: int = 0        # Times a reward (success) was observed
-    n_updates: int = 0        # Total outcome observations
-    total_reward: float = 0.0 # Cumulative reward (for revenue-weighted)
-    last_selected: Optional[datetime] = None
-    last_updated: Optional[datetime] = None
+    alpha: float = 1.0  # Successes + prior
+    beta: float = 19.0  # Failures + prior
+    n_selections: int = 0  # Times this arm was chosen
+    n_rewards: int = 0  # Times a reward (success) was observed
+    n_updates: int = 0  # Total outcome observations
+    total_reward: float = 0.0  # Cumulative reward (for revenue-weighted)
+    last_selected: datetime | None = None
+    last_updated: datetime | None = None
 
     @property
     def mean(self) -> float:
@@ -74,7 +73,7 @@ class ArmState:
         """Has this arm been selected at least once?"""
         return self.n_selections > 0
 
-    def sample(self, rng: Optional[random.Random] = None) -> float:
+    def sample(self, rng: random.Random | None = None) -> float:
         """
         Sample from Beta(α, β).
 
@@ -119,16 +118,18 @@ class ArmState:
 @dataclass
 class SelectionResult:
     """Result of an arm selection (for logging and experiment tracking)."""
+
     selected_arm: str
     category: str
-    sampled_values: dict[str, float]   # {arm_name: sampled_theta}
-    selection_reason: str              # "thompson_sampling" or "exploration"
+    sampled_values: dict[str, float]  # {arm_name: sampled_theta}
+    selection_reason: str  # "thompson_sampling" or "exploration"
     is_exploration: bool = False
 
 
 # ──────────────────────────────────────────────────────────
 # THOMPSON SAMPLING BANDIT
 # ──────────────────────────────────────────────────────────
+
 
 class ThompsonSamplingBandit:
     """
@@ -159,7 +160,7 @@ class ThompsonSamplingBandit:
         default_alpha: float = 1.0,
         default_beta: float = 19.0,
         exploration_rate: float = 0.05,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ):
         """
         Args:
@@ -335,7 +336,7 @@ class ThompsonSamplingBandit:
         """Get all arm states for a category."""
         return dict(self._ensure_category(category))
 
-    def get_leader(self, category: str) -> Optional[str]:
+    def get_leader(self, category: str) -> str | None:
         """
         Get the current leading arm (highest posterior mean).
 
@@ -352,7 +353,7 @@ class ThompsonSamplingBandit:
         category: str,
         min_selections: int = 30,
         separation_threshold: float = 0.10,
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Check if the bandit has converged on a winner for this category.
 
@@ -435,12 +436,8 @@ class ThompsonSamplingBandit:
         for name, arm in arms.items():
             if name in population_states:
                 pop = population_states[name]
-                arm.alpha = (
-                    weight * pop.alpha + (1 - weight) * self._default_alpha
-                )
-                arm.beta = (
-                    weight * pop.beta + (1 - weight) * self._default_beta
-                )
+                arm.alpha = weight * pop.alpha + (1 - weight) * self._default_alpha
+                arm.beta = weight * pop.beta + (1 - weight) * self._default_beta
 
     def get_population_state(self) -> dict[str, ArmState]:
         """
@@ -499,13 +496,12 @@ class ThompsonSamplingBandit:
             "default_beta": self._default_beta,
             "exploration_rate": self._exploration_rate,
             "categories": {
-                cat: {name: arm.to_dict() for name, arm in arms.items()}
-                for cat, arms in self._states.items()
+                cat: {name: arm.to_dict() for name, arm in arms.items()} for cat, arms in self._states.items()
             },
         }
 
     @classmethod
-    def from_dict(cls, d: dict, seed: Optional[int] = None) -> ThompsonSamplingBandit:
+    def from_dict(cls, d: dict, seed: int | None = None) -> ThompsonSamplingBandit:
         """Restore bandit state from persisted data."""
         bandit = cls(
             arm_names=d["arm_names"],
@@ -515,12 +511,5 @@ class ThompsonSamplingBandit:
             seed=seed,
         )
         for cat, arms_dict in d.get("categories", {}).items():
-            bandit._states[cat] = {
-                name: ArmState.from_dict(arm_data)
-                for name, arm_data in arms_dict.items()
-            }
+            bandit._states[cat] = {name: ArmState.from_dict(arm_data) for name, arm_data in arms_dict.items()}
         return bandit
-    
-
-
-    

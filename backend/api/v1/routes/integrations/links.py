@@ -8,20 +8,20 @@ PATCHED (2026-02-21):
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
 from db.session import get_session
-from models.user import User
-from models.product import Product
 from models.integration import Integration, ProductIntegrationLink
+from models.product import Product
+from models.user import User
 from schemas.integration import (
     ProductLinkCreate,
-    ProductLinkResponse,
     ProductLinkListResponse,
+    ProductLinkResponse,
 )
 
 router = APIRouter()
@@ -44,13 +44,13 @@ async def create_product_link(
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
-    
+
     if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Integration not found",
         )
-    
+
     # Validate product belongs to user
     stmt = select(Product).where(
         Product.id == data.product_id,
@@ -58,13 +58,13 @@ async def create_product_link(
     )
     result = await db.execute(stmt)
     product = result.scalars().first()
-    
+
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
-    
+
     # FIX: Variant-aware duplicate check.
     # Old code only checked external_product_id, so creating variant B's
     # link was rejected because variant A's link already existed.
@@ -73,34 +73,30 @@ async def create_product_link(
         ProductIntegrationLink.external_product_id == data.external_product_id,
     )
     if data.external_variant_id:
-        stmt = stmt.where(
-            ProductIntegrationLink.external_variant_id == data.external_variant_id
-        )
+        stmt = stmt.where(ProductIntegrationLink.external_variant_id == data.external_variant_id)
     else:
-        stmt = stmt.where(
-            ProductIntegrationLink.external_variant_id.is_(None)
-        )
-    
+        stmt = stmt.where(ProductIntegrationLink.external_variant_id.is_(None))
+
     result = await db.execute(stmt)
     existing = result.scalars().first()
-    
+
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This external product variant is already linked",
         )
-    
+
     link = ProductIntegrationLink(
         product_id=data.product_id,
         integration_id=integration_id,
         external_product_id=data.external_product_id,
         external_variant_id=data.external_variant_id,
     )
-    
+
     db.add(link)
     await db.commit()
     await db.refresh(link)
-    
+
     return ProductLinkResponse.model_validate(link)
 
 
@@ -118,19 +114,19 @@ async def list_product_links(
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
-    
+
     if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Integration not found",
         )
-    
+
     stmt = select(ProductIntegrationLink).where(
         ProductIntegrationLink.integration_id == integration_id,
     )
     result = await db.execute(stmt)
     links = list(result.scalars().all())
-    
+
     return ProductLinkListResponse(
         links=[ProductLinkResponse.model_validate(link) for link in links],
         total=len(links),
@@ -153,28 +149,25 @@ async def delete_product_link(
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
-    
+
     if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Integration not found",
         )
-    
+
     stmt = select(ProductIntegrationLink).where(
         ProductIntegrationLink.id == link_id,
         ProductIntegrationLink.integration_id == integration_id,
     )
     result = await db.execute(stmt)
     link = result.scalars().first()
-    
+
     if not link:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product link not found",
         )
-    
+
     await db.delete(link)
     await db.commit()
-
-
-    

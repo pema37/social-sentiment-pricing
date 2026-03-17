@@ -13,21 +13,20 @@ Endpoints:
 """
 
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import Column, DateTime, String, Text, func, select
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import Field as SQLField
+from sqlmodel import SQLModel
 
-from sqlmodel import SQLModel, Field as SQLField
-
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter
 from core.logging import get_logger
+from core.rate_limit import limiter
+from db.session import get_session
 from models.user import User
 
 logger = get_logger(__name__)
@@ -37,8 +36,10 @@ router = APIRouter(prefix="/prospect/analytics", tags=["Prospect Analytics"])
 
 # ── Model ─────────────────────────────────────────────────────
 
+
 class ProspectAuditEvent(SQLModel, table=True):
     """Tracks prospect audit funnel events."""
+
     __tablename__ = "prospect_audit_events"
 
     id: uuid.UUID = SQLField(
@@ -48,33 +49,33 @@ class ProspectAuditEvent(SQLModel, table=True):
     event_type: str = SQLField(
         sa_column=Column(String(50), nullable=False, index=True),
     )
-    store_url: Optional[str] = SQLField(
+    store_url: str | None = SQLField(
         default=None,
         sa_column=Column(String(500), nullable=True),
     )
-    email: Optional[str] = SQLField(
+    email: str | None = SQLField(
         default=None,
         sa_column=Column(String(255), nullable=True),
     )
-    input_mode: Optional[str] = SQLField(
+    input_mode: str | None = SQLField(
         default=None,
         sa_column=Column(String(10), nullable=True),
     )
-    products_found: Optional[int] = SQLField(default=None)
-    estimated_impact: Optional[str] = SQLField(
+    products_found: int | None = SQLField(default=None)
+    estimated_impact: str | None = SQLField(
         default=None,
         sa_column=Column(String(50), nullable=True),
     )
-    ip_hash: Optional[str] = SQLField(
+    ip_hash: str | None = SQLField(
         default=None,
         sa_column=Column(String(64), nullable=True),
     )
-    user_agent: Optional[str] = SQLField(
+    user_agent: str | None = SQLField(
         default=None,
         sa_column=Column(Text, nullable=True),
     )
     created_at: datetime = SQLField(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
     )
 
@@ -92,12 +93,14 @@ VALID_EVENTS = {
 
 
 class TrackEventRequest(BaseModel):
-    event_type: str = Field(description="One of: page_view, audit_started, audit_completed, email_submitted, pdf_downloaded, demo_clicked")
-    store_url: Optional[str] = None
-    email: Optional[str] = None
-    input_mode: Optional[str] = Field(default=None, description="'url' or 'csv'")
-    products_found: Optional[int] = None
-    estimated_impact: Optional[str] = None
+    event_type: str = Field(
+        description="One of: page_view, audit_started, audit_completed, email_submitted, pdf_downloaded, demo_clicked"
+    )
+    store_url: str | None = None
+    email: str | None = None
+    input_mode: str | None = Field(default=None, description="'url' or 'csv'")
+    products_found: int | None = None
+    estimated_impact: str | None = None
 
 
 class TrackEventResponse(BaseModel):
@@ -122,6 +125,7 @@ class FunnelMetrics(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────
 
+
 @router.post("/event", response_model=TrackEventResponse)
 @limiter.limit("30/minute")
 async def track_event(
@@ -138,6 +142,7 @@ async def track_event(
 
     # Hash IP for privacy (don't store raw IPs)
     import hashlib
+
     client_ip = req.client.host if req.client else "unknown"
     ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
 
@@ -176,7 +181,7 @@ async def get_funnel_metrics(
     Get prospect audit funnel metrics for the last N days.
     Auth required — this is for your admin dashboard.
     """
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
 
     async def count_events(event_type: str) -> int:
         result = await session.execute(
@@ -225,6 +230,3 @@ async def get_funnel_metrics(
         unique_stores=unique_stores,
         unique_emails=unique_emails,
     )
-
-
-

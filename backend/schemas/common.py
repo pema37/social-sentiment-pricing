@@ -1,23 +1,27 @@
 # backend/schemas/common.py
 
-from typing import TypeVar, Generic, List
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Generic, TypeVar
+
 from fastapi import Query
+from pydantic import BaseModel, ConfigDict
 
 T = TypeVar("T")
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response wrapper."""
+
     model_config = ConfigDict(from_attributes=True)
-    items: List[T]
+    items: list[T]
     total: int
     page: int
     page_size: int
     total_pages: int
 
+
 class PaginationParams:
     """Dependency for pagination query parameters."""
+
     def __init__(
         self,
         page: int = Query(1, ge=1, description="Page number"),
@@ -26,4 +30,3 @@ class PaginationParams:
         self.page = page
         self.page_size = page_size
         self.offset = (page - 1) * page_size
-        

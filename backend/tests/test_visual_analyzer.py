@@ -5,15 +5,15 @@ Tests the JSON parsing logic and price change math in the visual pricing pipelin
 No Gemini API dependency.
 """
 
-import pytest
 import json
 import re
-from decimal import Decimal
 from dataclasses import dataclass, field
-from typing import Optional
+from decimal import Decimal
 
+import pytest
 
 # ── Local replicas of data classes ──
+
 
 @dataclass
 class ProductInfo:
@@ -35,6 +35,7 @@ class PricingRecommendation:
 
 
 # ── Helper method extracted from VisualPricingAnalyzer ──
+
 
 def _parse_recommendation(response: str, your_product: ProductInfo) -> PricingRecommendation:
     try:
@@ -107,9 +108,8 @@ def product_zero():
 
 
 class TestParseRecommendation:
-
     def test_valid_json_block(self, product_29):
-        response = '''Based on my analysis:
+        response = """Based on my analysis:
 
 ```json
 {
@@ -121,7 +121,7 @@ class TestParseRecommendation:
 }
 ```
 
-This should increase conversion rates.'''
+This should increase conversion rates."""
 
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("24.99")
@@ -132,36 +132,36 @@ This should increase conversion rates.'''
         assert result.price_change_percent < 0  # Decrease
 
     def test_price_increase(self, product_29):
-        response = '''```json
+        response = """```json
 {
   "recommended_price": 34.99,
   "confidence": 0.7,
   "strategy": "increase",
   "risk_level": "medium"
 }
-```'''
+```"""
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("34.99")
         assert result.price_change_percent > 0  # Increase
         assert result.strategy == "increase"
 
     def test_maintain_price(self, product_29):
-        response = '''```json
+        response = """```json
 {
   "recommended_price": 29.99,
   "confidence": 0.9,
   "strategy": "maintain",
   "risk_level": "low"
 }
-```'''
+```"""
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("29.99")
         assert abs(result.price_change_percent) < 0.01  # No change
 
     def test_json_without_language_tag(self, product_29):
-        response = '''```
+        response = """```
 {"recommended_price": 27.99, "confidence": 0.6}
-```'''
+```"""
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("27.99")
 
@@ -181,7 +181,7 @@ This should increase conversion rates.'''
         assert "Unable to parse" in result.key_factors[0]
 
     def test_malformed_json_returns_safe_default(self, product_29):
-        response = '```json\n{broken json\n```'
+        response = "```json\n{broken json\n```"
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == product_29.price
         assert result.confidence == 0.3
@@ -207,7 +207,6 @@ This should increase conversion rates.'''
 
 
 class TestPriceChangeCalculation:
-
     def test_10_percent_decrease(self, product_100):
         response = '```json\n{"recommended_price": 90.00}\n```'
         result = _parse_recommendation(response, product_100)
@@ -241,13 +240,13 @@ class TestPriceChangeCalculation:
         assert result.price_change_percent == pytest.approx(0.01)
 
     def test_reasoning_preserved(self, product_29):
-        response = '''Here is my detailed analysis of the market.
+        response = """Here is my detailed analysis of the market.
 
 ```json
 {"recommended_price": 24.99}
 ```
 
-The competitor is undercutting you significantly.'''
+The competitor is undercutting you significantly."""
         result = _parse_recommendation(response, product_29)
         assert "detailed analysis" in result.reasoning
         assert "undercutting" in result.reasoning
@@ -259,10 +258,9 @@ The competitor is undercutting you significantly.'''
 
 
 class TestEdgeCases:
-
     def test_multiple_json_blocks_takes_first(self, product_29):
         """When multiple JSON blocks exist, first one wins."""
-        response = '''```json
+        response = """```json
 {"recommended_price": 19.99}
 ```
 
@@ -270,7 +268,7 @@ Actually on second thought:
 
 ```json
 {"recommended_price": 39.99}
-```'''
+```"""
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("19.99")
 
@@ -283,23 +281,23 @@ Actually on second thought:
     def test_very_long_response(self, product_29):
         """Large response should still find the JSON block."""
         padding = "Analysis data point. " * 1000
-        response = f'''{padding}
+        response = f"""{padding}
 
 ```json
 {{"recommended_price": 27.50, "confidence": 0.95}}
 ```
 
-{padding}'''
+{padding}"""
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("27.50")
         assert result.confidence == 0.95
 
     def test_unicode_in_response(self, product_29):
-        response = '''Análisis del precio: está muy alto 🏷️
+        response = """Análisis del precio: está muy alto 🏷️
 
 ```json
 {"recommended_price": 22.99, "key_factors": ["Precio competitivo"]}
-```'''
+```"""
         result = _parse_recommendation(response, product_29)
         assert result.recommended_price == Decimal("22.99")
         assert "Precio competitivo" in result.key_factors

@@ -10,14 +10,14 @@ Run: pytest backend/tests/test_session.py -v
 """
 
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 
 # =====================================================================
 # URL Manipulation — tested as pure string logic (no imports needed)
 # =====================================================================
+
 
 class TestURLManipulation:
     """
@@ -69,15 +69,11 @@ class TestURLManipulation:
         assert "sslmode=" not in result
 
     def test_channel_binding_removed(self):
-        result = self.make_async_url(
-            "postgresql://host/db?ssl=require&channel_binding=require"
-        )
+        result = self.make_async_url("postgresql://host/db?ssl=require&channel_binding=require")
         assert "channel_binding" not in result
 
     def test_channel_binding_at_start_removed(self):
-        result = self.make_async_url(
-            "postgresql://host/db?channel_binding=require&ssl=require"
-        )
+        result = self.make_async_url("postgresql://host/db?channel_binding=require&ssl=require")
         assert "channel_binding" not in result
 
     # --- Sync URL tests ---
@@ -100,11 +96,13 @@ class TestURLManipulation:
 # run_async — standalone, no DB imports needed
 # =====================================================================
 
+
 class TestRunAsync:
     """Test the Celery async helper. Import only the function via patching."""
 
     def _get_run_async(self):
         """Import run_async by extracting it without triggering engine creation."""
+
         # run_async is a pure function that doesn't need DB engines.
         # We define it inline to avoid importing db.session.
         def run_async(coro):
@@ -114,6 +112,7 @@ class TestRunAsync:
                 return loop.run_until_complete(coro)
             finally:
                 loop.close()
+
         return run_async
 
     def test_executes_coroutine(self):
@@ -147,12 +146,14 @@ class TestRunAsync:
 # get_session alias — check without importing the module
 # =====================================================================
 
+
 class TestSessionAliases:
     """Verify get_db is an alias for get_session at the code level."""
 
     def test_get_db_alias_in_source(self):
         """Read the source file and verify `get_db = get_session` exists."""
         import pathlib
+
         session_file = pathlib.Path(__file__).parent.parent / "db" / "session.py"
         source = session_file.read_text()
         assert "get_db = get_session" in source
@@ -161,6 +162,7 @@ class TestSessionAliases:
 # =====================================================================
 # Session provider logic — tested with mocked factories
 # =====================================================================
+
 
 class TestGetSyncSession:
     """Test get_sync_session logic using a mock SyncSessionLocal."""
@@ -270,6 +272,3 @@ class TestGetSessionContext:
                 pass
 
         mock_session.rollback.assert_awaited_once()
-
-
-        

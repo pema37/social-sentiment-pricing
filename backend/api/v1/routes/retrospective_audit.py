@@ -10,23 +10,23 @@ Endpoints:
 """
 
 import uuid
+from datetime import UTC
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.session import get_session
 from core.deps import get_current_user
+from db.session import get_session
 from models.user import User
-from services.retrospective_audit_service import RetrospectiveAuditService
-from services.audit_persistence_service import AuditPersistenceService
-from services.audit_pdf_generator import generate_audit_pdf
 from schemas.retrospective_audit import (
+    AuditListResponse,
     AuditRequest,
     RetrospectiveAuditResponse,
-    AuditListItem,
-    AuditListResponse,
 )
+from services.audit_pdf_generator import generate_audit_pdf
+from services.audit_persistence_service import AuditPersistenceService
+from services.retrospective_audit_service import RetrospectiveAuditService
 
 router = APIRouter(prefix="/audit", tags=["Retrospective Audit"])
 
@@ -71,8 +71,9 @@ async def get_latest_audit(
     if not force_refresh:
         cached = await persistence.get_latest(lookback_days=lookback_days)
         if cached:
-            from datetime import datetime, timezone, timedelta
-            age = datetime.now(timezone.utc) - cached.created_at
+            from datetime import datetime, timedelta
+
+            age = datetime.now(UTC) - cached.created_at
             if age < timedelta(hours=24):
                 return cached
 
@@ -141,6 +142,3 @@ async def generate_retrospective_pdf(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
-
-
-

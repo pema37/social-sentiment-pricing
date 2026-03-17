@@ -1,23 +1,23 @@
 # backend/models/competitor_product.py
 
 import uuid as uuid_lib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, Text, ForeignKey
+from sqlalchemy import Column, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlmodel import Field, SQLModel
 
 
 class CompetitorProduct(SQLModel, table=True):
     """
     Links your product to a competitor's equivalent product.
-    
+
     This allows tracking competitor prices for the same/similar items.
     One of your products can be linked to multiple competitor products
     (e.g., your iPhone 15 Pro linked to Amazon's listing, Best Buy's listing, etc.)
     """
+
     __tablename__ = "competitor_products"
 
     id: uuid_lib.UUID = Field(
@@ -48,41 +48,34 @@ class CompetitorProduct(SQLModel, table=True):
     # Competitor's product details
     competitor_product_name: str = Field(max_length=500)
     competitor_product_url: str = Field(max_length=1000)
-    competitor_sku: Optional[str] = Field(default=None, max_length=100)
+    competitor_sku: str | None = Field(default=None, max_length=100)
 
     # Current tracked price (updated by scraper)
-    current_price: Optional[Decimal] = Field(
-        default=None, max_digits=10, decimal_places=2
-    )
+    current_price: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
     currency: str = Field(default="USD", max_length=3)
 
     # Price tracking metadata
-    last_price_update: Optional[datetime] = Field(
+    last_price_update: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True)),
     )
     price_available: bool = Field(default=True)
 
     # Match confidence (how sure we are this is the same product)
-    match_confidence: Decimal = Field(
-        default=Decimal("1.0"), max_digits=3, decimal_places=2
-    )
+    match_confidence: Decimal = Field(default=Decimal("1.0"), max_digits=3, decimal_places=2)
 
     # Notes about the mapping
-    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    notes: str | None = Field(default=None, sa_column=Column(Text))
 
     # Tracking status
     is_active: bool = Field(default=True, index=True)
 
     # Timestamps
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-
-
-

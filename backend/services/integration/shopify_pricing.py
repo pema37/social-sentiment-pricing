@@ -21,17 +21,16 @@ See: https://shopify.dev/docs/api/admin-graphql/latest/mutations/productVariants
 
 import logging
 from decimal import Decimal
-from typing import Optional
 
 import httpx
 
+from .circuit_breaker import CircuitOpenError
+from .http_client import RetryableClient
 from .schemas import (
     PriceUpdateRequest,
     PriceUpdateResponse,
     PriceUpdateResult,
 )
-from .http_client import RetryableClient
-from .circuit_breaker import CircuitOpenError
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +50,7 @@ class ShopifyPricingMixin:
             # Resolve variant ID
             variant_id = request.external_variant_id
             if not variant_id:
-                product = await self.fetch_single_product(
-                    store_url, access_token, request.external_product_id
-                )
+                product = await self.fetch_single_product(store_url, access_token, request.external_product_id)
                 if product and product.variants:
                     variant_id = product.variants[0].id
                 else:
@@ -64,9 +61,7 @@ class ShopifyPricingMixin:
                     )
 
             # Get old price
-            current = await self.fetch_single_product(
-                store_url, access_token, request.external_product_id
-            )
+            current = await self.fetch_single_product(store_url, access_token, request.external_product_id)
             old_price = current.price if current else None
 
             # ══════════════════════════════════════════════════════════════
@@ -116,9 +111,7 @@ class ShopifyPricingMixin:
             }
 
             async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as rc:
-                data = await self._graphql(
-                    rc, shop_domain, access_token, mutation, variables
-                )
+                data = await self._graphql(rc, shop_domain, access_token, mutation, variables)
 
             # Check userErrors from mutation
             mutation_result = data.get("productVariantsBulkUpdate") or {}
@@ -155,8 +148,7 @@ class ShopifyPricingMixin:
                 )
 
             logger.info(
-                f"Price update verified for product {request.external_product_id}: "
-                f"${old_price} -> ${request.new_price}"
+                f"Price update verified for product {request.external_product_id}: ${old_price} -> ${request.new_price}"
             )
             return PriceUpdateResponse(
                 result=PriceUpdateResult.SUCCESS,
@@ -199,9 +191,7 @@ class ShopifyPricingMixin:
     ) -> dict:
         """Verify that a price update was actually applied in Shopify."""
         try:
-            updated_product = await self.fetch_single_product(
-                store_url, access_token, external_product_id
-            )
+            updated_product = await self.fetch_single_product(store_url, access_token, external_product_id)
             if not updated_product:
                 return {"success": False, "actual_price": None, "error": "Could not fetch product after update"}
 
@@ -229,8 +219,4 @@ class ShopifyPricingMixin:
             }
         except Exception as e:
             logger.exception(f"Error verifying price update for product {external_product_id}")
-            return {"success": False, "actual_price": None, "error": f"Verification error: {str(e)}"}
-        
-
-
-        
+            return {"success": False, "actual_price": None, "error": f"Verification error: {e!s}"}

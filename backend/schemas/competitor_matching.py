@@ -10,12 +10,9 @@ These schemas are used for:
 """
 
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
-from datetime import datetime
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Enums as string literals for API
@@ -23,7 +20,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 SEARCH_PROVIDERS = [
     "serpapi_google_shopping",
-    "google_custom_search", 
+    "google_custom_search",
     "duckduckgo",
     "keepa",
     "rainforest",
@@ -41,9 +38,10 @@ MATCH_STATUSES = [
 # Request Schemas
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CompetitorSearchRequest(BaseModel):
     """Request to search for competitor products."""
-    
+
     product_name: str = Field(
         ...,
         min_length=2,
@@ -51,12 +49,12 @@ class CompetitorSearchRequest(BaseModel):
         description="Product name to search for",
         json_schema_extra={"example": "iPhone 15 Pro 256GB"},
     )
-    keywords: Optional[List[str]] = Field(
+    keywords: list[str] | None = Field(
         default=None,
         description="Additional keywords to improve search accuracy",
         json_schema_extra={"example": ["apple", "smartphone", "unlocked"]},
     )
-    our_price: Optional[Decimal] = Field(
+    our_price: Decimal | None = Field(
         default=None,
         ge=0,
         description="Your product's price for relevance scoring",
@@ -68,12 +66,12 @@ class CompetitorSearchRequest(BaseModel):
         le=50,
         description="Maximum number of results to return",
     )
-    exclude_domains: Optional[List[str]] = Field(
+    exclude_domains: list[str] | None = Field(
         default=None,
         description="Domains to exclude from results (e.g., your own store)",
         json_schema_extra={"example": ["mystore.com"]},
     )
-    preferred_merchants: Optional[List[str]] = Field(
+    preferred_merchants: list[str] | None = Field(
         default=None,
         description="Preferred merchants to prioritize in results",
         json_schema_extra={"example": ["Amazon", "Best Buy", "Walmart"]},
@@ -106,7 +104,7 @@ class CompetitorSearchRequest(BaseModel):
 
 class ProductMatchRequest(BaseModel):
     """Request to find competitors for a specific product."""
-    
+
     product_id: UUID = Field(
         ...,
         description="ID of your product to find competitors for",
@@ -117,11 +115,11 @@ class ProductMatchRequest(BaseModel):
         le=50,
         description="Maximum results per product",
     )
-    exclude_domains: Optional[List[str]] = Field(
+    exclude_domains: list[str] | None = Field(
         default=None,
         description="Domains to exclude",
     )
-    preferred_merchants: Optional[List[str]] = Field(
+    preferred_merchants: list[str] | None = Field(
         default=None,
         description="Preferred merchants",
     )
@@ -150,8 +148,8 @@ class ProductMatchRequest(BaseModel):
 
 class BulkMatchRequest(BaseModel):
     """Request to match multiple products at once."""
-    
-    product_ids: List[UUID] = Field(
+
+    product_ids: list[UUID] = Field(
         ...,
         min_length=1,
         max_length=20,
@@ -179,18 +177,19 @@ class BulkMatchRequest(BaseModel):
 # Response Schemas
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class MatchedProductSchema(BaseModel):
     """A competitor product found via search."""
-    
+
     title: str = Field(description="Product title")
     url: str = Field(description="Product URL")
-    price: Optional[str] = Field(description="Product price")
+    price: str | None = Field(description="Product price")
     currency: str = Field(default="USD", description="Price currency")
     merchant: str = Field(description="Merchant/retailer name")
     merchant_domain: str = Field(description="Merchant domain")
-    image_url: Optional[str] = Field(description="Product image URL")
-    rating: Optional[float] = Field(description="Product rating (0-5)")
-    reviews_count: Optional[int] = Field(description="Number of reviews")
+    image_url: str | None = Field(description="Product image URL")
+    rating: float | None = Field(description="Product rating (0-5)")
+    reviews_count: int | None = Field(description="Number of reviews")
     confidence_score: float = Field(description="Match confidence (0-1)")
     confidence_percent: int = Field(description="Match confidence as percentage")
     source: str = Field(description="Search provider that found this result")
@@ -219,14 +218,14 @@ class MatchedProductSchema(BaseModel):
 
 class CompetitorSearchResponse(BaseModel):
     """Response from competitor search."""
-    
+
     success: bool = Field(description="Whether search was successful")
     status: str = Field(description="Search status (success, partial, failed, cached)")
     query_used: str = Field(description="The search query that was used")
     total_found: int = Field(description="Total number of matches found")
-    products: List[MatchedProductSchema] = Field(description="Matched products")
-    providers_used: List[str] = Field(description="Search providers that returned results")
-    providers_failed: List[str] = Field(description="Providers that failed (with error messages)")
+    products: list[MatchedProductSchema] = Field(description="Matched products")
+    providers_used: list[str] = Field(description="Search providers that returned results")
+    providers_failed: list[str] = Field(description="Providers that failed (with error messages)")
     search_time_ms: int = Field(description="Search time in milliseconds")
     cached: bool = Field(description="Whether results came from cache")
 
@@ -249,7 +248,7 @@ class CompetitorSearchResponse(BaseModel):
 
 class ProviderInfoSchema(BaseModel):
     """Information about a search provider."""
-    
+
     name: str = Field(description="Provider name")
     available: bool = Field(description="Whether provider is configured and available")
     requires_api_key: bool = Field(description="Whether provider requires an API key")
@@ -269,40 +268,40 @@ class ProviderInfoSchema(BaseModel):
 
 class ProvidersListResponse(BaseModel):
     """Response listing available providers."""
-    
-    providers: List[ProviderInfoSchema] = Field(description="List of all providers")
+
+    providers: list[ProviderInfoSchema] = Field(description="List of all providers")
     available_count: int = Field(description="Number of available providers")
     total_count: int = Field(description="Total number of providers")
 
 
 class BulkMatchResultSchema(BaseModel):
     """Result for a single product in bulk match."""
-    
+
     product_name: str = Field(description="Product name")
     success: bool = Field(description="Whether match was successful")
-    total_found: Optional[int] = Field(default=None, description="Number of matches found")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
-    top_matches: Optional[List[dict]] = Field(default=None, description="Top 3 matches summary")
+    total_found: int | None = Field(default=None, description="Number of matches found")
+    error: str | None = Field(default=None, description="Error message if failed")
+    top_matches: list[dict] | None = Field(default=None, description="Top 3 matches summary")
 
 
 class BulkMatchResponse(BaseModel):
     """Response from bulk match operation."""
-    
+
     total_products: int = Field(description="Total products processed")
     results: dict = Field(description="Results keyed by product ID")
 
 
 class AutoLinkResultSchema(BaseModel):
     """Result of auto-linking operation."""
-    
+
     product_id: str = Field(description="Product ID")
     linked_count: int = Field(description="Number of competitors linked")
-    links_created: List[dict] = Field(description="Details of created links")
+    links_created: list[dict] = Field(description="Details of created links")
 
 
 class CacheClearResponse(BaseModel):
     """Response from cache clear operation."""
-    
+
     success: bool = Field(description="Whether operation succeeded")
     entries_cleared: int = Field(description="Number of cache entries cleared")
 
@@ -311,12 +310,13 @@ class CacheClearResponse(BaseModel):
 # Error Schemas
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class MatchingErrorResponse(BaseModel):
     """Error response for matching operations."""
-    
+
     detail: str = Field(description="Error message")
-    error_code: Optional[str] = Field(default=None, description="Error code")
-    provider_errors: Optional[List[str]] = Field(default=None, description="Provider-specific errors")
+    error_code: str | None = Field(default=None, description="Error code")
+    provider_errors: list[str] | None = Field(default=None, description="Provider-specific errors")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -330,6 +330,3 @@ class MatchingErrorResponse(BaseModel):
             }
         }
     )
-
-
-

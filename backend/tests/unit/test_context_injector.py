@@ -16,10 +16,9 @@ Run: pytest backend/tests/unit/test_context_injector.py -v
 """
 
 import sys
-import pytest
-from datetime import datetime, timedelta, UTC
-from unittest.mock import MagicMock
+from datetime import UTC, datetime, timedelta
 
+import pytest
 
 # ──────────────────────────────────────────────────────────
 # sys.modules isolation
@@ -51,9 +50,9 @@ def isolate_modules():
 # Fake CategoryFeatures (duck-typed to match feature_engineer.py)
 # ──────────────────────────────────────────────────────────
 
+
 class FakeConfidenceBand:
-    def __init__(self, band_lower, band_upper, band_label, count,
-                 avg_revenue_lift_pct):
+    def __init__(self, band_lower, band_upper, band_label, count, avg_revenue_lift_pct):
         self.band_lower = band_lower
         self.band_upper = band_upper
         self.band_label = band_label
@@ -87,11 +86,13 @@ class FakeCategoryFeatures:
 # TESTS: ScoringContext defaults
 # ──────────────────────────────────────────────────────────
 
+
 class TestScoringContextDefaults:
     """Test ScoringContext dataclass defaults."""
 
     def test_default_values(self):
         from services.scoring.learning.context_injector import ScoringContext
+
         ctx = ScoringContext(category="test")
         assert ctx.category == "test"
         assert ctx.merchant_bias == 0.0
@@ -111,11 +112,13 @@ class TestScoringContextDefaults:
 # TESTS: build_scoring_context
 # ──────────────────────────────────────────────────────────
 
+
 class TestBuildScoringContext:
     """Test structured context for the scoring engine."""
 
     def _injector(self):
         from services.scoring.learning.context_injector import ContextInjector
+
         return ContextInjector()
 
     def test_none_features_returns_default(self):
@@ -166,9 +169,7 @@ class TestBuildScoringContext:
 
     def test_merchant_bias_zero_when_no_direction_bias(self):
         """Zero direction bias → zero merchant bias."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, modification_direction_bias=0.0
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, modification_direction_bias=0.0)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.merchant_bias == 0.0
 
@@ -216,41 +217,31 @@ class TestBuildScoringContext:
 
     def test_magnitude_cap_2_5_pct(self):
         """Best bucket '2-5%' → cap at 0.05."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, best_magnitude_bucket="2-5%"
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, best_magnitude_bucket="2-5%")
         ctx = self._injector().build_scoring_context(features)
         assert ctx.suggested_magnitude_cap == 0.05
 
     def test_magnitude_cap_0_2_pct(self):
         """Best bucket '0-2%' → cap at 0.02."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, best_magnitude_bucket="0-2%"
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, best_magnitude_bucket="0-2%")
         ctx = self._injector().build_scoring_context(features)
         assert ctx.suggested_magnitude_cap == 0.02
 
     def test_magnitude_cap_10_plus(self):
         """Best bucket '10%+' → no cap (None)."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, best_magnitude_bucket="10%+"
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, best_magnitude_bucket="10%+")
         ctx = self._injector().build_scoring_context(features)
         assert ctx.suggested_magnitude_cap is None
 
     def test_magnitude_cap_none_bucket(self):
         """No best bucket → no cap."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, best_magnitude_bucket=None
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, best_magnitude_bucket=None)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.suggested_magnitude_cap is None
 
     def test_magnitude_cap_unknown_bucket(self):
         """Unknown bucket string → None."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, best_magnitude_bucket="weird-bucket"
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, best_magnitude_bucket="weird-bucket")
         ctx = self._injector().build_scoring_context(features)
         assert ctx.suggested_magnitude_cap is None
 
@@ -264,21 +255,17 @@ class TestBuildScoringContext:
 
     def test_calibration_factor_no_bands(self):
         """No confidence band data → 1.0."""
-        features = FakeCategoryFeatures(
-            n_outcomes=20, confidence_band_performance=[]
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, confidence_band_performance=[])
         ctx = self._injector().build_scoring_context(features)
         assert ctx.confidence_calibration_factor == 1.0
 
     def test_calibration_factor_high_underperforms(self):
         """High-confidence underperforms low → factor < 1.0."""
         bands = [
-            FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 5, 8.0),   # low band, good
-            FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 5, 2.0),   # high band, worse
+            FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 5, 8.0),  # low band, good
+            FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 5, 2.0),  # high band, worse
         ]
-        features = FakeCategoryFeatures(
-            n_outcomes=20, confidence_band_performance=bands
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, confidence_band_performance=bands)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.confidence_calibration_factor < 1.0
         assert ctx.confidence_calibration_factor >= 0.5
@@ -286,12 +273,10 @@ class TestBuildScoringContext:
     def test_calibration_factor_high_outperforms(self):
         """High-confidence outperforms low → factor > 1.0."""
         bands = [
-            FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 5, 2.0),   # low band
+            FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 5, 2.0),  # low band
             FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 5, 10.0),  # high band, better
         ]
-        features = FakeCategoryFeatures(
-            n_outcomes=20, confidence_band_performance=bands
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, confidence_band_performance=bands)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.confidence_calibration_factor > 1.0
         assert ctx.confidence_calibration_factor <= 1.5
@@ -299,12 +284,10 @@ class TestBuildScoringContext:
     def test_calibration_factor_insufficient_per_band(self):
         """Bands with count < 2 are excluded → 1.0."""
         bands = [
-            FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 1, 8.0),   # too few
-            FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 1, 2.0),   # too few
+            FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 1, 8.0),  # too few
+            FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 1, 2.0),  # too few
         ]
-        features = FakeCategoryFeatures(
-            n_outcomes=20, confidence_band_performance=bands
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, confidence_band_performance=bands)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.confidence_calibration_factor == 1.0
 
@@ -318,26 +301,20 @@ class TestBuildScoringContext:
 
     def test_data_quality_bonus_rich_data(self):
         """High outcomes + high coverage → positive bonus."""
-        features = FakeCategoryFeatures(
-            n_outcomes=100, pct_with_impact_data=0.9
-        )
+        features = FakeCategoryFeatures(n_outcomes=100, pct_with_impact_data=0.9)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.data_quality_bonus > 0.0
         assert ctx.data_quality_bonus <= 0.2
 
     def test_data_quality_bonus_max(self):
         """Very high outcomes + full coverage → max ~0.2."""
-        features = FakeCategoryFeatures(
-            n_outcomes=300, pct_with_impact_data=1.0
-        )
+        features = FakeCategoryFeatures(n_outcomes=300, pct_with_impact_data=1.0)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.data_quality_bonus <= 0.2
 
     def test_data_quality_bonus_zero_coverage(self):
         """Zero impact coverage → only volume component."""
-        features = FakeCategoryFeatures(
-            n_outcomes=100, pct_with_impact_data=0.0
-        )
+        features = FakeCategoryFeatures(n_outcomes=100, pct_with_impact_data=0.0)
         ctx = self._injector().build_scoring_context(features)
         # volume_score = min(0.1, 100/200) = 0.05
         # coverage_score = 0.0 * 0.1 = 0.0
@@ -348,11 +325,13 @@ class TestBuildScoringContext:
 # TESTS: build_agent_context
 # ──────────────────────────────────────────────────────────
 
+
 class TestBuildAgentContext:
     """Test human-readable context for LLM prompts."""
 
     def _injector(self):
         from services.scoring.learning.context_injector import ContextInjector
+
         return ContextInjector()
 
     def test_none_features_empty_string(self):
@@ -521,11 +500,13 @@ class TestBuildAgentContext:
 # TESTS: build_minimal_context
 # ──────────────────────────────────────────────────────────
 
+
 class TestBuildMinimalContext:
     """Test one-line context summary."""
 
     def _injector(self):
         from services.scoring.learning.context_injector import ContextInjector
+
         return ContextInjector()
 
     def test_none_features(self):
@@ -571,11 +552,13 @@ class TestBuildMinimalContext:
 # TESTS: build() convenience method
 # ──────────────────────────────────────────────────────────
 
+
 class TestBuildConvenience:
     """Test the combined build() method."""
 
     def _injector(self):
         from services.scoring.learning.context_injector import ContextInjector
+
         return ContextInjector()
 
     def test_returns_tuple(self):
@@ -583,6 +566,7 @@ class TestBuildConvenience:
         features = FakeCategoryFeatures(n_outcomes=20)
         scoring_ctx, agent_text = self._injector().build(features)
         from services.scoring.learning.context_injector import ScoringContext
+
         assert isinstance(scoring_ctx, ScoringContext)
         assert isinstance(agent_text, str)
 
@@ -603,9 +587,7 @@ class TestBuildConvenience:
     def test_merchant_id_passed_through(self):
         """merchant_id parameter accepted (for future personalization)."""
         features = FakeCategoryFeatures(n_outcomes=20)
-        scoring_ctx, agent_text = self._injector().build(
-            features, merchant_id="m-123"
-        )
+        scoring_ctx, agent_text = self._injector().build(features, merchant_id="m-123")
         assert isinstance(agent_text, str)
 
 
@@ -613,11 +595,13 @@ class TestBuildConvenience:
 # TESTS: Edge Cases
 # ──────────────────────────────────────────────────────────
 
+
 class TestContextInjectorEdgeCases:
     """Boundary conditions and edge cases."""
 
     def _injector(self):
         from services.scoring.learning.context_injector import ContextInjector
+
         return ContextInjector()
 
     def test_exactly_threshold_outcomes(self):
@@ -633,9 +617,7 @@ class TestContextInjectorEdgeCases:
             FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 3, 5.0),
             FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 3, 5.0),
         ]
-        features = FakeCategoryFeatures(
-            n_outcomes=10, confidence_band_performance=bands
-        )
+        features = FakeCategoryFeatures(n_outcomes=10, confidence_band_performance=bands)
         ctx = self._injector().build_scoring_context(features)
         # Equal performance → factor stays 1.0
         assert ctx.confidence_calibration_factor == 1.0
@@ -676,9 +658,7 @@ class TestContextInjectorEdgeCases:
             FakeConfidenceBand(0.0, 0.5, "0.0-0.5", 5, 5.0),
             FakeConfidenceBand(0.7, 1.0, "0.7-1.0", 5, 5.0),
         ]
-        features = FakeCategoryFeatures(
-            n_outcomes=20, confidence_band_performance=bands
-        )
+        features = FakeCategoryFeatures(n_outcomes=20, confidence_band_performance=bands)
         ctx = self._injector().build_scoring_context(features)
         assert ctx.confidence_calibration_factor == 1.0
 
@@ -692,5 +672,3 @@ class TestContextInjectorEdgeCases:
         result = self._injector().build_agent_context(features)
         # Should not mention confidence bands since all negative
         assert "produced the best results" not in result
-
-        

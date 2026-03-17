@@ -19,19 +19,17 @@ and the feedback loop doesn't compound.
 Place at: backend/services/pricing/outcome_measurement.py
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.recommendation_outcome import (
-    RecommendationOutcome,
     MeasurementStatus,
+    RecommendationOutcome,
 )
-
 
 # Window configuration: which status qualifies, how many days must pass
 WINDOW_CONFIG = {
@@ -57,7 +55,6 @@ LEGACY_STATUS = MeasurementStatus.SINGLE_MEASURED.value
 
 
 class OutcomeMeasurementService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -122,7 +119,7 @@ class OutcomeMeasurementService:
         window: str,
         revenue: Decimal,
         units: int,
-        margin: Optional[Decimal] = None,
+        margin: Decimal | None = None,
     ) -> RecommendationOutcome:
         """Record measurement data for a specific window.
 
@@ -182,7 +179,7 @@ class OutcomeMeasurementService:
     async def mark_measurement_failed(
         self,
         outcome_id: UUID,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> RecommendationOutcome:
         """Mark an outcome as failed to measure.
 
@@ -208,9 +205,7 @@ class OutcomeMeasurementService:
 
         stats = {}
         for status in MeasurementStatus:
-            stmt = select(RecommendationOutcome).where(
-                RecommendationOutcome.measurement_status == status.value
-            )
+            stmt = select(RecommendationOutcome).where(RecommendationOutcome.measurement_status == status.value)
             result = await self.db.execute(stmt)
             stats[status.value] = len(result.scalars().all())
 
@@ -225,7 +220,7 @@ class OutcomeMeasurementService:
         outcome: RecommendationOutcome,
         window_revenue: Decimal,
         window: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         """Calculate revenue lift as percentage vs normalized baseline.
 
         Normalizes the baseline (revenue_before, measured over
@@ -246,10 +241,5 @@ class OutcomeMeasurementService:
         if normalized_baseline <= 0:
             return None
 
-        lift = float(
-            (window_revenue - normalized_baseline) / normalized_baseline * 100
-        )
+        lift = float((window_revenue - normalized_baseline) / normalized_baseline * 100)
         return round(lift, 2)
-    
-
-    

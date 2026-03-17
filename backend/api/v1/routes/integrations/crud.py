@@ -21,23 +21,29 @@ Now:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.deps import get_current_user
 from core.encryption import encrypt_token
-from core.rate_limit import rate_limit, WRITE_RATE_LIMIT
+from core.rate_limit import WRITE_RATE_LIMIT, rate_limit
 from db.session import get_session
+from models.integration import (
+    EcommercePlatform,
+    Integration,
+    IntegrationStatus,
+    IntegrationSyncLog,
+    ProductIntegrationLink,
+)
 from models.user import User
-from models.integration import Integration, IntegrationStatus, ProductIntegrationLink, IntegrationSyncLog, EcommercePlatform
 from schemas.integration import (
-    IntegrationUpdate,
-    IntegrationResponse,
     IntegrationListResponse,
+    IntegrationResponse,
+    IntegrationUpdate,
 )
 from services.integration import WebhookRegistrationService, WooCommerceService
 
@@ -53,20 +59,16 @@ async def list_integrations(
     current_user: User = Depends(get_current_user),
 ) -> IntegrationListResponse:
     """List all integrations for current user."""
-    stmt = select(Integration).where(
-        Integration.user_id == current_user.id
-    )
-    
+    stmt = select(Integration).where(Integration.user_id == current_user.id)
+
     result = await db.execute(stmt)
     integrations_list = list(result.scalars().all())
-    
+
     # Sort in Python to avoid SQLAlchemy type issues with .desc()
     integrations_sorted = sorted(
-        integrations_list,
-        key=lambda x: x.created_at if x.created_at else datetime.min,
-        reverse=True
+        integrations_list, key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True
     )
-    
+
     return IntegrationListResponse(
         integrations=[IntegrationResponse.model_validate(i) for i in integrations_sorted],
         total=len(integrations_sorted),
@@ -87,13 +89,10 @@ async def get_integration(
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
-    
+
     if not integration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+
     return IntegrationResponse.model_validate(integration)
 
 
@@ -108,7 +107,7 @@ async def update_integration(
 ) -> IntegrationResponse:
     """
     Update integration settings.
-    
+
     FIX (2026-01-27): Now supports credential updates for WooCommerce.
     If consumer_key and consumer_secret are provided, will:
     1. Verify the new credentials against the store
@@ -122,13 +121,10 @@ async def update_integration(
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
-    
+
     if not integration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+
     # Handle basic field updates
     if data.store_name is not None:
         integration.store_name = data.store_name
@@ -145,36 +141,36 @@ async def update_integration(
         if integration.platform != EcommercePlatform.WOOCOMMERCE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Credential updates are only supported for WooCommerce integrations"
+                detail="Credential updates are only supported for WooCommerce integrations",
             )
-        
+
         # Verify new credentials before saving
         credentials = f"{data.consumer_key}:{data.consumer_secret}"
         service = WooCommerceService()
-        
+
         is_valid = await service.verify_credentials(
             store_url=integration.store_url,
             access_token=credentials,
         )
-        
+
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid API credentials. Please verify your consumer key and secret."
+                detail="Invalid API credentials. Please verify your consumer key and secret.",
             )
-        
+
         # Credentials are valid - update them
         integration.access_token_encrypted = encrypt_token(credentials)
         integration.error_message = None  # Clear old errors
         integration.status = IntegrationStatus.ACTIVE
-        
+
         logger.info(f"WooCommerce credentials updated for integration {integration_id}")
-    
-    integration.updated_at = datetime.now(timezone.utc)
+
+    integration.updated_at = datetime.now(UTC)
     db.add(integration)
     await db.commit()
     await db.refresh(integration)
-    
+
     return IntegrationResponse.model_validate(integration)
 
 
@@ -188,20 +184,20 @@ async def disconnect_integration(
 ) -> None:
     """
     Disconnect or delete an integration.
-    
+
     Behavior:
     - ACTIVE/PAUSED integrations: Soft delete (status → DISCONNECTED)
       - Unregisters webhooks from the platform
       - Keeps the record for potential reconnection
-    
+
     - DISCONNECTED integrations: Hard delete (removed from database)
       - Deletes all associated sync logs
       - Deletes all associated product links
       - Permanently removes the integration record
-    
-    FIX (2026-01-24): Previously this only did soft delete, so clicking "Delete" 
+
+    FIX (2026-01-24): Previously this only did soft delete, so clicking "Delete"
     on an already-disconnected integration did nothing. Now it actually removes it.
-    
+
     FIX (2026-01-27): Now also deletes IntegrationSyncLog records to avoid
     foreign key constraint violations.
     """
@@ -211,47 +207,40 @@ async def disconnect_integration(
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
-    
+
     if not integration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+
     # ═══════════════════════════════════════════════════════════════════════════
     # FIX: If already disconnected, perform HARD DELETE
     # ═══════════════════════════════════════════════════════════════════════════
     if integration.status == IntegrationStatus.DISCONNECTED:
         # FIX (2026-01-27): Delete sync logs first (foreign key constraint)
-        sync_logs_stmt = select(IntegrationSyncLog).where(
-            IntegrationSyncLog.integration_id == integration_id
-        )
+        sync_logs_stmt = select(IntegrationSyncLog).where(IntegrationSyncLog.integration_id == integration_id)
         sync_logs_result = await db.execute(sync_logs_stmt)
         sync_logs = list(sync_logs_result.scalars().all())
-        
+
         for log in sync_logs:
             await db.delete(log)
-        
+
         # Delete associated product links (foreign key constraint)
-        links_stmt = select(ProductIntegrationLink).where(
-            ProductIntegrationLink.integration_id == integration_id
-        )
+        links_stmt = select(ProductIntegrationLink).where(ProductIntegrationLink.integration_id == integration_id)
         links_result = await db.execute(links_stmt)
         links = list(links_result.scalars().all())
-        
+
         for link in links:
             await db.delete(link)
-        
+
         # Now delete the integration itself
         await db.delete(integration)
         await db.commit()
-        
+
         logger.info(
             f"Integration {integration_id} permanently deleted by user {current_user.id} "
             f"(removed {len(sync_logs)} sync logs, {len(links)} product links)"
         )
         return
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # ACTIVE/PAUSED: Soft delete - unregister webhooks and mark as disconnected
     # ═══════════════════════════════════════════════════════════════════════════
@@ -262,15 +251,10 @@ async def disconnect_integration(
             logger.info(f"Webhooks unregistered for integration {integration_id}")
         except Exception as e:
             logger.warning(f"Failed to unregister webhooks: {e}")
-    
+
     integration.status = IntegrationStatus.DISCONNECTED
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(UTC)
     db.add(integration)
     await db.commit()
-    
+
     logger.info(f"Integration {integration_id} disconnected by user {current_user.id}")
-
-
-
-
-    

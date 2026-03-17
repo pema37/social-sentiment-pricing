@@ -21,24 +21,21 @@ Three feedback loops that make the intelligence environment self-improving:
 Place at: backend/services/pricing/outcome_calibration.py
 """
 
-from datetime import datetime, timedelta, UTC
-from decimal import Decimal
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.recommendation_outcome import (
-    RecommendationOutcome,
-    OutcomeLabel,
     MerchantDecision,
+    OutcomeLabel,
+    RecommendationOutcome,
 )
 from services.pricing.outcome_service import pearson_r
 
 
 class OutcomeCalibrationService:
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -48,8 +45,8 @@ class OutcomeCalibrationService:
 
     async def get_confidence_calibration(
         self,
-        user_id: Optional[UUID] = None,
-        product_category: Optional[str] = None,
+        user_id: UUID | None = None,
+        product_category: str | None = None,
         days: int = 90,
     ) -> dict:
         """Calculate Pearson r between predicted confidence and actual revenue lift.
@@ -119,7 +116,7 @@ class OutcomeCalibrationService:
 
     async def get_confidence_calibration_by_band(
         self,
-        user_id: Optional[UUID] = None,
+        user_id: UUID | None = None,
         days: int = 90,
     ) -> list[dict]:
         """Break down outcome quality by confidence band.
@@ -150,31 +147,32 @@ class OutcomeCalibrationService:
 
         results = []
         for band in bands:
-            band_outcomes = [
-                o for o in outcomes
-                if band["min"] <= float(o.original_confidence) < band["max"]
-            ]
+            band_outcomes = [o for o in outcomes if band["min"] <= float(o.original_confidence) < band["max"]]
 
             if not band_outcomes:
-                results.append({
-                    "band": band["label"],
-                    "confidence_range": f"{band['min']:.1f}-{band['max']:.1f}",
-                    "count": 0,
-                    "success_rate": None,
-                    "avg_lift_7d": None,
-                })
+                results.append(
+                    {
+                        "band": band["label"],
+                        "confidence_range": f"{band['min']:.1f}-{band['max']:.1f}",
+                        "count": 0,
+                        "success_rate": None,
+                        "avg_lift_7d": None,
+                    }
+                )
                 continue
 
             positive = sum(1 for o in band_outcomes if o.outcome_label == OutcomeLabel.POSITIVE)
             lifts = [o.revenue_lift_7d for o in band_outcomes if o.revenue_lift_7d is not None]
 
-            results.append({
-                "band": band["label"],
-                "confidence_range": f"{band['min']:.1f}-{band['max']:.1f}",
-                "count": len(band_outcomes),
-                "success_rate": round(positive / len(band_outcomes) * 100, 2),
-                "avg_lift_7d": round(sum(lifts) / len(lifts), 2) if lifts else None,
-            })
+            results.append(
+                {
+                    "band": band["label"],
+                    "confidence_range": f"{band['min']:.1f}-{band['max']:.1f}",
+                    "count": len(band_outcomes),
+                    "success_rate": round(positive / len(band_outcomes) * 100, 2),
+                    "avg_lift_7d": round(sum(lifts) / len(lifts), 2) if lifts else None,
+                }
+            )
 
         return results
 
@@ -184,8 +182,8 @@ class OutcomeCalibrationService:
 
     async def get_elasticity_accuracy(
         self,
-        user_id: Optional[UUID] = None,
-        product_category: Optional[str] = None,
+        user_id: UUID | None = None,
+        product_category: str | None = None,
         days: int = 90,
     ) -> dict:
         """Compare predicted elasticity with observed demand response.
@@ -268,7 +266,7 @@ class OutcomeCalibrationService:
 
     async def get_elasticity_accuracy_by_category(
         self,
-        user_id: Optional[UUID] = None,
+        user_id: UUID | None = None,
         days: int = 90,
     ) -> list[dict]:
         """Elasticity accuracy broken down by product category.
@@ -316,15 +314,17 @@ class OutcomeCalibrationService:
             avg_obs = sum(data["observed"]) / len(data["observed"])
             bias = avg_pred - avg_obs
 
-            results.append({
-                "category": cat,
-                "sample_size": len(data["observed"]),
-                "avg_predicted": round(avg_pred, 4),
-                "avg_observed": round(avg_obs, 4),
-                "bias": round(bias, 4),
-                "abs_bias": round(abs(bias), 4),
-                "direction": "overestimates" if bias > 0.05 else "underestimates" if bias < -0.05 else "accurate",
-            })
+            results.append(
+                {
+                    "category": cat,
+                    "sample_size": len(data["observed"]),
+                    "avg_predicted": round(avg_pred, 4),
+                    "avg_observed": round(avg_obs, 4),
+                    "bias": round(bias, 4),
+                    "abs_bias": round(abs(bias), 4),
+                    "direction": "overestimates" if bias > 0.05 else "underestimates" if bias < -0.05 else "accurate",
+                }
+            )
 
         results.sort(key=lambda x: x["abs_bias"], reverse=True)
         return results
@@ -336,7 +336,7 @@ class OutcomeCalibrationService:
     async def get_merchant_modification_pattern(
         self,
         user_id: UUID,
-        product_category: Optional[str] = None,
+        product_category: str | None = None,
         days: int = 90,
     ) -> dict:
         """Analyze how a merchant modifies recommendations.
@@ -356,11 +356,13 @@ class OutcomeCalibrationService:
         stmt = select(RecommendationOutcome).where(
             RecommendationOutcome.user_id == user_id,
             RecommendationOutcome.created_at >= cutoff,
-            RecommendationOutcome.merchant_decision.in_([
-                MerchantDecision.ACCEPTED.value,
-                MerchantDecision.MODIFIED.value,
-                MerchantDecision.REJECTED.value,
-            ]),
+            RecommendationOutcome.merchant_decision.in_(
+                [
+                    MerchantDecision.ACCEPTED.value,
+                    MerchantDecision.MODIFIED.value,
+                    MerchantDecision.REJECTED.value,
+                ]
+            ),
         )
         if product_category:
             stmt = stmt.where(RecommendationOutcome.product_category == product_category)
@@ -386,8 +388,7 @@ class OutcomeCalibrationService:
 
         # Average modification percent
         modifications = [
-            o.merchant_modification_percent for o in outcomes
-            if o.merchant_modification_percent is not None
+            o.merchant_modification_percent for o in outcomes if o.merchant_modification_percent is not None
         ]
         avg_modification = None
         if modifications:
@@ -511,6 +512,3 @@ class OutcomeCalibrationService:
                 }
 
         return result
-    
-
-    

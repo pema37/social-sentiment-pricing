@@ -16,12 +16,11 @@ Run: pytest backend/tests/unit/test_scoring_engine.py -v
 """
 
 import sys
-import types
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
+import pytest
 
 # ──────────────────────────────────────────────────────────
 # sys.modules isolation — prevents SQLAlchemy Table collisions
@@ -52,6 +51,7 @@ def isolate_modules():
 # ──────────────────────────────────────────────────────────
 # Fake dataclasses matching real return types
 # ──────────────────────────────────────────────────────────
+
 
 class FakeElasticityResult:
     def __init__(self, **kwargs):
@@ -84,14 +84,16 @@ class FakeFusionResult:
     def __init__(self, **kwargs):
         self.direction = kwargs.get("direction", "increase")
         self.reasoning = kwargs.get("reasoning", "Positive sentiment + underpriced")
-        self.confidence_components = kwargs.get("confidence_components", {
-            "data_quality": 0.6,
-        })
+        self.confidence_components = kwargs.get(
+            "confidence_components",
+            {
+                "data_quality": 0.6,
+            },
+        )
 
 
 class FakeCompetitorPrice:
-    def __init__(self, price=49.99, competitor_name="CompA", scraped_at=None,
-                 is_on_sale=False, sale_price=None):
+    def __init__(self, price=49.99, competitor_name="CompA", scraped_at=None, is_on_sale=False, sale_price=None):
         self.price = price
         self.competitor_name = competitor_name
         self.scraped_at = scraped_at or datetime.now(UTC)
@@ -109,11 +111,14 @@ class FakeSentiment:
 class FakeScoutOutput:
     def __init__(self, **kwargs):
         self.our_price = kwargs.get("our_price", 39.99)
-        self.competitors = kwargs.get("competitors", [
-            FakeCompetitorPrice(49.99, "CompA"),
-            FakeCompetitorPrice(44.99, "CompB"),
-            FakeCompetitorPrice(35.99, "CompC"),
-        ])
+        self.competitors = kwargs.get(
+            "competitors",
+            [
+                FakeCompetitorPrice(49.99, "CompA"),
+                FakeCompetitorPrice(44.99, "CompB"),
+                FakeCompetitorPrice(35.99, "CompC"),
+            ],
+        )
         self.sentiment = kwargs.get("sentiment", FakeSentiment())
         self.competitor_count = kwargs.get("competitor_count", 3)
         self.data_completeness = kwargs.get("data_completeness", 0.85)
@@ -135,12 +140,14 @@ class FakeSignals:
 # TESTS: Engine Initialization
 # ──────────────────────────────────────────────────────────
 
+
 class TestScoringEngineInit:
     """Test engine construction with various configs."""
 
     def test_default_init(self):
         """Engine initializes with default config."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         assert engine._prior_store is not None
         assert engine._elasticity_calc is not None
@@ -152,14 +159,16 @@ class TestScoringEngineInit:
         """Engine accepts custom GuardrailConfig."""
         from services.scoring.engine import ScoringEngine
         from services.scoring.fusion_types import GuardrailConfig
+
         config = GuardrailConfig()
         engine = ScoringEngine(guardrail_config=config)
         assert engine._fusion is not None
 
     def test_custom_prior_store(self):
         """Engine accepts injected CategoryPriorStore."""
-        from services.scoring.engine import ScoringEngine
         from services.scoring.category_priors import CategoryPriorStore
+        from services.scoring.engine import ScoringEngine
+
         store = CategoryPriorStore()
         engine = ScoringEngine(prior_store=store)
         assert engine._prior_store is store
@@ -167,6 +176,7 @@ class TestScoringEngineInit:
     def test_prior_store_property(self):
         """prior_store property exposes the store for batch jobs."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         assert engine.prior_store is engine._prior_store
 
@@ -174,6 +184,7 @@ class TestScoringEngineInit:
 # ──────────────────────────────────────────────────────────
 # TESTS: Full Scoring Pipeline
 # ──────────────────────────────────────────────────────────
+
 
 class TestScoringEnginePipeline:
     """Test the complete score() method."""
@@ -202,6 +213,7 @@ class TestScoringEnginePipeline:
     def test_happy_path_returns_result(self):
         """Full pipeline returns ScoringEngineResult with all components."""
         from services.scoring.engine import ScoringEngineResult
+
         engine = self._make_engine_with_mocks()
         scout = FakeScoutOutput()
 
@@ -317,18 +329,21 @@ class TestScoringEnginePipeline:
 # TESTS: Bridge Helpers
 # ──────────────────────────────────────────────────────────
 
+
 class TestBridgeHelpers:
     """Test static helper methods for data extraction."""
 
     def test_get_our_price_float(self):
         """Extracts float price from ScoutOutput."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(our_price=42.50)
         assert ScoringEngine._get_our_price(scout) == 42.50
 
     def test_get_our_price_decimal(self):
         """Converts Decimal price to float."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(our_price=Decimal("42.50"))
         result = ScoringEngine._get_our_price(scout)
         assert isinstance(result, float)
@@ -337,36 +352,42 @@ class TestBridgeHelpers:
     def test_get_our_price_zero(self):
         """Zero price returns 0.0."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(our_price=0)
         assert ScoringEngine._get_our_price(scout) == 0.0
 
     def test_get_our_price_none(self):
         """None price returns 0.0."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(our_price=None)
         assert ScoringEngine._get_our_price(scout) == 0.0
 
     def test_get_our_price_missing_attr(self):
         """Object without our_price returns 0.0."""
         from services.scoring.engine import ScoringEngine
+
         obj = MagicMock(spec=[])  # Empty spec — no attributes
         assert ScoringEngine._get_our_price(obj) == 0.0
 
     def test_get_sentiment_score_normal(self):
         """Extracts sentiment score from nested sentiment object."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(sentiment=FakeSentiment(overall_score=0.65))
         assert ScoringEngine._get_sentiment_score(scout) == 0.65
 
     def test_get_sentiment_score_none_sentiment(self):
         """No sentiment returns None."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(sentiment=None)
         assert ScoringEngine._get_sentiment_score(scout) is None
 
     def test_get_sentiment_score_none_overall(self):
         """Sentiment with no overall_score returns None."""
         from services.scoring.engine import ScoringEngine
+
         sentiment = MagicMock(spec=[])  # No overall_score
         scout = FakeScoutOutput(sentiment=sentiment)
         assert ScoringEngine._get_sentiment_score(scout) is None
@@ -374,6 +395,7 @@ class TestBridgeHelpers:
     def test_get_sentiment_score_decimal(self):
         """Decimal sentiment score converted to float."""
         from services.scoring.engine import ScoringEngine
+
         sentiment = FakeSentiment(overall_score=Decimal("0.55"))
         scout = FakeScoutOutput(sentiment=sentiment)
         result = ScoringEngine._get_sentiment_score(scout)
@@ -385,12 +407,14 @@ class TestBridgeHelpers:
 # TESTS: Urgency Signal Building
 # ──────────────────────────────────────────────────────────
 
+
 class TestUrgencySignalBuilding:
     """Test _build_urgency_signals bridge method."""
 
     def test_full_signals(self):
         """All signals available — all fields populated."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput()
         signals = FakeSignals()
         position = FakePositionResult()
@@ -408,6 +432,7 @@ class TestUrgencySignalBuilding:
     def test_no_signals(self):
         """No MarketSignals — trend fields are None."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput()
         position = FakePositionResult()
 
@@ -422,6 +447,7 @@ class TestUrgencySignalBuilding:
     def test_no_sentiment(self):
         """No sentiment on ScoutOutput — sentiment fields are None."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput(sentiment=None)
         signals = FakeSignals()
         position = FakePositionResult()
@@ -434,6 +460,7 @@ class TestUrgencySignalBuilding:
     def test_crisis_from_scout(self):
         """Crisis detected via scout sentiment."""
         from services.scoring.engine import ScoringEngine
+
         sentiment = FakeSentiment(overall_score=-0.8, crisis_detected=True, crisis_severity=0.9)
         scout = FakeScoutOutput(sentiment=sentiment)
         position = FakePositionResult()
@@ -446,6 +473,7 @@ class TestUrgencySignalBuilding:
     def test_crisis_from_viral_negative(self):
         """Crisis inferred from viral + negative sentiment (scout didn't catch it)."""
         from services.scoring.engine import ScoringEngine
+
         sentiment = FakeSentiment(overall_score=-0.7, crisis_detected=False)
         scout = FakeScoutOutput(sentiment=sentiment)
         signals = FakeSignals(viral_detected=True)
@@ -458,6 +486,7 @@ class TestUrgencySignalBuilding:
     def test_no_crisis_from_viral_positive(self):
         """Viral + positive sentiment does NOT trigger crisis."""
         from services.scoring.engine import ScoringEngine
+
         sentiment = FakeSentiment(overall_score=0.5, crisis_detected=False)
         scout = FakeScoutOutput(sentiment=sentiment)
         signals = FakeSignals(viral_detected=True)
@@ -470,6 +499,7 @@ class TestUrgencySignalBuilding:
     def test_inventory_fields_are_none(self):
         """Inventory/search signals not yet connected — always None."""
         from services.scoring.engine import ScoringEngine
+
         scout = FakeScoutOutput()
         position = FakePositionResult()
 
@@ -485,20 +515,25 @@ class TestUrgencySignalBuilding:
 # TESTS: Competitive Position Bridge
 # ──────────────────────────────────────────────────────────
 
+
 class TestPositionBridge:
     """Test _compute_position bridges ScoutOutput competitors correctly."""
 
     def test_competitors_converted_to_price_points(self):
         """ScoutOutput competitors are bridged to CompetitorPricePoint."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult()
 
-        scout = FakeScoutOutput(our_price=39.99, competitors=[
-            FakeCompetitorPrice(49.99, "A"),
-            FakeCompetitorPrice(44.99, "B"),
-        ])
+        scout = FakeScoutOutput(
+            our_price=39.99,
+            competitors=[
+                FakeCompetitorPrice(49.99, "A"),
+                FakeCompetitorPrice(44.99, "B"),
+            ],
+        )
 
         engine._compute_position(scout)
 
@@ -512,6 +547,7 @@ class TestPositionBridge:
     def test_empty_competitors(self):
         """No competitors — empty list passed to calculator."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult(competitor_count=0)
@@ -526,6 +562,7 @@ class TestPositionBridge:
     def test_none_competitors(self):
         """None competitors treated as empty list."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult(competitor_count=0)
@@ -540,6 +577,7 @@ class TestPositionBridge:
     def test_sale_price_bridged(self):
         """Competitor sale_price converted to float."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult()
@@ -557,6 +595,7 @@ class TestPositionBridge:
     def test_none_sale_price(self):
         """None sale_price stays None."""
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         engine._position_calc = MagicMock()
         engine._position_calc.compute.return_value = FakePositionResult()
@@ -575,18 +614,24 @@ class TestPositionBridge:
 # TESTS: Analyst Field Builder
 # ──────────────────────────────────────────────────────────
 
+
 class TestAnalystFieldBuilder:
     """Test _build_analyst_fields output structure."""
 
     def _build(self, **overrides):
         from services.scoring.engine import ScoringEngine
+
         scout = overrides.pop("scout", FakeScoutOutput())
         elasticity = overrides.pop("elasticity", FakeElasticityResult())
         position = overrides.pop("position", FakePositionResult())
         urgency = overrides.pop("urgency", FakeUrgencyResult())
         fusion = overrides.pop("fusion", FakeFusionResult())
         return ScoringEngine._build_analyst_fields(
-            scout, elasticity, position, urgency, fusion,
+            scout,
+            elasticity,
+            position,
+            urgency,
+            fusion,
         )
 
     def test_returns_dict(self):
@@ -702,18 +747,16 @@ class TestAnalystFieldBuilder:
 
     def test_position_fields(self):
         """Competitive position fields populated."""
-        fields = self._build(position=FakePositionResult(
-            position_index=0.7, market_pressure="downward", competitor_count=5
-        ))
+        fields = self._build(
+            position=FakePositionResult(position_index=0.7, market_pressure="downward", competitor_count=5)
+        )
         assert fields["competitive_position_index"] == 0.7
         assert fields["market_pressure"] == "downward"
         assert fields["competitor_count"] == 5
 
     def test_urgency_score_and_reasons(self):
         """Urgency score and reasons populated."""
-        fields = self._build(urgency=FakeUrgencyResult(
-            score=0.8, reasons=["crisis detected", "price undercut"]
-        ))
+        fields = self._build(urgency=FakeUrgencyResult(score=0.8, reasons=["crisis detected", "price undercut"]))
         assert fields["urgency_score"] == 0.8
         assert len(fields["urgency_reasons"]) == 2
 
@@ -722,12 +765,14 @@ class TestAnalystFieldBuilder:
 # TESTS: ScoringEngineResult
 # ──────────────────────────────────────────────────────────
 
+
 class TestScoringEngineResult:
     """Test the result container."""
 
     def test_slots(self):
         """Result uses __slots__ for memory efficiency."""
         from services.scoring.engine import ScoringEngineResult
+
         result = ScoringEngineResult(
             elasticity=FakeElasticityResult(),
             position=FakePositionResult(),
@@ -742,6 +787,7 @@ class TestScoringEngineResult:
     def test_no_extra_attributes(self):
         """__slots__ prevents adding extra attributes."""
         from services.scoring.engine import ScoringEngineResult
+
         result = ScoringEngineResult(
             elasticity=FakeElasticityResult(),
             position=FakePositionResult(),
@@ -758,11 +804,13 @@ class TestScoringEngineResult:
 # TESTS: Edge Cases
 # ──────────────────────────────────────────────────────────
 
+
 class TestEdgeCases:
     """Edge cases and boundary conditions."""
 
     def _make_engine_with_mocks(self):
         from services.scoring.engine import ScoringEngine
+
         engine = ScoringEngine()
         engine._elasticity_calc = MagicMock()
         engine._elasticity_calc.compute.return_value = FakeElasticityResult()
@@ -831,6 +879,3 @@ class TestEdgeCases:
 
         call_kwargs = engine._fusion.compute.call_args
         assert call_kwargs[1]["product"].cost is None
-
-
-        

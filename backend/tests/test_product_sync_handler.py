@@ -8,11 +8,10 @@ PATCHED (2026-02-22): Updated to match handler changes:
   - test_links_to_existing_product_by_sku → rewritten as sibling variant test
 """
 
+import os
 import sys
 import types
-import os
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -23,11 +22,16 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "models", "models.integration",
-    "core", "core.encryption",
-    "services", "services.integration",
+    "models",
+    "models.integration",
+    "core",
+    "core.encryption",
+    "services",
+    "services.integration",
     "services.integration.models",
     "services.integration.base",
     "services.integration.shopify_service",
@@ -65,6 +69,7 @@ _async_mod.AsyncSession = MagicMock()
 
 from enum import Enum
 
+
 class _FakeEcommercePlatform(str, Enum):
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
@@ -90,6 +95,7 @@ for _key, _attr in [
 sys.modules["models.integration"].Integration = MagicMock
 sys.modules["models.integration"].EcommercePlatform = _FakeEcommercePlatform
 sys.modules["core.encryption"].decrypt_token = MagicMock(return_value="test-token")
+
 
 # Provide ExternalProduct
 class _FakeExternalProduct:
@@ -138,6 +144,7 @@ for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_handler():
     db = AsyncMock()
@@ -222,7 +229,7 @@ class TestUpsertProduct:
         handler, db, prod_repo, link_repo = _make_handler()
         existing_link = MagicMock(product_id=uuid4())
         link_repo.find_by_external_id = AsyncMock(return_value=existing_link)
-        
+
         product = MagicMock(name="Old", base_price=19.99, sku="S")
         prod_repo.find_by_id = AsyncMock(return_value=product)
         prod_repo.update = AsyncMock(return_value=product)
@@ -296,7 +303,8 @@ class TestCreateOrLink:
         ext = _FakeExternalProduct(id="ext-1")
 
         c, u = await handler._create_or_link(
-            integration, ext,
+            integration,
+            ext,
             variant_id="var-2",
             variant_sku="SKU-2",
             variant_price=30.0,
@@ -318,7 +326,8 @@ class TestCreateOrLink:
         ext = _FakeExternalProduct(price=30.0)
 
         c, u = await handler._create_or_link(
-            integration, ext,
+            integration,
+            ext,
             variant_id=None,
             variant_sku=None,
             variant_price=30.0,
@@ -341,7 +350,8 @@ class TestCreateOrLink:
         ext = _FakeExternalProduct(variants=[variant])
 
         await handler._create_or_link(
-            integration, ext,
+            integration,
+            ext,
             variant_id="var-1",
             variant_sku=None,
             variant_price=19.99,
@@ -436,6 +446,3 @@ class TestSyncAllProducts:
 
         assert d == 0
         link_repo.disable_missing.assert_not_awaited()
-
-
-        

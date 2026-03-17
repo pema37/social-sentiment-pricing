@@ -5,9 +5,10 @@ Revises: retro_audit_001
 Create Date: 2026-03-02
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision = "prospect_analytics_001"
 down_revision = "retro_audit_001"
@@ -33,7 +34,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("prospect_audit_events")
-
-
-
-    

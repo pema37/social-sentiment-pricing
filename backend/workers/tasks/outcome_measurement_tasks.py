@@ -32,23 +32,20 @@ Then register the beat schedule in celery_app.py
 
 import asyncio
 import re
-from datetime import datetime, timedelta, UTC
-from decimal import Decimal
-from typing import Optional
+from datetime import datetime, timedelta
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import select
 
-from workers.celery_app import celery_app
 from core.config import settings
-from core.logging import get_logger
 from core.encryption import decrypt_token
-from models.integration import Integration, EcommercePlatform, IntegrationStatus
-from models.integration import ProductIntegrationLink
-from services.pricing.outcome_measurement import OutcomeMeasurementService
+from core.logging import get_logger
+from models.integration import EcommercePlatform, Integration, IntegrationStatus, ProductIntegrationLink
 from services.integration.shopify_service import ShopifyService
+from services.pricing.outcome_measurement import OutcomeMeasurementService
+from workers.celery_app import celery_app
 
 logger = get_logger(__name__)
 
@@ -56,6 +53,7 @@ logger = get_logger(__name__)
 # ==============================================================================
 # HELPERS (same pattern as pricing_tasks.py)
 # ==============================================================================
+
 
 def get_task_session_maker():
     """
@@ -69,8 +67,8 @@ def get_task_session_maker():
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     if "sslmode=" in db_url:
-        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
-        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
+        db_url = re.sub(r"[\?&]sslmode=[^&]*", "", db_url)
+        db_url = db_url.replace("?&", "?").replace("&&", "&").rstrip("?&")
 
     use_ssl = "neon.tech" in db_url or "railway" in db_url
 
@@ -110,6 +108,7 @@ def run_async(coro):
 # ==============================================================================
 # ASYNC IMPLEMENTATIONS
 # ==============================================================================
+
 
 async def _measure_outcomes(window: str):
     """
@@ -172,15 +171,12 @@ async def _measure_outcomes(window: str):
 
                 except Exception as e:
                     total_failed += 1
-                    logger.error(
-                        f"[{window}] Error measuring outcome {outcome.id}: {e}"
-                    )
+                    logger.error(f"[{window}] Error measuring outcome {outcome.id}: {e}")
                     # Don't mark as failed on transient errors — retried next run
                     continue
 
     logger.info(
-        f"[{window}] Measurement complete: {total_measured} measured, "
-        f"{total_failed} failed, {total_skipped} skipped"
+        f"[{window}] Measurement complete: {total_measured} measured, {total_failed} failed, {total_skipped} skipped"
     )
 
     return {
@@ -197,7 +193,7 @@ async def _fetch_sales_data(
     user_id,
     price_applied_at: datetime,
     window: str,
-) -> Optional[dict]:
+) -> dict | None:
     """
     Fetch sales data for a product over a specific time window.
 
@@ -240,10 +236,7 @@ async def _fetch_sales_data(
     link = link_result.scalars().first()
 
     if not link:
-        logger.debug(
-            f"No product link for product {product_id} "
-            f"in integration {integration.id}"
-        )
+        logger.debug(f"No product link for product {product_id} in integration {integration.id}")
         return None
 
     # Step 3: Decrypt access token
@@ -283,10 +276,7 @@ async def _fetch_sales_data(
         # from services.integration.woocommerce_service import WooCommerceService
         # woo = WooCommerceService()
         # return await woo.fetch_product_sales_data(...)
-        logger.debug(
-            f"WooCommerce sales data fetch not yet implemented. "
-            f"Product {product_id}, window {window}"
-        )
+        logger.debug(f"WooCommerce sales data fetch not yet implemented. Product {product_id}, window {window}")
         return None
 
     else:
@@ -309,6 +299,7 @@ async def _get_measurement_stats():
 # ==============================================================================
 # CELERY TASKS
 # ==============================================================================
+
 
 @celery_app.task(name="workers.tasks.outcome_measurement_tasks.measure_outcomes_7d")
 def measure_outcomes_7d():
@@ -359,6 +350,3 @@ def measurement_stats():
     Shows how many outcomes are in each measurement status.
     """
     return run_async(_get_measurement_stats())
-
-
-    

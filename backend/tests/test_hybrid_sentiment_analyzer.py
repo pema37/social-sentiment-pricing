@@ -22,9 +22,7 @@ Total: ~65 tests
 """
 
 import sys
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Import isolation ──────────────────────────────────────────────
 _MOCKED_MODULES = [
@@ -51,9 +49,9 @@ sys.modules["core.config"].settings = mock_settings
 import pytest
 
 from services.hybrid_sentiment_analyzer import (
-    RateLimitError,
-    HybridSentimentResult,
     HybridSentimentAnalyzer,
+    HybridSentimentResult,
+    RateLimitError,
 )
 
 # ── IMMEDIATE cleanup — restore before pytest collects later modules ──
@@ -71,8 +69,8 @@ SERVICE_PATH = "services.hybrid_sentiment_analyzer"
 # 1. RateLimitError
 # ============================================================
 
-class TestRateLimitError:
 
+class TestRateLimitError:
     def test_stores_api_name(self):
         err = RateLimitError("gemini")
         assert err.api_name == "gemini"
@@ -103,14 +101,21 @@ class TestRateLimitError:
 # 2. HybridSentimentResult dataclass
 # ============================================================
 
-class TestHybridSentimentResult:
 
+class TestHybridSentimentResult:
     def test_default_trust_fields(self):
         result = HybridSentimentResult(
-            compound=0.5, label="positive", confidence=0.8,
-            positive=0.7, negative=0.1, neutral=0.2,
-            sources_used=["vader"], individual_scores={"vader": 0.5},
-            emotions={}, topics=[], is_sarcastic=False,
+            compound=0.5,
+            label="positive",
+            confidence=0.8,
+            positive=0.7,
+            negative=0.1,
+            neutral=0.2,
+            sources_used=["vader"],
+            individual_scores={"vader": 0.5},
+            emotions={},
+            topics=[],
+            is_sarcastic=False,
         )
         assert result.trust_score == 1.0
         assert result.trust_level == "medium"
@@ -120,12 +125,21 @@ class TestHybridSentimentResult:
 
     def test_custom_trust_fields(self):
         result = HybridSentimentResult(
-            compound=0.5, label="positive", confidence=0.8,
-            positive=0.7, negative=0.1, neutral=0.2,
-            sources_used=["vader"], individual_scores={"vader": 0.5},
-            emotions={}, topics=[], is_sarcastic=False,
-            trust_score=0.3, trust_level="low",
-            trust_adjusted_compound=0.15, is_filtered=True,
+            compound=0.5,
+            label="positive",
+            confidence=0.8,
+            positive=0.7,
+            negative=0.1,
+            neutral=0.2,
+            sources_used=["vader"],
+            individual_scores={"vader": 0.5},
+            emotions={},
+            topics=[],
+            is_sarcastic=False,
+            trust_score=0.3,
+            trust_level="low",
+            trust_adjusted_compound=0.15,
+            is_filtered=True,
             risk_flags=["bot_like"],
         )
         assert result.trust_score == 0.3
@@ -137,8 +151,8 @@ class TestHybridSentimentResult:
 # 3. Initialization
 # ============================================================
 
-class TestHybridSentimentAnalyzerInit:
 
+class TestHybridSentimentAnalyzerInit:
     @patch(f"{SERVICE_PATH}.settings")
     def test_vader_not_available(self, mock_s):
         mock_s.GEMINI_API_KEY = None
@@ -168,8 +182,8 @@ class TestHybridSentimentAnalyzerInit:
 # 4. get_available_sources
 # ============================================================
 
-class TestGetAvailableSources:
 
+class TestGetAvailableSources:
     def test_only_vader(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.vader = MagicMock()
@@ -199,8 +213,8 @@ class TestGetAvailableSources:
 # 5. _combine_scores
 # ============================================================
 
-class TestCombineScores:
 
+class TestCombineScores:
     def setup_method(self):
         self.svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
 
@@ -241,8 +255,8 @@ class TestCombineScores:
 # 6. _get_label
 # ============================================================
 
-class TestGetLabel:
 
+class TestGetLabel:
     def setup_method(self):
         self.svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
 
@@ -272,8 +286,8 @@ class TestGetLabel:
 # 7. _calculate_confidence
 # ============================================================
 
-class TestCalculateConfidence:
 
+class TestCalculateConfidence:
     def setup_method(self):
         self.svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
 
@@ -287,33 +301,24 @@ class TestCalculateConfidence:
 
     def test_more_sources_higher_confidence(self):
         single = self.svc._calculate_confidence({"vader": 0.5}, ["vader"])
-        multi = self.svc._calculate_confidence(
-            {"vader": 0.5, "gemini": 0.5}, ["vader", "gemini"]
-        )
+        multi = self.svc._calculate_confidence({"vader": 0.5, "gemini": 0.5}, ["vader", "gemini"])
         assert multi > single
 
     def test_ai_sources_boost_confidence(self):
         no_ai = self.svc._calculate_confidence({"vader": 0.5}, ["vader"])
-        with_ai = self.svc._calculate_confidence(
-            {"vader": 0.5, "gemini": 0.5}, ["vader", "gemini"]
-        )
+        with_ai = self.svc._calculate_confidence({"vader": 0.5, "gemini": 0.5}, ["vader", "gemini"])
         assert with_ai > no_ai
 
     def test_agreement_boosts_confidence(self):
         # Same scores = perfect agreement
-        agree = self.svc._calculate_confidence(
-            {"vader": 0.5, "gemini": 0.5}, ["vader", "gemini"]
-        )
+        agree = self.svc._calculate_confidence({"vader": 0.5, "gemini": 0.5}, ["vader", "gemini"])
         # Different scores = low agreement
-        disagree = self.svc._calculate_confidence(
-            {"vader": 0.5, "gemini": -0.5}, ["vader", "gemini"]
-        )
+        disagree = self.svc._calculate_confidence({"vader": 0.5, "gemini": -0.5}, ["vader", "gemini"])
         assert agree > disagree
 
     def test_capped_at_one(self):
         result = self.svc._calculate_confidence(
-            {"vader": 1.0, "gemini": 1.0, "openai": 1.0},
-            ["vader", "gemini", "openai"]
+            {"vader": 1.0, "gemini": 1.0, "openai": 1.0}, ["vader", "gemini", "openai"]
         )
         assert result <= 1.0
 
@@ -322,13 +327,16 @@ class TestCalculateConfidence:
 # 8. _analyze_vader
 # ============================================================
 
-class TestAnalyzeVader:
 
+class TestAnalyzeVader:
     def test_returns_scores(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.vader = MagicMock()
         svc.vader.polarity_scores.return_value = {
-            "compound": 0.75, "pos": 0.6, "neg": 0.1, "neu": 0.3,
+            "compound": 0.75,
+            "pos": 0.6,
+            "neg": 0.1,
+            "neu": 0.3,
         }
         result = svc._analyze_vader("great product!")
         assert result["compound"] == 0.75
@@ -340,7 +348,10 @@ class TestAnalyzeVader:
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.vader = MagicMock()
         svc.vader.polarity_scores.return_value = {
-            "compound": 0, "pos": 0, "neg": 0, "neu": 1,
+            "compound": 0,
+            "pos": 0,
+            "neg": 0,
+            "neu": 1,
         }
         svc._analyze_vader("test text")
         svc.vader.polarity_scores.assert_called_once_with("test text")
@@ -349,6 +360,7 @@ class TestAnalyzeVader:
 # ============================================================
 # 9. _analyze_gemini
 # ============================================================
+
 
 class TestAnalyzeGemini:
     from unittest.mock import AsyncMock, MagicMock, patch
@@ -371,19 +383,18 @@ class TestAnalyzeGemini:
         assert result["compound"] == 0.7
         assert result["topics"] == ["quality"]
 
-        #import asyncio
-        #loop = asyncio.get_event_loop()
-        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, return_value=mock_response):
-            #result = await svc._analyze_gemini("great product")
-            #assert result["compound"] == 0.7
-            #assert result["topics"] == ["quality"]
-
+        # import asyncio
+        # loop = asyncio.get_event_loop()
+        # with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, return_value=mock_response):
+        # result = await svc._analyze_gemini("great product")
+        # assert result["compound"] == 0.7
+        # assert result["topics"] == ["quality"]
 
     @pytest.mark.asyncio
     async def test_raises_rate_limit_on_429(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.gemini_model = "gemini-2.0-flash"
-        
+
         svc.gemini_client = MagicMock()
         svc.gemini_client.aio = MagicMock()
         svc.gemini_client.aio.models = MagicMock()
@@ -393,23 +404,23 @@ class TestAnalyzeGemini:
             await svc._analyze_gemini("test")
         assert exc_info.value.api_name == "gemini"
 
-    #@pytest.mark.asyncio
-    #async def test_raises_rate_limit_on_429(self):
-        #svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
-        #svc.gemini_client = MagicMock()
+    # @pytest.mark.asyncio
+    # async def test_raises_rate_limit_on_429(self):
+    # svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+    # svc.gemini_client = MagicMock()
 
-        #import asyncio
-        #loop = asyncio.get_event_loop()
-        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=Exception("429 Resource exhausted")):
-            #with pytest.raises(RateLimitError) as exc_info:
-                #await svc._analyze_gemini("test")
-            #assert exc_info.value.api_name == "gemini"
+    # import asyncio
+    # loop = asyncio.get_event_loop()
+    # with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=Exception("429 Resource exhausted")):
+    # with pytest.raises(RateLimitError) as exc_info:
+    # await svc._analyze_gemini("test")
+    # assert exc_info.value.api_name == "gemini"
 
     @pytest.mark.asyncio
     async def test_raises_rate_limit_on_quota(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.gemini_model = "gemini-2.0-flash"
-        
+
         svc.gemini_client = MagicMock()
         svc.gemini_client.aio = MagicMock()
         svc.gemini_client.aio.models = MagicMock()
@@ -417,39 +428,38 @@ class TestAnalyzeGemini:
 
         with pytest.raises(RateLimitError):
             await svc._analyze_gemini("test")
-    
-    #@pytest.mark.asyncio
-    #async def test_raises_rate_limit_on_quota(self):
-        #svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
-        #svc.gemini_client = MagicMock()
 
-        #import asyncio
-        #loop = asyncio.get_event_loop()
-        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=Exception("quota exceeded")):
-            #with pytest.raises(RateLimitError):
-                #await svc._analyze_gemini("test")
+    # @pytest.mark.asyncio
+    # async def test_raises_rate_limit_on_quota(self):
+    # svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+    # svc.gemini_client = MagicMock()
 
-    #@pytest.mark.asyncio
-    #async def test_reraises_non_rate_limit_errors(self):
-        #svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
-        #svc.gemini_client = MagicMock()
+    # import asyncio
+    # loop = asyncio.get_event_loop()
+    # with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=Exception("quota exceeded")):
+    # with pytest.raises(RateLimitError):
+    # await svc._analyze_gemini("test")
 
-        #import asyncio
-        #loop = asyncio.get_event_loop()
-        #with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=ValueError("parse error")):
-            #with pytest.raises(ValueError):
-                #await svc._analyze_gemini("test")
+    # @pytest.mark.asyncio
+    # async def test_reraises_non_rate_limit_errors(self):
+    # svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
+    # svc.gemini_client = MagicMock()
 
+    # import asyncio
+    # loop = asyncio.get_event_loop()
+    # with patch.object(loop, 'run_in_executor', new_callable=AsyncMock, side_effect=ValueError("parse error")):
+    # with pytest.raises(ValueError):
+    # await svc._analyze_gemini("test")
 
     @pytest.mark.asyncio
     async def test_reraises_non_rate_limit_errors(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.gemini_model = "gemini-2.0-flash"
-        
+
         svc.gemini_client = MagicMock()
         svc.gemini_client.aio = MagicMock()
         svc.gemini_client.aio.models = MagicMock()
-        
+
         svc.gemini_client.aio.models.generate_content = AsyncMock(side_effect=ValueError("parse error"))
 
         with pytest.raises(ValueError):
@@ -460,8 +470,8 @@ class TestAnalyzeGemini:
 # 10. _analyze_openai
 # ============================================================
 
-class TestAnalyzeOpenAI:
 
+class TestAnalyzeOpenAI:
     @pytest.mark.asyncio
     async def test_parses_response(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
@@ -484,9 +494,7 @@ class TestAnalyzeOpenAI:
     async def test_raises_rate_limit_on_429(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.openai_client = AsyncMock()
-        svc.openai_client.chat.completions.create = AsyncMock(
-            side_effect=Exception("429 Too Many Requests")
-        )
+        svc.openai_client.chat.completions.create = AsyncMock(side_effect=Exception("429 Too Many Requests"))
 
         with pytest.raises(RateLimitError) as exc_info:
             await svc._analyze_openai("test")
@@ -496,9 +504,7 @@ class TestAnalyzeOpenAI:
     async def test_reraises_non_rate_limit_errors(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.openai_client = AsyncMock()
-        svc.openai_client.chat.completions.create = AsyncMock(
-            side_effect=ValueError("bad response")
-        )
+        svc.openai_client.chat.completions.create = AsyncMock(side_effect=ValueError("bad response"))
 
         with pytest.raises(ValueError):
             await svc._analyze_openai("test")
@@ -508,8 +514,8 @@ class TestAnalyzeOpenAI:
 # 11. analyze (orchestration)
 # ============================================================
 
-class TestAnalyze:
 
+class TestAnalyze:
     def _make_svc(self, vader=True, gemini=False, openai=False, trust=False):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.vader = MagicMock() if vader else None
@@ -519,7 +525,10 @@ class TestAnalyze:
 
         if vader:
             svc.vader.polarity_scores.return_value = {
-                "compound": 0.5, "pos": 0.6, "neg": 0.1, "neu": 0.3,
+                "compound": 0.5,
+                "pos": 0.6,
+                "neg": 0.1,
+                "neu": 0.3,
             }
         return svc
 
@@ -540,9 +549,14 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_gemini_used_when_available(self):
         svc = self._make_svc(vader=True, gemini=True)
-        svc._analyze_gemini = AsyncMock(return_value={
-            "compound": 0.8, "emotions": {}, "topics": [], "is_sarcastic": False,
-        })
+        svc._analyze_gemini = AsyncMock(
+            return_value={
+                "compound": 0.8,
+                "emotions": {},
+                "topics": [],
+                "is_sarcastic": False,
+            }
+        )
         result = await svc.analyze("great!", use_ai=True)
         assert "gemini" in result.sources_used
 
@@ -550,9 +564,14 @@ class TestAnalyze:
     async def test_openai_fallback_on_gemini_failure(self):
         svc = self._make_svc(vader=True, gemini=True, openai=True)
         svc._analyze_gemini = AsyncMock(side_effect=Exception("Gemini down"))
-        svc._analyze_openai = AsyncMock(return_value={
-            "compound": 0.6, "emotions": {}, "topics": [], "is_sarcastic": False,
-        })
+        svc._analyze_openai = AsyncMock(
+            return_value={
+                "compound": 0.6,
+                "emotions": {},
+                "topics": [],
+                "is_sarcastic": False,
+            }
+        )
         result = await svc.analyze("test", use_ai=True)
         assert "openai" in result.sources_used
         assert "gemini" not in result.sources_used
@@ -567,9 +586,14 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_openai_only_when_no_gemini(self):
         svc = self._make_svc(vader=True, openai=True)
-        svc._analyze_openai = AsyncMock(return_value={
-            "compound": 0.4, "emotions": {}, "topics": [], "is_sarcastic": False,
-        })
+        svc._analyze_openai = AsyncMock(
+            return_value={
+                "compound": 0.4,
+                "emotions": {},
+                "topics": [],
+                "is_sarcastic": False,
+            }
+        )
         result = await svc.analyze("test", use_ai=True)
         assert "openai" in result.sources_used
 
@@ -577,17 +601,20 @@ class TestAnalyze:
     async def test_result_has_correct_structure(self):
         svc = self._make_svc(vader=True)
         result = await svc.analyze("test", use_ai=False)
-        assert hasattr(result, 'compound')
-        assert hasattr(result, 'label')
-        assert hasattr(result, 'confidence')
-        assert hasattr(result, 'trust_score')
-        assert hasattr(result, 'trust_adjusted_compound')
+        assert hasattr(result, "compound")
+        assert hasattr(result, "label")
+        assert hasattr(result, "confidence")
+        assert hasattr(result, "trust_score")
+        assert hasattr(result, "trust_adjusted_compound")
 
     @pytest.mark.asyncio
     async def test_positive_score_distribution(self):
         svc = self._make_svc(vader=True)
         svc.vader.polarity_scores.return_value = {
-            "compound": 0.8, "pos": 0.9, "neg": 0.0, "neu": 0.1,
+            "compound": 0.8,
+            "pos": 0.9,
+            "neg": 0.0,
+            "neu": 0.1,
         }
         result = await svc.analyze("amazing!", use_ai=False)
         assert result.positive > result.negative
@@ -596,7 +623,10 @@ class TestAnalyze:
     async def test_negative_score_distribution(self):
         svc = self._make_svc(vader=True)
         svc.vader.polarity_scores.return_value = {
-            "compound": -0.8, "pos": 0.0, "neg": 0.9, "neu": 0.1,
+            "compound": -0.8,
+            "pos": 0.0,
+            "neg": 0.9,
+            "neu": 0.1,
         }
         result = await svc.analyze("terrible!", use_ai=False)
         assert result.negative > result.positive
@@ -618,8 +648,10 @@ class TestAnalyze:
         svc.trust_service.analyze_content.return_value = mock_content
 
         result = await svc.analyze(
-            "good product", use_ai=False,
-            author_id="user123", apply_trust_scoring=True,
+            "good product",
+            use_ai=False,
+            author_id="user123",
+            apply_trust_scoring=True,
         )
         assert "trust_scoring" in result.sources_used
         assert result.trust_level == "high"
@@ -629,20 +661,31 @@ class TestAnalyze:
 # 12. analyze_with_trust (batch)
 # ============================================================
 
-class TestAnalyzeWithTrust:
 
+class TestAnalyzeWithTrust:
     @pytest.mark.asyncio
     async def test_returns_summary(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.trust_service = None
-        svc.analyze = AsyncMock(return_value=HybridSentimentResult(
-            compound=0.5, label="positive", confidence=0.8,
-            positive=0.7, negative=0.1, neutral=0.2,
-            sources_used=["vader"], individual_scores={"vader": 0.5},
-            emotions={}, topics=[], is_sarcastic=False,
-            trust_score=0.9, trust_level="high",
-            trust_adjusted_compound=0.45, is_filtered=False,
-        ))
+        svc.analyze = AsyncMock(
+            return_value=HybridSentimentResult(
+                compound=0.5,
+                label="positive",
+                confidence=0.8,
+                positive=0.7,
+                negative=0.1,
+                neutral=0.2,
+                sources_used=["vader"],
+                individual_scores={"vader": 0.5},
+                emotions={},
+                topics=[],
+                is_sarcastic=False,
+                trust_score=0.9,
+                trust_level="high",
+                trust_adjusted_compound=0.45,
+                is_filtered=False,
+            )
+        )
 
         mentions = [{"content": "great!", "author_id": "u1", "source": "twitter"}]
         result = await svc.analyze_with_trust(mentions, use_ai=False)
@@ -656,14 +699,25 @@ class TestAnalyzeWithTrust:
     async def test_filtered_mentions_counted(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
         svc.trust_service = None
-        svc.analyze = AsyncMock(return_value=HybridSentimentResult(
-            compound=0.5, label="positive", confidence=0.8,
-            positive=0.7, negative=0.1, neutral=0.2,
-            sources_used=["vader"], individual_scores={"vader": 0.5},
-            emotions={}, topics=[], is_sarcastic=False,
-            trust_score=0.05, trust_level="untrusted",
-            trust_adjusted_compound=0.025, is_filtered=True,
-        ))
+        svc.analyze = AsyncMock(
+            return_value=HybridSentimentResult(
+                compound=0.5,
+                label="positive",
+                confidence=0.8,
+                positive=0.7,
+                negative=0.1,
+                neutral=0.2,
+                sources_used=["vader"],
+                individual_scores={"vader": 0.5},
+                emotions={},
+                topics=[],
+                is_sarcastic=False,
+                trust_score=0.05,
+                trust_level="untrusted",
+                trust_adjusted_compound=0.025,
+                is_filtered=True,
+            )
+        )
 
         mentions = [{"content": "spam!", "author_id": "bot1", "source": "twitter"}]
         result = await svc.analyze_with_trust(mentions, use_ai=False)
@@ -694,17 +748,26 @@ class TestAnalyzeWithTrust:
 # 13. analyze_batch
 # ============================================================
 
-class TestAnalyzeBatch:
 
+class TestAnalyzeBatch:
     @pytest.mark.asyncio
     async def test_processes_all_texts(self):
         svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
-        svc.analyze = AsyncMock(return_value=HybridSentimentResult(
-            compound=0.5, label="positive", confidence=0.8,
-            positive=0.7, negative=0.1, neutral=0.2,
-            sources_used=["vader"], individual_scores={"vader": 0.5},
-            emotions={}, topics=[], is_sarcastic=False,
-        ))
+        svc.analyze = AsyncMock(
+            return_value=HybridSentimentResult(
+                compound=0.5,
+                label="positive",
+                confidence=0.8,
+                positive=0.7,
+                negative=0.1,
+                neutral=0.2,
+                sources_used=["vader"],
+                individual_scores={"vader": 0.5},
+                emotions={},
+                topics=[],
+                is_sarcastic=False,
+            )
+        )
 
         results = await svc.analyze_batch(["text1", "text2", "text3"])
         assert len(results) == 3
@@ -716,5 +779,3 @@ class TestAnalyzeBatch:
         svc.analyze = AsyncMock()
         results = await svc.analyze_batch([])
         assert results == []
-
-        

@@ -19,9 +19,9 @@ Run: pytest backend/tests/unit/test_scout_feedback.py -v
 """
 
 import sys
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
+import pytest
 
 # ──────────────────────────────────────────────────────────
 # sys.modules isolation
@@ -29,15 +29,18 @@ from datetime import datetime, UTC
 
 _saved_modules = {}
 
+
 def _save_modules():
     global _saved_modules
     _saved_modules = dict(sys.modules)
+
 
 def _restore_modules():
     current = set(sys.modules.keys())
     saved = set(_saved_modules.keys())
     for mod in current - saved:
         del sys.modules[mod]
+
 
 @pytest.fixture(autouse=True)
 def isolate_modules():
@@ -50,8 +53,10 @@ def isolate_modules():
 # Helpers
 # ──────────────────────────────────────────────────────────
 
+
 def _make_outcome(**kwargs):
     from services.scoring.learning.scout_feedback import OutcomeWithDataQuality
+
     defaults = dict(
         recommendation_id="rec-001",
         category="electronics",
@@ -86,8 +91,8 @@ def _make_success(**kwargs):
 # TESTS: OutcomeWithDataQuality Properties
 # ──────────────────────────────────────────────────────────
 
-class TestOutcomeWithDataQuality:
 
+class TestOutcomeWithDataQuality:
     def test_was_successful(self):
         o = _make_outcome(action="accepted", revenue_delta_pct=5.0)
         assert o.was_successful is True
@@ -153,31 +158,40 @@ class TestOutcomeWithDataQuality:
 # TESTS: ScrapingPriorityAdjustment
 # ──────────────────────────────────────────────────────────
 
-class TestScrapingPriorityAdjustment:
 
+class TestScrapingPriorityAdjustment:
     def test_is_significant(self):
         from services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
+
         adj = ScrapingPriorityAdjustment(
-            category="electronics", adjustment_type="competitor_price",
-            priority_boost=0.3, reason="test",
+            category="electronics",
+            adjustment_type="competitor_price",
+            priority_boost=0.3,
+            reason="test",
             confidence=0.5,
         )
         assert adj.is_significant is True
 
     def test_not_significant_low_boost(self):
         from services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
+
         adj = ScrapingPriorityAdjustment(
-            category="electronics", adjustment_type="competitor_price",
-            priority_boost=0.01, reason="test",
+            category="electronics",
+            adjustment_type="competitor_price",
+            priority_boost=0.01,
+            reason="test",
             confidence=0.5,
         )
         assert adj.is_significant is False
 
     def test_not_significant_low_confidence(self):
         from services.scoring.learning.scout_feedback import ScrapingPriorityAdjustment
+
         adj = ScrapingPriorityAdjustment(
-            category="electronics", adjustment_type="competitor_price",
-            priority_boost=0.3, reason="test",
+            category="electronics",
+            adjustment_type="competitor_price",
+            priority_boost=0.3,
+            reason="test",
             confidence=0.1,
         )
         assert adj.is_significant is False
@@ -187,19 +201,27 @@ class TestScrapingPriorityAdjustment:
 # TESTS: ScoutFeedbackReport
 # ──────────────────────────────────────────────────────────
 
-class TestScoutFeedbackReport:
 
+class TestScoutFeedbackReport:
     def test_significant_adjustments_filter(self):
         from services.scoring.learning.scout_feedback import (
-            ScoutFeedbackReport, ScrapingPriorityAdjustment,
+            ScoutFeedbackReport,
+            ScrapingPriorityAdjustment,
         )
+
         adj1 = ScrapingPriorityAdjustment(
-            category="a", adjustment_type="t", priority_boost=0.3,
-            reason="r", confidence=0.5,
+            category="a",
+            adjustment_type="t",
+            priority_boost=0.3,
+            reason="r",
+            confidence=0.5,
         )
         adj2 = ScrapingPriorityAdjustment(
-            category="b", adjustment_type="t", priority_boost=0.01,
-            reason="r", confidence=0.5,
+            category="b",
+            adjustment_type="t",
+            priority_boost=0.01,
+            reason="r",
+            confidence=0.5,
         )
         report = ScoutFeedbackReport(
             analyzed_at=datetime.now(UTC),
@@ -215,6 +237,7 @@ class TestScoutFeedbackReport:
 
     def test_summary_string(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackReport
+
         report = ScoutFeedbackReport(
             analyzed_at=datetime.now(UTC),
             total_outcomes_analyzed=20,
@@ -232,10 +255,11 @@ class TestScoutFeedbackReport:
 # TESTS: Analyzer — Happy Path
 # ──────────────────────────────────────────────────────────
 
-class TestAnalyzerHappyPath:
 
+class TestAnalyzerHappyPath:
     def _analyzer(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+
         return ScoutFeedbackAnalyzer()
 
     def test_empty_outcomes(self):
@@ -260,12 +284,8 @@ class TestAnalyzerHappyPath:
 
     def test_category_summaries(self):
         """Category summaries populated."""
-        outcomes = [
-            _make_success(recommendation_id=f"s-{i}", category="electronics")
-            for i in range(5)
-        ] + [
-            _make_failure(recommendation_id=f"f-{i}", category="electronics")
-            for i in range(5)
+        outcomes = [_make_success(recommendation_id=f"s-{i}", category="electronics") for i in range(5)] + [
+            _make_failure(recommendation_id=f"f-{i}", category="electronics") for i in range(5)
         ]
         report = self._analyzer().analyze(outcomes)
         assert "electronics" in report.category_summaries
@@ -278,24 +298,30 @@ class TestAnalyzerHappyPath:
         outcomes = []
         # Failures with low competitor count
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"fc-{i}",
-                competitor_count=0,
-                revenue_delta_pct=-5.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"fc-{i}",
+                    competitor_count=0,
+                    revenue_delta_pct=-5.0,
+                )
+            )
         # Failures with no sentiment
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"fs-{i}",
-                sentiment_available=False,
-                revenue_delta_pct=-3.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"fs-{i}",
+                    sentiment_available=False,
+                    revenue_delta_pct=-3.0,
+                )
+            )
         # Some successes for comparison
         for i in range(10):
-            outcomes.append(_make_success(
-                recommendation_id=f"s-{i}",
-                competitor_count=5,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"s-{i}",
+                    competitor_count=5,
+                )
+            )
 
         report = self._analyzer().analyze(outcomes)
         if len(report.adjustments) >= 2:
@@ -306,26 +332,31 @@ class TestAnalyzerHappyPath:
 # TESTS: Competitor Gap Detection
 # ──────────────────────────────────────────────────────────
 
-class TestCompetitorGapDetection:
 
+class TestCompetitorGapDetection:
     def _analyzer(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+
         return ScoutFeedbackAnalyzer()
 
     def test_low_competitor_count_detected(self):
         """Failures with < 2 competitors → competitor_price adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                competitor_count=0,
-                revenue_delta_pct=-4.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    competitor_count=0,
+                    revenue_delta_pct=-4.0,
+                )
+            )
         for i in range(5):
-            outcomes.append(_make_success(
-                recommendation_id=f"s-{i}",
-                competitor_count=5,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"s-{i}",
+                    competitor_count=5,
+                )
+            )
         report = self._analyzer().analyze(outcomes)
         comp_adjs = [a for a in report.adjustments if a.adjustment_type == "competitor_price"]
         assert len(comp_adjs) >= 1
@@ -335,11 +366,13 @@ class TestCompetitorGapDetection:
         """Failures with low price_data_completeness → adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                price_data_completeness=0.3,
-                revenue_delta_pct=-3.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    price_data_completeness=0.3,
+                    revenue_delta_pct=-3.0,
+                )
+            )
         for i in range(5):
             outcomes.append(_make_success(recommendation_id=f"s-{i}"))
         report = self._analyzer().analyze(outcomes)
@@ -350,17 +383,21 @@ class TestCompetitorGapDetection:
         """Failures with good competitor data → no competitor adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                competitor_count=5,
-                price_data_completeness=0.95,
-                revenue_delta_pct=-2.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    competitor_count=5,
+                    price_data_completeness=0.95,
+                    revenue_delta_pct=-2.0,
+                )
+            )
         for i in range(5):
-            outcomes.append(_make_success(
-                recommendation_id=f"s-{i}",
-                competitor_count=5,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"s-{i}",
+                    competitor_count=5,
+                )
+            )
         report = self._analyzer().analyze(outcomes)
         comp_adjs = [a for a in report.adjustments if a.adjustment_type == "competitor_price"]
         # May or may not have adjustments, but shouldn't be high priority
@@ -372,21 +409,24 @@ class TestCompetitorGapDetection:
 # TESTS: Sentiment Gap Detection
 # ──────────────────────────────────────────────────────────
 
-class TestSentimentGapDetection:
 
+class TestSentimentGapDetection:
     def _analyzer(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+
         return ScoutFeedbackAnalyzer()
 
     def test_no_sentiment_detected(self):
         """Failures with no sentiment → sentiment adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                sentiment_available=False,
-                revenue_delta_pct=-3.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    sentiment_available=False,
+                    revenue_delta_pct=-3.0,
+                )
+            )
         for i in range(5):
             outcomes.append(_make_success(recommendation_id=f"s-{i}"))
         report = self._analyzer().analyze(outcomes)
@@ -397,11 +437,13 @@ class TestSentimentGapDetection:
         """Failures with low sentiment completeness → adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                sentiment_data_completeness=0.3,
-                revenue_delta_pct=-3.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    sentiment_data_completeness=0.3,
+                    revenue_delta_pct=-3.0,
+                )
+            )
         for i in range(5):
             outcomes.append(_make_success(recommendation_id=f"s-{i}"))
         report = self._analyzer().analyze(outcomes)
@@ -413,26 +455,31 @@ class TestSentimentGapDetection:
 # TESTS: Freshness Gap Detection
 # ──────────────────────────────────────────────────────────
 
-class TestFreshnessGapDetection:
 
+class TestFreshnessGapDetection:
     def _analyzer(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+
         return ScoutFeedbackAnalyzer()
 
     def test_stale_data_detected(self):
         """Failures with stale data → freshness adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                days_since_last_scrape=14.0,
-                revenue_delta_pct=-4.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    days_since_last_scrape=14.0,
+                    revenue_delta_pct=-4.0,
+                )
+            )
         for i in range(5):
-            outcomes.append(_make_success(
-                recommendation_id=f"s-{i}",
-                days_since_last_scrape=1.0,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"s-{i}",
+                    days_since_last_scrape=1.0,
+                )
+            )
         report = self._analyzer().analyze(outcomes)
         fresh_adjs = [a for a in report.adjustments if a.adjustment_type == "freshness"]
         assert len(fresh_adjs) >= 1
@@ -442,11 +489,13 @@ class TestFreshnessGapDetection:
         """Failures with fresh data → no freshness adjustment."""
         outcomes = []
         for i in range(5):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                days_since_last_scrape=1.0,
-                revenue_delta_pct=-2.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    days_since_last_scrape=1.0,
+                    revenue_delta_pct=-2.0,
+                )
+            )
         for i in range(5):
             outcomes.append(_make_success(recommendation_id=f"s-{i}"))
         report = self._analyzer().analyze(outcomes)
@@ -458,10 +507,11 @@ class TestFreshnessGapDetection:
 # TESTS: Multiple Categories
 # ──────────────────────────────────────────────────────────
 
-class TestMultipleCategories:
 
+class TestMultipleCategories:
     def _analyzer(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+
         return ScoutFeedbackAnalyzer()
 
     def test_separate_category_analysis(self):
@@ -469,20 +519,30 @@ class TestMultipleCategories:
         outcomes = []
         # Electronics: failures with low competitors
         for i in range(4):
-            outcomes.append(_make_failure(
-                recommendation_id=f"ef-{i}", category="electronics",
-                competitor_count=0, revenue_delta_pct=-3.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"ef-{i}",
+                    category="electronics",
+                    competitor_count=0,
+                    revenue_delta_pct=-3.0,
+                )
+            )
         for i in range(4):
-            outcomes.append(_make_success(
-                recommendation_id=f"es-{i}", category="electronics",
-                competitor_count=5,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"es-{i}",
+                    category="electronics",
+                    competitor_count=5,
+                )
+            )
         # Fashion: all good
         for i in range(8):
-            outcomes.append(_make_success(
-                recommendation_id=f"fs-{i}", category="fashion",
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"fs-{i}",
+                    category="fashion",
+                )
+            )
 
         report = self._analyzer().analyze(outcomes)
         assert "electronics" in report.category_summaries
@@ -498,26 +558,23 @@ class TestMultipleCategories:
 # TESTS: Edge Cases
 # ──────────────────────────────────────────────────────────
 
-class TestScoutFeedbackEdgeCases:
 
+class TestScoutFeedbackEdgeCases:
     def _analyzer(self):
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
+
         return ScoutFeedbackAnalyzer()
 
     def test_all_failures(self):
         """100% failure rate doesn't crash."""
-        outcomes = [
-            _make_failure(recommendation_id=f"f-{i}", competitor_count=0)
-            for i in range(10)
-        ]
+        outcomes = [_make_failure(recommendation_id=f"f-{i}", competitor_count=0) for i in range(10)]
         report = self._analyzer().analyze(outcomes)
         assert report.total_failures == 10
 
     def test_none_revenue_delta(self):
         """None revenue_delta_pct handled gracefully."""
         outcomes = [
-            _make_outcome(recommendation_id=f"r-{i}", revenue_delta_pct=None, action="ignored")
-            for i in range(10)
+            _make_outcome(recommendation_id=f"r-{i}", revenue_delta_pct=None, action="ignored") for i in range(10)
         ]
         report = self._analyzer().analyze(outcomes)
         assert report.total_outcomes_analyzed == 10
@@ -526,16 +583,20 @@ class TestScoutFeedbackEdgeCases:
         """Priority boost never exceeds 1.0."""
         outcomes = []
         for i in range(20):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                competitor_count=0,
-                revenue_delta_pct=-50.0,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    competitor_count=0,
+                    revenue_delta_pct=-50.0,
+                )
+            )
         for i in range(5):
-            outcomes.append(_make_success(
-                recommendation_id=f"s-{i}",
-                competitor_count=10,
-            ))
+            outcomes.append(
+                _make_success(
+                    recommendation_id=f"s-{i}",
+                    competitor_count=10,
+                )
+            )
         report = self._analyzer().analyze(outcomes)
         for adj in report.adjustments:
             assert adj.priority_boost <= 1.0
@@ -544,15 +605,14 @@ class TestScoutFeedbackEdgeCases:
         """Confidence never exceeds 1.0."""
         outcomes = []
         for i in range(30):
-            outcomes.append(_make_failure(
-                recommendation_id=f"f-{i}",
-                sentiment_available=False,
-            ))
+            outcomes.append(
+                _make_failure(
+                    recommendation_id=f"f-{i}",
+                    sentiment_available=False,
+                )
+            )
         for i in range(5):
             outcomes.append(_make_success(recommendation_id=f"s-{i}"))
         report = self._analyzer().analyze(outcomes)
         for adj in report.adjustments:
             assert adj.confidence <= 1.0
-
-
-            

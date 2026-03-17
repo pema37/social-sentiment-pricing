@@ -7,13 +7,8 @@ Place at: backend/tests/test_config.py
 Run: pytest backend/tests/test_config.py -v
 """
 
-import os
 import sys
-from unittest.mock import MagicMock, patch
-
-import pytest
-from pydantic import ValidationError
-
+from unittest.mock import MagicMock
 
 # Required env vars that have no defaults
 REQUIRED_ENV = {
@@ -28,6 +23,7 @@ def _get_settings_class():
     if isinstance(sys.modules.get("core.config"), MagicMock):
         del sys.modules["core.config"]
     from core.config import Settings
+
     return Settings
 
 
@@ -42,24 +38,27 @@ def make_settings(**overrides):
 # Path Constants
 # =====================================================================
 
-class TestPathConstants:
 
+class TestPathConstants:
     def test_backend_dir_exists(self):
         if isinstance(sys.modules.get("core.config"), MagicMock):
             del sys.modules["core.config"]
         from core.config import BACKEND_DIR
+
         assert BACKEND_DIR.is_dir()
 
     def test_env_file_path(self):
         if isinstance(sys.modules.get("core.config"), MagicMock):
             del sys.modules["core.config"]
         from core.config import BACKEND_DIR, ENV_FILE
+
         assert ENV_FILE == BACKEND_DIR / ".env"
 
 
 # =====================================================================
 # Required Fields
 # =====================================================================
+
 
 class TestRequiredFields:
     """Verify DATABASE_URL, JWT_SECRET_KEY, ENCRYPTION_KEY are required (no defaults)."""
@@ -90,8 +89,8 @@ class TestRequiredFields:
 # Application Defaults
 # =====================================================================
 
-class TestApplicationDefaults:
 
+class TestApplicationDefaults:
     def test_app_name(self):
         s = make_settings()
         assert s.APP_NAME == "Social Sentiment Pricing API"
@@ -121,8 +120,8 @@ class TestApplicationDefaults:
 # URL Defaults
 # =====================================================================
 
-class TestURLDefaults:
 
+class TestURLDefaults:
     def test_backend_url(self):
         s = make_settings()
         assert s.BACKEND_URL == "http://localhost:8000"
@@ -136,8 +135,8 @@ class TestURLDefaults:
 # JWT / Security Defaults
 # =====================================================================
 
-class TestSecurityDefaults:
 
+class TestSecurityDefaults:
     def test_algorithm(self):
         s = make_settings()
         assert s.ALGORITHM == "HS256"
@@ -159,8 +158,8 @@ class TestSecurityDefaults:
 # CORS
 # =====================================================================
 
-class TestCORS:
 
+class TestCORS:
     def test_cors_default(self):
         s = make_settings()
         assert s.CORS_ORIGINS == "*"
@@ -186,8 +185,8 @@ class TestCORS:
 # Redis / Celery Defaults
 # =====================================================================
 
-class TestRedisDefaults:
 
+class TestRedisDefaults:
     def test_redis_url(self):
         s = make_settings()
         assert s.REDIS_URL == "redis://localhost:6379/0"
@@ -201,8 +200,8 @@ class TestRedisDefaults:
 # Monitoring Defaults
 # =====================================================================
 
-class TestMonitoringDefaults:
 
+class TestMonitoringDefaults:
     def test_sentry_dsn_none(self):
         s = make_settings()
         assert s.SENTRY_DSN is None
@@ -223,6 +222,7 @@ class TestMonitoringDefaults:
 # =====================================================================
 # External API Defaults (all Optional, None)
 # =====================================================================
+
 
 class TestExternalAPIDefaults:
     """
@@ -262,8 +262,8 @@ class TestExternalAPIDefaults:
 # MNEE Payment Defaults
 # =====================================================================
 
-class TestMNEEDefaults:
 
+class TestMNEEDefaults:
     def test_mnee_api_key_empty(self):
         s = make_settings()
         assert s.MNEE_API_KEY == ""
@@ -282,11 +282,8 @@ class TestMNEEDefaults:
 # Extra Fields Ignored
 # =====================================================================
 
-class TestExtraIgnored:
 
+class TestExtraIgnored:
     def test_extra_fields_ignored(self):
         s = make_settings(NONEXISTENT_FIELD="should_be_ignored")
         assert not hasattr(s, "NONEXISTENT_FIELD")
-
-
-        

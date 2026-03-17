@@ -6,24 +6,24 @@ These describe intelligence environment concepts (calibration, benchmarks,
 data gaps) — not basic pricing CRUD.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # ── Confidence Calibration ────────────────────────────────────────
+
 
 class CalibrationBucket(BaseModel):
     """One bucket in the calibration curve."""
+
     confidence_range_low: float = Field(ge=0.0, le=1.0)
     confidence_range_high: float = Field(ge=0.0, le=1.0)
     predicted_success_rate: float = Field(ge=0.0, le=1.0)
     actual_success_rate: float = Field(ge=0.0, le=1.0)
     sample_count: int = Field(ge=0)
-    avg_revenue_lift_pct: Optional[float] = None
+    avg_revenue_lift_pct: float | None = None
 
 
 class ConfidenceCalibrationResponse(BaseModel):
@@ -33,6 +33,7 @@ class ConfidenceCalibrationResponse(BaseModel):
     Perfect calibration = the diagonal line. Over-confident systems
     show actual < predicted; under-confident show actual > predicted.
     """
+
     buckets: list[CalibrationBucket]
     overall_calibration_error: float = Field(
         ge=0.0,
@@ -40,14 +41,16 @@ class ConfidenceCalibrationResponse(BaseModel):
     )
     total_outcomes: int = Field(ge=0)
     period_days: int
-    category: Optional[str] = None
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    category: str | None = None
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ── Merchant Modification Patterns ────────────────────────────────
 
+
 class ModificationDetail(BaseModel):
     """Detail of how the merchant commonly modifies recommendations."""
+
     direction: str = Field(description="'rounds_down', 'rounds_up', 'reduces_magnitude', 'increases_magnitude'")
     frequency: float = Field(ge=0.0, le=1.0, description="How often this pattern occurs")
     avg_adjustment_pct: float = Field(description="Average % the merchant adjusts by")
@@ -60,24 +63,27 @@ class MerchantPatternResponse(BaseModel):
     Feeds Tier 1 context injection — the Strategist uses this
     to pre-adjust recommendations toward the merchant's preferences.
     """
+
     total_decisions: int = Field(ge=0)
     acceptance_rate: float = Field(ge=0.0, le=1.0)
     modification_rate: float = Field(ge=0.0, le=1.0)
     rejection_rate: float = Field(ge=0.0, le=1.0)
-    avg_time_to_decision_hours: Optional[float] = Field(
-        default=None, ge=0.0,
+    avg_time_to_decision_hours: float | None = Field(
+        default=None,
+        ge=0.0,
         description="Average hours between recommendation and merchant action",
     )
     common_modifications: list[ModificationDetail] = Field(default_factory=list)
-    preferred_change_magnitude: Optional[float] = Field(
+    preferred_change_magnitude: float | None = Field(
         default=None,
         description="Median % change the merchant actually applies.",
     )
     period_days: int
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ── Category Benchmarks ───────────────────────────────────────────
+
 
 class CategoryBenchmarkResponse(BaseModel):
     """
@@ -85,6 +91,7 @@ class CategoryBenchmarkResponse(BaseModel):
 
     Cross-merchant aggregates. Only populated when k-anonymity >= 5.
     """
+
     category: str
     merchant_count: int = Field(ge=0, description="Must be >= 5")
     has_sufficient_data: bool = Field(
@@ -92,32 +99,34 @@ class CategoryBenchmarkResponse(BaseModel):
     )
 
     # Pricing benchmarks
-    median_price: Optional[Decimal] = None
-    price_25th_percentile: Optional[Decimal] = None
-    price_75th_percentile: Optional[Decimal] = None
-    avg_margin_pct: Optional[float] = None
+    median_price: Decimal | None = None
+    price_25th_percentile: Decimal | None = None
+    price_75th_percentile: Decimal | None = None
+    avg_margin_pct: float | None = None
 
     # Outcome benchmarks
-    avg_acceptance_rate: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    avg_revenue_lift_7d: Optional[float] = None
-    best_performing_strategy: Optional[str] = Field(
+    avg_acceptance_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    avg_revenue_lift_7d: float | None = None
+    best_performing_strategy: str | None = Field(
         default=None,
         description="'competitive_match', 'premium', 'undercut', etc.",
     )
 
     # Optimal change range (for Strategist guardrails)
-    optimal_change_min_pct: Optional[float] = None
-    optimal_change_max_pct: Optional[float] = None
-    optimal_change_median_pct: Optional[float] = None
+    optimal_change_min_pct: float | None = None
+    optimal_change_max_pct: float | None = None
+    optimal_change_median_pct: float | None = None
 
     period_days: int
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ── Data Gap Failure Rates ────────────────────────────────────────
 
+
 class DataGapDetail(BaseModel):
     """One specific gap in the feedback loop."""
+
     gap_type: str = Field(
         description="'unmeasured_recommendation', 'failed_sales_pull', 'no_outcome_history', 'stale_competitor_data'",
     )
@@ -131,6 +140,7 @@ class DataGapDetail(BaseModel):
 
 class DataGapFailureRate(BaseModel):
     """Overall failure rate for one measurement window."""
+
     window: str = Field(description="'24h', '48h', '7d', '14d', '30d'")
     total_expected: int = Field(ge=0)
     total_measured: int = Field(ge=0)
@@ -144,23 +154,27 @@ class DataGapResponse(BaseModel):
     A feedback loop with unmeasured outcomes is worse than no loop —
     it creates silent confidence in uncalibrated scores.
     """
+
     gaps: list[DataGapDetail]
     measurement_failure_rates: list[DataGapFailureRate] = Field(default_factory=list)
     total_recommendations: int = Field(ge=0)
     total_measured: int = Field(ge=0)
     overall_measurement_rate: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="total_measured / total_recommendations. Target: > 0.8",
     )
     products_with_no_outcomes: int = Field(ge=0)
     period_days: int
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ── Elasticity Accuracy ───────────────────────────────────────────
 
+
 class ElasticityAccuracyBucket(BaseModel):
     """One bucket comparing predicted vs observed elasticity."""
+
     predicted_elasticity_range: str = Field(description="e.g. '-2.0 to -1.5'")
     avg_predicted: float
     avg_observed: float
@@ -174,27 +188,32 @@ class ElasticityAccuracyResponse(BaseModel):
 
     Core signal for Analyst model quality. Pearson r > 0.5 = good, < 0.3 = retrain.
     """
+
     buckets: list[ElasticityAccuracyBucket]
     overall_mae: float = Field(ge=0.0, description="Mean absolute error. Lower = better.")
-    correlation: Optional[float] = Field(
-        default=None, ge=-1.0, le=1.0,
+    correlation: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
         description="Pearson correlation between predicted and observed.",
     )
     total_observations: int = Field(ge=0)
     period_days: int
-    category: Optional[str] = None
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    category: str | None = None
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ── Dashboard Summaries ───────────────────────────────────────────
 
+
 class OutcomeCardData(BaseModel):
     """Lightweight summary for frontend OutcomeCard component."""
+
     outcome_id: UUID
     product_name: str
     outcome_label: str
     outcome_score: Decimal
-    revenue_change_percent: Optional[Decimal] = None
+    revenue_change_percent: Decimal | None = None
     confidence_score: Decimal
     measured_at: datetime
     measurement_window: str = Field(description="'24h', '48h', '7d', '14d', '30d'")
@@ -202,13 +221,11 @@ class OutcomeCardData(BaseModel):
 
 class AccuracyStats(BaseModel):
     """Lightweight accuracy summary for dashboard header."""
+
     total_outcomes: int
     positive_rate: float
     negative_rate: float
     neutral_rate: float
     avg_confidence: float
-    avg_revenue_lift: Optional[float] = None
-    calibration_error: Optional[float] = None
-
-
-    
+    avg_revenue_lift: float | None = None
+    calibration_error: float | None = None

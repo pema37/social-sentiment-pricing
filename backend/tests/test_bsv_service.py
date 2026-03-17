@@ -5,8 +5,7 @@ BSVPaymentService — WhatsOnChain-based BSV payment verification.
 """
 
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -21,19 +20,26 @@ _originals = {m: sys.modules.get(m) for m in _MOCKED}
 # httpx
 _httpx = MagicMock()
 _httpx.AsyncClient = MagicMock
-_httpx.HTTPStatusError = type("HTTPStatusError", (Exception,), {
-    "__init__": lambda self, *a, **kw: None,
-})
+_httpx.HTTPStatusError = type(
+    "HTTPStatusError",
+    (Exception,),
+    {
+        "__init__": lambda self, *a, **kw: None,
+    },
+)
 sys.modules["httpx"] = _httpx
+
 
 # base
 class _FakePaymentBase:
     def _create_verification_result(self, **kwargs):
         return MagicMock(**kwargs)
 
+
 _base_mod = MagicMock()
 _base_mod.PaymentVerificationService = _FakePaymentBase
 sys.modules["services.payment.base"] = _base_mod
+
 
 # schemas.payment
 class _FakeVerification:
@@ -41,11 +47,12 @@ class _FakeVerification:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+
 _schema_mod = MagicMock()
 _schema_mod.TransactionVerification = _FakeVerification
 sys.modules["schemas.payment"] = _schema_mod
 
-from services.payment.bsv_service import BSVPaymentService, WHATSONCHAIN_API_URL
+from services.payment.bsv_service import BSVPaymentService
 
 # Restore
 for _m in _MOCKED:
@@ -68,7 +75,6 @@ def _make_service():
 # Init / properties
 # ──────────────────────────────────────────────
 class TestInit:
-
     def test_network_name(self):
         svc = BSVPaymentService()
         assert svc.network_name == "bsv"
@@ -86,7 +92,6 @@ class TestInit:
 # _get_client
 # ──────────────────────────────────────────────
 class TestGetClient:
-
     @pytest.mark.asyncio
     async def test_creates_client(self):
         with patch(f"{SVC_MOD}.httpx.AsyncClient") as MockClient:
@@ -119,46 +124,53 @@ class TestGetClient:
 # _extract_memo
 # ──────────────────────────────────────────────
 class TestExtractMemo:
-
     def test_op_return_hex(self):
         svc = _make_service()
-        vout = [{
-            "scriptPubKey": {
-                "asm": "OP_RETURN " + "SSP-abc12345".encode().hex(),
+        vout = [
+            {
+                "scriptPubKey": {
+                    "asm": "OP_RETURN " + b"SSP-abc12345".hex(),
+                }
             }
-        }]
+        ]
         result = svc._extract_memo(vout)
         assert result is not None
         assert "SSP" in result
 
     def test_op_false_op_return(self):
         svc = _make_service()
-        vout = [{
-            "scriptPubKey": {
-                "asm": "0 OP_RETURN " + "hello".encode().hex(),
+        vout = [
+            {
+                "scriptPubKey": {
+                    "asm": "0 OP_RETURN " + b"hello".hex(),
+                }
             }
-        }]
+        ]
         result = svc._extract_memo(vout)
         assert result is not None
 
     def test_op_return_field(self):
         svc = _make_service()
-        vout = [{
-            "scriptPubKey": {
-                "asm": "some other script",
-                "opReturn": "SSP-12345678",
+        vout = [
+            {
+                "scriptPubKey": {
+                    "asm": "some other script",
+                    "opReturn": "SSP-12345678",
+                }
             }
-        }]
+        ]
         result = svc._extract_memo(vout)
         assert result == "SSP-12345678"
 
     def test_no_op_return(self):
         svc = _make_service()
-        vout = [{
-            "scriptPubKey": {
-                "asm": "OP_DUP OP_HASH160 abc OP_EQUALVERIFY OP_CHECKSIG",
+        vout = [
+            {
+                "scriptPubKey": {
+                    "asm": "OP_DUP OP_HASH160 abc OP_EQUALVERIFY OP_CHECKSIG",
+                }
             }
-        }]
+        ]
         result = svc._extract_memo(vout)
         assert result is None
 
@@ -168,22 +180,26 @@ class TestExtractMemo:
 
     def test_invalid_hex_skipped(self):
         svc = _make_service()
-        vout = [{
-            "scriptPubKey": {
-                "asm": "OP_RETURN ZZZZ",  # not valid hex
+        vout = [
+            {
+                "scriptPubKey": {
+                    "asm": "OP_RETURN ZZZZ",  # not valid hex
+                }
             }
-        }]
+        ]
         result = svc._extract_memo(vout)
         assert result is None
 
     def test_short_decoded_skipped(self):
         svc = _make_service()
         # "ab" decodes to 1 byte — less than 3 chars
-        vout = [{
-            "scriptPubKey": {
-                "asm": "OP_RETURN 6162",  # "ab" — 2 chars, skipped
+        vout = [
+            {
+                "scriptPubKey": {
+                    "asm": "OP_RETURN 6162",  # "ab" — 2 chars, skipped
+                }
             }
-        }]
+        ]
         result = svc._extract_memo(vout)
         assert result is None
 
@@ -192,7 +208,6 @@ class TestExtractMemo:
 # verify_transaction
 # ──────────────────────────────────────────────
 class TestVerifyTransaction:
-
     @pytest.mark.asyncio
     async def test_not_verified_passes_through(self):
         svc = _make_service()
@@ -205,7 +220,10 @@ class TestVerifyTransaction:
     async def test_memo_mismatch(self):
         svc = _make_service()
         tx_result = MagicMock(
-            verified=True, memo="SSP-wrong", confirmations=5, block_height=100,
+            verified=True,
+            memo="SSP-wrong",
+            confirmations=5,
+            block_height=100,
         )
         svc.get_transaction_status = AsyncMock(return_value=tx_result)
         svc._create_verification_result = MagicMock(return_value=MagicMock(verified=False))
@@ -217,8 +235,11 @@ class TestVerifyTransaction:
     async def test_memo_match_case_insensitive(self):
         svc = _make_service()
         tx_result = MagicMock(
-            verified=True, memo="SSP-ABC123", confirmations=5,
-            block_height=100, timestamp=None,
+            verified=True,
+            memo="SSP-ABC123",
+            confirmations=5,
+            block_height=100,
+            timestamp=None,
         )
         svc.get_transaction_status = AsyncMock(return_value=tx_result)
         svc._create_verification_result = MagicMock(return_value=MagicMock(verified=True))
@@ -230,8 +251,11 @@ class TestVerifyTransaction:
     async def test_no_memo_check_when_none(self):
         svc = _make_service()
         tx_result = MagicMock(
-            verified=True, memo="anything", confirmations=5,
-            block_height=100, timestamp=None,
+            verified=True,
+            memo="anything",
+            confirmations=5,
+            block_height=100,
+            timestamp=None,
         )
         svc.get_transaction_status = AsyncMock(return_value=tx_result)
         svc._create_verification_result = MagicMock(return_value=MagicMock(verified=True))
@@ -253,7 +277,6 @@ class TestVerifyTransaction:
 # get_transaction_status
 # ──────────────────────────────────────────────
 class TestGetTransactionStatus:
-
     @pytest.mark.asyncio
     async def test_404_not_found(self):
         svc = _make_service()
@@ -315,7 +338,6 @@ class TestGetTransactionStatus:
 # close
 # ──────────────────────────────────────────────
 class TestClose:
-
     @pytest.mark.asyncio
     async def test_closes_client(self):
         svc = _make_service()
@@ -330,7 +352,3 @@ class TestClose:
         svc = _make_service()
         svc._client = None
         await svc.close()
-
-
-
-        

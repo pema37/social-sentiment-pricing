@@ -4,9 +4,8 @@ Tests for services.integration.sync_service
 
 import sys
 import types
-import asyncio
-from datetime import datetime, timedelta, UTC
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -17,11 +16,17 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
-    "sqlalchemy.sql", "sqlalchemy.sql.functions",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
+    "sqlalchemy.sql",
+    "sqlalchemy.sql.functions",
     "sqlmodel",
-    "models", "models.integration", "models.product",
-    "core", "core.encryption",
+    "models",
+    "models.integration",
+    "models.product",
+    "core",
+    "core.encryption",
     "services.integration.base",
     "services.integration.models",
     "services.integration.circuit_breaker",
@@ -62,28 +67,62 @@ class _ColumnMock:
     """MagicMock can't handle <, >, <=, >= with real values like datetime.
     This mock returns a MagicMock for any comparison, just like SQLAlchemy
     column objects do when building .where() expressions."""
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
+
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
+
 
 class _ColumnMock:
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
-    def desc(self): return MagicMock()
-    def asc(self): return MagicMock()
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
+
+    def desc(self):
+        return MagicMock()
+
+    def asc(self):
+        return MagicMock()
+
 
 # --- Fake model classes: class-level attrs for SQLAlchemy .where()/.join() ---
 # Instance attrs set in __init__ override on instances but class-level
 # MagicMock attrs remain accessible on the *class* for query building.
+
 
 class _FakeIntegration:
     # class-level for SQLAlchemy queries
@@ -112,7 +151,7 @@ class _FakeSyncLog:
     # class-level for SQLAlchemy queries
     id = MagicMock()
     integration_id = MagicMock()
-    started_at = _ColumnMock()        # needs <, > comparison support
+    started_at = _ColumnMock()  # needs <, > comparison support
     completed_at = MagicMock()
     success = MagicMock()
 
@@ -225,12 +264,12 @@ sys.modules["services.integration.woocommerce_service"].WooCommerceService = Mag
 
 # --- import under test ---
 from services.integration.sync_service import (
-    SyncService,
     SyncError,
+    SyncService,
     SyncTemporarilyUnavailable,
     SyncTimeoutError,
-    run_product_sync,
     recover_stuck_syncs_async,
+    run_product_sync,
 )
 
 # Restore
@@ -252,6 +291,7 @@ for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_service(db=None):
     db = db or AsyncMock()
@@ -560,5 +600,3 @@ class TestBackgroundFunctions:
             mock_recover.return_value = 2
             result = await recover_stuck_syncs_async(db)
             assert result == 2
-
-

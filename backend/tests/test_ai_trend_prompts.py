@@ -18,21 +18,21 @@ for mod in ["db.session"]:
         sys.modules[mod] = MagicMock()
 
 from services.ai_trend_analysis.prompts import (
-    SYSTEM_PROMPT,
-    TREND_ANALYSIS_PROMPT,
+    INSIGHT_GENERATION_PROMPT,
     OPPORTUNITY_ANALYSIS_PROMPT,
     RISK_DETECTION_PROMPT,
-    INSIGHT_GENERATION_PROMPT,
-    build_trend_analysis_prompt,
+    SYSTEM_PROMPT,
+    TREND_ANALYSIS_PROMPT,
+    build_insight_prompt,
     build_opportunity_prompt,
     build_risk_prompt,
-    build_insight_prompt,
+    build_trend_analysis_prompt,
 )
-
 
 # ==================================================================
 # Prompt Constants
 # ==================================================================
+
 
 class TestPromptConstants:
     """Verify prompt templates exist and contain expected structure."""
@@ -117,6 +117,7 @@ class TestPromptConstants:
 # build_trend_analysis_prompt
 # ==================================================================
 
+
 class TestBuildTrendAnalysisPrompt:
     def _call(self, **overrides):
         defaults = {
@@ -191,8 +192,9 @@ class TestBuildTrendAnalysisPrompt:
         # Should have no remaining {placeholder} patterns
         # (escaped {{ }} in JSON schema are fine)
         import re
+
         # Find single-brace placeholders, not double-brace
-        singles = re.findall(r'(?<!\{)\{[a-z_]+\}(?!\})', result)
+        singles = re.findall(r"(?<!\{)\{[a-z_]+\}(?!\})", result)
         assert singles == [], f"Unformatted placeholders found: {singles}"
 
     def test_contains_json_schema(self):
@@ -204,6 +206,7 @@ class TestBuildTrendAnalysisPrompt:
 # ==================================================================
 # build_opportunity_prompt
 # ==================================================================
+
 
 class TestBuildOpportunityPrompt:
     def _call(self, **overrides):
@@ -291,7 +294,8 @@ class TestBuildOpportunityPrompt:
     def test_no_unformatted_placeholders(self):
         result = self._call()
         import re
-        singles = re.findall(r'(?<!\{)\{[a-z_]+\}(?!\})', result)
+
+        singles = re.findall(r"(?<!\{)\{[a-z_]+\}(?!\})", result)
         assert singles == [], f"Unformatted placeholders found: {singles}"
 
     def test_contains_json_schema(self):
@@ -303,6 +307,7 @@ class TestBuildOpportunityPrompt:
 # ==================================================================
 # build_risk_prompt
 # ==================================================================
+
 
 class TestBuildRiskPrompt:
     def _call(self, **overrides):
@@ -343,7 +348,8 @@ class TestBuildRiskPrompt:
     def test_no_unformatted_placeholders(self):
         result = self._call()
         import re
-        singles = re.findall(r'(?<!\{)\{[a-z_]+\}(?!\})', result)
+
+        singles = re.findall(r"(?<!\{)\{[a-z_]+\}(?!\})", result)
         assert singles == [], f"Unformatted placeholders found: {singles}"
 
     def test_contains_json_schema(self):
@@ -355,6 +361,7 @@ class TestBuildRiskPrompt:
 # ==================================================================
 # build_insight_prompt
 # ==================================================================
+
 
 class TestBuildInsightPrompt:
     def _call(self, **overrides):
@@ -410,7 +417,8 @@ class TestBuildInsightPrompt:
     def test_no_unformatted_placeholders(self):
         result = self._call()
         import re
-        singles = re.findall(r'(?<!\{)\{[a-z_]+\}(?!\})', result)
+
+        singles = re.findall(r"(?<!\{)\{[a-z_]+\}(?!\})", result)
         assert singles == [], f"Unformatted placeholders found: {singles}"
 
     def test_contains_json_schema(self):
@@ -426,6 +434,3 @@ class TestBuildInsightPrompt:
     def test_zero_mentions(self):
         result = self._call(total_mentions=0)
         assert "0" in result
-
-
-        

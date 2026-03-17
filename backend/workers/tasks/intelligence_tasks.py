@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Task registry — import the Celery app
 # ---------------------------------------------------------------------------
+
 
 # Lazy import to avoid circular deps at module level
 def _get_celery_app():
@@ -44,12 +45,14 @@ def _get_celery_app():
 def _get_db_session():
     """Get a sync DB session for Celery tasks."""
     from db.session import SessionLocal
+
     return SessionLocal()
 
 
 # ---------------------------------------------------------------------------
 # Decorator helper for consistent error handling
 # ---------------------------------------------------------------------------
+
 
 def _task_wrapper(task_name: str, fn, *args, **kwargs) -> dict[str, Any]:
     """
@@ -64,29 +67,28 @@ def _task_wrapper(task_name: str, fn, *args, **kwargs) -> dict[str, Any]:
     try:
         result = fn(*args, **kwargs)
         duration_ms = (time.monotonic() - start) * 1000
-        logger.info(
-            "[IE] Task %s completed in %.0fms: %s",
-            task_name, duration_ms, result
-        )
+        logger.info("[IE] Task %s completed in %.0fms: %s", task_name, duration_ms, result)
         return {
             "task": task_name,
             "status": "success",
             "duration_ms": round(duration_ms, 2),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "result": result,
         }
     except Exception as exc:
         duration_ms = (time.monotonic() - start) * 1000
         logger.error(
             "[IE] Task %s failed after %.0fms: %s",
-            task_name, duration_ms, exc,
+            task_name,
+            duration_ms,
+            exc,
             exc_info=True,
         )
         return {
             "task": task_name,
             "status": "error",
             "duration_ms": round(duration_ms, 2),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "error": str(exc),
         }
 
@@ -94,6 +96,7 @@ def _task_wrapper(task_name: str, fn, *args, **kwargs) -> dict[str, Any]:
 # ===================================================================
 # Phase 3 Block A: Tier 2 Batch Learning Tasks
 # ===================================================================
+
 
 def weekly_feature_compute_impl() -> dict:
     """
@@ -158,6 +161,7 @@ def refresh_context_cache_impl() -> dict:
 # ===================================================================
 # Phase 3 Block B: Thompson Sampling Experimentation Tasks
 # ===================================================================
+
 
 def daily_bandit_update_impl() -> dict:
     """
@@ -230,6 +234,7 @@ def persist_bandit_state_impl() -> dict:
 # ===================================================================
 # Phase 3 Block C: Backward Learning Tasks
 # ===================================================================
+
 
 def weekly_calibration_impl() -> dict:
     """
@@ -325,64 +330,54 @@ app = _get_celery_app()
 
 
 # -- Phase 3 Block A --
-@app.task(name="ie.weekly_feature_compute", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_feature_compute", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_feature_compute(self):
     return _task_wrapper("weekly_feature_compute", weekly_feature_compute_impl)
 
 
-@app.task(name="ie.weekly_prior_update", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_prior_update", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_prior_update(self):
     return _task_wrapper("weekly_prior_update", weekly_prior_update_impl)
 
 
-@app.task(name="ie.refresh_context_cache", bind=True, max_retries=2,
-          default_retry_delay=60, acks_late=True)
+@app.task(name="ie.refresh_context_cache", bind=True, max_retries=2, default_retry_delay=60, acks_late=True)
 def refresh_context_cache(self):
     return _task_wrapper("refresh_context_cache", refresh_context_cache_impl)
 
 
 # -- Phase 3 Block B --
-@app.task(name="ie.daily_bandit_update", bind=True, max_retries=3,
-          default_retry_delay=120, acks_late=True)
+@app.task(name="ie.daily_bandit_update", bind=True, max_retries=3, default_retry_delay=120, acks_late=True)
 def daily_bandit_update(self):
     return _task_wrapper("daily_bandit_update", daily_bandit_update_impl)
 
 
-@app.task(name="ie.weekly_convergence_check", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_convergence_check", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_convergence_check(self):
     return _task_wrapper("weekly_convergence_check", weekly_convergence_check_impl)
 
 
-@app.task(name="ie.persist_bandit_state", bind=True, max_retries=3,
-          default_retry_delay=60, acks_late=True)
+@app.task(name="ie.persist_bandit_state", bind=True, max_retries=3, default_retry_delay=60, acks_late=True)
 def persist_bandit_state(self):
     return _task_wrapper("persist_bandit_state", persist_bandit_state_impl)
 
 
 # -- Phase 3 Block C --
-@app.task(name="ie.weekly_calibration", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_calibration", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_calibration(self):
     return _task_wrapper("weekly_calibration", weekly_calibration_impl)
 
 
-@app.task(name="ie.weekly_drift_detection", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_drift_detection", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_drift_detection(self):
     return _task_wrapper("weekly_drift_detection", weekly_drift_detection_impl)
 
 
-@app.task(name="ie.weekly_scout_feedback", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_scout_feedback", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_scout_feedback(self):
     return _task_wrapper("weekly_scout_feedback", weekly_scout_feedback_impl)
 
 
-@app.task(name="ie.weekly_analyst_feedback", bind=True, max_retries=2,
-          default_retry_delay=300, acks_late=True)
+@app.task(name="ie.weekly_analyst_feedback", bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def weekly_analyst_feedback(self):
     return _task_wrapper("weekly_analyst_feedback", weekly_analyst_feedback_impl)
 
@@ -480,6 +475,7 @@ IE_BEAT_SCHEDULE = {
 # Merge helper — call this from celery_app.py
 # ===================================================================
 
+
 def register_ie_beat_schedule(app_instance) -> None:
     """
     Merge IE beat schedules into the existing Celery Beat configuration.
@@ -505,6 +501,3 @@ def register_ie_beat_schedule(app_instance) -> None:
 
     app_instance.conf.beat_schedule = existing
     logger.info("[IE] Registered %d beat schedule entries", len(IE_BEAT_SCHEDULE))
-
-
-    

@@ -16,10 +16,10 @@ Covers:
 - get_health: healthy, degraded
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -27,8 +27,12 @@ import pytest
 # 1. sys.modules stub isolation
 # ---------------------------------------------------------------------------
 _MOCKED = [
-    "db.session", "core.logging", "core.config",
-    "google", "google.genai", "google.generativeai",
+    "db.session",
+    "core.logging",
+    "core.config",
+    "google",
+    "google.genai",
+    "google.generativeai",
     "openai",
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
@@ -70,13 +74,13 @@ for _m in ("google", "google.genai", "google.generativeai", "openai"):
 # 2. Import module under test
 # ---------------------------------------------------------------------------
 from services.ai_support_service import (
-    AISupportService,
-    SYSTEM_PROMPT,
-    TOPIC_CONTEXT,
-    TOPIC_ACTIONS,
-    TOPIC_SUGGESTIONS,
     DEFAULT_GREETING,
     SUGGESTED_QUESTIONS,
+    SYSTEM_PROMPT,
+    TOPIC_ACTIONS,
+    TOPIC_CONTEXT,
+    TOPIC_SUGGESTIONS,
+    AISupportService,
 )
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,7 @@ del _m
 # Helpers
 # ===========================================================================
 
+
 def _make_service(gemini_client=None, openai_client=None):
     """Create AISupportService with injected clients (bypasses __init__ provider setup)."""
     svc = AISupportService.__new__(AISupportService)
@@ -108,6 +113,7 @@ def _make_service(gemini_client=None, openai_client=None):
 # ===========================================================================
 # Module Constants Tests
 # ===========================================================================
+
 
 class TestModuleConstants:
     def test_system_prompt_not_empty(self):
@@ -142,6 +148,7 @@ class TestModuleConstants:
 # ===========================================================================
 # AISupportService Tests
 # ===========================================================================
+
 
 class TestIsAvailable:
     def test_no_providers(self):
@@ -507,6 +514,3 @@ class TestGetHealth:
         assert "features" in result
         assert "gemini_primary" in result["features"]
         assert "openai_fallback" in result["features"]
-
-
-        

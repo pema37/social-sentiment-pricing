@@ -1,13 +1,12 @@
 # backend/models/sentiment.py
 
 import uuid as uuid_lib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 
-from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlmodel import Field, SQLModel
 
 
 class Sentiment(SQLModel, table=True):
@@ -30,11 +29,10 @@ class Sentiment(SQLModel, table=True):
     negative_score: Decimal = Field(max_digits=4, decimal_places=3)
     neutral_score: Decimal = Field(max_digits=4, decimal_places=3)
 
-    author: Optional[str] = Field(default=None, max_length=255)
-    url: Optional[str] = Field(default=None)
+    author: str | None = Field(default=None, max_length=255)
+    url: str | None = Field(default=None)
 
     analyzed_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-

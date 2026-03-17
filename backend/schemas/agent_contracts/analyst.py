@@ -7,8 +7,7 @@ Feeds into: Strategist
 Stored in: analyst_evidence JSONB column on RecommendationOutcome
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -18,20 +17,21 @@ from .shared import PriceDirection, UrgencyLevel
 
 class ElasticityEstimate(BaseModel):
     """Analyst's estimate of price elasticity of demand."""
+
     point_estimate: float = Field(
         description="Estimated PED. Negative = normal good. e.g. -1.2 means 1% price increase → 1.2% demand decrease",
     )
-    confidence_interval_low: Optional[float] = None
-    confidence_interval_high: Optional[float] = None
+    confidence_interval_low: float | None = None
+    confidence_interval_high: float | None = None
     method: str = Field(
         default="bayesian_hierarchical",
         description="'bayesian_hierarchical', 'category_prior', 'historical_regression'",
     )
-    prior_source: Optional[str] = Field(
+    prior_source: str | None = Field(
         default=None,
         description="'category_benchmark', 'merchant_history', 'default'",
     )
-    sample_size: Optional[int] = Field(
+    sample_size: int | None = Field(
         default=None,
         description="Number of historical observations used",
     )
@@ -44,6 +44,7 @@ class ConfidenceDecomposition(BaseModel):
     Feeds directly into the confidence_elasticity, confidence_position,
     confidence_urgency, confidence_data_quality columns on RecommendationOutcome.
     """
+
     elasticity: float = Field(ge=0.0, le=1.0, description="Confidence in elasticity estimate")
     position: float = Field(ge=0.0, le=1.0, description="Confidence in competitive position")
     urgency: float = Field(ge=0.0, le=1.0, description="Confidence in urgency assessment")
@@ -86,7 +87,7 @@ class AnalystOutput(BaseModel):
     scout_scouted_at: datetime = Field(
         description="When Scout gathered the data. For staleness detection.",
     )
-    analyzed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    analyzed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Elasticity analysis (→ feeds Strategist magnitude)
     elasticity: ElasticityEstimate
@@ -97,7 +98,8 @@ class AnalystOutput(BaseModel):
     # Urgency assessment (→ feeds Strategist timing)
     urgency_level: UrgencyLevel
     urgency_score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="0.0 = no urgency, 1.0 = act immediately",
     )
     urgency_reasons: list[str] = Field(
@@ -106,21 +108,24 @@ class AnalystOutput(BaseModel):
     )
 
     # Sentiment interpretation
-    sentiment_score: Optional[float] = Field(
-        default=None, ge=-1.0, le=1.0,
+    sentiment_score: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
         description="Analyst's weighted sentiment. None if no social data from Scout.",
     )
-    sentiment_impact: Optional[str] = Field(
+    sentiment_impact: str | None = Field(
         default=None,
         description="'supports_increase', 'suggests_decrease', 'neutral', 'crisis_override'",
     )
 
     # Market position analysis
     competitive_position_index: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="From Scout, possibly adjusted. 0.0 = cheapest, 1.0 = most expensive.",
     )
-    market_pressure: Optional[str] = Field(
+    market_pressure: str | None = Field(
         default=None,
         description="'underpriced', 'fairly_priced', 'overpriced', 'no_data'",
     )
@@ -137,7 +142,7 @@ class AnalystOutput(BaseModel):
 
     # Metadata
     analyst_version: str = "1.0"
-    processing_time_ms: Optional[int] = None
+    processing_time_ms: int | None = None
     model_used: str = Field(
         default="gemini-2.0-flash",
         description="Which LLM/model produced this analysis",
@@ -146,6 +151,3 @@ class AnalystOutput(BaseModel):
     def to_evidence(self) -> dict:
         """Serialize for JSONB storage on RecommendationOutcome.analyst_evidence."""
         return self.model_dump(mode="json")
-    
-
-    

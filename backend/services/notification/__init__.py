@@ -6,22 +6,20 @@ Multi-channel alert delivery: Email (SendGrid), Slack (Webhooks), Webhook (Custo
 Alert generation from system events.
 """
 
+from services.notification.alert_generator import AlertGenerator
 from services.notification.email_service import EmailService
-from services.notification.slack_service import SlackService
-from services.notification.webhook_service import WebhookService
 from services.notification.notification_dispatcher import (
     NotificationDispatcher,
     send_quick_alert,
 )
-from services.notification.alert_generator import AlertGenerator
+from services.notification.slack_service import SlackService
+from services.notification.webhook_service import WebhookService
 
 __all__ = [
+    "AlertGenerator",
     "EmailService",
+    "NotificationDispatcher",
     "SlackService",
     "WebhookService",
-    "NotificationDispatcher",
     "send_quick_alert",
-    "AlertGenerator",
 ]
-
-

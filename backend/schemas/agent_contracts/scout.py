@@ -6,9 +6,8 @@ Feeds into: Analyst
 Stored in: scout_evidence JSONB column on RecommendationOutcome
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -18,17 +17,19 @@ from .shared import DataSource
 
 class CompetitorPrice(BaseModel):
     """A single competitor's price observation."""
+
     competitor_name: str
     price: Decimal
     currency: str = "USD"
-    url: Optional[str] = None
+    url: str | None = None
     scraped_at: datetime
     is_on_sale: bool = False
-    sale_price: Optional[Decimal] = None
+    sale_price: Decimal | None = None
 
 
 class SentimentSnapshot(BaseModel):
     """Aggregated sentiment at time of scouting."""
+
     overall_score: float = Field(ge=-1.0, le=1.0)
     mention_count: int = Field(ge=0)
     positive_ratio: float = Field(ge=0.0, le=1.0)
@@ -36,7 +37,7 @@ class SentimentSnapshot(BaseModel):
     neutral_ratio: float = Field(ge=0.0, le=1.0)
     trending_topics: list[str] = Field(default_factory=list)
     crisis_detected: bool = False
-    crisis_severity: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    crisis_severity: float | None = Field(default=None, ge=0.0, le=1.0)
     source_breakdown: dict[str, int] = Field(
         default_factory=dict,
         description="Mention count by source: {'twitter': 42, 'reddit': 15, ...}",
@@ -45,6 +46,7 @@ class SentimentSnapshot(BaseModel):
 
 class PriceHistoryPoint(BaseModel):
     """Historical price data point for trend analysis."""
+
     price: Decimal
     recorded_at: datetime
     source: str = "internal"
@@ -65,34 +67,37 @@ class ScoutOutput(BaseModel):
 
     # Identity
     product_id: UUID
-    scouted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    scouted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Competitor intelligence
     competitors: list[CompetitorPrice] = Field(default_factory=list)
     competitor_count: int = Field(ge=0, default=0)
     our_price: Decimal
-    our_position: Optional[str] = Field(
+    our_position: str | None = Field(
         default=None,
         description="'cheapest', 'below_median', 'at_median', 'above_median', 'most_expensive'",
     )
-    competitive_position_index: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0,
+    competitive_position_index: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
         description="0.0 = cheapest in market, 1.0 = most expensive",
     )
 
     # Sentiment intelligence
-    sentiment: Optional[SentimentSnapshot] = None
+    sentiment: SentimentSnapshot | None = None
 
     # Price history (for trend detection)
     price_history: list[PriceHistoryPoint] = Field(default_factory=list)
-    price_trend: Optional[str] = Field(
+    price_trend: str | None = Field(
         default=None,
         description="'rising', 'falling', 'stable', 'volatile'",
     )
 
     # Data quality (critical for Analyst confidence decomposition)
     data_completeness: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="0.0 = no data, 1.0 = full coverage. < 0.6 triggers Scout priority queue.",
     )
     data_sources: list[DataSource] = Field(default_factory=list)
@@ -103,7 +108,7 @@ class ScoutOutput(BaseModel):
 
     # Metadata
     scout_version: str = "1.0"
-    processing_time_ms: Optional[int] = None
+    processing_time_ms: int | None = None
 
     @field_validator("competitor_count", mode="before")
     @classmethod
@@ -116,6 +121,3 @@ class ScoutOutput(BaseModel):
     def to_evidence(self) -> dict:
         """Serialize for JSONB storage on RecommendationOutcome.scout_evidence."""
         return self.model_dump(mode="json")
-    
-
-    

@@ -17,7 +17,6 @@ Already fixed (no changes):
   tests/test_webhook_registration.py
 """
 
-import re
 import sys
 from pathlib import Path
 
@@ -176,7 +175,7 @@ for _key, _attr in [
     if _key in sys.modules:
         _saved_attrs[(_key, _attr)] = getattr(sys.modules[_key], _attr, _SENTINEL)
 """,
-        save_anchor="_integ_mod = sys.modules[\"models.integration\"]",
+        save_anchor='_integ_mod = sys.modules["models.integration"]',
         restore_anchor="""# Restore
 for _name, _mod in _stubs.items():
     if _name in sys.modules and sys.modules[_name] is _mod:
@@ -247,7 +246,7 @@ for _name, _mod in _stubs.items():
     )
 
     # -----------------------------------------------------------------------
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"Patched {patched}/5 files")
     if patched == 5:
         print("All done! Run: pytest tests/ -x -q")
@@ -259,6 +258,3 @@ for _name, _mod in _stubs.items():
 
 if __name__ == "__main__":
     main()
-
-
-    

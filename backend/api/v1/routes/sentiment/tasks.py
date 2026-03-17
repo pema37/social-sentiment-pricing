@@ -3,14 +3,14 @@
 
 from uuid import UUID
 
+from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from celery.result import AsyncResult
 
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter, BULK_RATE_LIMIT
+from core.rate_limit import BULK_RATE_LIMIT, limiter
+from db.session import get_session
 from models import Product, User
 from workers.tasks.ingestion_tasks import fetch_for_product, process_pending_mentions
 
@@ -29,15 +29,13 @@ async def fetch_product_mentions(
     Queue a background task to fetch social mentions for a product.
     Returns a task_id to check status.
     """
-    result = await session.execute(
-        select(Product).where(Product.id == product_id)
-    )
+    result = await session.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     task = fetch_for_product.delay(str(product_id))
-    
+
     return {
         "status": "queued",
         "task_id": task.id,
@@ -59,7 +57,7 @@ async def process_mentions(
     Returns a task_id to check status.
     """
     task = process_pending_mentions.delay(batch_size)
-    
+
     return {
         "status": "queued",
         "task_id": task.id,
@@ -77,7 +75,7 @@ async def get_task_status(
 ):
     """
     Check the status of a background task.
-    
+
     States:
     - PENDING: Task is waiting to be picked up
     - STARTED: Task has started
@@ -86,31 +84,31 @@ async def get_task_status(
     - FAILURE: Task failed
     """
     result = AsyncResult(task_id)
-    
+
     response = {
         "task_id": task_id,
         "status": result.status,
     }
-    
+
     if result.status == "PENDING":
         response["message"] = "Task is waiting to be picked up by a worker"
-    
+
     elif result.status == "STARTED":
         response["message"] = "Task has started"
         if result.info:
             response["progress"] = result.info
-    
+
     elif result.status in ["LOADING_PRODUCT", "FETCHING", "SAVING", "PROCESSING", "LOADING"]:
         response["message"] = f"Task is {result.status.lower()}"
         if result.info:
             response["progress"] = result.info
-    
+
     elif result.status == "SUCCESS":
         response["message"] = "Task completed successfully"
         response["result"] = result.result
-    
+
     elif result.status == "FAILURE":
         response["message"] = "Task failed"
         response["error"] = str(result.result) if result.result else "Unknown error"
-    
+
     return response

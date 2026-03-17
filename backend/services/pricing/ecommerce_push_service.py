@@ -11,28 +11,27 @@ PATCHED (2026-02-21):
 - Reuse cached service instances instead of re-instantiating per push
 """
 
-from datetime import datetime, UTC
-from uuid import UUID
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models.product import Product
-from models.integration import (
-    Integration,
-    ProductIntegrationLink,
-    IntegrationStatus,
-    EcommercePlatform,
-)
 from core.encryption import decrypt_token
-from services.integration.shopify_service import ShopifyService
-from services.integration.woocommerce_service import WooCommerceService
+from models.integration import (
+    EcommercePlatform,
+    Integration,
+    IntegrationStatus,
+    ProductIntegrationLink,
+)
+from models.product import Product
 from services.integration.base import (
     EcommerceService,
     PriceUpdateRequest,
     PriceUpdateResult,
 )
+from services.integration.shopify_service import ShopifyService
+from services.integration.woocommerce_service import WooCommerceService
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ class EcommercePushService:
     async def push_price(self, product: Product) -> dict:
         """
         Push price update to ALL connected e-commerce platforms.
-        
+
         Returns:
             dict with success status, platforms pushed, and details
         """
@@ -76,7 +75,7 @@ class EcommercePushService:
             )
             result = await self.db.execute(stmt)
             links = list(result.scalars().all())
-            
+
             if not links:
                 logger.warning(f"Product {product.id} not linked to any ACTIVE platform")
                 return {
@@ -85,13 +84,13 @@ class EcommercePushService:
                     "error": "Product not linked to any active platform",
                     "error_code": "NO_ACTIVE_INTEGRATION_LINK",
                 }
-            
+
             # Push to EACH active platform/variant link
             push_results = []
             for link in links:
                 single_result = await self._push_to_platform(product, link)
                 push_results.append(single_result)
-            
+
             # FIX: Flush link metadata updates (last_price_push_at, external_price)
             # after all pushes. Using flush() instead of commit() so the caller
             # (auto_approve_and_apply) controls the transaction boundary.
@@ -99,15 +98,14 @@ class EcommercePushService:
             # in a single atomic commit.
             await self.db.flush()
 
-            
             # Aggregate results
             successful = [r for r in push_results if r["success"]]
             failed = [r for r in push_results if not r["success"]]
             overall_success = len(successful) > 0
-            
+
             platforms_pushed = [r["platform"] for r in successful]
             platforms_failed = [f"{r['platform']}: {r['error']}" for r in failed]
-            
+
             if overall_success:
                 return {
                     "platform": ", ".join(platforms_pushed),
@@ -124,7 +122,7 @@ class EcommercePushService:
                     "error_code": "ALL_PLATFORMS_FAILED",
                     "details": push_results,
                 }
-            
+
         except Exception as e:
             logger.exception(f"Error pushing to e-commerce for product {product.id}")
             return {
@@ -134,13 +132,11 @@ class EcommercePushService:
                 "error_code": "EXCEPTION",
             }
 
-    async def _push_to_platform(
-        self, product: Product, link: ProductIntegrationLink
-    ) -> dict:
+    async def _push_to_platform(self, product: Product, link: ProductIntegrationLink) -> dict:
         """Push price update to a single e-commerce platform/variant link."""
         try:
             integration = await self.db.get(Integration, link.integration_id)
-            
+
             if not integration:
                 return {
                     "platform": "unknown",
@@ -148,9 +144,9 @@ class EcommercePushService:
                     "error": "Integration not found",
                     "error_code": "INTEGRATION_NOT_FOUND",
                 }
-            
+
             platform_name = integration.platform.value
-            
+
             if integration.status != IntegrationStatus.ACTIVE:
                 return {
                     "platform": platform_name,
@@ -158,24 +154,24 @@ class EcommercePushService:
                     "error": f"Integration status: {integration.status.value}",
                     "error_code": "INTEGRATION_INACTIVE",
                 }
-            
+
             try:
                 access_token = decrypt_token(integration.access_token_encrypted)
             except Exception as e:
                 return {
                     "platform": platform_name,
                     "success": False,
-                    "error": f"Failed to decrypt token: {str(e)}",
+                    "error": f"Failed to decrypt token: {e!s}",
                     "error_code": "TOKEN_DECRYPT_FAILED",
                 }
-            
+
             # Build price update request (includes variant_id for variant-level targeting)
             request = PriceUpdateRequest(
                 external_product_id=link.external_product_id,
                 external_variant_id=link.external_variant_id,
                 new_price=float(product.current_price),
             )
-            
+
             # FIX: Use cached service instance instead of re-instantiating
             try:
                 service = self._get_service(integration.platform)
@@ -186,13 +182,13 @@ class EcommercePushService:
                     "error": "Unsupported platform",
                     "error_code": "UNSUPPORTED_PLATFORM",
                 }
-            
+
             response = await service.update_price(
                 store_url=integration.store_url,
                 access_token=access_token,
                 request=request,
             )
-            
+
             if response.result == PriceUpdateResult.SUCCESS:
                 now = datetime.now(UTC)
                 link.last_price_push_at = now
@@ -201,7 +197,7 @@ class EcommercePushService:
                 link.updated_at = now
                 self.db.add(link)
                 # Note: commit happens in push_price() after all links are processed
-                
+
                 return {
                     "platform": platform_name,
                     "success": True,
@@ -219,7 +215,7 @@ class EcommercePushService:
                     "error": response.error,
                     "error_code": "API_ERROR",
                 }
-                
+
         except Exception as e:
             logger.exception(f"Error pushing to platform for link {link.id}")
             return {
@@ -228,6 +224,3 @@ class EcommercePushService:
                 "error": str(e),
                 "error_code": "EXCEPTION",
             }
-        
-
-        

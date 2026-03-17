@@ -3,17 +3,17 @@
 AI Support Chat API routes.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, HTTPException
 
 from schemas.ai_support import (
     SupportChatRequest,
     SupportChatResponse,
-    SupportTopicsResponse,
     SupportHealthResponse,
+    SupportTopicsResponse,
 )
 from services.ai_support_service import ai_support_service
-
 
 router = APIRouter(prefix="/support", tags=["AI Support"])
 
@@ -22,22 +22,21 @@ router = APIRouter(prefix="/support", tags=["AI Support"])
 async def chat_with_support(request: SupportChatRequest) -> SupportChatResponse:
     """Send a message to the AI support assistant."""
     try:
-        history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.conversation_history
-        ] if request.conversation_history else None
-        
-        result = await ai_support_service.chat(
-            message=request.message,
-            conversation_history=history,
-            topic=request.topic
+        history = (
+            [{"role": msg.role, "content": msg.content} for msg in request.conversation_history]
+            if request.conversation_history
+            else None
         )
-        
+
+        result = await ai_support_service.chat(
+            message=request.message, conversation_history=history, topic=request.topic
+        )
+
         return SupportChatResponse(
             message=result["message"],
             topic_detected=result.get("topic_detected"),
             suggested_actions=result.get("suggested_actions", []),
-            timestamp=datetime.now(UTC).isoformat()
+            timestamp=datetime.now(UTC).isoformat(),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -50,7 +49,7 @@ async def get_support_topics() -> SupportTopicsResponse:
     return SupportTopicsResponse(
         topics=[{"id": t["id"], "label": t["label"], "description": t["description"]} for t in data["topics"]],
         default_greeting=data["default_greeting"],
-        suggested_questions=data["suggested_questions"]
+        suggested_questions=data["suggested_questions"],
     )
 
 
@@ -63,6 +62,5 @@ async def support_health_check() -> SupportHealthResponse:
         service=health["service"],
         openai_configured=health["openai_configured"],
         model=health["model"],
-        features=health["features"]
+        features=health["features"],
     )
-

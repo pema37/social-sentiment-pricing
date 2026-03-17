@@ -15,28 +15,24 @@ Endpoints:
 
 import logging
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_current_user
 from db.session import get_session as get_db  # Fixed: use get_session from db.session
-from models.user import User
-from models.product import Product
 from models.competitor import Competitor
 from models.competitor_product import CompetitorProduct
+from models.product import Product
+from models.user import User
 from services.competitor_matching import (
-    competitor_matching_service,
-    find_competitors,
-    get_available_providers,
-    MatchSearchResponse,
     MatchedProduct,
-    SearchProvider,
+    MatchSearchResponse,
+    competitor_matching_service,
+    get_available_providers,
 )
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/match", tags=["competitor-matching"])
@@ -46,15 +42,17 @@ router = APIRouter(prefix="/match", tags=["competitor-matching"])
 # Request/Response Schemas
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CompetitorSearchRequest(BaseModel):
     """Request schema for competitor search."""
+
     product_name: str = Field(..., min_length=2, max_length=500, description="Product name to search")
-    keywords: Optional[List[str]] = Field(default=None, description="Additional keywords")
-    our_price: Optional[Decimal] = Field(default=None, ge=0, description="Our product price for comparison")
+    keywords: list[str] | None = Field(default=None, description="Additional keywords")
+    our_price: Decimal | None = Field(default=None, ge=0, description="Our product price for comparison")
     max_results: int = Field(default=10, ge=1, le=50, description="Maximum results to return")
-    exclude_domains: Optional[List[str]] = Field(default=None, description="Domains to exclude")
-    preferred_merchants: Optional[List[str]] = Field(default=None, description="Preferred merchants")
-    min_confidence: Optional[float] = Field(default=0.3, ge=0, le=1, description="Minimum confidence score")
+    exclude_domains: list[str] | None = Field(default=None, description="Domains to exclude")
+    preferred_merchants: list[str] | None = Field(default=None, description="Preferred merchants")
+    min_confidence: float | None = Field(default=0.3, ge=0, le=1, description="Minimum confidence score")
     use_cache: bool = Field(default=True, description="Use cached results if available")
 
     class Config:
@@ -72,10 +70,11 @@ class CompetitorSearchRequest(BaseModel):
 
 class ProductMatchRequest(BaseModel):
     """Request schema for matching a specific product."""
+
     product_id: UUID = Field(..., description="Product ID to find competitors for")
     max_results: int = Field(default=10, ge=1, le=50)
-    exclude_domains: Optional[List[str]] = Field(default=None)
-    preferred_merchants: Optional[List[str]] = Field(default=None)
+    exclude_domains: list[str] | None = Field(default=None)
+    preferred_merchants: list[str] | None = Field(default=None)
     auto_link: bool = Field(default=False, description="Automatically link high-confidence matches")
     auto_link_threshold: float = Field(default=0.8, ge=0.5, le=1, description="Confidence threshold for auto-linking")
 
@@ -92,7 +91,8 @@ class ProductMatchRequest(BaseModel):
 
 class BulkMatchRequest(BaseModel):
     """Request schema for bulk matching."""
-    product_ids: List[UUID] = Field(..., min_length=1, max_length=20, description="Product IDs to match")
+
+    product_ids: list[UUID] = Field(..., min_length=1, max_length=20, description="Product IDs to match")
     max_results_per_product: int = Field(default=5, ge=1, le=20)
     auto_link: bool = Field(default=False)
     auto_link_threshold: float = Field(default=0.8, ge=0.5, le=1)
@@ -100,15 +100,16 @@ class BulkMatchRequest(BaseModel):
 
 class MatchedProductResponse(BaseModel):
     """Response schema for a matched product."""
+
     title: str
     url: str
-    price: Optional[str]
+    price: str | None
     currency: str
     merchant: str
     merchant_domain: str
-    image_url: Optional[str]
-    rating: Optional[float]
-    reviews_count: Optional[int]
+    image_url: str | None
+    rating: float | None
+    reviews_count: int | None
     confidence_score: float
     confidence_percent: int
     source: str
@@ -135,13 +136,14 @@ class MatchedProductResponse(BaseModel):
 
 class CompetitorSearchResponse(BaseModel):
     """Response schema for competitor search."""
+
     success: bool
     status: str
     query_used: str
     total_found: int
-    products: List[MatchedProductResponse]
-    providers_used: List[str]
-    providers_failed: List[str]
+    products: list[MatchedProductResponse]
+    providers_used: list[str]
+    providers_failed: list[str]
     search_time_ms: int
     cached: bool
 
@@ -162,6 +164,7 @@ class CompetitorSearchResponse(BaseModel):
 
 class ProviderInfo(BaseModel):
     """Information about a search provider."""
+
     name: str
     available: bool
     requires_api_key: bool
@@ -170,21 +173,24 @@ class ProviderInfo(BaseModel):
 
 class ProvidersResponse(BaseModel):
     """Response schema for providers list."""
-    providers: List[ProviderInfo]
+
+    providers: list[ProviderInfo]
     available_count: int
     total_count: int
 
 
 class LinkResultResponse(BaseModel):
     """Response for auto-link operations."""
+
     product_id: str
     linked_count: int
-    links_created: List[dict]
+    links_created: list[dict]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/search",
@@ -198,10 +204,10 @@ async def search_competitors(
 ) -> CompetitorSearchResponse:
     """
     Search for competitor products by name.
-    
+
     This endpoint searches Google Shopping, Google Custom Search, and DuckDuckGo
     to find competitor listings for the given product.
-    
+
     Results are scored by confidence (how well they match your product)
     and sorted with best matches first.
     """
@@ -225,7 +231,7 @@ async def search_competitors(
         logger.exception(f"Competitor search failed: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Search failed: {str(e)}",
+            detail=f"Search failed: {e!s}",
         )
 
 
@@ -243,16 +249,16 @@ async def match_product(
 ) -> CompetitorSearchResponse:
     """
     Find competitors for a specific product in your catalog.
-    
+
     Uses the product's name, keywords, and price to find matching
     competitor listings. Optionally auto-links high-confidence matches.
     """
     # Fetch the product
     product = await db.get(Product, request.product_id)
-    
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     if product.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your product")
 
@@ -265,7 +271,7 @@ async def match_product(
             keywords = product.keywords
         elif isinstance(product.keywords, str):
             keywords = [k.strip() for k in product.keywords.split(",")]
-    
+
     if product.category:
         keywords.append(product.category)
 
@@ -296,7 +302,7 @@ async def match_product(
         logger.exception(f"Product match failed: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Match failed: {str(e)}",
+            detail=f"Match failed: {e!s}",
         )
 
 
@@ -313,12 +319,12 @@ async def bulk_match_products(
 ) -> dict:
     """
     Bulk match multiple products.
-    
+
     Searches are performed concurrently for efficiency.
     Results are returned as a dictionary keyed by product ID.
     """
     from sqlalchemy import select
-    
+
     # Fetch all products
     stmt = select(Product).where(
         Product.id.in_(request.product_ids),
@@ -339,7 +345,7 @@ async def bulk_match_products(
         if product.keywords:
             if isinstance(product.keywords, list):
                 keywords = product.keywords
-        
+
         try:
             response = await competitor_matching_service.find_competitors(
                 product_name=product.name,
@@ -400,11 +406,11 @@ async def list_providers(
 ) -> ProvidersResponse:
     """
     List available search providers.
-    
+
     Shows which providers are configured and available for use.
     """
     providers = get_available_providers()
-    
+
     return ProvidersResponse(
         providers=[ProviderInfo(**p) for p in providers],
         available_count=sum(1 for p in providers if p["available"]),
@@ -422,11 +428,11 @@ async def clear_cache(
 ) -> dict:
     """
     Clear the search cache.
-    
+
     Use this if you want fresh results instead of cached ones.
     """
     count = competitor_matching_service.clear_cache()
-    
+
     return {
         "success": True,
         "entries_cleared": count,
@@ -437,35 +443,35 @@ async def clear_cache(
 # Helper Functions
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def _auto_link_competitors(
     db: AsyncSession,
     user_id: UUID,
     product: Product,
-    matches: List[MatchedProduct],
+    matches: list[MatchedProduct],
     threshold: float,
-) -> List[dict]:
+) -> list[dict]:
     """
     Background task to auto-link high-confidence competitor matches.
-    
+
     Creates CompetitorProduct entries for matches above the threshold.
     """
     from sqlalchemy import select
-    from services.competitor_matching import extract_domain
-    
+
     links_created = []
-    
+
     for match in matches:
         # Skip low confidence
         if match.confidence_score < threshold:
             continue
-        
+
         # Skip if no price
         if match.price is None:
             continue
 
         try:
             domain = match.merchant_domain
-            
+
             # Find or create competitor
             stmt = select(Competitor).where(
                 Competitor.user_id == user_id,
@@ -511,13 +517,15 @@ async def _auto_link_competitors(
                     is_active=True,
                 )
                 db.add(link)
-                
-                links_created.append({
-                    "merchant": match.merchant,
-                    "url": match.url,
-                    "price": str(match.price),
-                    "confidence": match.confidence_percent,
-                })
+
+                links_created.append(
+                    {
+                        "merchant": match.merchant,
+                        "url": match.url,
+                        "price": str(match.price),
+                        "confidence": match.confidence_percent,
+                    }
+                )
 
             await db.commit()
 
@@ -525,11 +533,6 @@ async def _auto_link_competitors(
             logger.error(f"Failed to auto-link {match.url}: {e}")
             await db.rollback()
 
-    logger.info(
-        f"Auto-linked {len(links_created)} competitors for product {product.id}"
-    )
-    
+    logger.info(f"Auto-linked {len(links_created)} competitors for product {product.id}")
+
     return links_created
-
-
-

@@ -5,13 +5,12 @@ Middleware for request tracing and monitoring.
 
 import time
 import uuid
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from core.logging import get_logger, set_correlation_id, get_correlation_id
-from core.sentry import set_user
+from core.logging import get_logger, set_correlation_id
 
 logger = get_logger(__name__)
 
@@ -23,20 +22,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     - Logs request/response details
     - Tracks request duration
     """
-    
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Generate or extract correlation ID
         correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4())[:8])
         set_correlation_id(correlation_id)
-        
+
         # Start timing
         start_time = time.perf_counter()
-        
+
         # Get request details
         method = request.method
         path = request.url.path
         client_ip = request.client.host if request.client else "unknown"
-        
+
         # Log request
         logger.info(
             "Request started",
@@ -44,7 +43,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             path=path,
             client_ip=client_ip,
         )
-        
+
         # Process request
         try:
             response = await call_next(request)
@@ -59,13 +58,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 error=str(e),
             )
             raise
-        
+
         # Calculate duration
         duration_ms = (time.perf_counter() - start_time) * 1000
-        
+
         # Add correlation ID to response headers
         response.headers["X-Correlation-ID"] = correlation_id
-        
+
         # Log response (skip health checks to reduce noise)
         if not any(p in path for p in ["/health", "/ready", "/live"]):
             log_level = "info" if response.status_code < 400 else "warning"
@@ -76,7 +75,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 status_code=response.status_code,
                 duration_ms=round(duration_ms, 2),
             )
-        
+
         return response
 
 
@@ -84,7 +83,7 @@ class UserContextMiddleware(BaseHTTPMiddleware):
     """
     Middleware to set user context for logging and error tracking.
     """
-    
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # User context is set after authentication in the route handlers
         # This middleware just ensures clean state

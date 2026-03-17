@@ -8,7 +8,7 @@ Total: ~35 tests
 """
 
 import sys
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 # === Import isolation ===
@@ -16,14 +16,13 @@ for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-import pytest
 
 from services.ai_trend_analysis.calculators import TrendCalculators
-
 
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def make_sentiment(score, created_at=None, product_id=None):
     d = {"score": score, "created_at": created_at or datetime.now(UTC)}
@@ -43,8 +42,8 @@ def make_product(name, product_id="p1"):
 # 1. calculate_avg_sentiment
 # ============================================================
 
-class TestCalculateAvgSentiment:
 
+class TestCalculateAvgSentiment:
     def test_simple_average(self):
         data = [make_sentiment(0.5), make_sentiment(0.7), make_sentiment(0.3)]
         assert TrendCalculators.calculate_avg_sentiment(data) == 0.5
@@ -60,8 +59,8 @@ class TestCalculateAvgSentiment:
 # 2. calculate_sentiment_trend
 # ============================================================
 
-class TestCalculateSentimentTrend:
 
+class TestCalculateSentimentTrend:
     def test_rising_trend(self):
         # First half (recent) has higher scores, second half (older) lower
         data = [make_sentiment(0.8)] * 5 + [make_sentiment(0.3)] * 5
@@ -87,8 +86,8 @@ class TestCalculateSentimentTrend:
 # 3. calculate_sentiment_volatility
 # ============================================================
 
-class TestCalculateSentimentVolatility:
 
+class TestCalculateSentimentVolatility:
     def test_zero_volatility(self):
         data = [make_sentiment(0.5)] * 5
         assert TrendCalculators.calculate_sentiment_volatility(data) == 0.0
@@ -109,14 +108,14 @@ class TestCalculateSentimentVolatility:
 # 4. calculate_volume_change
 # ============================================================
 
-class TestCalculateVolumeChange:
 
+class TestCalculateVolumeChange:
     def test_volume_increase(self):
         now = datetime.now(UTC)
         mid = now - timedelta(days=15)
         data = (
-            [{"created_at": now - timedelta(days=i)} for i in range(10)] +  # 10 recent
-            [{"created_at": mid - timedelta(days=i)} for i in range(5)]     # 5 older
+            [{"created_at": now - timedelta(days=i)} for i in range(10)]  # 10 recent
+            + [{"created_at": mid - timedelta(days=i)} for i in range(5)]  # 5 older
         )
         result = TrendCalculators.calculate_volume_change(data, 30)
         assert result > 0
@@ -138,8 +137,8 @@ class TestCalculateVolumeChange:
 # 5. summarize_competitor_changes
 # ============================================================
 
-class TestSummarizeCompetitorChanges:
 
+class TestSummarizeCompetitorChanges:
     def test_with_data(self):
         data = [{"name": "A"}, {"name": "B"}]
         result = TrendCalculators.summarize_competitor_changes(data)
@@ -154,8 +153,8 @@ class TestSummarizeCompetitorChanges:
 # 6. get_top_performing_product
 # ============================================================
 
-class TestGetTopPerformingProduct:
 
+class TestGetTopPerformingProduct:
     def test_finds_best_product(self):
         p1 = make_product("Widget A", "p1")
         p2 = make_product("Widget B", "p2")
@@ -183,8 +182,8 @@ class TestGetTopPerformingProduct:
 # 7. get_worst_performing_product
 # ============================================================
 
-class TestGetWorstPerformingProduct:
 
+class TestGetWorstPerformingProduct:
     def test_finds_worst_product(self):
         p1 = make_product("Widget A", "p1")
         p2 = make_product("Widget B", "p2")
@@ -207,8 +206,8 @@ class TestGetWorstPerformingProduct:
 # 8. detect_basic_trends
 # ============================================================
 
-class TestDetectBasicTrends:
 
+class TestDetectBasicTrends:
     def test_sentiment_rise_detected(self):
         # Recent 7 high, older 7 low → rise > 0.2
         data = [make_sentiment(0.8)] * 7 + [make_sentiment(0.3)] * 7
@@ -235,8 +234,8 @@ class TestDetectBasicTrends:
 # 9. detect_notable_events
 # ============================================================
 
-class TestDetectNotableEvents:
 
+class TestDetectNotableEvents:
     def test_sentiment_shift_detected(self):
         data = [
             make_sentiment(0.9),
@@ -260,6 +259,3 @@ class TestDetectNotableEvents:
         data = [make_sentiment(0.5), make_sentiment(0.1)]
         events = TrendCalculators.detect_notable_events(data, [])
         assert len(events) == 0
-
-
-        

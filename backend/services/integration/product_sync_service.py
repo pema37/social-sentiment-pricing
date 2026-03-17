@@ -18,21 +18,21 @@ PATCHED (2026-02-21):
 """
 
 import logging
-from datetime import datetime, UTC
-from typing import Optional, Dict, Any
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models.product import Product
-from models.integration import (
-    Integration,
-    ProductIntegrationLink,
-    IntegrationStatus,
-    EcommercePlatform,
-)
 from core.encryption import decrypt_token
+from models.integration import (
+    EcommercePlatform,
+    Integration,
+    IntegrationStatus,
+    ProductIntegrationLink,
+)
+from models.product import Product
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +57,8 @@ class ProductSyncService:
     async def get_user_active_integration(
         self,
         user_id: UUID,
-        platform: Optional[EcommercePlatform] = None,
-    ) -> Optional[Integration]:
+        platform: EcommercePlatform | None = None,
+    ) -> Integration | None:
         """Get user's active integration, optionally filtered by platform."""
         stmt = select(Integration).where(
             Integration.user_id == user_id,
@@ -83,7 +83,7 @@ class ProductSyncService:
         self,
         product: Product,
         integration: Integration,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Push a product from SSP to the e-commerce platform.
 
@@ -138,7 +138,7 @@ class ProductSyncService:
         self,
         product: Product,
         integration: Integration,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Push product to WooCommerce via REST API (WooCommerce still uses REST)."""
         import httpx
 
@@ -223,7 +223,7 @@ class ProductSyncService:
         self,
         product: Product,
         integration: Integration,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Push product to Shopify via GraphQL Admin API.
 
@@ -237,12 +237,7 @@ class ProductSyncService:
             store_url = integration.store_url.rstrip("/")
 
             # Normalize domain
-            shop_domain = (
-                store_url.lower()
-                .replace("https://", "")
-                .replace("http://", "")
-                .rstrip("/")
-            )
+            shop_domain = store_url.lower().replace("https://", "").replace("http://", "").rstrip("/")
             if not shop_domain.endswith(".myshopify.com") and "." not in shop_domain:
                 shop_domain = f"{shop_domain}.myshopify.com"
 
@@ -267,7 +262,7 @@ class ProductSyncService:
                 }
             """
 
-            product_input: Dict[str, Any] = {
+            product_input: dict[str, Any] = {
                 "title": product.name,
                 "bodyHtml": product.description or "",
                 "vendor": "",
@@ -357,10 +352,10 @@ class ProductSyncService:
         self,
         product_id: UUID,
         integration_id: UUID,
-        external_variant_id: Optional[str] = None,
-    ) -> Optional[ProductIntegrationLink]:
+        external_variant_id: str | None = None,
+    ) -> ProductIntegrationLink | None:
         """Find existing link, optionally for a specific variant.
-        
+
         FIX: Added external_variant_id param. Without it, for a product with
         3 variant links, this returns an arbitrary one — which could cause
         link_existing_product to overwrite the wrong variant's link.
@@ -370,10 +365,8 @@ class ProductSyncService:
             ProductIntegrationLink.integration_id == integration_id,
         )
         if external_variant_id is not None:
-            stmt = stmt.where(
-                ProductIntegrationLink.external_variant_id == external_variant_id
-            )
-        
+            stmt = stmt.where(ProductIntegrationLink.external_variant_id == external_variant_id)
+
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -382,11 +375,11 @@ class ProductSyncService:
         product_id: UUID,
         integration_id: UUID,
         external_product_id: str,
-        external_variant_id: Optional[str] = None,
-        external_price: Optional[float] = None,
+        external_variant_id: str | None = None,
+        external_price: float | None = None,
     ) -> ProductIntegrationLink:
         """Create a new integration link.
-        
+
         FIX: external_price uses float (matching model field), not Decimal.
         FIX: Removed last_synced_at — field doesn't exist on model.
               Model has last_price_pull_at instead.
@@ -408,9 +401,7 @@ class ProductSyncService:
         await self.db.refresh(link)
         return link
 
-    async def sync_product_on_create(
-        self, product: Product, user_id: UUID, auto_push: bool = True
-    ) -> Dict[str, Any]:
+    async def sync_product_on_create(self, product: Product, user_id: UUID, auto_push: bool = True) -> dict[str, Any]:
         """Auto-push product to all active integrations on creation."""
         if not auto_push:
             return {"synced": False, "reason": "auto_push disabled"}
@@ -422,12 +413,14 @@ class ProductSyncService:
         results = []
         for integration in integrations:
             result = await self.push_product_to_store(product, integration)
-            results.append({
-                "integration_id": str(integration.id),
-                "platform": integration.platform.value,
-                "store_url": integration.store_url,
-                **result,
-            })
+            results.append(
+                {
+                    "integration_id": str(integration.id),
+                    "platform": integration.platform.value,
+                    "store_url": integration.store_url,
+                    **result,
+                }
+            )
 
         return {
             "synced": True,
@@ -440,10 +433,10 @@ class ProductSyncService:
         product_id: UUID,
         integration_id: UUID,
         external_product_id: str,
-        external_variant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        external_variant_id: str | None = None,
+    ) -> dict[str, Any]:
         """Manually link an SSP product to an external product/variant.
-        
+
         FIX: Passes external_variant_id to _get_existing_link so it won't
         accidentally overwrite a different variant's link.
         """
@@ -460,9 +453,7 @@ class ProductSyncService:
             return {"success": False, "error": "Integration not found"}
 
         # FIX: Pass variant_id to avoid overwriting a different variant's link
-        existing = await self._get_existing_link(
-            product_id, integration_id, external_variant_id=external_variant_id
-        )
+        existing = await self._get_existing_link(product_id, integration_id, external_variant_id=external_variant_id)
         if existing:
             existing.external_product_id = external_product_id
             existing.external_variant_id = external_variant_id
@@ -490,9 +481,7 @@ class ProductSyncService:
             "message": "Created new link",
         }
 
-    async def bulk_push_products(
-        self, user_id: UUID, product_ids: Optional[list[UUID]] = None
-    ) -> Dict[str, Any]:
+    async def bulk_push_products(self, user_id: UUID, product_ids: list[UUID] | None = None) -> dict[str, Any]:
         """Push multiple products to all active integrations."""
         integrations = await self.get_all_user_integrations(user_id)
         if not integrations:
@@ -516,7 +505,7 @@ class ProductSyncService:
         if not products:
             return {"success": True, "message": "No products to push", "pushed": 0}
 
-        results: Dict[str, Any] = {
+        results: dict[str, Any] = {
             "total_products": len(products),
             "total_integrations": len(integrations),
             "pushed": 0,
@@ -531,16 +520,14 @@ class ProductSyncService:
                     results["pushed"] += 1
                 else:
                     results["failed"] += 1
-                results["details"].append({
-                    "product_id": str(product.id),
-                    "product_name": product.name,
-                    "integration_id": str(integration.id),
-                    "platform": integration.platform.value,
-                    **push_result,
-                })
+                results["details"].append(
+                    {
+                        "product_id": str(product.id),
+                        "product_name": product.name,
+                        "integration_id": str(integration.id),
+                        "platform": integration.platform.value,
+                        **push_result,
+                    }
+                )
 
         return results
-
-
-
-        

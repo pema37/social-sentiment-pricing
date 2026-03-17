@@ -7,26 +7,25 @@ Run with: pytest backend/tests/test_product_schemas.py -v
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
 from schemas.product import (
-    ProductCreate,
-    ProductUpdate,
-    ProductRead,
     PriceSuggestion,
+    ProductCreate,
+    ProductRead,
+    ProductUpdate,
 )
-
 
 # =====================================================================
 # ProductCreate
 # =====================================================================
 
-class TestProductCreate:
 
+class TestProductCreate:
     def test_valid_minimal(self):
         """Only name + base_price required."""
         p = ProductCreate(name="Headphones", base_price=Decimal("49.99"))
@@ -149,8 +148,8 @@ class TestProductCreate:
 # ProductUpdate
 # =====================================================================
 
-class TestProductUpdate:
 
+class TestProductUpdate:
     def test_empty_update(self):
         """All fields optional — empty update is valid."""
         u = ProductUpdate()
@@ -203,8 +202,8 @@ class TestProductUpdate:
 # ProductRead
 # =====================================================================
 
-class TestProductRead:
 
+class TestProductRead:
     @pytest.fixture
     def valid_product_data(self):
         return {
@@ -224,8 +223,8 @@ class TestProductRead:
             "sentiment_multiplier": Decimal("0.1"),
             "auto_pricing_enabled": False,
             "keywords": ["test"],
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
 
     def test_valid_full(self, valid_product_data):
@@ -280,8 +279,8 @@ class TestProductRead:
 # PriceSuggestion
 # =====================================================================
 
-class TestPriceSuggestion:
 
+class TestPriceSuggestion:
     @pytest.fixture
     def valid_suggestion(self):
         return {
@@ -355,6 +354,3 @@ class TestPriceSuggestion:
         valid_suggestion["suggested_price"] = Decimal("108.19")
         s = PriceSuggestion(**valid_suggestion)
         assert s.change_percent > 0
-
-
-        

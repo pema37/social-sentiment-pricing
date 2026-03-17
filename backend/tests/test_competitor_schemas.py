@@ -9,38 +9,33 @@ Run with: pytest backend/tests/test_competitor_schemas.py -v
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
 from schemas.competitor import (
-    CompetitorBase,
-    CompetitorCreate,
-    CompetitorUpdate,
-    CompetitorResponse,
-    CompetitorListResponse,
-    CompetitorProductBase,
-    CompetitorProductCreate,
-    CompetitorProductUpdate,
-    CompetitorProductResponse,
-    CompetitorProductWithDetails,
-    CompetitorProductListResponse,
-    CompetitorPriceHistoryResponse,
-    CompetitorPriceHistoryListResponse,
-    CompetitorPriceComparison,
     CompetitorAlert,
+    CompetitorCreate,
+    CompetitorListResponse,
+    CompetitorPriceComparison,
+    CompetitorPriceHistoryResponse,
+    CompetitorProductCreate,
+    CompetitorProductResponse,
+    CompetitorProductUpdate,
+    CompetitorProductWithDetails,
+    CompetitorResponse,
     CompetitorTrendAnalysis,
+    CompetitorUpdate,
 )
-
 
 # =====================================================================
 # CompetitorBase / CompetitorCreate
 # =====================================================================
 
-class TestCompetitorCreate:
 
+class TestCompetitorCreate:
     def test_valid_minimal(self):
         c = CompetitorCreate(name="Amazon")
         assert c.name == "Amazon"
@@ -107,8 +102,8 @@ class TestCompetitorCreate:
 # CompetitorUpdate
 # =====================================================================
 
-class TestCompetitorUpdate:
 
+class TestCompetitorUpdate:
     def test_empty_update(self):
         u = CompetitorUpdate()
         assert u.name is None
@@ -142,8 +137,8 @@ class TestCompetitorUpdate:
 # CompetitorResponse
 # =====================================================================
 
-class TestCompetitorResponse:
 
+class TestCompetitorResponse:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -158,8 +153,8 @@ class TestCompetitorResponse:
             "last_scraped_at": None,
             "consecutive_failures": 0,
             "last_error": None,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
 
     def test_valid(self, valid_data):
@@ -186,7 +181,6 @@ class TestCompetitorResponse:
 
 
 class TestCompetitorListResponse:
-
     def test_valid(self):
         r = CompetitorListResponse(items=[], total=0, page=1, size=20)
         assert r.items == []
@@ -197,8 +191,8 @@ class TestCompetitorListResponse:
 # CompetitorProductCreate
 # =====================================================================
 
-class TestCompetitorProductCreate:
 
+class TestCompetitorProductCreate:
     def test_valid_minimal(self):
         p = CompetitorProductCreate(
             competitor_product_name="BT Headphones",
@@ -327,8 +321,8 @@ class TestCompetitorProductCreate:
 # CompetitorProductUpdate
 # =====================================================================
 
-class TestCompetitorProductUpdate:
 
+class TestCompetitorProductUpdate:
     def test_empty_update(self):
         u = CompetitorProductUpdate()
         assert u.competitor_product_name is None
@@ -352,8 +346,8 @@ class TestCompetitorProductUpdate:
 # CompetitorProductResponse
 # =====================================================================
 
-class TestCompetitorProductResponse:
 
+class TestCompetitorProductResponse:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -368,10 +362,10 @@ class TestCompetitorProductResponse:
             "notes": None,
             "is_active": True,
             "current_price": Decimal("74.99"),
-            "last_price_update": datetime.now(timezone.utc),
+            "last_price_update": datetime.now(UTC),
             "price_available": True,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
 
     def test_valid(self, valid_data):
@@ -391,8 +385,8 @@ class TestCompetitorProductResponse:
 # CompetitorProductWithDetails
 # =====================================================================
 
-class TestCompetitorProductWithDetails:
 
+class TestCompetitorProductWithDetails:
     def test_valid(self):
         d = CompetitorProductWithDetails(
             id=uuid.uuid4(),
@@ -404,8 +398,8 @@ class TestCompetitorProductWithDetails:
             match_confidence=Decimal("0.9"),
             is_active=True,
             price_available=True,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             competitor_name="Amazon",
             your_product_name="Wireless Headphones",
             your_current_price=Decimal("99.99"),
@@ -420,8 +414,8 @@ class TestCompetitorProductWithDetails:
 # CompetitorPriceHistoryResponse
 # =====================================================================
 
-class TestCompetitorPriceHistoryResponse:
 
+class TestCompetitorPriceHistoryResponse:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -437,7 +431,7 @@ class TestCompetitorPriceHistoryResponse:
             "promotion_name": None,
             "was_available": True,
             "is_available": True,
-            "observed_at": datetime.now(timezone.utc),
+            "observed_at": datetime.now(UTC),
         }
 
     def test_valid(self, valid_data):
@@ -469,8 +463,8 @@ class TestCompetitorPriceHistoryResponse:
 # CompetitorPriceComparison
 # =====================================================================
 
-class TestCompetitorPriceComparison:
 
+class TestCompetitorPriceComparison:
     def test_valid(self):
         c = CompetitorPriceComparison(
             product_id=uuid.uuid4(),
@@ -505,8 +499,8 @@ class TestCompetitorPriceComparison:
 # CompetitorAlert
 # =====================================================================
 
-class TestCompetitorAlert:
 
+class TestCompetitorAlert:
     def test_valid(self):
         a = CompetitorAlert(
             alert_type="price_drop",
@@ -519,7 +513,7 @@ class TestCompetitorAlert:
             change_percent=Decimal("-16.67"),
             your_current_price=Decimal("99.99"),
             suggested_action="Lower price to match",
-            observed_at=datetime.now(timezone.utc),
+            observed_at=datetime.now(UTC),
         )
         assert a.alert_type == "price_drop"
 
@@ -536,7 +530,7 @@ class TestCompetitorAlert:
             change_percent=None,
             your_current_price=Decimal("99.99"),
             suggested_action="Monitor",
-            observed_at=datetime.now(timezone.utc),
+            observed_at=datetime.now(UTC),
         )
         assert a.old_price is None
         assert a.change_percent is None
@@ -546,8 +540,8 @@ class TestCompetitorAlert:
 # CompetitorTrendAnalysis
 # =====================================================================
 
-class TestCompetitorTrendAnalysis:
 
+class TestCompetitorTrendAnalysis:
     def test_valid(self):
         t = CompetitorTrendAnalysis(
             competitor_product_id=uuid.uuid4(),
@@ -591,6 +585,3 @@ class TestCompetitorTrendAnalysis:
                 competitor_name="Amazon",
                 # missing product_name and other required fields
             )
-
-
-            

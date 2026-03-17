@@ -1,24 +1,22 @@
 """Tests for services/ai_trend_analysis/market_trends_visual.py"""
 
 import pytest
-import json
-from datetime import datetime
 
+from services.ai_trend_analysis.ai_clients import ThoughtType
 from services.ai_trend_analysis.market_trends_visual import (
+    MarketDataPoint,
+    MarketTrendsAnalyzer,
     TrendAgent,
     TrendDirection,
-    TrendTimeframe,
-    TrendMessage,
-    MarketDataPoint,
     TrendForecast,
-    MarketTrendsAnalyzer,
+    TrendMessage,
+    TrendTimeframe,
 )
-from services.ai_trend_analysis.ai_clients import ThoughtType
-
 
 # ════════════════════════════════════════
 # ENUMS
 # ════════════════════════════════════════
+
 
 class TestTrendAgent:
     def test_values(self):
@@ -56,6 +54,7 @@ class TestTrendTimeframe:
 # ════════════════════════════════════════
 # DATACLASSES
 # ════════════════════════════════════════
+
 
 class TestTrendMessage:
     def test_creation_defaults(self):
@@ -151,6 +150,7 @@ class TestTrendForecast:
 # ════════════════════════════════════════
 # MarketTrendsAnalyzer - Helper Methods
 # ════════════════════════════════════════
+
 
 class TestMarketTrendsAnalyzer:
     @pytest.fixture
@@ -309,6 +309,3 @@ class TestMarketTrendsAnalyzer:
         assert analyzer.significant_sentiment_change == 0.2
         assert analyzer.high_volume_multiplier == 1.5
         assert analyzer.min_confidence == 0.4
-
-
-        

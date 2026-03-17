@@ -22,31 +22,67 @@ All imports still work from the package root:
 """
 
 # ── Shared types ──
-from .shared import (
-    PriceDirection,
-    UrgencyLevel,
-    DataSource,
-)
-
-# ── Scout ──
-from .scout import (
-    CompetitorPrice,
-    SentimentSnapshot,
-    PriceHistoryPoint,
-    ScoutOutput,
-)
-
 # ── Analyst ──
 from .analyst import (
-    ElasticityEstimate,
-    ConfidenceDecomposition,
     AnalystOutput,
+    ConfidenceDecomposition,
+    ElasticityEstimate,
+)
+from .conflict_resolution import (
+    ConflictResolution,
+    ConflictResolver,
+    ConflictType,
+)
+from .contracts_v2 import (
+    AnalystInput,
+    ContractViolation,
+    DataQualityLevel,
+    # Strategist V2
+    GuardrailVerification,
+    PositionIndex,
+    ScoutInput,
+    StrategistInput,
+    UrgencyScore,
+    compute_provenance_hash,
+)
+from .contracts_v2 import (
+    AnalystOutput as AnalystOutputV2,
+)
+from .contracts_v2 import (
+    # Scout V2
+    CompetitorPrice as CompetitorPriceV2,
+)
+from .contracts_v2 import (
+    # Analyst V2
+    ElasticityEstimate as ElasticityEstimateV2,
 )
 
-# ── Strategist ──
-from .strategist import (
-    GuardrailCheck,
-    StrategistOutput,
+# ── Phase 4: Enhanced Semantic Contracts ──
+from .contracts_v2 import (
+    # Shared types (prefixed to avoid collision with Phase 1 PriceDirection)
+    PriceDirection as PriceDirectionV2,
+)
+from .contracts_v2 import (
+    ScoutOutput as ScoutOutputV2,
+)
+from .contracts_v2 import (
+    StrategistOutput as StrategistOutputV2,
+)
+
+# ── Intelligence Environment Responses ──
+from .intelligence import (
+    AccuracyStats,
+    CalibrationBucket,
+    CategoryBenchmarkResponse,
+    ConfidenceCalibrationResponse,
+    DataGapDetail,
+    DataGapFailureRate,
+    DataGapResponse,
+    ElasticityAccuracyBucket,
+    ElasticityAccuracyResponse,
+    MerchantPatternResponse,
+    ModificationDetail,
+    OutcomeCardData,
 )
 
 # ── Pipeline ──
@@ -54,62 +90,34 @@ from .pipeline import (
     PipelineResult,
 )
 
-# ── Intelligence Environment Responses ──
-from .intelligence import (
-    CalibrationBucket,
-    ConfidenceCalibrationResponse,
-    ModificationDetail,
-    MerchantPatternResponse,
-    CategoryBenchmarkResponse,
-    DataGapDetail,
-    DataGapFailureRate,
-    DataGapResponse,
-    ElasticityAccuracyBucket,
-    ElasticityAccuracyResponse,
-    OutcomeCardData,
-    AccuracyStats,
+# ── Scout ──
+from .scout import (
+    CompetitorPrice,
+    PriceHistoryPoint,
+    ScoutOutput,
+    SentimentSnapshot,
+)
+from .shared import (
+    DataSource,
+    PriceDirection,
+    UrgencyLevel,
 )
 
-# ── Phase 4: Enhanced Semantic Contracts ──
-from .contracts_v2 import (
-    # Shared types (prefixed to avoid collision with Phase 1 PriceDirection)
-    PriceDirection as PriceDirectionV2,
-    DataQualityLevel,
-    ContractViolation,
-    compute_provenance_hash,
-    # Scout V2
-    CompetitorPrice as CompetitorPriceV2,
-    ScoutInput,
-    ScoutOutput as ScoutOutputV2,
-    # Analyst V2
-    ElasticityEstimate as ElasticityEstimateV2,
-    PositionIndex,
-    UrgencyScore,
-    AnalystInput,
-    AnalystOutput as AnalystOutputV2,
-    # Strategist V2
-    GuardrailVerification,
-    StrategistInput,
-    StrategistOutput as StrategistOutputV2,
+# ── Strategist ──
+from .strategist import (
+    GuardrailCheck,
+    StrategistOutput,
 )
-
+from .tracing import (
+    PipelineTrace,
+    PipelineTracer,
+    TraceSpan,
+)
 from .validation import (
     AgentValidator,
     PipelineValidator,
     ValidationResult,
     ValidationStatus,
-)
-
-from .conflict_resolution import (
-    ConflictResolver,
-    ConflictResolution,
-    ConflictType,
-)
-
-from .tracing import (
-    PipelineTracer,
-    PipelineTrace,
-    TraceSpan,
 )
 
 __all__ = [
@@ -174,5 +182,3 @@ __all__ = [
     "PipelineTrace",
     "TraceSpan",
 ]
-
-

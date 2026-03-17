@@ -16,7 +16,6 @@ Run: pytest backend/tests/unit/test_pipeline_adapter.py -v
 
 import sys
 import types
-from datetime import datetime, UTC
 from decimal import Decimal
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -43,19 +42,11 @@ _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
 from services.pricing.pipeline_adapter import PipelineAdapter
-from schemas.agent_contracts import (
-    ScoutOutput,
-    AnalystOutput,
-    StrategistOutput,
-    ConfidenceDecomposition,
-    DataSource,
-    PriceDirection,
-)
-
 
 # ══════════════════════════════════════════════════════════════════
 # HELPER: cross-module-safe isinstance
 # ══════════════════════════════════════════════════════════════════
+
 
 def _is_type(obj, type_name: str) -> bool:
     """Check type by name to avoid cross-module identity mismatch."""
@@ -74,6 +65,7 @@ def _is_type(obj, type_name: str) -> bool:
 #   signals.is_trending            → bool
 #   signals.trend_direction        → str or None
 # ══════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def product_id():
@@ -117,7 +109,7 @@ def mock_signals_full():
 def mock_signals_empty():
     """Signals with no data — FLAT attributes."""
     signals = MagicMock()
-    signals.competitor_prices = {}          # Empty dict, not list
+    signals.competitor_prices = {}  # Empty dict, not list
     signals.sentiment_score = None
     signals.mention_count_24h = 0
     signals.viral_detected = False
@@ -151,7 +143,11 @@ def confidence_breakdown_full():
             "signal_agreement": {"score": 0.75, "weight": 0.3, "factors": {"competitor_aligned": True}},
             "market_stability": {"score": 0.7, "weight": 0.2, "factors": {"volatility": "low"}},
             "rule_confidence": {"score": 0.65, "weight": 0.15, "rule_type": "competitor_relative"},
-            "data_quality": {"score": 0.8, "weight": 0.2, "factors": {"competitor_count": 3, "has_sentiment": True, "mention_count_24h": 127}},
+            "data_quality": {
+                "score": 0.8,
+                "weight": 0.2,
+                "factors": {"competitor_count": 3, "has_sentiment": True, "mention_count_24h": 127},
+            },
             "historical_accuracy": {"score": 0.6, "weight": 0.15},
         },
     }
@@ -166,8 +162,8 @@ def confidence_breakdown_empty():
 # SCOUT OUTPUT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestBuildScoutOutput:
 
+class TestBuildScoutOutput:
     def test_full_data(self, mock_product, mock_signals_full):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
 
@@ -187,9 +183,7 @@ class TestBuildScoutOutput:
     def test_our_position_label(self, mock_product, mock_signals_full):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
 
-        assert scout.our_position in [
-            "cheapest", "below_median", "at_median", "above_median", "most_expensive"
-        ]
+        assert scout.our_position in ["cheapest", "below_median", "at_median", "above_median", "most_expensive"]
 
     def test_sentiment_snapshot(self, mock_product, mock_signals_full):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
@@ -267,13 +261,11 @@ class TestBuildScoutOutput:
 # ANALYST OUTPUT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestBuildAnalystOutput:
 
+class TestBuildAnalystOutput:
     def test_full_data(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert _is_type(analyst, "AnalystOutput")
         assert analyst.product_id == mock_product.id
@@ -282,46 +274,34 @@ class TestBuildAnalystOutput:
         self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
     ):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         cd = analyst.confidence
         assert _is_type(cd, "ConfidenceDecomposition")
-        assert cd.elasticity == 0.75     # signal_agreement.score
-        assert cd.position == 0.7        # market_stability.score
-        assert cd.urgency == 0.65        # rule_confidence.score
-        assert cd.data_quality == 0.8    # data_quality.score
+        assert cd.elasticity == 0.75  # signal_agreement.score
+        assert cd.position == 0.7  # market_stability.score
+        assert cd.urgency == 0.65  # rule_confidence.score
+        assert cd.data_quality == 0.8  # data_quality.score
 
     def test_urgency_from_viral(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         mock_signals_full.viral_detected = True
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert analyst.urgency_score >= 0.8
         assert "viral_content_detected" in analyst.urgency_reasons
 
-    def test_urgency_from_sentiment_spike(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_urgency_from_sentiment_spike(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         mock_signals_full.sentiment_change_24h = -0.4
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert analyst.urgency_score >= 0.7
 
-    def test_urgency_from_trending(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_urgency_from_trending(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         mock_signals_full.is_trending = True
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert "trending_detected" in analyst.urgency_reasons
 
@@ -330,11 +310,13 @@ class TestBuildAnalystOutput:
     ):
         mock_rule.action.value = "decrease_percent"
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
-        direction_val = analyst.recommended_direction.value if hasattr(analyst.recommended_direction, "value") else analyst.recommended_direction
+        direction_val = (
+            analyst.recommended_direction.value
+            if hasattr(analyst.recommended_direction, "value")
+            else analyst.recommended_direction
+        )
         assert direction_val.lower() == "decrease"
 
     def test_direction_from_increase_action(
@@ -342,78 +324,60 @@ class TestBuildAnalystOutput:
     ):
         mock_rule.action.value = "increase_percent"
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
-        direction_val = analyst.recommended_direction.value if hasattr(analyst.recommended_direction, "value") else analyst.recommended_direction
+        direction_val = (
+            analyst.recommended_direction.value
+            if hasattr(analyst.recommended_direction, "value")
+            else analyst.recommended_direction
+        )
         assert direction_val.lower() == "increase"
 
-    def test_sentiment_interpretation(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_sentiment_interpretation(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         mock_signals_full.sentiment_score = 0.5
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert analyst.sentiment_score == 0.5
         assert analyst.sentiment_impact == "supports_increase"
 
-    def test_no_rule_defaults_to_hold(
-        self, mock_product, mock_signals_full, confidence_breakdown_full
-    ):
+    def test_no_rule_defaults_to_hold(self, mock_product, mock_signals_full, confidence_breakdown_full):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, rule=None
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, rule=None)
 
-        direction_val = analyst.recommended_direction.value if hasattr(analyst.recommended_direction, "value") else analyst.recommended_direction
+        direction_val = (
+            analyst.recommended_direction.value
+            if hasattr(analyst.recommended_direction, "value")
+            else analyst.recommended_direction
+        )
         assert direction_val.lower() == "hold"
 
-    def test_empty_confidence_defaults(
-        self, mock_product, mock_signals_full, confidence_breakdown_empty, mock_rule
-    ):
+    def test_empty_confidence_defaults(self, mock_product, mock_signals_full, confidence_breakdown_empty, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_empty, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_empty, mock_signals_full, mock_rule)
 
         assert analyst.confidence.elasticity == 0.5
         assert analyst.confidence.position == 0.5
         assert analyst.confidence.urgency == 0.5
         assert analyst.confidence.data_quality == 0.5
 
-    def test_analyst_version(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_analyst_version(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert analyst.analyst_version == "1.0-adapter"
         assert analyst.model_used == "rule_engine"
 
-    def test_data_completeness(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_data_completeness(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
         assert analyst.data_completeness > 0.0
         assert analyst.competitor_count == 3
 
-    def test_market_pressure(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_market_pressure(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
         assert analyst.market_pressure in ["underpriced", "fairly_priced", "overpriced", "no_data"]
 
 
@@ -421,20 +385,14 @@ class TestBuildAnalystOutput:
 # STRATEGIST OUTPUT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestBuildStrategistOutput:
 
+class TestBuildStrategistOutput:
     def _build_analyst(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        return PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        return PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
 
-    def test_full_data(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_full_data(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -453,9 +411,7 @@ class TestBuildStrategistOutput:
     def test_direction_from_negative_change(
         self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
     ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -467,16 +423,18 @@ class TestBuildStrategistOutput:
             rule=mock_rule,
         )
 
-        direction_val = strategist.change_direction.value if hasattr(strategist.change_direction, "value") else strategist.change_direction
+        direction_val = (
+            strategist.change_direction.value
+            if hasattr(strategist.change_direction, "value")
+            else strategist.change_direction
+        )
         assert direction_val.lower() == "decrease"
 
     def test_direction_from_positive_change(
         self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
     ):
         mock_rule.action.value = "increase_percent"
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -488,15 +446,15 @@ class TestBuildStrategistOutput:
             rule=mock_rule,
         )
 
-        direction_val = strategist.change_direction.value if hasattr(strategist.change_direction, "value") else strategist.change_direction
+        direction_val = (
+            strategist.change_direction.value
+            if hasattr(strategist.change_direction, "value")
+            else strategist.change_direction
+        )
         assert direction_val.lower() == "increase"
 
-    def test_direction_hold_near_zero(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_direction_hold_near_zero(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -508,15 +466,15 @@ class TestBuildStrategistOutput:
             rule=mock_rule,
         )
 
-        direction_val = strategist.change_direction.value if hasattr(strategist.change_direction, "value") else strategist.change_direction
+        direction_val = (
+            strategist.change_direction.value
+            if hasattr(strategist.change_direction, "value")
+            else strategist.change_direction
+        )
         assert direction_val.lower() == "hold"
 
-    def test_guardrail_clamping_detected(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_guardrail_clamping_detected(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -532,12 +490,8 @@ class TestBuildStrategistOutput:
         assert strategist.was_clamped is True
         assert strategist.raw_recommended_price == Decimal("20.00")
 
-    def test_guardrails_include_min_max(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_guardrails_include_min_max(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -553,13 +507,9 @@ class TestBuildStrategistOutput:
         assert "min_price_floor" in guardrail_names
         assert "max_price_ceiling" in guardrail_names
 
-    def test_no_rule_no_guardrails(
-        self, mock_product, mock_signals_full, confidence_breakdown_full
-    ):
+    def test_no_rule_no_guardrails(self, mock_product, mock_signals_full, confidence_breakdown_full):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, rule=None
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, rule=None)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -573,12 +523,8 @@ class TestBuildStrategistOutput:
 
         assert len(strategist.guardrails_applied) == 0
 
-    def test_pipeline_source(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_pipeline_source(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -593,12 +539,8 @@ class TestBuildStrategistOutput:
         assert strategist.pipeline_source == "rule_based"
         assert strategist.strategist_version == "1.0-adapter"
 
-    def test_evidence_serialization(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_evidence_serialization(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -615,12 +557,8 @@ class TestBuildStrategistOutput:
         evidence = to_ev()
         assert isinstance(evidence, dict)
 
-    def test_confidence_score_passthrough(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_confidence_score_passthrough(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -634,12 +572,8 @@ class TestBuildStrategistOutput:
 
         assert strategist.confidence_score == 0.72
 
-    def test_current_price_captured(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+    def test_current_price_captured(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -656,9 +590,7 @@ class TestBuildStrategistOutput:
     def test_confidence_decomposition_from_analyst(
         self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
     ):
-        analyst = self._build_analyst(
-            mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-        )
+        analyst = self._build_analyst(mock_product, mock_signals_full, confidence_breakdown_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -679,15 +611,13 @@ class TestBuildStrategistOutput:
 # END-TO-END ADAPTER CHAIN
 # ══════════════════════════════════════════════════════════════════
 
-class TestEndToEndAdapterChain:
 
+class TestEndToEndAdapterChain:
     def test_full_chain_produces_serializable_evidence(
         self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
     ):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -704,13 +634,9 @@ class TestEndToEndAdapterChain:
             assert to_ev is not None, f"{type(obj).__name__} missing evidence method"
             assert isinstance(to_ev(), dict)
 
-    def test_empty_signals_chain(
-        self, mock_product, mock_signals_empty, confidence_breakdown_empty
-    ):
+    def test_empty_signals_chain(self, mock_product, mock_signals_empty, confidence_breakdown_empty):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_empty)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_empty, mock_signals_empty, rule=None
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_empty, mock_signals_empty, rule=None)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -723,16 +649,16 @@ class TestEndToEndAdapterChain:
         )
 
         assert scout.data_completeness == 0.0
-        direction_val = strategist.change_direction.value if hasattr(strategist.change_direction, "value") else strategist.change_direction
+        direction_val = (
+            strategist.change_direction.value
+            if hasattr(strategist.change_direction, "value")
+            else strategist.change_direction
+        )
         assert direction_val.lower() == "hold"
 
-    def test_factors_dict_round_trip(
-        self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule
-    ):
+    def test_factors_dict_round_trip(self, mock_product, mock_signals_full, confidence_breakdown_full, mock_rule):
         scout = PipelineAdapter.build_scout_output(mock_product, mock_signals_full)
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown_full, mock_signals_full, mock_rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown_full, mock_signals_full, mock_rule)
         strategist = PipelineAdapter.build_strategist_output(
             analyst=analyst,
             product=mock_product,
@@ -765,6 +691,4 @@ class TestEndToEndAdapterChain:
 # ══════════════════════════════════════════════════════════════════
 
 for _key, _orig in _saved_attrs.items():
-    sys.modules[_key] = _orig 
-
-    
+    sys.modules[_key] = _orig

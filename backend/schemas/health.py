@@ -4,9 +4,9 @@ from pydantic import BaseModel
 
 
 class HealthResponse(BaseModel):
-  status: str
-  api: str
-  version: str
-  database: str
-  uptime_seconds: float
-  timestamp_utc: str
+    status: str
+    api: str
+    version: str
+    database: str
+    uptime_seconds: float
+    timestamp_utc: str

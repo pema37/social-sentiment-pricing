@@ -9,7 +9,6 @@ Environment variables:
 """
 
 import os
-from typing import Optional
 
 import httpx
 
@@ -23,8 +22,8 @@ HUBSPOT_CONTACTS_URL = "https://api.hubapi.com/crm/v3/objects/contacts"
 
 async def capture_lead(
     email: str,
-    company_name: Optional[str] = None,
-    store_url: Optional[str] = None,
+    company_name: str | None = None,
+    store_url: str | None = None,
     source: str = "free_pricing_audit",
 ) -> bool:
     """
@@ -98,8 +97,3 @@ async def capture_lead(
         logger.error(f"HubSpot CRM push failed for {email}: {e}")
         # Don't block the PDF generation — log and move on
         return False
-
-
-
-
-        

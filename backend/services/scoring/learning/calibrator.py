@@ -25,20 +25,21 @@ Place at: backend/services/scoring/learning/calibrator.py
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional, Sequence
-
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 # ──────────────────────────────────────────────────────────
 # INPUT: Outcome records with confidence scores
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class CalibrationRecord:
     """Minimal record for calibration analysis."""
+
     confidence_score: float
-    revenue_delta_pct: Optional[float]
+    revenue_delta_pct: float | None
     action: str  # accepted, modified, rejected, ignored
     category: str = "all"
 
@@ -55,9 +56,11 @@ class CalibrationRecord:
 # CALIBRATION BAND: Per-band measurement
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class CalibrationBand:
     """Calibration measurement for one confidence band."""
+
     band_lower: float
     band_upper: float
     count: int
@@ -90,6 +93,7 @@ class CalibrationBand:
 # CALIBRATION REPORT
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class CalibrationReport:
     """Complete calibration measurement for a category (or global)."""
@@ -99,7 +103,7 @@ class CalibrationReport:
     n_records: int
 
     # ── Overall correlation ──
-    pearson_r: Optional[float]
+    pearson_r: float | None
     """Correlation between confidence and revenue_delta.
     >0.7 = well-calibrated, >0.3 = acceptable, <0.3 = miscalibrated."""
 
@@ -146,6 +150,7 @@ class CalibrationReport:
 # ──────────────────────────────────────────────────────────
 # CALIBRATION MAP: Correction function
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class CalibrationMap:
@@ -215,11 +220,15 @@ class CalibrationMap:
 
 # Bands for calibration measurement
 _BANDS = [
-    (0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.0),
+    (0.0, 0.2),
+    (0.2, 0.4),
+    (0.4, 0.6),
+    (0.6, 0.8),
+    (0.8, 1.0),
 ]
 
-_MIN_RECORDS = 10        # Minimum for any analysis
-_MIN_PER_BAND = 3        # Minimum per band for meaningful measurement
+_MIN_RECORDS = 10  # Minimum for any analysis
+_MIN_PER_BAND = 3  # Minimum per band for meaningful measurement
 _WELL_CALIBRATED_R = 0.7
 _ACCEPTABLE_R = 0.3
 
@@ -262,11 +271,17 @@ class Calibrator:
 
         if len(records) < _MIN_RECORDS:
             return CalibrationReport(
-                category=category, analyzed_at=now, n_records=len(records),
-                pearson_r=None, bands=[],
-                is_monotonic=True, mean_absolute_gap=0, max_gap=0,
+                category=category,
+                analyzed_at=now,
+                n_records=len(records),
+                pearson_r=None,
+                bands=[],
+                is_monotonic=True,
+                mean_absolute_gap=0,
+                max_gap=0,
                 calibration_quality="insufficient_data",
-                overconfident_bands=[], underconfident_bands=[],
+                overconfident_bands=[],
+                underconfident_bands=[],
             )
 
         # ── Pearson r ──
@@ -338,10 +353,7 @@ class Calibrator:
             return cal_map
 
         # Build anchor points: (mean_confidence, positive_rate)
-        raw_points = [
-            (b.mean_confidence, b.positive_rate)
-            for b in bands_with_data
-        ]
+        raw_points = [(b.mean_confidence, b.positive_rate) for b in bands_with_data]
 
         # Apply PAV (pool adjacent violators) for monotonicity
         monotonic_points = self._pav_isotonic(raw_points)
@@ -376,13 +388,9 @@ class Calibrator:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def _compute_pearson_r(records: Sequence[CalibrationRecord]) -> Optional[float]:
+    def _compute_pearson_r(records: Sequence[CalibrationRecord]) -> float | None:
         """Pearson r between confidence_score and revenue_delta_pct."""
-        pairs = [
-            (r.confidence_score, r.revenue_delta_pct)
-            for r in records
-            if r.revenue_delta_pct is not None
-        ]
+        pairs = [(r.confidence_score, r.revenue_delta_pct) for r in records if r.revenue_delta_pct is not None]
         n = len(pairs)
         if n < 5:
             return None
@@ -407,17 +415,24 @@ class Calibrator:
         bands = []
         for lower, upper in _BANDS:
             in_band = [
-                r for r in records
-                if lower <= r.confidence_score < upper
-                or (upper == 1.0 and r.confidence_score == 1.0 and lower <= 0.8)
+                r
+                for r in records
+                if lower <= r.confidence_score < upper or (upper == 1.0 and r.confidence_score == 1.0 and lower <= 0.8)
             ]
             if not in_band:
-                bands.append(CalibrationBand(
-                    band_lower=lower, band_upper=upper,
-                    count=0, positive_count=0,
-                    positive_rate=0, expected_rate=(lower + upper) / 2,
-                    gap=0, mean_confidence=0, mean_revenue_lift=0,
-                ))
+                bands.append(
+                    CalibrationBand(
+                        band_lower=lower,
+                        band_upper=upper,
+                        count=0,
+                        positive_count=0,
+                        positive_rate=0,
+                        expected_rate=(lower + upper) / 2,
+                        gap=0,
+                        mean_confidence=0,
+                        mean_revenue_lift=0,
+                    )
+                )
                 continue
 
             n = len(in_band)
@@ -428,17 +443,19 @@ class Calibrator:
             lifts = [r.revenue_delta_pct for r in in_band if r.revenue_delta_pct is not None]
             mean_lift = sum(lifts) / len(lifts) if lifts else 0
 
-            bands.append(CalibrationBand(
-                band_lower=lower,
-                band_upper=upper,
-                count=n,
-                positive_count=pos,
-                positive_rate=round(pos_rate, 4),
-                expected_rate=round(expected, 4),
-                gap=round(pos_rate - expected, 4),
-                mean_confidence=round(expected, 4),
-                mean_revenue_lift=round(mean_lift, 4),
-            ))
+            bands.append(
+                CalibrationBand(
+                    band_lower=lower,
+                    band_upper=upper,
+                    count=n,
+                    positive_count=pos,
+                    positive_rate=round(pos_rate, 4),
+                    expected_rate=round(expected, 4),
+                    gap=round(pos_rate - expected, 4),
+                    mean_confidence=round(expected, 4),
+                    mean_revenue_lift=round(mean_lift, 4),
+                )
+            )
 
         return bands
 
@@ -454,7 +471,7 @@ class Calibrator:
 
     @staticmethod
     def _diagnose_quality(
-        pearson_r: Optional[float],
+        pearson_r: float | None,
         is_monotonic: bool,
         mean_gap: float,
     ) -> str:
@@ -514,6 +531,3 @@ class Calibrator:
             x_idx += len(block)
 
         return result
-    
-
-    

@@ -11,26 +11,23 @@ Future phases will add:
 - Proxy rotation for rate limiting
 - ML-based price extraction
 
-PATCHED (2025-01-07): Added price anomaly detection to prevent obviously 
+PATCHED (2025-01-07): Added price anomaly detection to prevent obviously
 wrong prices from being saved. Uses ratio-based validation that works for
 any product regardless of price range.
 """
 
-import uuid as uuid_lib
-import re
 import logging
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
-from typing import Optional, Dict, List, Tuple
+import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 
 import httpx
 from bs4 import BeautifulSoup
 
 from models.competitor import Competitor
-from models.competitor_product import CompetitorProduct
 from models.competitor_price_history import CompetitorPriceHistory
-
+from models.competitor_product import CompetitorProduct
 
 logger = logging.getLogger(__name__)
 
@@ -38,23 +35,24 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ScrapeResult:
     """Result of a price scrape attempt."""
+
     success: bool
-    price: Optional[Decimal] = None
+    price: Decimal | None = None
     currency: str = "USD"
     is_available: bool = True
-    error: Optional[str] = None
-    raw_price_text: Optional[str] = None
+    error: str | None = None
+    raw_price_text: str | None = None
     scraped_at: datetime = None
 
     def __post_init__(self):
         if self.scraped_at is None:
-            self.scraped_at = datetime.now(timezone.utc)
+            self.scraped_at = datetime.now(UTC)
 
 
 class CompetitorScraperService:
     """
     Service for scraping competitor product prices.
-    
+
     Supports multiple extraction methods:
     - CSS selectors (default)
     - XPath (future)
@@ -64,10 +62,10 @@ class CompetitorScraperService:
 
     # Common price patterns
     PRICE_PATTERNS = [
-        r'\$[\d,]+\.?\d*',           # $1,234.56
-        r'[\d,]+\.?\d*\s*(?:USD|usd)',  # 1234.56 USD
-        r'USD\s*[\d,]+\.?\d*',       # USD 1234.56
-        r'[\d,]+\.?\d*',             # 1234.56 (fallback)
+        r"\$[\d,]+\.?\d*",  # $1,234.56
+        r"[\d,]+\.?\d*\s*(?:USD|usd)",  # 1234.56 USD
+        r"USD\s*[\d,]+\.?\d*",  # USD 1234.56
+        r"[\d,]+\.?\d*",  # 1234.56 (fallback)
     ]
 
     # Default request headers
@@ -88,12 +86,7 @@ class CompetitorScraperService:
     MAX_COMPETITOR_VS_OUR_PRICE_RATIO = Decimal("20.0")
     # ========== END NEW ==========
 
-    def __init__(
-        self,
-        timeout: float = 30.0,
-        max_retries: int = 3,
-        respect_robots: bool = True
-    ):
+    def __init__(self, timeout: float = 30.0, max_retries: int = 3, respect_robots: bool = True):
         self.timeout = timeout
         self.max_retries = max_retries
         self.respect_robots = respect_robots
@@ -102,16 +95,16 @@ class CompetitorScraperService:
         self,
         competitor_product: CompetitorProduct,
         competitor: Competitor,
-        our_product_price: Optional[Decimal] = None,  # NEW: Added parameter
+        our_product_price: Decimal | None = None,  # NEW: Added parameter
     ) -> ScrapeResult:
         """
         Scrape the current price for a competitor product.
-        
+
         Args:
             competitor_product: The competitor product mapping
             competitor: The competitor entity (contains scraping config)
             our_product_price: Our product's current price (for validation)
-            
+
         Returns:
             ScrapeResult with price or error
         """
@@ -122,32 +115,22 @@ class CompetitorScraperService:
             # Fetch the page
             html = await self._fetch_page(url, config)
             if html is None:
-                return ScrapeResult(
-                    success=False,
-                    error="Failed to fetch page after retries"
-                )
+                return ScrapeResult(success=False, error="Failed to fetch page after retries")
 
             # Parse HTML
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, "html.parser")
 
             # Try extraction methods in order of preference
             price, raw_text = await self._extract_price(soup, config)
 
             if price is None:
-                return ScrapeResult(
-                    success=False,
-                    error="Could not extract price from page",
-                    raw_price_text=raw_text
-                )
+                return ScrapeResult(success=False, error="Could not extract price from page", raw_price_text=raw_text)
 
             # ========== NEW: Price anomaly detection ==========
             validation_result = self._validate_price(
-                price=price,
-                last_price=competitor_product.current_price,
-                our_product_price=our_product_price,
-                url=url
+                price=price, last_price=competitor_product.current_price, our_product_price=our_product_price, url=url
             )
-            
+
             if not validation_result["valid"]:
                 logger.warning(
                     f"Price anomaly rejected for {url}: "
@@ -155,9 +138,7 @@ class CompetitorScraperService:
                     f"reason={validation_result['reason']}"
                 )
                 return ScrapeResult(
-                    success=False,
-                    error=f"Price anomaly: {validation_result['reason']}",
-                    raw_price_text=raw_text
+                    success=False, error=f"Price anomaly: {validation_result['reason']}", raw_price_text=raw_text
                 )
             # ========== END NEW ==========
 
@@ -169,7 +150,7 @@ class CompetitorScraperService:
                 price=price,
                 currency=config.get("currency", "USD"),
                 is_available=is_available,
-                raw_price_text=raw_text
+                raw_price_text=raw_text,
             )
 
         except httpx.TimeoutException:
@@ -182,43 +163,36 @@ class CompetitorScraperService:
 
     # ========== NEW: Price validation method ==========
     def _validate_price(
-        self,
-        price: Decimal,
-        last_price: Optional[Decimal],
-        our_product_price: Optional[Decimal] = None,
-        url: str = ""
+        self, price: Decimal, last_price: Decimal | None, our_product_price: Decimal | None = None, url: str = ""
     ) -> dict:
         """
         Validate scraped price for anomalies.
-        
+
         Uses ratio-based checks that work for ANY product regardless of price range.
         A $10 product and a $10,000 product both use the same validation logic.
-        
+
         Checks:
         1. Price must be positive
         2. If we have a last known price, new price must be within reasonable ratio
         3. If we have our product's price, competitor shouldn't be wildly different
-        
+
         Args:
             price: The scraped price to validate
             last_price: Last known competitor price (may be None for first scrape)
             our_product_price: Our product's current price (may be None)
             url: URL being scraped (for logging only)
-            
+
         Returns:
             dict with 'valid' (bool) and 'reason' (str if invalid)
         """
         # Check 1: Price must be positive
         if price <= Decimal("0"):
-            return {
-                "valid": False,
-                "reason": f"Price ${price} is zero or negative"
-            }
-        
+            return {"valid": False, "reason": f"Price ${price} is zero or negative"}
+
         # Check 2: Compare to last known price (if available)
         if last_price and last_price > Decimal("0"):
             ratio = price / last_price
-            
+
             # Reject massive increases (e.g., $39 -> $2095 is 53x)
             if ratio > self.MAX_PRICE_INCREASE_RATIO:
                 return {
@@ -226,9 +200,9 @@ class CompetitorScraperService:
                     "reason": (
                         f"Price ${price} is {ratio:.1f}x the last price ${last_price}. "
                         f"Max allowed increase is {self.MAX_PRICE_INCREASE_RATIO}x"
-                    )
+                    ),
                 }
-            
+
             # Reject massive decreases (likely scraping wrong element)
             if ratio < self.MIN_PRICE_DECREASE_RATIO:
                 return {
@@ -236,13 +210,13 @@ class CompetitorScraperService:
                     "reason": (
                         f"Price ${price} is only {ratio:.1%} of last price ${last_price}. "
                         f"Min allowed is {self.MIN_PRICE_DECREASE_RATIO:.0%}"
-                    )
+                    ),
                 }
-        
+
         # Check 3: Compare to our product's price (if available)
         if our_product_price and our_product_price > Decimal("0"):
             ratio = price / our_product_price
-            
+
             # Competitor being 20x our price is almost certainly a scraping error
             if ratio > self.MAX_COMPETITOR_VS_OUR_PRICE_RATIO:
                 return {
@@ -250,18 +224,15 @@ class CompetitorScraperService:
                     "reason": (
                         f"Price ${price} is {ratio:.1f}x our price ${our_product_price}. "
                         f"This is likely a scraping error."
-                    )
+                    ),
                 }
-        
+
         # All checks passed
         return {"valid": True, "reason": None}
+
     # ========== END NEW ==========
 
-    async def _fetch_page(
-        self,
-        url: str,
-        config: Dict
-    ) -> Optional[str]:
+    async def _fetch_page(self, url: str, config: dict) -> str | None:
         """Fetch page HTML with retries."""
         headers = {**self.DEFAULT_HEADERS}
         if config.get("headers"):
@@ -279,14 +250,10 @@ class CompetitorScraperService:
                     raise
         return None
 
-    async def _extract_price(
-        self,
-        soup: BeautifulSoup,
-        config: Dict
-    ) -> Tuple[Optional[Decimal], Optional[str]]:
+    async def _extract_price(self, soup: BeautifulSoup, config: dict) -> tuple[Decimal | None, str | None]:
         """
         Extract price from parsed HTML.
-        
+
         Tries methods in order:
         1. Configured CSS selector
         2. JSON-LD structured data
@@ -316,25 +283,25 @@ class CompetitorScraperService:
 
         # Method 4: Common selectors fallback
         common_selectors = [
-            '[data-price]',
-            '.price',
-            '.product-price',
-            '.current-price',
-            '#price',
+            "[data-price]",
+            ".price",
+            ".product-price",
+            ".current-price",
+            "#price",
             '[itemprop="price"]',
-            '.a-price .a-offscreen',  # Amazon
-            '.price-current',         # Newegg
-            '.priceView-hero-price span', # Best Buy
+            ".a-price .a-offscreen",  # Amazon
+            ".price-current",  # Newegg
+            ".priceView-hero-price span",  # Best Buy
         ]
 
         for selector in common_selectors:
             element = soup.select_one(selector)
             if element:
                 # Check for data attribute first
-                if element.get('data-price'):
-                    raw_text = element.get('data-price')
-                elif element.get('content'):
-                    raw_text = element.get('content')
+                if element.get("data-price"):
+                    raw_text = element.get("data-price")
+                elif element.get("content"):
+                    raw_text = element.get("content")
                 else:
                     raw_text = element.get_text(strip=True)
 
@@ -344,31 +311,28 @@ class CompetitorScraperService:
 
         return None, raw_text
 
-    def _extract_from_json_ld(
-        self,
-        soup: BeautifulSoup
-    ) -> Tuple[Optional[Decimal], Optional[str]]:
+    def _extract_from_json_ld(self, soup: BeautifulSoup) -> tuple[Decimal | None, str | None]:
         """Extract price from JSON-LD structured data."""
         import json
 
-        scripts = soup.find_all('script', type='application/ld+json')
+        scripts = soup.find_all("script", type="application/ld+json")
         for script in scripts:
             try:
                 data = json.loads(script.string)
-                
+
                 # Handle array of items
                 if isinstance(data, list):
                     data = data[0] if data else {}
 
                 # Look for Product schema
-                if data.get('@type') == 'Product':
-                    offers = data.get('offers', {})
-                    
+                if data.get("@type") == "Product":
+                    offers = data.get("offers", {})
+
                     # ========== CHANGED: Handle multiple offers - take LOWEST price ==========
                     if isinstance(offers, list):
                         prices = []
                         for offer in offers:
-                            price_str = str(offer.get('price', ''))
+                            price_str = str(offer.get("price", ""))
                             if price_str:
                                 parsed = self._parse_price(price_str)
                                 if parsed and parsed > 0:
@@ -380,7 +344,7 @@ class CompetitorScraperService:
                             return min_price, str(min_price)
                     # ========== END CHANGED ==========
                     else:
-                        price_str = str(offers.get('price', ''))
+                        price_str = str(offers.get("price", ""))
                         if price_str:
                             price = self._parse_price(price_str)
                             if price:
@@ -390,28 +354,25 @@ class CompetitorScraperService:
 
         return None, None
 
-    def _extract_from_meta(
-        self,
-        soup: BeautifulSoup
-    ) -> Tuple[Optional[Decimal], Optional[str]]:
+    def _extract_from_meta(self, soup: BeautifulSoup) -> tuple[Decimal | None, str | None]:
         """Extract price from meta tags."""
         meta_properties = [
-            'og:price:amount',
-            'product:price:amount',
-            'price',
+            "og:price:amount",
+            "product:price:amount",
+            "price",
         ]
 
         for prop in meta_properties:
-            meta = soup.find('meta', property=prop) or soup.find('meta', attrs={'name': prop})
-            if meta and meta.get('content'):
-                raw_text = meta.get('content')
+            meta = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+            if meta and meta.get("content"):
+                raw_text = meta.get("content")
                 price = self._parse_price(raw_text)
                 if price:
                     return price, raw_text
 
         return None, None
 
-    def _parse_price(self, text: str) -> Optional[Decimal]:
+    def _parse_price(self, text: str) -> Decimal | None:
         """Parse a price string into a Decimal."""
         if not text:
             return None
@@ -423,9 +384,9 @@ class CompetitorScraperService:
             if match:
                 price_str = match.group()
                 # Remove currency symbols and whitespace
-                price_str = re.sub(r'[^\d.,]', '', price_str)
+                price_str = re.sub(r"[^\d.,]", "", price_str)
                 # Handle comma as thousands separator
-                price_str = price_str.replace(',', '')
+                price_str = price_str.replace(",", "")
 
                 try:
                     return Decimal(price_str)
@@ -434,7 +395,7 @@ class CompetitorScraperService:
 
         return None
 
-    def _check_availability(self, soup: BeautifulSoup, config: Dict) -> bool:
+    def _check_availability(self, soup: BeautifulSoup, config: dict) -> bool:
         """Check if product is in stock."""
         # Check configured selector
         if config.get("out_of_stock_selector"):
@@ -443,11 +404,11 @@ class CompetitorScraperService:
 
         # Common out of stock indicators
         out_of_stock_indicators = [
-            'out of stock',
-            'sold out',
-            'currently unavailable',
-            'not available',
-            'out-of-stock',
+            "out of stock",
+            "sold out",
+            "currently unavailable",
+            "not available",
+            "out-of-stock",
         ]
 
         page_text = soup.get_text().lower()
@@ -462,10 +423,10 @@ class CompetitorScraperService:
         self,
         competitor_product: CompetitorProduct,
         scrape_result: ScrapeResult,
-    ) -> Optional[CompetitorPriceHistory]:
+    ) -> CompetitorPriceHistory | None:
         """
         Create a price history record if price changed.
-        
+
         Returns None if price hasn't changed.
         """
         if not scrape_result.success or scrape_result.price is None:
@@ -521,4 +482,3 @@ class CompetitorScraperService:
 
 # Singleton instance
 competitor_scraper = CompetitorScraperService()
-

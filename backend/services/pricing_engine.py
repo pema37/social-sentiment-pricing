@@ -10,10 +10,9 @@ This is the upgraded pricing engine that factors in:
 The engine provides weighted suggestions based on multiple market signals.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, Dict, List
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 from models.product import Product
 
@@ -21,6 +20,7 @@ from models.product import Product
 @dataclass
 class CompetitorPriceData:
     """Competitor price information for pricing decisions."""
+
     competitor_name: str
     competitor_price: Decimal
     price_difference: Decimal  # positive = we're higher
@@ -32,24 +32,25 @@ class CompetitorPriceData:
 @dataclass
 class PriceSuggestion:
     """Complete price suggestion with all factors."""
+
     product_id: str
     current_price: Decimal
     suggested_price: Decimal
     change_percent: Decimal
     reasoning: str
     confidence: Decimal
-    factors: Dict
-    competitor_analysis: Optional[Dict] = None
+    factors: dict
+    competitor_analysis: dict | None = None
 
 
 class PricingEngine:
     """
     Intelligent pricing engine that combines sentiment and competitor data.
-    
+
     Weighting Strategy:
     - Sentiment weight: How much social sentiment affects price (default 60%)
     - Competitor weight: How much competitor prices affect price (default 40%)
-    
+
     These weights can be adjusted per product or globally.
     """
 
@@ -72,17 +73,17 @@ class PricingEngine:
         product: Product,
         sentiment_score: Decimal,
         mention_volume: int = 0,
-        competitor_prices: Optional[List[CompetitorPriceData]] = None,
-    ) -> Dict:
+        competitor_prices: list[CompetitorPriceData] | None = None,
+    ) -> dict:
         """
         Calculate a price suggestion based on sentiment and competitor data.
-        
+
         Args:
             product: The product to price
             sentiment_score: Compound sentiment (-1 to +1)
             mention_volume: Number of mentions analyzed
             competitor_prices: List of competitor price data (optional)
-            
+
         Returns:
             Complete suggestion with reasoning and factors
         """
@@ -118,8 +119,7 @@ class PricingEngine:
         if competitor_prices:
             # Use weighted average when we have competitor data
             combined_adjustment = (
-                sentiment_adjustment * self.sentiment_weight +
-                competitor_adjustment * self.competitor_weight
+                sentiment_adjustment * self.sentiment_weight + competitor_adjustment * self.competitor_weight
             )
         else:
             # Sentiment only when no competitor data
@@ -138,17 +138,10 @@ class PricingEngine:
         suggested_price = current_price * (1 + change_percent / 100)
 
         # Apply min/max price boundaries
-        suggested_price = self._apply_boundaries(
-            suggested_price,
-            product.min_price,
-            product.max_price
-        )
+        suggested_price = self._apply_boundaries(suggested_price, product.min_price, product.max_price)
 
         # Round to 2 decimal places
-        suggested_price = suggested_price.quantize(
-            Decimal("0.01"),
-            rounding=ROUND_HALF_UP
-        )
+        suggested_price = suggested_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # Recalculate actual change after boundaries
         if current_price > 0:
@@ -156,10 +149,7 @@ class PricingEngine:
         else:
             actual_change_percent = Decimal("0")
 
-        actual_change_percent = actual_change_percent.quantize(
-            Decimal("0.01"),
-            rounding=ROUND_HALF_UP
-        )
+        actual_change_percent = actual_change_percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # Calculate confidence
         confidence = self._calculate_confidence(
@@ -209,11 +199,11 @@ class PricingEngine:
     def _calculate_competitor_adjustment(
         self,
         current_price: Decimal,
-        competitor_prices: List[CompetitorPriceData],
-    ) -> tuple[Decimal, Dict]:
+        competitor_prices: list[CompetitorPriceData],
+    ) -> tuple[Decimal, dict]:
         """
         Calculate price adjustment based on competitor positioning.
-        
+
         Strategy:
         - If we're significantly higher than average → suggest decrease
         - If we're significantly lower than average → suggest increase (capture margin)
@@ -287,12 +277,7 @@ class PricingEngine:
             return -self.max_change_percent
         return change_percent
 
-    def _apply_boundaries(
-        self,
-        price: Decimal,
-        min_price: Optional[Decimal],
-        max_price: Optional[Decimal]
-    ) -> Decimal:
+    def _apply_boundaries(self, price: Decimal, min_price: Decimal | None, max_price: Decimal | None) -> Decimal:
         """Apply min/max price boundaries."""
         if min_price and price < min_price:
             return min_price
@@ -308,7 +293,7 @@ class PricingEngine:
     ) -> Decimal:
         """
         Calculate confidence score based on data quality.
-        
+
         More data = higher confidence.
         """
         # Base confidence from sentiment volume
@@ -347,7 +332,7 @@ class PricingEngine:
         sentiment_score: Decimal,
         mention_volume: int,
         change_percent: Decimal,
-        competitor_analysis: Optional[Dict],
+        competitor_analysis: dict | None,
     ) -> str:
         """Generate human-readable reasoning for the suggestion."""
         parts = []
@@ -359,22 +344,25 @@ class PricingEngine:
             sentiment_desc = "Positive" if sentiment_score > 0 else "Negative"
             if abs(sentiment_score) < Decimal("0.1"):
                 sentiment_desc = "Neutral"
-            parts.append(
-                f"{sentiment_desc} sentiment ({sentiment_score:+.2f}) "
-                f"from {mention_volume} mentions."
-            )
+            parts.append(f"{sentiment_desc} sentiment ({sentiment_score:+.2f}) from {mention_volume} mentions.")
 
         # Competitor part
         if competitor_analysis:
             position = competitor_analysis["your_position"]
             gap = competitor_analysis["price_gap_percent"]
-            
+
             if position == "highest":
-                parts.append(f"Currently priced highest among {competitor_analysis['competitor_count']} competitors ({gap:+.1f}% vs average).")
+                parts.append(
+                    f"Currently priced highest among {competitor_analysis['competitor_count']} competitors ({gap:+.1f}% vs average)."
+                )
             elif position == "lowest":
-                parts.append(f"Currently priced lowest among {competitor_analysis['competitor_count']} competitors ({gap:+.1f}% vs average).")
+                parts.append(
+                    f"Currently priced lowest among {competitor_analysis['competitor_count']} competitors ({gap:+.1f}% vs average)."
+                )
             else:
-                parts.append(f"Competitively positioned ({gap:+.1f}% vs {competitor_analysis['competitor_count']} competitors).")
+                parts.append(
+                    f"Competitively positioned ({gap:+.1f}% vs {competitor_analysis['competitor_count']} competitors)."
+                )
 
             if competitor_analysis["active_promotions"] > 0:
                 parts.append(f"Note: {competitor_analysis['active_promotions']} competitor(s) running promotions.")
@@ -395,8 +383,8 @@ class PricingEngine:
     def get_competitive_position(
         self,
         current_price: Decimal,
-        competitor_prices: List[CompetitorPriceData],
-    ) -> Dict:
+        competitor_prices: list[CompetitorPriceData],
+    ) -> dict:
         """
         Analyze competitive positioning without making a price suggestion.
         Useful for dashboards and reports.
@@ -409,7 +397,7 @@ class PricingEngine:
 
         prices = [cp.competitor_price for cp in competitor_prices]
         avg_price = sum(prices) / len(prices)
-        
+
         sorted_all = sorted(prices + [current_price])
         rank = sorted_all.index(current_price) + 1
         total = len(sorted_all)
@@ -428,12 +416,12 @@ class PricingEngine:
 
     def detect_price_war(
         self,
-        competitor_prices: List[CompetitorPriceData],
+        competitor_prices: list[CompetitorPriceData],
         lookback_days: int = 7,
-    ) -> Dict:
+    ) -> dict:
         """
         Detect if competitors are engaged in aggressive pricing.
-        
+
         Indicators:
         - Multiple recent price drops
         - Prices below apparent cost
@@ -463,4 +451,3 @@ class PricingEngine:
 
 # Singleton instance for easy imports
 pricing_engine = PricingEngine()
-

@@ -18,14 +18,14 @@ Design:
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -34,43 +34,48 @@ logger = logging.getLogger(__name__)
 # Result types (frozen dataclasses — immutable after creation)
 # ---------------------------------------------------------------------------
 
+
 class IEStatus(str, Enum):
     """Overall status of the IE recommendation pipeline."""
+
     SUCCESS = "success"
-    PARTIAL = "partial"           # Some components failed, result still usable
-    FALLBACK = "fallback"         # IE unavailable, fell back to legacy
-    ERROR = "error"               # Complete failure
+    PARTIAL = "partial"  # Some components failed, result still usable
+    FALLBACK = "fallback"  # IE unavailable, fell back to legacy
+    ERROR = "error"  # Complete failure
 
 
 @dataclass(frozen=True)
 class ComponentTiming:
     """Latency tracking per component for observability."""
+
     component: str
     duration_ms: float
     success: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
 class ExperimentContext:
     """What the ExperimentManager decided for this recommendation."""
+
     strategy_name: str
     arm_index: int
     is_exploration: bool
     magnitude_multiplier: float
     guardrail_overrides: dict[str, Any]
     weight_overrides: dict[str, float]
-    assignment_id: Optional[str] = None
+    assignment_id: str | None = None
 
 
 @dataclass(frozen=True)
 class CalibrationAdjustment:
     """How the Calibrator modified the raw confidence."""
+
     raw_confidence: float
     calibrated_confidence: float
-    calibration_method: str        # "isotonic", "identity", "uncalibrated"
-    sample_count: int              # How many outcomes backed this calibration
-    is_reliable: bool              # True if sample_count >= min_threshold
+    calibration_method: str  # "isotonic", "identity", "uncalibrated"
+    sample_count: int  # How many outcomes backed this calibration
+    is_reliable: bool  # True if sample_count >= min_threshold
 
 
 @dataclass(frozen=True)
@@ -79,17 +84,18 @@ class IERecommendation:
     The final output — a fully-traced recommendation with experiment
     metadata, calibrated confidence, and evidence chain.
     """
+
     recommendation_id: str
     product_id: str
     merchant_id: str
-    category_id: Optional[str]
+    category_id: str | None
     timestamp: datetime
 
     # The recommendation itself
     current_price: float
     suggested_price: float
     change_pct: float
-    direction: str                 # "increase" | "decrease" | "hold"
+    direction: str  # "increase" | "decrease" | "hold"
 
     # Scoring
     raw_confidence: float
@@ -98,11 +104,11 @@ class IERecommendation:
     scoring_evidence: dict[str, Any]
 
     # Experiment
-    experiment: Optional[ExperimentContext]
-    calibration: Optional[CalibrationAdjustment]
+    experiment: ExperimentContext | None
+    calibration: CalibrationAdjustment | None
 
     # Context injection
-    category_context: Optional[dict[str, Any]]
+    category_context: dict[str, Any] | None
 
     # Observability
     status: IEStatus
@@ -110,26 +116,22 @@ class IERecommendation:
     total_duration_ms: float
     pipeline_version: str
     warnings: list[str]
-    ie_enabled: bool               # Was IE actually used?
+    ie_enabled: bool  # Was IE actually used?
 
 
 # ---------------------------------------------------------------------------
 # Protocol definitions (what each collaborator must provide)
 # ---------------------------------------------------------------------------
 
+
 class ExperimentManagerProtocol(Protocol):
     """Interface for the Thompson Sampling experiment manager."""
 
-    def get_experiment_config(
-        self, category_id: str, merchant_id: str
-    ) -> dict[str, Any]:
+    def get_experiment_config(self, category_id: str, merchant_id: str) -> dict[str, Any]:
         """Select a strategy arm for this category. Returns config dict."""
         ...
 
-    def record_assignment(
-        self, recommendation_id: str, category_id: str,
-        arm_index: int, is_exploration: bool
-    ) -> str:
+    def record_assignment(self, recommendation_id: str, category_id: str, arm_index: int, is_exploration: bool) -> str:
         """Persist which arm was selected. Returns assignment_id."""
         ...
 
@@ -157,9 +159,7 @@ class ContextInjectorProtocol(Protocol):
 class CalibratorProtocol(Protocol):
     """Interface for confidence calibration."""
 
-    def calibrate(
-        self, raw_confidence: float, category_id: str
-    ) -> dict[str, Any]:
+    def calibrate(self, raw_confidence: float, category_id: str) -> dict[str, Any]:
         """Adjust confidence based on historical accuracy. Returns calibration dict."""
         ...
 
@@ -168,22 +168,25 @@ class CalibratorProtocol(Protocol):
 # Configuration
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class IEOrchestratorConfig:
     """Configuration for the orchestrator. Frozen = immutable after creation."""
+
     pipeline_version: str = "ie-v1.0"
     min_calibration_samples: int = 30
     enable_experiments: bool = True
     enable_calibration: bool = True
     enable_context_injection: bool = True
-    component_timeout_ms: float = 200.0     # Per-component timeout budget
-    total_timeout_ms: float = 500.0         # Total p99 target
-    fallback_on_error: bool = True          # Fall back to legacy on IE failure
+    component_timeout_ms: float = 200.0  # Per-component timeout budget
+    total_timeout_ms: float = 500.0  # Total p99 target
+    fallback_on_error: bool = True  # Fall back to legacy on IE failure
 
 
 # ---------------------------------------------------------------------------
 # The Orchestrator
 # ---------------------------------------------------------------------------
+
 
 class IEOrchestrator:
     """
@@ -208,8 +211,8 @@ class IEOrchestrator:
         scoring_engine: ScoringEngineProtocol,
         context_injector: ContextInjectorProtocol,
         calibrator: CalibratorProtocol,
-        config: Optional[IEOrchestratorConfig] = None,
-        is_ie_enabled: Optional[Callable[[str], bool]] = None,
+        config: IEOrchestratorConfig | None = None,
+        is_ie_enabled: Callable[[str], bool] | None = None,
     ):
         self._experiment_manager = experiment_manager
         self._scoring_engine = scoring_engine
@@ -253,22 +256,17 @@ class IEOrchestrator:
         ie_enabled = self._is_ie_enabled(merchant_id)
         if not ie_enabled:
             return self._build_legacy_fallback(
-                recommendation_id, product_context, timings, warnings,
-                reason="IE disabled for merchant"
+                recommendation_id, product_context, timings, warnings, reason="IE disabled for merchant"
             )
 
         # ── Step 1: Experiment selection ──
         experiment_ctx = None
         if self._config.enable_experiments and category_id:
-            experiment_ctx, timing = self._run_experiment_selection(
-                category_id, merchant_id
-            )
+            experiment_ctx, timing = self._run_experiment_selection(category_id, merchant_id)
             timings.append(timing)
             if experiment_ctx:
                 # Apply strategy overrides to product_context
-                product_context = self._apply_strategy_overrides(
-                    product_context, experiment_ctx
-                )
+                product_context = self._apply_strategy_overrides(product_context, experiment_ctx)
             else:
                 warnings.append("Experiment selection failed; using default weights")
 
@@ -288,12 +286,10 @@ class IEOrchestrator:
         if not scoring_result:
             if self._config.fallback_on_error:
                 return self._build_legacy_fallback(
-                    recommendation_id, product_context, timings, warnings,
-                    reason="Scoring engine failed"
+                    recommendation_id, product_context, timings, warnings, reason="Scoring engine failed"
                 )
             return self._build_error_result(
-                recommendation_id, product_context, timings, warnings,
-                reason="Scoring engine failed"
+                recommendation_id, product_context, timings, warnings, reason="Scoring engine failed"
             )
 
         # ── Step 4: Calibration ──
@@ -302,9 +298,7 @@ class IEOrchestrator:
         calibrated_confidence = raw_confidence
 
         if self._config.enable_calibration and category_id:
-            calibration_adj, timing = self._run_calibration(
-                raw_confidence, category_id
-            )
+            calibration_adj, timing = self._run_calibration(raw_confidence, category_id)
             timings.append(timing)
             if calibration_adj:
                 calibrated_confidence = calibration_adj.calibrated_confidence
@@ -314,31 +308,20 @@ class IEOrchestrator:
         # ── Step 5: Record experiment assignment ──
         if experiment_ctx and self._config.enable_experiments:
             assignment_timing = self._run_experiment_recording(
-                recommendation_id, category_id,
-                experiment_ctx.arm_index, experiment_ctx.is_exploration
+                recommendation_id, category_id, experiment_ctx.arm_index, experiment_ctx.is_exploration
             )
             timings.append(assignment_timing)
 
         # ── Step 6: Build final recommendation ──
         suggested_price = scoring_result.get("suggested_price", current_price)
-        change_pct = (
-            ((suggested_price - current_price) / current_price * 100)
-            if current_price > 0 else 0.0
-        )
-        direction = (
-            "increase" if change_pct > 0.1
-            else "decrease" if change_pct < -0.1
-            else "hold"
-        )
+        change_pct = ((suggested_price - current_price) / current_price * 100) if current_price > 0 else 0.0
+        direction = "increase" if change_pct > 0.1 else "decrease" if change_pct < -0.1 else "hold"
 
         total_ms = (time.monotonic() - start_time) * 1000
 
         # Latency warning
         if total_ms > self._config.total_timeout_ms:
-            warnings.append(
-                f"Total latency {total_ms:.0f}ms exceeded budget "
-                f"{self._config.total_timeout_ms:.0f}ms"
-            )
+            warnings.append(f"Total latency {total_ms:.0f}ms exceeded budget {self._config.total_timeout_ms:.0f}ms")
 
         status = IEStatus.SUCCESS
         if warnings:
@@ -349,16 +332,14 @@ class IEOrchestrator:
             product_id=product_id,
             merchant_id=merchant_id,
             category_id=category_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             current_price=current_price,
             suggested_price=round(suggested_price, 2),
             change_pct=round(change_pct, 2),
             direction=direction,
             raw_confidence=round(raw_confidence, 4),
             calibrated_confidence=round(calibrated_confidence, 4),
-            confidence_decomposition=scoring_result.get(
-                "confidence_decomposition", {}
-            ),
+            confidence_decomposition=scoring_result.get("confidence_decomposition", {}),
             scoring_evidence=scoring_result.get("evidence", {}),
             experiment=experiment_ctx,
             calibration=calibration_adj,
@@ -377,13 +358,11 @@ class IEOrchestrator:
 
     def _run_experiment_selection(
         self, category_id: str, merchant_id: str
-    ) -> tuple[Optional[ExperimentContext], ComponentTiming]:
+    ) -> tuple[ExperimentContext | None, ComponentTiming]:
         """Call ExperimentManager.get_experiment_config() with circuit breaker."""
         t0 = time.monotonic()
         try:
-            config = self._experiment_manager.get_experiment_config(
-                category_id, merchant_id
-            )
+            config = self._experiment_manager.get_experiment_config(category_id, merchant_id)
             duration = (time.monotonic() - t0) * 1000
             ctx = ExperimentContext(
                 strategy_name=config.get("strategy_name", "default"),
@@ -400,9 +379,7 @@ class IEOrchestrator:
             )
         except Exception as exc:
             duration = (time.monotonic() - t0) * 1000
-            logger.warning(
-                "ExperimentManager.get_experiment_config failed: %s", exc
-            )
+            logger.warning("ExperimentManager.get_experiment_config failed: %s", exc)
             return None, ComponentTiming(
                 component="experiment_manager",
                 duration_ms=round(duration, 2),
@@ -410,9 +387,7 @@ class IEOrchestrator:
                 error=str(exc),
             )
 
-    def _run_context_injection(
-        self, category_id: str
-    ) -> tuple[Optional[dict[str, Any]], ComponentTiming]:
+    def _run_context_injection(self, category_id: str) -> tuple[dict[str, Any] | None, ComponentTiming]:
         """Call ContextInjector.get_scoring_context() with circuit breaker."""
         t0 = time.monotonic()
         try:
@@ -425,9 +400,7 @@ class IEOrchestrator:
             )
         except Exception as exc:
             duration = (time.monotonic() - t0) * 1000
-            logger.warning(
-                "ContextInjector.get_scoring_context failed: %s", exc
-            )
+            logger.warning("ContextInjector.get_scoring_context failed: %s", exc)
             return None, ComponentTiming(
                 component="context_injector",
                 duration_ms=round(duration, 2),
@@ -435,9 +408,7 @@ class IEOrchestrator:
                 error=str(exc),
             )
 
-    def _run_scoring(
-        self, product_context: dict[str, Any]
-    ) -> tuple[Optional[dict[str, Any]], ComponentTiming]:
+    def _run_scoring(self, product_context: dict[str, Any]) -> tuple[dict[str, Any] | None, ComponentTiming]:
         """Call ScoringEngine.score() with circuit breaker."""
         t0 = time.monotonic()
         try:
@@ -460,7 +431,7 @@ class IEOrchestrator:
 
     def _run_calibration(
         self, raw_confidence: float, category_id: str
-    ) -> tuple[Optional[CalibrationAdjustment], ComponentTiming]:
+    ) -> tuple[CalibrationAdjustment | None, ComponentTiming]:
         """Call Calibrator.calibrate() with circuit breaker."""
         t0 = time.monotonic()
         try:
@@ -471,9 +442,7 @@ class IEOrchestrator:
                 calibrated_confidence=result.get("calibrated", raw_confidence),
                 calibration_method=result.get("method", "uncalibrated"),
                 sample_count=result.get("sample_count", 0),
-                is_reliable=result.get(
-                    "sample_count", 0
-                ) >= self._config.min_calibration_samples,
+                is_reliable=result.get("sample_count", 0) >= self._config.min_calibration_samples,
             )
             return adj, ComponentTiming(
                 component="calibrator",
@@ -491,15 +460,12 @@ class IEOrchestrator:
             )
 
     def _run_experiment_recording(
-        self, recommendation_id: str, category_id: str,
-        arm_index: int, is_exploration: bool
+        self, recommendation_id: str, category_id: str, arm_index: int, is_exploration: bool
     ) -> ComponentTiming:
         """Call ExperimentManager.record_assignment() — fire-and-forget."""
         t0 = time.monotonic()
         try:
-            self._experiment_manager.record_assignment(
-                recommendation_id, category_id, arm_index, is_exploration
-            )
+            self._experiment_manager.record_assignment(recommendation_id, category_id, arm_index, is_exploration)
             duration = (time.monotonic() - t0) * 1000
             return ComponentTiming(
                 component="experiment_recording",
@@ -508,9 +474,7 @@ class IEOrchestrator:
             )
         except Exception as exc:
             duration = (time.monotonic() - t0) * 1000
-            logger.warning(
-                "ExperimentManager.record_assignment failed: %s", exc
-            )
+            logger.warning("ExperimentManager.record_assignment failed: %s", exc)
             return ComponentTiming(
                 component="experiment_recording",
                 duration_ms=round(duration, 2),
@@ -523,8 +487,7 @@ class IEOrchestrator:
     # -------------------------------------------------------------------
 
     def _apply_strategy_overrides(
-        self, product_context: dict[str, Any],
-        experiment: ExperimentContext
+        self, product_context: dict[str, Any], experiment: ExperimentContext
     ) -> dict[str, Any]:
         """
         Apply Thompson Sampling strategy overrides to the product context.
@@ -550,7 +513,8 @@ class IEOrchestrator:
     # -------------------------------------------------------------------
 
     def _build_legacy_fallback(
-        self, recommendation_id: str,
+        self,
+        recommendation_id: str,
         product_context: dict[str, Any],
         timings: list[ComponentTiming],
         warnings: list[str],
@@ -564,7 +528,7 @@ class IEOrchestrator:
             product_id=product_context.get("product_id", "unknown"),
             merchant_id=product_context.get("merchant_id", "unknown"),
             category_id=product_context.get("category_id"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             current_price=current_price,
             suggested_price=current_price,  # No change in fallback
             change_pct=0.0,
@@ -585,7 +549,8 @@ class IEOrchestrator:
         )
 
     def _build_error_result(
-        self, recommendation_id: str,
+        self,
+        recommendation_id: str,
         product_context: dict[str, Any],
         timings: list[ComponentTiming],
         warnings: list[str],
@@ -599,7 +564,7 @@ class IEOrchestrator:
             product_id=product_context.get("product_id", "unknown"),
             merchant_id=product_context.get("merchant_id", "unknown"),
             category_id=product_context.get("category_id"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             current_price=current_price,
             suggested_price=current_price,
             change_pct=0.0,
@@ -624,9 +589,10 @@ class IEOrchestrator:
 # Factory: wires real implementations together
 # ---------------------------------------------------------------------------
 
+
 def create_ie_orchestrator(
     db_session_factory: Callable,
-    merchant_feature_flags: Optional[dict[str, bool]] = None,
+    merchant_feature_flags: dict[str, bool] | None = None,
 ) -> IEOrchestrator:
     """
     Factory that wires the real implementations from Phases 2-3.
@@ -664,5 +630,3 @@ def create_ie_orchestrator(
         config=IEOrchestratorConfig(),
         is_ie_enabled=is_ie_enabled,
     )
-
-

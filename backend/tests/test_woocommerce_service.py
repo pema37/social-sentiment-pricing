@@ -6,8 +6,7 @@ import sys
 import types
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,7 +16,9 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
     "services.integration.base",
     "services.integration.models",
@@ -30,6 +31,7 @@ _originals = {m: sys.modules.get(m) for m in _needed}
 for _mod_name in _needed:
     sys.modules[_mod_name] = types.ModuleType(_mod_name)
 
+
 # Provide base class
 class _FakeEcommerceService:
     def __init__(self, retry_config=None):
@@ -39,7 +41,9 @@ class _FakeEcommerceService:
     def normalize_store_url(url):
         return url.rstrip("/")
 
+
 sys.modules["services.integration.base"].EcommerceService = _FakeEcommerceService
+
 
 # Provide model classes (reuse same fakes as shopify tests)
 class _FakeExternalProduct:
@@ -47,20 +51,24 @@ class _FakeExternalProduct:
         for k, v in kw.items():
             setattr(self, k, v)
 
+
 class _FakeExternalProductVariant:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakeProductSyncResult:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
+
 class _FakeOAuthResult:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakePriceUpdateResult:
     SUCCESS = "success"
@@ -69,15 +77,18 @@ class _FakePriceUpdateResult:
     PRODUCT_NOT_FOUND = "product_not_found"
     RATE_LIMITED = "rate_limited"
 
+
 class _FakePriceUpdateResponse:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
+
 class _FakeWebhookRegistration:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakeConnectionStatus:
     HEALTHY = "healthy"
@@ -85,16 +96,19 @@ class _FakeConnectionStatus:
     UNAUTHORIZED = "unauthorized"
     RATE_LIMITED = "rate_limited"
 
+
 class _FakePriceUpdateRequest:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakeRetryConfig:
     def __init__(self, **kw):
         self.max_retries = kw.get("max_retries", 3)
         self.base_delay = kw.get("base_delay", 1.0)
         self.max_delay = kw.get("max_delay", 30.0)
+
 
 _models = sys.modules["services.integration.models"]
 _models.OAuthResult = _FakeOAuthResult
@@ -303,23 +317,17 @@ class TestParseDatetime:
 
 class TestVerifyWebhookSignature:
     def test_valid_signature(self):
-        import hmac as _hmac
-        import hashlib
         import base64
+        import hashlib
+        import hmac as _hmac
 
         svc = WooCommerceService()
         secret = "wc-secret"
         payload = b'{"id": 42}'
-        sig = base64.b64encode(
-            _hmac.new(secret.encode(), payload, hashlib.sha256).digest()
-        ).decode()
+        sig = base64.b64encode(_hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()
 
         assert svc.verify_webhook_signature(payload, sig, secret) is True
 
     def test_invalid_signature(self):
         svc = WooCommerceService()
         assert svc.verify_webhook_signature(b"data", "bad-sig", "secret") is False
-
-
-
-        

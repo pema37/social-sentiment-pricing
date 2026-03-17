@@ -24,6 +24,3 @@ class DataSource(str, Enum):
     SALES_DATA = "sales_data"
     MARKET_TREND = "market_trend"
     CRISIS_DETECTION = "crisis_detection"
-
-
-    

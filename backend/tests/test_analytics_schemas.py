@@ -7,31 +7,31 @@ Place at: backend/tests/test_analytics_schemas.py
 Run: pytest backend/tests/test_analytics_schemas.py -v
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
 from schemas.analytics import (
+    AlertAnalytics,
     DashboardOverview,
     ProductSummary,
     RecommendationStats,
-    SentimentDataPoint,
-    SentimentAnalytics,
     RevenueImpact,
-    AlertAnalytics,
+    SentimentAnalytics,
+    SentimentDataPoint,
 )
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 # =====================================================================
 # DashboardOverview
 # =====================================================================
 
-class TestDashboardOverview:
 
+class TestDashboardOverview:
     def test_valid_minimal(self):
         d = DashboardOverview(
             total_products=50,
@@ -74,8 +74,8 @@ class TestDashboardOverview:
 # ProductSummary
 # =====================================================================
 
-class TestProductSummary:
 
+class TestProductSummary:
     def test_valid_minimal(self):
         p = ProductSummary(
             id="prod_123",
@@ -129,8 +129,8 @@ class TestProductSummary:
 # RecommendationStats
 # =====================================================================
 
-class TestRecommendationStats:
 
+class TestRecommendationStats:
     def test_valid_minimal(self):
         r = RecommendationStats(
             total_generated=100,
@@ -169,8 +169,8 @@ class TestRecommendationStats:
 # SentimentDataPoint
 # =====================================================================
 
-class TestSentimentDataPoint:
 
+class TestSentimentDataPoint:
     def test_valid(self):
         s = SentimentDataPoint(
             timestamp=NOW,
@@ -188,8 +188,8 @@ class TestSentimentDataPoint:
 # SentimentAnalytics
 # =====================================================================
 
-class TestSentimentAnalytics:
 
+class TestSentimentAnalytics:
     def test_valid_defaults(self):
         s = SentimentAnalytics(period_days=30)
         assert s.product_id is None
@@ -220,8 +220,8 @@ class TestSentimentAnalytics:
 # RevenueImpact
 # =====================================================================
 
-class TestRevenueImpact:
 
+class TestRevenueImpact:
     def test_valid_minimal(self):
         r = RevenueImpact(
             period_days=30,
@@ -252,8 +252,8 @@ class TestRevenueImpact:
 # AlertAnalytics
 # =====================================================================
 
-class TestAlertAnalytics:
 
+class TestAlertAnalytics:
     def test_valid_minimal(self):
         a = AlertAnalytics(
             total_alerts_7d=18,
@@ -274,6 +274,3 @@ class TestAlertAnalytics:
     def test_missing_required_raises(self):
         with pytest.raises(ValidationError):
             AlertAnalytics(total_alerts_7d=10)
-
-
-            

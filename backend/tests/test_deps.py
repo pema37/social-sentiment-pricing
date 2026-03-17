@@ -17,7 +17,6 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-
 # =====================================================================
 # Import Isolation: mock db.session before importing core.deps
 # =====================================================================
@@ -31,12 +30,12 @@ _mock_session_module.get_session = AsyncMock()
 sys.modules.setdefault("db.session", _mock_session_module)
 
 # Now safe to import core.deps (it does `from db.session import get_session`)
-from core.deps import get_current_user, require_admin, oauth2_scheme  # noqa: E402
-
+from core.deps import get_current_user, oauth2_scheme, require_admin  # noqa: E402
 
 # =====================================================================
 # Helpers
 # =====================================================================
+
 
 def make_mock_user(user_id=None, is_active=True, role="USER"):
     """Create a mock User object."""
@@ -63,8 +62,8 @@ def make_mock_db(user=None):
 # oauth2_scheme
 # =====================================================================
 
-class TestOAuth2Scheme:
 
+class TestOAuth2Scheme:
     def test_token_url(self):
         assert oauth2_scheme.model.flows.password.tokenUrl == "/api/v1/auth/login/oauth"
 
@@ -73,8 +72,8 @@ class TestOAuth2Scheme:
 # get_current_user
 # =====================================================================
 
-class TestGetCurrentUser:
 
+class TestGetCurrentUser:
     @pytest.mark.asyncio
     @patch("core.deps.decode_access_token")
     async def test_valid_token_returns_user(self, mock_decode):
@@ -146,8 +145,8 @@ class TestGetCurrentUser:
 # require_admin
 # =====================================================================
 
-class TestRequireAdmin:
 
+class TestRequireAdmin:
     @pytest.mark.asyncio
     async def test_admin_passes(self):
         admin = make_mock_user(role="ADMIN")
@@ -168,6 +167,3 @@ class TestRequireAdmin:
         with pytest.raises(HTTPException) as exc_info:
             await require_admin(current_user=user)
         assert exc_info.value.status_code == 403
-
-
-        

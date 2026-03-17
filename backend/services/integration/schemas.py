@@ -7,13 +7,13 @@ Data models and enums for e-commerce integrations.
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List
-
 
 # ==================== Enums ====================
 
+
 class PriceUpdateResult(str, Enum):
     """Result of a price update operation"""
+
     SUCCESS = "success"
     FAILED = "failed"
     RATE_LIMITED = "rate_limited"
@@ -23,6 +23,7 @@ class PriceUpdateResult(str, Enum):
 
 class ConnectionStatus(str, Enum):
     """Health check status for platform connection"""
+
     HEALTHY = "healthy"
     UNHEALTHY = "unhealthy"
     RATE_LIMITED = "rate_limited"
@@ -31,83 +32,90 @@ class ConnectionStatus(str, Enum):
 
 # ==================== Data Classes ====================
 
+
 @dataclass
 class OAuthResult:
     """Result of OAuth token exchange"""
+
     success: bool
-    access_token: Optional[str] = None
-    refresh_token: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    scope: Optional[str] = None
-    error: Optional[str] = None
+    access_token: str | None = None
+    refresh_token: str | None = None
+    expires_at: datetime | None = None
+    scope: str | None = None
+    error: str | None = None
 
 
 @dataclass
 class ExternalProductVariant:
     """A product variant from external platform"""
+
     id: str
     title: str
-    price: Optional[float] = None
-    sku: Optional[str] = None
-    inventory_quantity: Optional[int] = None
-    compare_at_price: Optional[float] = None
+    price: float | None = None
+    sku: str | None = None
+    inventory_quantity: int | None = None
+    compare_at_price: float | None = None
 
 
 @dataclass
 class ExternalProduct:
     """Normalized product data from any e-commerce platform"""
+
     id: str
     title: str
-    price: Optional[float] = None
-    compare_at_price: Optional[float] = None
-    sku: Optional[str] = None
-    description: Optional[str] = None
-    inventory_quantity: Optional[int] = None
-    product_type: Optional[str] = None
-    vendor: Optional[str] = None
-    tags: Optional[List[str]] = None
-    images: Optional[List[str]] = None
-    variants: Optional[List[ExternalProductVariant]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    price: float | None = None
+    compare_at_price: float | None = None
+    sku: str | None = None
+    description: str | None = None
+    inventory_quantity: int | None = None
+    product_type: str | None = None
+    vendor: str | None = None
+    tags: list[str] | None = None
+    images: list[str] | None = None
+    variants: list[ExternalProductVariant] | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass
 class ProductSyncResult:
     """Result of fetching products from platform"""
+
     success: bool
-    products: Optional[List[ExternalProduct]] = None
+    products: list[ExternalProduct] | None = None
     has_more: bool = False
-    next_cursor: Optional[str] = None
-    error: Optional[str] = None
+    next_cursor: str | None = None
+    error: str | None = None
     retries_used: int = 0
 
 
 @dataclass
 class PriceUpdateRequest:
     """Request to update a product's price"""
+
     external_product_id: str
-    external_variant_id: Optional[str] = None
+    external_variant_id: str | None = None
     new_price: float = 0.0
-    compare_at_price: Optional[float] = None
+    compare_at_price: float | None = None
 
 
 @dataclass
 class PriceUpdateResponse:
     """Response from price update operation"""
+
     result: PriceUpdateResult
     external_product_id: str
-    old_price: Optional[float] = None
-    new_price: Optional[float] = None
-    error: Optional[str] = None
+    old_price: float | None = None
+    new_price: float | None = None
+    error: str | None = None
     retries_used: int = 0
 
 
 @dataclass
 class WebhookRegistration:
     """Result of webhook registration"""
+
     success: bool
-    webhook_id: Optional[str] = None
-    topic: Optional[str] = None
-    error: Optional[str] = None
-    
+    webhook_id: str | None = None
+    topic: str | None = None
+    error: str | None = None

@@ -53,7 +53,16 @@ Package structure:
 """
 
 # ── Engine (primary entry point) ──
-from .engine import ScoringEngine, ScoringEngineResult
+# ── Priors (exposed for Tier 2 batch updates) ──
+from .category_priors import (
+    CategoryPrior,
+    CategoryPriorStore,
+)
+from .competitive_position import (
+    CompetitivePositionCalculator,
+    CompetitorPricePoint,
+    PositionResult,
+)
 
 # ── Component calculators ──
 from .elasticity_calculator import (
@@ -61,49 +70,39 @@ from .elasticity_calculator import (
     ElasticityResult,
     PriceChangeEvent,
 )
-from .competitive_position import (
-    CompetitivePositionCalculator,
-    CompetitorPricePoint,
-    PositionResult,
-)
-from .urgency_scorer import (
-    UrgencyScorer,
-    UrgencySignals,
-    UrgencyResult,
-)
-
-# ── Fusion layer ──
-from .score_fusion import ScoreFusion
+from .engine import ScoringEngine, ScoringEngineResult
 from .fusion_types import (
-    ConflictType,
-    GuardrailType,
-    GuardrailConfig,
-    ProductContext,
-    PriceChange,
-    GuardrailResult,
-    FusionResult,
     ELASTICITY_MAGNITUDE,
-    URGENCY_MULTIPLIER,
     POSITION_DIRECTION_BIAS,
+    URGENCY_MULTIPLIER,
+    ConflictType,
+    FusionResult,
+    GuardrailConfig,
+    GuardrailResult,
+    GuardrailType,
+    PriceChange,
+    ProductContext,
 )
 from .guardrails import GuardrailEnforcer
 
-# ── Priors (exposed for Tier 2 batch updates) ──
-from .category_priors import (
-    CategoryPriorStore,
-    CategoryPrior,
-)
-
 # ── Phase 5: IE Orchestrator (full pipeline entry point) ──
 from .ie_orchestrator import (
+    CalibrationAdjustment,
+    ComponentTiming,
+    ExperimentContext,
     IEOrchestrator,
     IEOrchestratorConfig,
     IERecommendation,
     IEStatus,
-    ExperimentContext,
-    CalibrationAdjustment,
-    ComponentTiming,
     create_ie_orchestrator,
+)
+
+# ── Fusion layer ──
+from .score_fusion import ScoreFusion
+from .urgency_scorer import (
+    UrgencyResult,
+    UrgencyScorer,
+    UrgencySignals,
 )
 
 __all__ = [
@@ -147,5 +146,3 @@ __all__ = [
     "ComponentTiming",
     "create_ie_orchestrator",
 ]
-
-

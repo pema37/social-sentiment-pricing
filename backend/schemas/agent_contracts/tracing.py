@@ -25,8 +25,8 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +38,16 @@ class TraceSpan:
 
     Represents one agent invocation (Scout, Analyst, or Strategist).
     """
+
     span_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     agent: str = ""
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     duration_ms: float = 0.0
 
     # Provenance
-    input_hash: Optional[str] = None
-    output_hash: Optional[str] = None
+    input_hash: str | None = None
+    output_hash: str | None = None
 
     # Validation
     input_valid: bool = True
@@ -59,8 +60,8 @@ class TraceSpan:
 
     # Status
     success: bool = True
-    error: Optional[str] = None
-    error_type: Optional[str] = None
+    error: str | None = None
+    error_type: str | None = None
 
     # Custom metadata
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -88,25 +89,26 @@ class PipelineTrace:
 
     Captures the complete evidence chain for debugging any recommendation.
     """
+
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    recommendation_id: Optional[str] = None
-    merchant_id: Optional[str] = None
-    product_id: Optional[str] = None
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
+    recommendation_id: str | None = None
+    merchant_id: str | None = None
+    product_id: str | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     total_duration_ms: float = 0.0
 
     spans: list[TraceSpan] = field(default_factory=list)
 
     # Pipeline-level
     success: bool = True
-    failure_reason: Optional[str] = None
+    failure_reason: str | None = None
     pipeline_version: str = "ie-v1.0"
 
     # Provenance chain
-    scout_hash: Optional[str] = None
-    analyst_hash: Optional[str] = None
-    strategist_hash: Optional[str] = None
+    scout_hash: str | None = None
+    analyst_hash: str | None = None
+    strategist_hash: str | None = None
 
     def add_span(self, span: TraceSpan) -> None:
         self.spans.append(span)
@@ -202,19 +204,19 @@ class PipelineTracer:
 
     def __init__(
         self,
-        merchant_id: Optional[str] = None,
-        product_id: Optional[str] = None,
-        recommendation_id: Optional[str] = None,
+        merchant_id: str | None = None,
+        product_id: str | None = None,
+        recommendation_id: str | None = None,
         pipeline_version: str = "ie-v1.0",
     ):
         self._trace = PipelineTrace(
             recommendation_id=recommendation_id,
             merchant_id=merchant_id,
             product_id=product_id,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             pipeline_version=pipeline_version,
         )
-        self._current_span: Optional[TraceSpan] = None
+        self._current_span: TraceSpan | None = None
 
     def span(self, agent: str) -> _SpanContext:
         """Create a new span context for an agent invocation."""
@@ -222,7 +224,7 @@ class PipelineTracer:
 
     def finalize(self) -> PipelineTrace:
         """Close the trace and compute total duration."""
-        self._trace.ended_at = datetime.now(timezone.utc)
+        self._trace.ended_at = datetime.now(UTC)
         if self._trace.started_at:
             delta = (self._trace.ended_at - self._trace.started_at).total_seconds()
             self._trace.total_duration_ms = delta * 1000
@@ -248,12 +250,12 @@ class _SpanContext:
         self.span = TraceSpan(agent=agent)
 
     def __enter__(self) -> TraceSpan:
-        self.span.started_at = datetime.now(timezone.utc)
+        self.span.started_at = datetime.now(UTC)
         self._start_time = time.monotonic()
         return self.span
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
-        self.span.ended_at = datetime.now(timezone.utc)
+        self.span.ended_at = datetime.now(UTC)
         self.span.duration_ms = (time.monotonic() - self._start_time) * 1000
 
         if exc_type is not None:
@@ -263,6 +265,3 @@ class _SpanContext:
 
         self._tracer._add_span(self.span)
         return False  # Don't suppress exceptions
-    
-
-    

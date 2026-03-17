@@ -1,20 +1,19 @@
 # backend/api/v1/routes/users.py
 
 import re
-from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, field_validator
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.v1.routes.auth import get_current_user, require_role
+from core.rate_limit import AUTH_RATE_LIMIT, WRITE_RATE_LIMIT, limiter
 from core.security import hash_password, verify_password
-from core.rate_limit import limiter, WRITE_RATE_LIMIT, AUTH_RATE_LIMIT
 from db.session import get_session
 from models import User
-from api.v1.routes.auth import get_current_user, require_role
 from schemas.common import PaginatedResponse, PaginationParams
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -22,10 +21,11 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 # ───────────────────── Schemas ───────────────────── #
 
+
 class UserUpdateRequest(BaseModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None 
+    username: str | None = None
+    email: EmailStr | None = None
+    full_name: str | None = None
 
 
 class PasswordChangeRequest(BaseModel):
@@ -34,54 +34,55 @@ class PasswordChangeRequest(BaseModel):
 
 
 class WalletUpdateRequest(BaseModel):
-    eth_wallet_address: Optional[str] = None
-    bsv_wallet_address: Optional[str] = None
+    eth_wallet_address: str | None = None
+    bsv_wallet_address: str | None = None
 
-    @field_validator('eth_wallet_address')
+    @field_validator("eth_wallet_address")
     @classmethod
     def validate_eth_address(cls, v):
         if v is None:
             return v
         # Ethereum addresses: 0x followed by 40 hex characters
-        if not re.match(r'^0x[a-fA-F0-9]{40}$', v):
-            raise ValueError('Invalid Ethereum address format')
+        if not re.match(r"^0x[a-fA-F0-9]{40}$", v):
+            raise ValueError("Invalid Ethereum address format")
         return v.lower()  # Normalize to lowercase
 
-    @field_validator('bsv_wallet_address')
+    @field_validator("bsv_wallet_address")
     @classmethod
     def validate_bsv_address(cls, v):
         if v is None:
             return v
         # BSV addresses: typically start with 1 or 3, or PayMail format
         # Allow PayMail (email-like) or standard addresses
-        if '@' in v:
+        if "@" in v:
             # PayMail format (e.g., $pema12@handcash.io)
             return v
-        if not re.match(r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$', v):
-            raise ValueError('Invalid BSV address format')
+        if not re.match(r"^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$", v):
+            raise ValueError("Invalid BSV address format")
         return v
 
 
 class UserDetailResponse(BaseModel):
     id: UUID
     email: str
-    username: Optional[str]
-    full_name: Optional[str]
+    username: str | None
+    full_name: str | None
     role: str
     is_active: bool
-    eth_wallet_address: Optional[str]
-    bsv_wallet_address: Optional[str]
+    eth_wallet_address: str | None
+    bsv_wallet_address: str | None
 
     class Config:
         from_attributes = True
 
 
 class WalletResponse(BaseModel):
-    eth_wallet_address: Optional[str]
-    bsv_wallet_address: Optional[str]
+    eth_wallet_address: str | None
+    bsv_wallet_address: str | None
 
 
 # ───────────────────── User Self-Management ───────────────────── #
+
 
 @router.get("/me", response_model=UserDetailResponse)
 async def get_my_profile(
@@ -101,7 +102,7 @@ async def update_my_profile(
     session: AsyncSession = Depends(get_session),
 ):
     """Update current user's profile (username, email)."""
-    
+
     if payload.email is not None:
         email = payload.email.lower()
         stmt = select(User).where(User.email == email, User.id != current_user.id)
@@ -127,7 +128,7 @@ async def update_my_profile(
 
     if payload.full_name is not None:
         current_user.full_name = payload.full_name
-        
+
     session.add(current_user)
     await session.commit()
     await session.refresh(current_user)
@@ -144,10 +145,10 @@ async def update_my_wallet(
     session: AsyncSession = Depends(get_session),
 ):
     """Update current user's wallet addresses (ETH and/or BSV)."""
-    
+
     if payload.eth_wallet_address is not None:
         current_user.eth_wallet_address = payload.eth_wallet_address
-    
+
     if payload.bsv_wallet_address is not None:
         current_user.bsv_wallet_address = payload.bsv_wallet_address
 
@@ -182,7 +183,7 @@ async def change_my_password(
     session: AsyncSession = Depends(get_session),
 ):
     """Change current user's password."""
-    
+
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -225,6 +226,7 @@ async def delete_my_account(
 
 # ───────────────────── Admin Endpoints ───────────────────── #
 
+
 @router.get("/", response_model=PaginatedResponse[UserDetailResponse])
 async def list_all_users(
     request: Request,
@@ -236,13 +238,13 @@ async def list_all_users(
     count_query = select(func.count()).select_from(User)
     count_result = await session.execute(count_query)
     total = count_result.scalar_one()
-    
+
     stmt = select(User).offset(pagination.offset).limit(pagination.page_size)
     result = await session.execute(stmt)
     users = list(result.scalars().all())
-    
+
     total_pages = (total + pagination.page_size - 1) // pagination.page_size
-    
+
     return PaginatedResponse(
         items=users,
         total=total,
@@ -319,4 +321,3 @@ async def activate_user(
     await session.commit()
 
     return {"message": f"User {user.email} activated"}
-

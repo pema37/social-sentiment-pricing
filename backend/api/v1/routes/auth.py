@@ -8,35 +8,35 @@ PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
 - New /auth/refresh endpoint to get new access token using refresh token
 """
 
-from typing import Callable
+from collections.abc import Callable
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from core.rate_limit import AUTH_RATE_LIMIT, PASSWORD_RESET_RATE_LIMIT, REGISTER_RATE_LIMIT, limiter
 from core.security import (
-    hash_password,
-    verify_password,
     create_access_token,
     create_refresh_token,
+    create_reset_token,
     decode_access_token,
     decode_refresh_token,
-    create_reset_token,
     decode_reset_token,
+    hash_password,
+    verify_password,
 )
-from core.rate_limit import limiter, AUTH_RATE_LIMIT, REGISTER_RATE_LIMIT, PASSWORD_RESET_RATE_LIMIT
 from db.session import get_session
 from models import User
 from schemas.auth import (
-    RegisterRequest,
-    LoginRequest,
-    UserResponse,
-    TokenResponse,
     ForgotPasswordRequest,
-    ResetPasswordRequest,
+    LoginRequest,
     RefreshRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -53,6 +53,7 @@ ROLE_HIERARCHY = {
 
 
 # ───────────────────── Current user helpers ───────────────────── #
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -99,6 +100,7 @@ async def get_current_user(
 
 def require_role(min_role: str) -> Callable[[User], User]:
     """Restrict access based on role hierarchy. ADMIN can access everything."""
+
     async def role_checker(user: User = Depends(get_current_user)) -> User:
         user_level = ROLE_HIERARCHY.get(user.role, 0)
         required_level = ROLE_HIERARCHY.get(min_role, 0)
@@ -114,6 +116,7 @@ def require_role(min_role: str) -> Callable[[User], User]:
 
 
 # ───────────────────────────── Auth Endpoints ───────────────────────────── #
+
 
 @router.post(
     "/register",
@@ -178,7 +181,7 @@ async def login(
         "sub": str(user.id),
         "role": user.role,
     }
-    
+
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -216,7 +219,7 @@ async def login_oauth(
         "sub": str(user.id),
         "role": user.role,
     }
-    
+
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -235,26 +238,26 @@ async def refresh_tokens(
 ):
     """
     Get new access token using a valid refresh token.
-    
+
     This endpoint allows the frontend to silently refresh the session
     without forcing the user to re-login.
     """
     # Decode the refresh token
     token_payload = decode_refresh_token(payload.refresh_token)
-    
+
     if token_payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
-    
+
     user_id = token_payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token payload",
         )
-    
+
     try:
         user_uuid = UUID(user_id)
     except ValueError:
@@ -262,31 +265,31 @@ async def refresh_tokens(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid user ID in token",
         )
-    
+
     # Verify user still exists and is active
     user = await session.get(User, user_uuid)
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated",
         )
-    
+
     # Create new tokens
     token_data = {
         "sub": str(user.id),
         "role": user.role,
     }
-    
+
     new_access_token = create_access_token(token_data)
     new_refresh_token = create_refresh_token(token_data)
-    
+
     return TokenResponse(
         access_token=new_access_token,
         refresh_token=new_refresh_token,
@@ -313,6 +316,7 @@ async def get_admin_data(current_user: User = Depends(require_role("ADMIN"))):
 
 # ───────────────────────────── Password Reset ───────────────────────────── #
 
+
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 @limiter.limit(PASSWORD_RESET_RATE_LIMIT)
 async def forgot_password(
@@ -337,10 +341,10 @@ async def forgot_password(
     reset_token = create_reset_token(str(user.id))
 
     # TODO: In production, send this via email
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"PASSWORD RESET TOKEN FOR: {email}")
     print(f"Token: {reset_token}")
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
     return {"message": "If that email exists, a reset link has been sent"}
 
@@ -388,5 +392,3 @@ async def reset_password(
     await session.commit()
 
     return {"message": "Password reset successfully"}
-
-

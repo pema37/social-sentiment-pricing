@@ -19,33 +19,29 @@ for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-import pytest
 
 from services.competitor_matching.utils import (
+    _is_valid_price,
+    _tokenize,
+    build_shopping_query,
+    calculate_keyword_match,
+    calculate_text_similarity,
+    clean_product_title,
     extract_domain,
+    extract_price_from_text,
     get_merchant_name,
     get_merchant_reliability,
     is_marketplace,
     is_skip_domain,
     parse_price,
-    extract_price_from_text,
-    _is_valid_price,
-    calculate_text_similarity,
-    calculate_keyword_match,
-    _tokenize,
-    build_shopping_query,
-    clean_product_title,
-    KNOWN_MERCHANTS,
-    SKIP_DOMAINS,
 )
-
 
 # ============================================================
 # 1. extract_domain
 # ============================================================
 
-class TestExtractDomain:
 
+class TestExtractDomain:
     def test_simple_url(self):
         assert extract_domain("https://amazon.com/dp/B09V3KXJPB") == "amazon.com"
 
@@ -73,8 +69,8 @@ class TestExtractDomain:
 # 2. get_merchant_name
 # ============================================================
 
-class TestGetMerchantName:
 
+class TestGetMerchantName:
     def test_known_merchant(self):
         assert get_merchant_name("amazon.com") == "Amazon"
 
@@ -93,8 +89,8 @@ class TestGetMerchantName:
 # 3. get_merchant_reliability
 # ============================================================
 
-class TestGetMerchantReliability:
 
+class TestGetMerchantReliability:
     def test_known_high_reliability(self):
         assert get_merchant_reliability("amazon.com") == 0.95
 
@@ -112,8 +108,8 @@ class TestGetMerchantReliability:
 # 4. is_marketplace
 # ============================================================
 
-class TestIsMarketplace:
 
+class TestIsMarketplace:
     def test_marketplace_true(self):
         assert is_marketplace("amazon.com") is True
         assert is_marketplace("ebay.com") is True
@@ -130,8 +126,8 @@ class TestIsMarketplace:
 # 5. is_skip_domain
 # ============================================================
 
-class TestIsSkipDomain:
 
+class TestIsSkipDomain:
     def test_search_engines(self):
         assert is_skip_domain("google.com") is True
         assert is_skip_domain("bing.com") is True
@@ -151,8 +147,8 @@ class TestIsSkipDomain:
 # 6. parse_price
 # ============================================================
 
-class TestParsePrice:
 
+class TestParsePrice:
     def test_integer(self):
         assert parse_price(100) == Decimal("100")
 
@@ -188,8 +184,8 @@ class TestParsePrice:
 # 7. extract_price_from_text
 # ============================================================
 
-class TestExtractPriceFromText:
 
+class TestExtractPriceFromText:
     def test_dollar_sign(self):
         assert extract_price_from_text("$49.99") == Decimal("49.99")
 
@@ -226,8 +222,8 @@ class TestExtractPriceFromText:
 # 8. _is_valid_price
 # ============================================================
 
-class TestIsValidPrice:
 
+class TestIsValidPrice:
     def test_valid_range(self):
         assert _is_valid_price(Decimal("0.01")) is True
         assert _is_valid_price(Decimal("100000")) is True
@@ -245,8 +241,8 @@ class TestIsValidPrice:
 # 9. calculate_text_similarity
 # ============================================================
 
-class TestCalculateTextSimilarity:
 
+class TestCalculateTextSimilarity:
     def test_identical_texts(self):
         assert calculate_text_similarity("hello world", "hello world") == 1.0
 
@@ -271,8 +267,8 @@ class TestCalculateTextSimilarity:
 # 10. calculate_keyword_match
 # ============================================================
 
-class TestCalculateKeywordMatch:
 
+class TestCalculateKeywordMatch:
     def test_all_keywords_match(self):
         assert calculate_keyword_match("apple banana cherry", ["apple", "banana"]) == 1.0
 
@@ -296,8 +292,8 @@ class TestCalculateKeywordMatch:
 # 11. _tokenize
 # ============================================================
 
-class TestTokenize:
 
+class TestTokenize:
     def test_basic_tokenization(self):
         tokens = _tokenize("Hello World 2024")
         assert "hello" in tokens
@@ -323,8 +319,8 @@ class TestTokenize:
 # 12. build_shopping_query
 # ============================================================
 
-class TestBuildShoppingQuery:
 
+class TestBuildShoppingQuery:
     def test_name_only(self):
         assert build_shopping_query("iPhone 15 Pro") == "iPhone 15 Pro"
 
@@ -358,8 +354,8 @@ class TestBuildShoppingQuery:
 # 13. clean_product_title
 # ============================================================
 
-class TestCleanProductTitle:
 
+class TestCleanProductTitle:
     def test_removes_free_shipping(self):
         assert "FREE SHIPPING" not in clean_product_title("Widget Pro FREE SHIPPING")
 
@@ -380,6 +376,3 @@ class TestCleanProductTitle:
     def test_cleans_whitespace(self):
         result = clean_product_title("Widget   Pro    Max")
         assert "  " not in result
-
-
-        

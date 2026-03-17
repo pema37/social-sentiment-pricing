@@ -15,8 +15,7 @@ PATCHED (2026-02-22):
 """
 
 import logging
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,26 +34,26 @@ def utc_now() -> datetime:
 class ProductRepository:
     """
     Repository for Product database operations.
-    
+
     Note on commits: create() and update() do NOT commit.
     The caller (ProductSyncHandler) batches commits per page for performance.
     Callers outside the sync flow (e.g., API routes) must commit themselves.
-    
+
     Methods:
     - find_by_id: Get product by UUID
     - find_by_sku: Get product by SKU for a user
     - create: Create new product (flush only — caller commits)
     - update: Update existing product (no commit — caller commits)
     """
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
-    
-    async def find_by_id(self, product_id: UUID) -> Optional[Product]:
+
+    async def find_by_id(self, product_id: UUID) -> Product | None:
         """Find a product by its ID."""
         return await self.db.get(Product, product_id)
-    
-    async def find_by_sku(self, user_id: UUID, sku: str) -> Optional[Product]:
+
+    async def find_by_sku(self, user_id: UUID, sku: str) -> Product | None:
         """Find a product by SKU for a specific user."""
         stmt = select(Product).where(
             Product.user_id == user_id,
@@ -62,7 +61,7 @@ class ProductRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
-    
+
     async def create(
         self,
         user_id: UUID,
@@ -70,12 +69,12 @@ class ProductRepository:
         sku: str,
         base_price: float,
         current_price: float,
-        description: Optional[str] = None,
-        category: Optional[str] = None,
-        image_url: Optional[str] = None,
+        description: str | None = None,
+        category: str | None = None,
+        image_url: str | None = None,
     ) -> Product:
         """Create a new product.
-        
+
         Uses flush() to get the generated ID without committing.
         Caller is responsible for committing (batched per page).
         """
@@ -93,20 +92,20 @@ class ProductRepository:
         self.db.add(product)
         await self.db.flush()
         return product
-    
+
     async def update(
         self,
         product: Product,
-        name: Optional[str] = None,
-        sku: Optional[str] = None,
-        current_price: Optional[float] = None,
-        base_price: Optional[float] = None,
+        name: str | None = None,
+        sku: str | None = None,
+        current_price: float | None = None,
+        base_price: float | None = None,
     ) -> Product:
         """Update an existing product.
-        
+
         Only updates fields that are explicitly passed (not None).
         Does NOT commit — caller batches commits per page.
-        
+
         Field ownership (enforced by caller, not here):
         - name: platform-owned (Shopify sync updates this)
         - sku: set-once (only filled if empty)
@@ -121,11 +120,7 @@ class ProductRepository:
             product.current_price = current_price
         if base_price is not None:
             product.base_price = base_price
-        
+
         product.updated_at = utc_now()
         self.db.add(product)
         return product
-    
-
-
-    

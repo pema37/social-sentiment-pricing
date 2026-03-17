@@ -17,6 +17,3 @@ __all__ = [
     "dispatch_alert_task",
     "dispatch_bulk_alerts_task",
 ]
-
-
-

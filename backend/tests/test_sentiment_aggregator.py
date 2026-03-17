@@ -14,11 +14,11 @@ Covers:
 - get_sentiment_by_source: groups by source, per-source metrics
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
@@ -32,7 +32,7 @@ _MOCKED = [
 ]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -51,13 +51,26 @@ for _pkg, _subdir in [
 
 
 class _ColumnMock:
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
 
 
 class _FakeSocialMention:
@@ -98,6 +111,7 @@ del _m
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _make_session():
     s = AsyncMock()
@@ -141,6 +155,7 @@ def _mock_query_sequence(session, *mention_lists):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestInit:
     def test_stores_db(self):
@@ -275,8 +290,12 @@ class TestCalculateAggregation:
     def test_topic_extraction(self):
         agg = _make_aggregator()
         mentions = [
-            _make_mention(raw_data={"sentiment": {"compound": 0.5, "label": "positive", "topics": ["quality", "shipping"]}}),
-            _make_mention(raw_data={"sentiment": {"compound": 0.3, "label": "positive", "topics": ["quality", "design"]}}),
+            _make_mention(
+                raw_data={"sentiment": {"compound": 0.5, "label": "positive", "topics": ["quality", "shipping"]}}
+            ),
+            _make_mention(
+                raw_data={"sentiment": {"compound": 0.3, "label": "positive", "topics": ["quality", "design"]}}
+            ),
             _make_mention(raw_data={"sentiment": {"compound": 0.1, "label": "neutral", "topics": ["shipping"]}}),
         ]
         result = agg._calculate_aggregation(mentions, uuid4(), 24)
@@ -287,9 +306,7 @@ class TestCalculateAggregation:
     def test_top_topics_capped_at_5(self):
         agg = _make_aggregator()
         topics = [f"topic_{i}" for i in range(10)]
-        mentions = [
-            _make_mention(raw_data={"sentiment": {"compound": 0.0, "label": "neutral", "topics": topics}})
-        ]
+        mentions = [_make_mention(raw_data={"sentiment": {"compound": 0.0, "label": "neutral", "topics": topics}})]
         result = agg._calculate_aggregation(mentions, uuid4(), 24)
         assert len(result["top_topics"]) <= 5
 
@@ -500,9 +517,15 @@ class TestGetSentimentBySource:
         agg = SentimentAggregator(session)
 
         mentions = [
-            _make_mention(source="twitter", raw_data={"sentiment": {"compound": 0.8, "label": "positive", "topics": []}}),
-            _make_mention(source="twitter", raw_data={"sentiment": {"compound": 0.6, "label": "positive", "topics": []}}),
-            _make_mention(source="reddit", raw_data={"sentiment": {"compound": -0.3, "label": "negative", "topics": []}}),
+            _make_mention(
+                source="twitter", raw_data={"sentiment": {"compound": 0.8, "label": "positive", "topics": []}}
+            ),
+            _make_mention(
+                source="twitter", raw_data={"sentiment": {"compound": 0.6, "label": "positive", "topics": []}}
+            ),
+            _make_mention(
+                source="reddit", raw_data={"sentiment": {"compound": -0.3, "label": "negative", "topics": []}}
+            ),
         ]
         _mock_query_returns(session, mentions)
 
@@ -531,8 +554,12 @@ class TestGetSentimentBySource:
         agg = SentimentAggregator(session)
 
         mentions = [
-            _make_mention(source="twitter", raw_data={"sentiment": {"compound": 0.8, "label": "positive", "topics": []}}),
-            _make_mention(source="reddit", raw_data={"sentiment": {"compound": -0.8, "label": "negative", "topics": []}}),
+            _make_mention(
+                source="twitter", raw_data={"sentiment": {"compound": 0.8, "label": "positive", "topics": []}}
+            ),
+            _make_mention(
+                source="reddit", raw_data={"sentiment": {"compound": -0.8, "label": "negative", "topics": []}}
+            ),
         ]
         _mock_query_returns(session, mentions)
 
@@ -541,6 +568,3 @@ class TestGetSentimentBySource:
 
         assert result["twitter"]["sentiment_label"] == "positive"
         assert result["reddit"]["sentiment_label"] == "negative"
-
-
-        

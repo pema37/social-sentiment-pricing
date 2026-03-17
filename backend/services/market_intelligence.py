@@ -12,13 +12,13 @@ DeveloperWeek 2026 Hackathon - You.com Challenge Track
 import asyncio
 import json
 import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import AsyncGenerator, Optional
 
 from core.config import settings
 from core.logging import get_logger
-from services.youcom_client import YouComClient, Freshness, SearchResponse
+from services.youcom_client import Freshness, SearchResponse, YouComClient
 
 logger = get_logger(__name__)
 
@@ -27,8 +27,10 @@ logger = get_logger(__name__)
 # Enums & Data Models (matches existing AgentMessage shape)
 # ---------------------------------------------------------------------------
 
+
 class AgentRole(str, Enum):
     """Agent roles in the pipeline."""
+
     SCOUT = "scout"
     ANALYST = "analyst"
     STRATEGIST = "strategist"
@@ -36,6 +38,7 @@ class AgentRole(str, Enum):
 
 class ThoughtType(str, Enum):
     """Types of agent thoughts (matches visual-pricing pattern)."""
+
     OBSERVATION = "observation"
     ANALYSIS = "analysis"
     HYPOTHESIS = "hypothesis"
@@ -51,11 +54,12 @@ class AgentEvent:
     Matches the AgentMessage shape used by visual-pricing, crisis-detection,
     and other demo routes so the frontend can reuse the same components.
     """
+
     agent: AgentRole
-    thought_type: Optional[ThoughtType]
+    thought_type: ThoughtType | None
     content: str
     is_final: bool = False
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -74,16 +78,18 @@ class AgentEvent:
 @dataclass
 class IntelligenceRequest:
     """Input for the market intelligence pipeline."""
+
     product_name: str
-    current_price: Optional[float] = None
-    brand: Optional[str] = None
-    category: Optional[str] = None
-    features: Optional[list[str]] = None
+    current_price: float | None = None
+    brand: str | None = None
+    category: str | None = None
+    features: list[str] | None = None
 
 
 @dataclass
 class PriceRecommendation:
     """Structured output from the Strategist agent."""
+
     recommended_price: float
     confidence: float
     price_range_low: float
@@ -100,6 +106,7 @@ class PriceRecommendation:
 # Scout Agent
 # ---------------------------------------------------------------------------
 
+
 class ScoutAgent:
     """
     Gathers live market data via You.com parallel searches.
@@ -113,14 +120,12 @@ class ScoutAgent:
     def __init__(self, client: YouComClient):
         self._client = client
 
-    async def gather(
-        self, request: IntelligenceRequest
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def gather(self, request: IntelligenceRequest) -> AsyncGenerator[AgentEvent]:
         """Run parallel searches and yield events as results arrive."""
         yield AgentEvent(
             agent=AgentRole.SCOUT,
             thought_type=ThoughtType.OBSERVATION,
-            content=f"Starting live web search for \"{request.product_name}\"...",
+            content=f'Starting live web search for "{request.product_name}"...',
         )
 
         # Build parallel search tasks
@@ -212,6 +217,7 @@ class ScoutAgent:
 # Analyst Agent
 # ---------------------------------------------------------------------------
 
+
 class AnalystAgent:
     """
     Synthesizes Scout data into a market analysis using Gemini streaming.
@@ -228,9 +234,7 @@ class AnalystAgent:
         "Keep your analysis concise (3-5 bullet points max)."
     )
 
-    async def analyze(
-        self, scout_context: str, request: IntelligenceRequest
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def analyze(self, scout_context: str, request: IntelligenceRequest) -> AsyncGenerator[AgentEvent]:
         """Analyze scout data via Gemini and yield streaming events."""
         yield AgentEvent(
             agent=AgentRole.ANALYST,
@@ -289,8 +293,7 @@ class AnalystAgent:
                 )
         else:
             full_text = (
-                "Gemini not configured. Based on the Scout data, "
-                "a manual review of competitor prices is recommended."
+                "Gemini not configured. Based on the Scout data, a manual review of competitor prices is recommended."
             )
             yield AgentEvent(
                 agent=AgentRole.ANALYST,
@@ -330,6 +333,7 @@ class AnalystAgent:
 # Strategist Agent
 # ---------------------------------------------------------------------------
 
+
 class StrategistAgent:
     """
     Produces final pricing recommendation with confidence score.
@@ -361,7 +365,7 @@ class StrategistAgent:
         scout_context: str,
         analyst_summary: str,
         request: IntelligenceRequest,
-    ) -> AsyncGenerator[AgentEvent, None]:
+    ) -> AsyncGenerator[AgentEvent]:
         """Generate pricing recommendation and yield events."""
         yield AgentEvent(
             agent=AgentRole.STRATEGIST,
@@ -370,7 +374,7 @@ class StrategistAgent:
         )
 
         user_prompt = self._build_prompt(scout_context, analyst_summary, request)
-        recommendation: Optional[PriceRecommendation] = None
+        recommendation: PriceRecommendation | None = None
 
         if settings.GEMINI_API_KEY:
             try:
@@ -485,9 +489,7 @@ class StrategistAgent:
         parts.append(f"\n## Analyst Summary\n{analyst_summary}")
         parts.append(f"\n## Raw Market Data\n{scout_context[:3000]}")
         parts.append(
-            "\n## Your Task\n"
-            "Based on the above, recommend an optimal price. "
-            "Respond ONLY with the JSON object."
+            "\n## Your Task\nBased on the above, recommend an optimal price. Respond ONLY with the JSON object."
         )
         return "\n".join(parts)
 
@@ -514,6 +516,7 @@ class StrategistAgent:
 # Pipeline Orchestrator
 # ---------------------------------------------------------------------------
 
+
 class MarketIntelligencePipeline:
     """
     Orchestrates Scout → Analyst → Strategist pipeline.
@@ -522,20 +525,16 @@ class MarketIntelligencePipeline:
     frontend as SSE events.
     """
 
-    def __init__(self, youcom_api_key: Optional[str] = None):
+    def __init__(self, youcom_api_key: str | None = None):
         api_key = youcom_api_key or getattr(settings, "YOUCOM_API_KEY", None)
         if not api_key:
-            raise ValueError(
-                "You.com API key required. Set YOUCOM_API_KEY in your .env"
-            )
+            raise ValueError("You.com API key required. Set YOUCOM_API_KEY in your .env")
         self._client = YouComClient(api_key=api_key)
         self._scout = ScoutAgent(self._client)
         self._analyst = AnalystAgent()
         self._strategist = StrategistAgent()
 
-    async def run(
-        self, request: IntelligenceRequest
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def run(self, request: IntelligenceRequest) -> AsyncGenerator[AgentEvent]:
         """
         Execute full pipeline and yield events for SSE streaming.
 
@@ -582,9 +581,7 @@ class MarketIntelligencePipeline:
 
         # --- Phase 3: Strategist ---
         try:
-            async for event in self._strategist.recommend(
-                scout_context, analyst_summary, request
-            ):
+            async for event in self._strategist.recommend(scout_context, analyst_summary, request):
                 # Inject sources into the final strategist event
                 if event.is_final and event.metadata:
                     event.metadata["sources"] = sources
@@ -613,6 +610,3 @@ class MarketIntelligencePipeline:
     async def close(self) -> None:
         """Clean up the You.com HTTP client."""
         await self._client.close()
-
-
-        

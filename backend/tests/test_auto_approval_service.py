@@ -16,7 +16,7 @@ Total: ~45 tests
 import sys
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -33,7 +33,8 @@ for mod in [
 
 # Fix comparison operators on mocked model columns (Python 3.13)
 from models.price_recommendation import PriceRecommendation, RecommendationStatus
-for _col in ['user_id', 'status', 'valid_until', 'applied_at', 'id']:
+
+for _col in ["user_id", "status", "valid_until", "applied_at", "id"]:
     _c = getattr(PriceRecommendation, _col)
     try:
         _c.__eq__ = MagicMock(return_value=MagicMock())
@@ -106,8 +107,8 @@ def make_recommendation(
 # 1. Initialization
 # ============================================================
 
-class TestAutoApprovalServiceInit:
 
+class TestAutoApprovalServiceInit:
     def test_stores_db(self):
         db = make_mock_db()
         svc = AutoApprovalService(db)
@@ -118,8 +119,8 @@ class TestAutoApprovalServiceInit:
 # 2. process_pending (orchestration)
 # ============================================================
 
-class TestProcessPending:
 
+class TestProcessPending:
     @pytest.mark.asyncio
     @patch("services.pricing.settings_service.SettingsService")
     @patch(f"{SERVICE_PATH}.select")
@@ -301,9 +302,7 @@ class TestProcessPending:
         mock_as_instance = AsyncMock()
         applied_rec = MagicMock()
         # First fails, second succeeds
-        mock_as_instance.auto_approve_and_apply.side_effect = [
-            Exception("failed"), applied_rec
-        ]
+        mock_as_instance.auto_approve_and_apply.side_effect = [Exception("failed"), applied_rec]
         MockAS.return_value = mock_as_instance
 
         svc = AutoApprovalService(db)
@@ -320,8 +319,8 @@ class TestProcessPending:
 # 3. _is_eligible
 # ============================================================
 
-class TestIsEligible:
 
+class TestIsEligible:
     def setup_method(self):
         self.svc = AutoApprovalService(make_mock_db())
 
@@ -418,8 +417,8 @@ class TestIsEligible:
 # 4. _check_daily_limit
 # ============================================================
 
-class TestCheckDailyLimit:
 
+class TestCheckDailyLimit:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     @patch(f"{SERVICE_PATH}.func")
@@ -482,8 +481,8 @@ class TestCheckDailyLimit:
 # 5. _in_blackout_period
 # ============================================================
 
-class TestInBlackoutPeriod:
 
+class TestInBlackoutPeriod:
     def setup_method(self):
         self.svc = AutoApprovalService(make_mock_db())
 
@@ -536,6 +535,3 @@ class TestInBlackoutPeriod:
         mock_dt.now.return_value = datetime(2026, 1, 1, 6, 0)
         settings = make_settings(blackout_hours_start=0, blackout_hours_end=6)
         assert self.svc._in_blackout_period(settings) is False
-
-
-        

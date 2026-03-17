@@ -16,20 +16,19 @@ is down) degrades gracefully instead of killing the whole scan.
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from schemas.price_check import (
     CompetitorMatch,
     PriceCheckOpportunity,
-    PriceCheckReport,
 )
-from services.audit.store_scanner import scan_store, ScannedProduct
 from services.audit.report_generator import (
     CompetitorData,
-    SentimentData,
     RecommendationData,
+    SentimentData,
     generate_report,
 )
+from services.audit.store_scanner import ScannedProduct, scan_store
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ async def run_price_check(
     store_url: str,
     email: str,
     category: str | None = None,
-) -> AsyncGenerator[dict, None]:
+) -> AsyncGenerator[dict]:
     """
     Run the full Price Check pipeline, yielding SSE events as each
     step completes.
@@ -75,12 +74,13 @@ async def run_price_check(
         store_name = scan_result.store_name
 
         yield _sse(
-            "scout", "progress",
+            "scout",
+            "progress",
             f"Found {len(products)} products on {scan_result.platform.title()} store",
         )
     except Exception as e:
         logger.exception("Scout: store scan failed")
-        yield _sse("error", "error", f"Could not scan the store: {str(e)}")
+        yield _sse("error", "error", f"Could not scan the store: {e!s}")
         return
 
     if not products:
@@ -124,7 +124,8 @@ async def run_price_check(
         competitor_data.matches = all_matches
 
         yield _sse(
-            "scout", "progress",
+            "scout",
+            "progress",
             f"Found {len(all_matches)} competitor price points",
         )
 
@@ -147,9 +148,7 @@ async def run_price_check(
                     price = await scrape_competitor_price(match.competitor_url)
                     if price and price > 0:
                         match.competitor_price = price
-                        match.gap_percent = round(
-                            ((match.your_price - price) / price) * 100, 1
-                        )
+                        match.gap_percent = round(((match.your_price - price) / price) * 100, 1)
                 except Exception:
                     continue
 
@@ -162,7 +161,8 @@ async def run_price_check(
 
     unique_competitors = len(set(m.competitor_name for m in competitor_data.matches))
     yield _sse(
-        "scout", "done",
+        "scout",
+        "done",
         f"Scanned {len(products)} products · {unique_competitors} competitors found · {len(competitor_data.matches)} price comparisons",
     )
 
@@ -189,7 +189,8 @@ async def run_price_check(
                 continue
 
         yield _sse(
-            "analyst", "progress",
+            "analyst",
+            "progress",
             f"Found {len(all_mentions)} social mentions",
         )
 
@@ -265,7 +266,8 @@ async def run_price_check(
 
     pos_pct = round((sentiment_data.positive_count / max(sentiment_data.total_mentions, 1)) * 100)
     yield _sse(
-        "analyst", "done",
+        "analyst",
+        "done",
         f"{sentiment_data.total_mentions} mentions · {pos_pct}% positive · trend {sentiment_data.trend}",
     )
 
@@ -286,20 +288,15 @@ async def run_price_check(
 
             if gap > 0:
                 suggested = round(match.your_price * (1 - min(gap, 30) / 200), 2)
-                reason = (
-                    f"Priced {abs(gap):.0f}% above {match.competitor_name}. "
-                    f"Consider competitive positioning."
-                )
+                reason = f"Priced {abs(gap):.0f}% above {match.competitor_name}. Consider competitive positioning."
                 confidence = min(80, 50 + abs(gap) * 0.5)
             else:
                 sentiment_boost = max(0, sentiment_data.avg_score * 10)
                 suggested = round(match.your_price * (1 + min(abs(gap), 20) / 200), 2)
                 reason = (
-                    f"Priced {abs(gap):.0f}% below market. "
-                    f"Positive sentiment suggests room to increase."
+                    f"Priced {abs(gap):.0f}% below market. Positive sentiment suggests room to increase."
                     if sentiment_data.avg_score > 0
-                    else f"Priced {abs(gap):.0f}% below market. "
-                    f"Review competitive position."
+                    else f"Priced {abs(gap):.0f}% below market. Review competitive position."
                 )
                 confidence = min(75, 40 + abs(gap) * 0.3 + sentiment_boost)
 
@@ -337,6 +334,7 @@ async def run_price_check(
 
     try:
         from services.pricing_engine import PricingEngine  # noqa: F401
+
         logger.info("Strategist: PricingEngine available for enhanced analysis")
     except ImportError:
         logger.info("Strategist: PricingEngine not available, using built-in logic")
@@ -347,7 +345,8 @@ async def run_price_check(
 
     total_opps = len(recommendation_data.opportunities)
     yield _sse(
-        "strategist", "done",
+        "strategist",
+        "done",
         f"{total_opps} repricing opportunities · {recommendation_data.overall_confidence:.0f}% confidence",
     )
 
@@ -364,7 +363,3 @@ async def run_price_check(
     )
 
     yield _sse("complete", "done", "Report ready", data=report.model_dump())
-
-
-
-    

@@ -7,14 +7,13 @@ Handles BSV wallet address management for MNEE payments.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 from pydantic import BaseModel, field_validator
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.session import get_session
 from core.deps import get_current_user
+from db.session import get_session
 from models.user import User
-from services.payment import get_mnee_service, MneeValidationError
+from services.payment import MneeValidationError, get_mnee_service
 
 router = APIRouter(tags=["payments"])
 
@@ -23,37 +22,39 @@ router = APIRouter(tags=["payments"])
 # SCHEMAS
 # =============================================================================
 
+
 class WalletAddressUpdate(BaseModel):
     """Request schema for updating wallet address."""
+
     bsv_wallet_address: str
-    
-    @field_validator('bsv_wallet_address')
+
+    @field_validator("bsv_wallet_address")
     @classmethod
     def validate_bsv_address(cls, v: str) -> str:
         """Validate BSV address format."""
         if not v:
-            raise ValueError('BSV wallet address is required')
-        
+            raise ValueError("BSV wallet address is required")
+
         # Reject Ethereum addresses explicitly
-        if v.startswith('0x'):
+        if v.startswith("0x"):
             raise ValueError(
-                'Ethereum addresses (0x...) are not supported. '
-                'MNEE uses BSV addresses starting with "1" or "3".'
+                'Ethereum addresses (0x...) are not supported. MNEE uses BSV addresses starting with "1" or "3".'
             )
-        
+
         # BSV addresses start with 1 or 3
-        if not v.startswith('1') and not v.startswith('3'):
+        if not v.startswith("1") and not v.startswith("3"):
             raise ValueError('BSV address must start with "1" or "3"')
-        
+
         # BSV addresses are 25-34 characters
         if len(v) < 25 or len(v) > 34:
-            raise ValueError('BSV address must be 25-34 characters')
-        
+            raise ValueError("BSV address must be 25-34 characters")
+
         return v
 
 
 class WalletInfo(BaseModel):
     """Response schema for wallet info."""
+
     bsv_wallet_address: str | None
     balance: str | None = None
     balance_raw: int | None = None
@@ -61,6 +62,7 @@ class WalletInfo(BaseModel):
 
 class BalanceInfo(BaseModel):
     """Response schema for balance check."""
+
     address: str
     balance: str
     balance_raw: int
@@ -69,6 +71,7 @@ class BalanceInfo(BaseModel):
 # =============================================================================
 # ENDPOINTS
 # =============================================================================
+
 
 @router.get("/wallet", response_model=WalletInfo)
 async def get_wallet(
@@ -80,7 +83,7 @@ async def get_wallet(
     """
     balance = None
     balance_raw = None
-    
+
     # If user has a wallet, fetch balance
     if current_user.bsv_wallet_address:
         try:
@@ -91,7 +94,7 @@ async def get_wallet(
         except Exception:
             # Balance fetch failed, but we can still return the address
             pass
-    
+
     return WalletInfo(
         bsv_wallet_address=current_user.bsv_wallet_address,
         balance=balance,
@@ -117,13 +120,13 @@ async def update_wallet(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-    
+
     # Update user's wallet address
     current_user.bsv_wallet_address = data.bsv_wallet_address
     session.add(current_user)
     await session.commit()
     await session.refresh(current_user)
-    
+
     # Fetch balance for the new address
     balance = None
     balance_raw = None
@@ -133,7 +136,7 @@ async def update_wallet(
         balance_raw = balance_data.get("balance_raw")
     except Exception:
         pass
-    
+
     return WalletInfo(
         bsv_wallet_address=current_user.bsv_wallet_address,
         balance=balance,
@@ -166,7 +169,7 @@ async def check_balance(
         mnee_service = get_mnee_service()
         mnee_service.validate_bsv_address(address)
         balance_data = await mnee_service.get_balance(address)
-        
+
         return BalanceInfo(
             address=address,
             balance=balance_data.get("balance", "0"),
@@ -180,7 +183,5 @@ async def check_balance(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch balance: {str(e)}",
+            detail=f"Failed to fetch balance: {e!s}",
         )
-    
-    

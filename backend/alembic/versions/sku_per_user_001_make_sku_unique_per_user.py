@@ -26,9 +26,9 @@ Blast radius: MINIMAL
     - No frontend changes needed ✅
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "sku_per_user_001"
@@ -83,5 +83,3 @@ def downgrade() -> None:
 
     # Restore global unique constraint
     op.create_unique_constraint("products_sku_key", "products", ["sku"])
-
-

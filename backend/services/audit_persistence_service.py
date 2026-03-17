@@ -6,20 +6,17 @@ Used by the Celery weekly task (save) and the API endpoints (load cached).
 """
 
 import uuid as uuid_lib
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.retrospective_audit import RetrospectiveAudit
 from schemas.retrospective_audit import (
-    RetrospectiveAuditResponse,
-    AuditSummary,
-    SKUAuditResult,
     AuditListItem,
+    AuditSummary,
+    RetrospectiveAuditResponse,
+    SKUAuditResult,
 )
 
 
@@ -54,17 +51,12 @@ class AuditPersistenceService:
         await self.session.flush()
         return record
 
-    async def get_latest(
-        self, lookback_days: Optional[int] = None
-    ) -> Optional[RetrospectiveAuditResponse]:
+    async def get_latest(self, lookback_days: int | None = None) -> RetrospectiveAuditResponse | None:
         """
         Get the most recent persisted audit for this user.
         Optionally filter by lookback_days.
         """
-        query = (
-            select(RetrospectiveAudit)
-            .where(RetrospectiveAudit.user_id == self.user_id)
-        )
+        query = select(RetrospectiveAudit).where(RetrospectiveAudit.user_id == self.user_id)
         if lookback_days:
             query = query.where(RetrospectiveAudit.lookback_days == lookback_days)
 
@@ -78,15 +70,12 @@ class AuditPersistenceService:
 
         return self._record_to_response(record)
 
-    async def get_by_id(self, audit_id: uuid_lib.UUID) -> Optional[RetrospectiveAuditResponse]:
+    async def get_by_id(self, audit_id: uuid_lib.UUID) -> RetrospectiveAuditResponse | None:
         """Retrieve a specific audit by ID."""
-        query = (
-            select(RetrospectiveAudit)
-            .where(
-                and_(
-                    RetrospectiveAudit.id == audit_id,
-                    RetrospectiveAudit.user_id == self.user_id,
-                )
+        query = select(RetrospectiveAudit).where(
+            and_(
+                RetrospectiveAudit.id == audit_id,
+                RetrospectiveAudit.user_id == self.user_id,
             )
         )
         result = await self.session.execute(query)
@@ -97,16 +86,12 @@ class AuditPersistenceService:
 
         return self._record_to_response(record)
 
-    async def list_audits(
-        self, limit: int = 20, offset: int = 0
-    ) -> tuple[list[AuditListItem], int]:
+    async def list_audits(self, limit: int = 20, offset: int = 0) -> tuple[list[AuditListItem], int]:
         """List past audits for this user."""
         # Count
         from sqlalchemy import func
-        count_query = (
-            select(func.count(RetrospectiveAudit.id))
-            .where(RetrospectiveAudit.user_id == self.user_id)
-        )
+
+        count_query = select(func.count(RetrospectiveAudit.id)).where(RetrospectiveAudit.user_id == self.user_id)
         count_result = await self.session.execute(count_query)
         total = count_result.scalar_one()
 
@@ -149,7 +134,3 @@ class AuditPersistenceService:
             sku_results=sku_results,
             methodology=record.methodology or "",
         )
-
-
-
-        

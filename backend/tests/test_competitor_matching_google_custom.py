@@ -17,24 +17,22 @@ Total: ~30 tests
 
 import sys
 from datetime import date
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 for mod in ["db.session"]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-import pytest
 
-from services.competitor_matching.schemas import SearchProvider, ProviderResult
 from services.competitor_matching.providers.google_custom import GoogleCustomSearchProvider
-
+from services.competitor_matching.schemas import SearchProvider
 
 # ============================================================
 # 1. Provider Properties
 # ============================================================
 
-class TestGoogleCustomProperties:
 
+class TestGoogleCustomProperties:
     def test_provider_name(self):
         p = GoogleCustomSearchProvider(api_key="key", search_engine_id="cx")
         assert p.provider_name == SearchProvider.GOOGLE_CUSTOM_SEARCH
@@ -66,8 +64,8 @@ class TestGoogleCustomProperties:
 # 2. is_available
 # ============================================================
 
-class TestIsAvailable:
 
+class TestIsAvailable:
     def test_available_with_both_keys(self):
         p = GoogleCustomSearchProvider(api_key="key", search_engine_id="cx")
         assert p.is_available() is True
@@ -90,8 +88,8 @@ class TestIsAvailable:
 # 3. _extract_image
 # ============================================================
 
-class TestExtractImage:
 
+class TestExtractImage:
     def setup_method(self):
         self.p = GoogleCustomSearchProvider(api_key="k", search_engine_id="cx")
 
@@ -115,10 +113,12 @@ class TestExtractImage:
 
     def test_priority_order(self):
         # cse_thumbnail takes priority over cse_image
-        item = {"pagemap": {
-            "cse_thumbnail": [{"src": "https://thumb.jpg"}],
-            "cse_image": [{"src": "https://full.jpg"}],
-        }}
+        item = {
+            "pagemap": {
+                "cse_thumbnail": [{"src": "https://thumb.jpg"}],
+                "cse_image": [{"src": "https://full.jpg"}],
+            }
+        }
         assert self.p._extract_image(item) == "https://thumb.jpg"
 
 
@@ -126,8 +126,8 @@ class TestExtractImage:
 # 4. _extract_rating
 # ============================================================
 
-class TestExtractRating:
 
+class TestExtractRating:
     def setup_method(self):
         self.p = GoogleCustomSearchProvider(api_key="k", search_engine_id="cx")
 
@@ -151,8 +151,8 @@ class TestExtractRating:
 # 5. _check_daily_reset
 # ============================================================
 
-class TestCheckDailyReset:
 
+class TestCheckDailyReset:
     def test_resets_on_new_day(self):
         p = GoogleCustomSearchProvider(api_key="k", search_engine_id="cx")
         p._daily_requests = 50
@@ -173,8 +173,8 @@ class TestCheckDailyReset:
 # 6. get_usage_stats / get_remaining_free_searches
 # ============================================================
 
-class TestUsageStats:
 
+class TestUsageStats:
     def test_usage_stats(self):
         p = GoogleCustomSearchProvider(api_key="k", search_engine_id="cx")
         p._daily_requests = 30
@@ -201,8 +201,8 @@ class TestUsageStats:
 # 7. _parse_results / _parse_item
 # ============================================================
 
-class TestParseResults:
 
+class TestParseResults:
     def setup_method(self):
         self.p = GoogleCustomSearchProvider(api_key="k", search_engine_id="cx")
 
@@ -211,11 +211,15 @@ class TestParseResults:
         assert self.p._parse_results({"items": []}) == []
 
     def test_valid_item(self):
-        data = {"items": [{
-            "title": "Widget Pro",
-            "link": "https://www.amazon.com/widget-pro",
-            "snippet": "Only $49.99 - Great widget",
-        }]}
+        data = {
+            "items": [
+                {
+                    "title": "Widget Pro",
+                    "link": "https://www.amazon.com/widget-pro",
+                    "snippet": "Only $49.99 - Great widget",
+                }
+            ]
+        }
         products = self.p._parse_results(data)
         assert len(products) == 1
         assert products[0].merchant == "Amazon"
@@ -229,6 +233,3 @@ class TestParseResults:
         data = {"items": [{"title": "Widget"}]}
         products = self.p._parse_results(data)
         assert len(products) == 0
-
-
-        

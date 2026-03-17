@@ -29,25 +29,24 @@ Wire into Celery Beat schedule (celery_app.py or equivalent):
 
 import asyncio
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Optional, List, Dict
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import select
 
-from workers.celery_app import celery_app
 from core.config import settings
-from core.logging import get_logger
-from models.product import Product
-from models.integration import Integration, IntegrationStatus, ProductIntegrationLink, IntegrationSyncLog
-from services.integration.woocommerce_service import WooCommerceService
-from services.integration.shopify_service import ShopifyService
-from services.integration.schemas import ConnectionStatus
 from core.encryption import decrypt_token
+from core.logging import get_logger
+from models.integration import Integration, IntegrationStatus, IntegrationSyncLog, ProductIntegrationLink
+from models.product import Product
+from services.integration.schemas import ConnectionStatus
+from services.integration.shopify_service import ShopifyService
+from services.integration.woocommerce_service import WooCommerceService
+from workers.celery_app import celery_app
 
 logger = get_logger(__name__)
 
@@ -60,7 +59,7 @@ logger = get_logger(__name__)
 PRICE_MISMATCH_THRESHOLD = Decimal("0.05")
 
 # Maximum links to check per run (None = check all eligible links)
-MAX_PRODUCTS_PER_RUN: Optional[int] = None
+MAX_PRODUCTS_PER_RUN: int | None = None
 
 # How old a sync can be before we force a re-check (hours)
 STALE_SYNC_HOURS = 24
@@ -80,6 +79,7 @@ _HEALTH_POLL_STATUSES = {IntegrationStatus.ACTIVE, IntegrationStatus.ERROR}
 # HELPERS
 # ==============================================================================
 
+
 def get_task_session_maker():
     """
     Create a fresh async session maker for Celery tasks.
@@ -92,8 +92,8 @@ def get_task_session_maker():
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     if "sslmode=" in db_url:
-        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
-        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
+        db_url = re.sub(r"[\?&]sslmode=[^&]*", "", db_url)
+        db_url = db_url.replace("?&", "?").replace("&&", "&").rstrip("?&")
 
     use_ssl = "neon.tech" in db_url or "railway" in db_url
 
@@ -134,7 +134,8 @@ def run_async(coro):
 # ASYNC IMPLEMENTATIONS
 # ==============================================================================
 
-async def _verify_all_price_syncs() -> Dict:
+
+async def _verify_all_price_syncs() -> dict:
     """
     Verify prices are in sync between ActualPrice and e-commerce platforms.
 
@@ -155,10 +156,7 @@ async def _verify_all_price_syncs() -> Dict:
     }
 
     async with session_maker() as db:
-        integrations_stmt = (
-            select(Integration)
-            .where(Integration.status == IntegrationStatus.ACTIVE)
-        )
+        integrations_stmt = select(Integration).where(Integration.status == IntegrationStatus.ACTIVE)
         integrations_result = await db.execute(integrations_stmt)
         integrations = {i.id: i for i in integrations_result.scalars().all()}
 
@@ -201,11 +199,13 @@ async def _verify_all_price_syncs() -> Dict:
                     access_token = decrypt_token(integration.access_token_encrypted)
                 except Exception as e:
                     results["errors"] += 1
-                    results["error_details"].append({
-                        "product_id": str(product.id),
-                        "product_name": product.name,
-                        "error": f"Failed to decrypt credentials: {str(e)}"
-                    })
+                    results["error_details"].append(
+                        {
+                            "product_id": str(product.id),
+                            "product_name": product.name,
+                            "error": f"Failed to decrypt credentials: {e!s}",
+                        }
+                    )
                     continue
 
                 platform_price = None
@@ -214,7 +214,7 @@ async def _verify_all_price_syncs() -> Dict:
                     external_product = await woo_service.fetch_single_product(
                         store_url=integration.store_url,
                         access_token=access_token,
-                        external_product_id=link.external_product_id
+                        external_product_id=link.external_product_id,
                     )
                     if external_product:
                         platform_price = _resolve_link_price(
@@ -226,7 +226,7 @@ async def _verify_all_price_syncs() -> Dict:
                     external_product = await shopify_service.fetch_single_product(
                         store_url=integration.store_url,
                         access_token=access_token,
-                        external_product_id=link.external_product_id
+                        external_product_id=link.external_product_id,
                     )
                     if external_product:
                         platform_price = _resolve_link_price(
@@ -236,11 +236,13 @@ async def _verify_all_price_syncs() -> Dict:
 
                 if platform_price is None:
                     results["errors"] += 1
-                    results["error_details"].append({
-                        "product_id": str(product.id),
-                        "product_name": product.name,
-                        "error": "Could not fetch price from platform"
-                    })
+                    results["error_details"].append(
+                        {
+                            "product_id": str(product.id),
+                            "product_name": product.name,
+                            "error": "Could not fetch price from platform",
+                        }
+                    )
                     continue
 
                 our_price = Decimal(str(product.current_price)) if product.current_price else Decimal("0")
@@ -250,7 +252,7 @@ async def _verify_all_price_syncs() -> Dict:
                 if price_diff <= PRICE_MISMATCH_THRESHOLD:
                     results["matched"] += 1
                     link.external_price = their_price
-                    link.last_sync_verified_at = datetime.now(timezone.utc)
+                    link.last_sync_verified_at = datetime.now(UTC)
                     db.add(link)
                 else:
                     results["mismatched"] += 1
@@ -274,11 +276,9 @@ async def _verify_all_price_syncs() -> Dict:
 
             except Exception as e:
                 results["errors"] += 1
-                results["error_details"].append({
-                    "product_id": str(product.id),
-                    "product_name": product.name,
-                    "error": str(e)
-                })
+                results["error_details"].append(
+                    {"product_id": str(product.id), "product_name": product.name, "error": str(e)}
+                )
                 logger.error(f"Error checking product {product.id}: {e}")
 
         await db.commit()
@@ -292,7 +292,7 @@ async def _verify_all_price_syncs() -> Dict:
     return results
 
 
-def _resolve_link_price(external_product, external_variant_id: Optional[str]) -> Optional[float]:
+def _resolve_link_price(external_product, external_variant_id: str | None) -> float | None:
     """Resolve the effective external price for a specific product-integration link."""
     if not external_product:
         return None
@@ -305,7 +305,7 @@ def _resolve_link_price(external_product, external_variant_id: Optional[str]) ->
     return external_product.price
 
 
-async def _auto_fix_price_mismatches(dry_run: bool = True) -> Dict:
+async def _auto_fix_price_mismatches(dry_run: bool = True) -> dict:
     """
     Automatically fix price mismatches by pushing ActualPrice to platform.
 
@@ -380,15 +380,11 @@ async def _auto_fix_price_mismatches(dry_run: bool = True) -> Dict:
 
                 if integration.platform.lower() == "woocommerce":
                     response = await woo_service.update_price(
-                        store_url=integration.store_url,
-                        access_token=access_token,
-                        request=request
+                        store_url=integration.store_url, access_token=access_token, request=request
                     )
                 elif integration.platform.lower() == "shopify":
                     response = await shopify_service.update_price(
-                        store_url=integration.store_url,
-                        access_token=access_token,
-                        request=request
+                        store_url=integration.store_url, access_token=access_token, request=request
                     )
                 else:
                     results["failed"] += 1
@@ -396,10 +392,12 @@ async def _auto_fix_price_mismatches(dry_run: bool = True) -> Dict:
 
                 if response.result.value == "success":
                     results["fixed"] += 1
-                    link.last_price_push_at = datetime.now(timezone.utc)
+                    link.last_price_push_at = datetime.now(UTC)
                     link.external_price = product.current_price
                     db.add(link)
-                    logger.info(f"Auto-fixed price for {product.name}: ${mismatch['platform_price']} -> ${product.current_price}")
+                    logger.info(
+                        f"Auto-fixed price for {product.name}: ${mismatch['platform_price']} -> ${product.current_price}"
+                    )
                 else:
                     results["failed"] += 1
                     logger.error(f"Failed to auto-fix {product.name}: {response.error}")
@@ -413,7 +411,7 @@ async def _auto_fix_price_mismatches(dry_run: bool = True) -> Dict:
     return results
 
 
-async def _get_sync_status_report() -> Dict:
+async def _get_sync_status_report() -> dict:
     """
     Generate a comprehensive sync status report.
 
@@ -423,17 +421,13 @@ async def _get_sync_status_report() -> Dict:
     session_maker = get_task_session_maker()
 
     async with session_maker() as db:
-        total_stmt = (
-            select(ProductIntegrationLink)
-            .where(ProductIntegrationLink.sync_enabled == True)
-        )
+        total_stmt = select(ProductIntegrationLink).where(ProductIntegrationLink.sync_enabled == True)
         total_result = await db.execute(total_stmt)
         total_links = list(total_result.scalars().all())
 
-        recent_threshold = datetime.now(timezone.utc) - timedelta(hours=STALE_SYNC_HOURS)
+        recent_threshold = datetime.now(UTC) - timedelta(hours=STALE_SYNC_HOURS)
         recent_count = sum(
-            1 for link in total_links
-            if link.last_price_push_at and link.last_price_push_at > recent_threshold
+            1 for link in total_links if link.last_price_push_at and link.last_price_push_at > recent_threshold
         )
 
         product_ids = [link.product_id for link in total_links]
@@ -455,14 +449,14 @@ async def _get_sync_status_report() -> Dict:
             "recently_synced": recent_count,
             "stale_syncs": len(total_links) - recent_count,
             "known_mismatches": mismatch_count,
-            "sync_health_percent": round(
-                (len(total_links) - mismatch_count) / len(total_links) * 100, 1
-            ) if total_links else 100.0,
-            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "sync_health_percent": round((len(total_links) - mismatch_count) / len(total_links) * 100, 1)
+            if total_links
+            else 100.0,
+            "checked_at": datetime.now(UTC).isoformat(),
         }
 
 
-async def _recover_stuck_syncs() -> Dict:
+async def _recover_stuck_syncs() -> dict:
     """
     Recover integrations stuck in 'syncing' status.
 
@@ -478,7 +472,7 @@ async def _recover_stuck_syncs() -> Dict:
         "details": [],
     }
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=STUCK_SYNC_TIMEOUT_MINUTES)
+    cutoff = datetime.now(UTC) - timedelta(minutes=STUCK_SYNC_TIMEOUT_MINUTES)
 
     async with session_maker() as db:
         stmt = select(Integration).where(Integration.sync_status == "syncing")
@@ -499,7 +493,7 @@ async def _recover_stuck_syncs() -> Dict:
             stuck_log = log_result.scalars().first()
 
             if stuck_log and stuck_log.started_at < cutoff:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 stuck_duration_minutes = (now - stuck_log.started_at).total_seconds() / 60
 
                 stuck_log.success = False
@@ -516,12 +510,14 @@ async def _recover_stuck_syncs() -> Dict:
                 db.add(integration)
 
                 results["recovered"] += 1
-                results["details"].append({
-                    "integration_id": str(integration.id),
-                    "store_url": integration.store_url,
-                    "stuck_for_minutes": stuck_duration_minutes,
-                    "action": "recovered",
-                })
+                results["details"].append(
+                    {
+                        "integration_id": str(integration.id),
+                        "store_url": integration.store_url,
+                        "stuck_for_minutes": stuck_duration_minutes,
+                        "action": "recovered",
+                    }
+                )
 
                 logger.warning(
                     f"Recovered stuck sync for integration {integration.id} "
@@ -548,16 +544,17 @@ async def _recover_stuck_syncs() -> Dict:
                     db.add(integration)
 
                     results["recovered"] += 1
-                    results["details"].append({
-                        "integration_id": str(integration.id),
-                        "store_url": integration.store_url,
-                        "stuck_for_minutes": None,
-                        "action": "fixed_inconsistent_state",
-                    })
+                    results["details"].append(
+                        {
+                            "integration_id": str(integration.id),
+                            "store_url": integration.store_url,
+                            "stuck_for_minutes": None,
+                            "action": "fixed_inconsistent_state",
+                        }
+                    )
 
                     logger.warning(
-                        f"Fixed inconsistent sync status for integration {integration.id} "
-                        f"({integration.store_url})"
+                        f"Fixed inconsistent sync status for integration {integration.id} ({integration.store_url})"
                     )
 
         if results["recovered"] > 0:
@@ -576,7 +573,8 @@ async def _recover_stuck_syncs() -> Dict:
 # ADDED (2026-03-13): Integration health polling
 # ==============================================================================
 
-async def _check_all_integration_health() -> Dict:
+
+async def _check_all_integration_health() -> dict:
     """
     Poll health of every ACTIVE and ERROR integration and persist results to DB.
 
@@ -598,20 +596,17 @@ async def _check_all_integration_health() -> Dict:
     """
     session_maker = get_task_session_maker()
 
-    results: Dict = {
+    results: dict = {
         "checked": 0,
         "healthy": 0,
         "unhealthy": 0,
-        "recovered": 0,   # ERROR → ACTIVE transitions
-        "errors": 0,       # decrypt failures or unexpected exceptions
+        "recovered": 0,  # ERROR → ACTIVE transitions
+        "errors": 0,  # decrypt failures or unexpected exceptions
         "details": [],
     }
 
     async with session_maker() as db:
-        stmt = (
-            select(Integration)
-            .where(Integration.status.in_(_HEALTH_POLL_STATUSES))
-        )
+        stmt = select(Integration).where(Integration.status.in_(_HEALTH_POLL_STATUSES))
         result = await db.execute(stmt)
         integrations = result.scalars().all()
 
@@ -623,7 +618,7 @@ async def _check_all_integration_health() -> Dict:
 
         shopify_service = ShopifyService()
         woo_service = WooCommerceService()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for integration in integrations:
             results["checked"] += 1
@@ -638,18 +633,18 @@ async def _check_all_integration_health() -> Dict:
                     f"integration {integration.id} ({integration.store_url}): {exc}"
                 )
                 integration.status = IntegrationStatus.ERROR
-                integration.error_message = (
-                    "Stored credentials are invalid. Please reconnect."
-                )
+                integration.error_message = "Stored credentials are invalid. Please reconnect."
                 integration.updated_at = now
                 db.add(integration)
                 results["errors"] += 1
-                results["details"].append({
-                    "integration_id": str(integration.id),
-                    "store_url": integration.store_url,
-                    "platform": integration.platform.value,
-                    "result": "decrypt_failed",
-                })
+                results["details"].append(
+                    {
+                        "integration_id": str(integration.id),
+                        "store_url": integration.store_url,
+                        "platform": integration.platform.value,
+                        "result": "decrypt_failed",
+                    }
+                )
                 continue
 
             # ── Health check ───────────────────────────────────────────────
@@ -665,18 +660,17 @@ async def _check_all_integration_health() -> Dict:
                         access_token=access_token,
                     )
             except Exception as exc:
-                logger.error(
-                    f"Health poll: unexpected error for integration "
-                    f"{integration.id}: {exc}"
-                )
+                logger.error(f"Health poll: unexpected error for integration {integration.id}: {exc}")
                 results["errors"] += 1
-                results["details"].append({
-                    "integration_id": str(integration.id),
-                    "store_url": integration.store_url,
-                    "platform": integration.platform.value,
-                    "result": "exception",
-                    "error": str(exc),
-                })
+                results["details"].append(
+                    {
+                        "integration_id": str(integration.id),
+                        "store_url": integration.store_url,
+                        "platform": integration.platform.value,
+                        "result": "exception",
+                        "error": str(exc),
+                    }
+                )
                 continue
 
             # ── Persist result ─────────────────────────────────────────────
@@ -690,23 +684,16 @@ async def _check_all_integration_health() -> Dict:
                     # (e.g., merchant reconnected via Partner Dashboard)
                     results["recovered"] += 1
                     logger.info(
-                        f"Health poll: integration {integration.id} "
-                        f"({integration.store_url}) auto-recovered → ACTIVE"
+                        f"Health poll: integration {integration.id} ({integration.store_url}) auto-recovered → ACTIVE"
                     )
                 else:
                     results["healthy"] += 1
 
             else:
                 error_map = {
-                    ConnectionStatus.UNAUTHORIZED: (
-                        "Shopify access token was revoked. Reconnect your store."
-                    ),
-                    ConnectionStatus.RATE_LIMITED: (
-                        "Shopify API rate limit hit. Will retry automatically."
-                    ),
-                    ConnectionStatus.UNHEALTHY: (
-                        "Could not reach the store. Check the store URL."
-                    ),
+                    ConnectionStatus.UNAUTHORIZED: ("Shopify access token was revoked. Reconnect your store."),
+                    ConnectionStatus.RATE_LIMITED: ("Shopify API rate limit hit. Will retry automatically."),
+                    ConnectionStatus.UNHEALTHY: ("Could not reach the store. Check the store URL."),
                 }
                 error_message = error_map.get(
                     connection_status,
@@ -726,14 +713,16 @@ async def _check_all_integration_health() -> Dict:
                     )
 
             db.add(integration)
-            results["details"].append({
-                "integration_id": str(integration.id),
-                "store_url": integration.store_url,
-                "platform": integration.platform.value,
-                "previous_status": previous_status.value,
-                "new_status": integration.status.value,
-                "connection_status": connection_status.value,
-            })
+            results["details"].append(
+                {
+                    "integration_id": str(integration.id),
+                    "store_url": integration.store_url,
+                    "platform": integration.platform.value,
+                    "previous_status": previous_status.value,
+                    "new_status": integration.status.value,
+                    "connection_status": connection_status.value,
+                }
+            )
 
         await db.commit()
 
@@ -749,6 +738,7 @@ async def _check_all_integration_health() -> Dict:
 # ==============================================================================
 # CELERY TASKS
 # ==============================================================================
+
 
 @celery_app.task(name="workers.tasks.sync_verification_tasks.verify_price_syncs")
 def verify_price_syncs():
@@ -817,7 +807,3 @@ def check_all_integration_health():
     a health check.
     """
     return run_async(_check_all_integration_health())
-
-
-
-    

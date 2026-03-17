@@ -10,7 +10,7 @@ import hmac
 import json
 import time
 from dataclasses import fields
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -24,7 +24,6 @@ SVC_MOD = "services.notification.webhook_service"
 # WebhookResult dataclass
 # ──────────────────────────────────────────────
 class TestWebhookResult:
-
     def test_success(self):
         r = WebhookResult(success=True, status_code=200)
         assert r.success is True
@@ -55,7 +54,6 @@ class TestWebhookResult:
 # WebhookService — init
 # ──────────────────────────────────────────────
 class TestWebhookServiceInit:
-
     def test_timeout_default(self):
         svc = WebhookService()
         assert svc.timeout == 10.0
@@ -69,45 +67,62 @@ class TestWebhookServiceInit:
 # WebhookService — _build_payload
 # ──────────────────────────────────────────────
 class TestBuildPayload:
-
     def test_returns_dict(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id="a-1", alert_title="T", alert_message="M",
-            alert_type="sentiment_drop", severity="high", alert_data=None,
+            alert_id="a-1",
+            alert_title="T",
+            alert_message="M",
+            alert_type="sentiment_drop",
+            severity="high",
+            alert_data=None,
         )
         assert isinstance(result, dict)
 
     def test_event_field(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert result["event"] == "alert"
 
     def test_source_field(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert result["source"] == "social-sentiment-pricing"
 
     def test_timestamp_is_int(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert isinstance(result["timestamp"], int)
 
     def test_alert_fields(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id="a-1", alert_title="My Alert",
+            alert_id="a-1",
+            alert_title="My Alert",
             alert_message="Something happened",
-            alert_type="price_change", severity="critical",
+            alert_type="price_change",
+            severity="critical",
             alert_data=None,
         )
         alert = result["alert"]
@@ -120,8 +135,12 @@ class TestBuildPayload:
     def test_none_alert_id(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert result["alert"]["id"] is None
 
@@ -129,24 +148,36 @@ class TestBuildPayload:
         svc = WebhookService()
         data = {"product_id": "123", "score": -0.45}
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=data,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=data,
         )
         assert result["alert"]["data"] == data
 
     def test_without_alert_data(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert "data" not in result["alert"]
 
     def test_empty_alert_data(self):
         svc = WebhookService()
         result = svc._build_payload(
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data={},
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data={},
         )
         # Empty dict is falsy, so data should not be added
         assert "data" not in result["alert"]
@@ -156,7 +187,6 @@ class TestBuildPayload:
 # WebhookService — _build_headers
 # ──────────────────────────────────────────────
 class TestBuildHeaders:
-
     def test_content_type(self):
         svc = WebhookService()
         headers = svc._build_headers({"key": "val"}, None)
@@ -221,7 +251,6 @@ class TestBuildHeaders:
 # WebhookService — _mask_url
 # ──────────────────────────────────────────────
 class TestMaskUrl:
-
     def test_short_url_unchanged(self):
         svc = WebhookService()
         assert svc._mask_url("https://short.com") == "https://short.com"
@@ -257,7 +286,6 @@ class TestMaskUrl:
 # WebhookService — _sleep
 # ──────────────────────────────────────────────
 class TestSleep:
-
     @pytest.mark.asyncio
     async def test_calls_asyncio_sleep(self):
         svc = WebhookService()
@@ -270,12 +298,13 @@ class TestSleep:
 # WebhookService — send_alert
 # ──────────────────────────────────────────────
 class TestSendAlert:
-
     @pytest.mark.asyncio
     async def test_no_url_returns_failure(self):
         svc = WebhookService()
         result = await svc.send_alert(
-            webhook_url="", alert_title="T", alert_message="M",
+            webhook_url="",
+            alert_title="T",
+            alert_message="M",
         )
         assert result.success is False
         assert "No webhook URL" in result.error
@@ -284,7 +313,9 @@ class TestSendAlert:
     async def test_none_url_returns_failure(self):
         svc = WebhookService()
         result = await svc.send_alert(
-            webhook_url=None, alert_title="T", alert_message="M",
+            webhook_url=None,
+            alert_title="T",
+            alert_message="M",
         )
         assert result.success is False
 
@@ -303,7 +334,8 @@ class TestSendAlert:
 
             result = await svc.send_alert(
                 webhook_url="https://test.com/hook",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is True
@@ -324,7 +356,8 @@ class TestSendAlert:
 
             result = await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is True
@@ -345,7 +378,8 @@ class TestSendAlert:
 
             result = await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is True
@@ -369,7 +403,8 @@ class TestSendAlert:
             with patch.object(svc, "_sleep", new_callable=AsyncMock):
                 result = await svc.send_alert(
                     webhook_url="https://test.com",
-                    alert_title="T", alert_message="M",
+                    alert_title="T",
+                    alert_message="M",
                 )
 
         assert result.success is False
@@ -390,7 +425,8 @@ class TestSendAlert:
             with patch.object(svc, "_sleep", new_callable=AsyncMock):
                 result = await svc.send_alert(
                     webhook_url="https://test.com",
-                    alert_title="T", alert_message="M",
+                    alert_title="T",
+                    alert_message="M",
                 )
 
         assert result.success is False
@@ -411,7 +447,8 @@ class TestSendAlert:
             with patch.object(svc, "_sleep", new_callable=AsyncMock):
                 result = await svc.send_alert(
                     webhook_url="https://test.com",
-                    alert_title="T", alert_message="M",
+                    alert_title="T",
+                    alert_message="M",
                 )
 
         assert result.success is False
@@ -431,7 +468,8 @@ class TestSendAlert:
 
             result = await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is False
@@ -456,7 +494,8 @@ class TestSendAlert:
             with patch.object(svc, "_sleep", new_callable=AsyncMock) as mock_sleep:
                 result = await svc.send_alert(
                     webhook_url="https://test.com",
-                    alert_title="T", alert_message="M",
+                    alert_title="T",
+                    alert_message="M",
                 )
 
             # 3 attempts total (initial + 2 retries), 2 sleeps
@@ -481,7 +520,8 @@ class TestSendAlert:
             with patch.object(svc, "_sleep", new_callable=AsyncMock) as mock_sleep:
                 await svc.send_alert(
                     webhook_url="https://test.com",
-                    alert_title="T", alert_message="M",
+                    alert_title="T",
+                    alert_message="M",
                 )
 
             delays = [c[0][0] for c in mock_sleep.call_args_list]
@@ -509,7 +549,8 @@ class TestSendAlert:
             with patch.object(svc, "_sleep", new_callable=AsyncMock):
                 result = await svc.send_alert(
                     webhook_url="https://test.com",
-                    alert_title="T", alert_message="M",
+                    alert_title="T",
+                    alert_message="M",
                 )
 
         assert result.success is True
@@ -531,7 +572,8 @@ class TestSendAlert:
 
             await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
             call_kwargs = mock_client.post.call_args[1]
@@ -554,7 +596,8 @@ class TestSendAlert:
 
             await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
                 webhook_secret="my-secret",
             )
 
@@ -580,7 +623,8 @@ class TestSendAlert:
 
             result = await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
         assert result.success is False
@@ -603,11 +647,9 @@ class TestSendAlert:
 
             await svc.send_alert(
                 webhook_url="https://test.com",
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
             )
 
             payload = mock_client.post.call_args[1]["json"]
             assert payload["alert"]["severity"] == "medium"
-
-
-            

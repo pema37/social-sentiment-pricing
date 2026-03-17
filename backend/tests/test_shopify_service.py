@@ -12,7 +12,6 @@ import types
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
@@ -22,9 +21,12 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "core", "core.config",
+    "core",
+    "core.config",
     "services.integration.base",
     "services.integration.schemas",
     "services.integration.retry",
@@ -66,6 +68,7 @@ _settings.SHOPIFY_CLIENT_ID = "test-client-id"
 _settings.SHOPIFY_CLIENT_SECRET = "test-client-secret"
 sys.modules["core.config"].settings = _settings
 
+
 # Provide base class
 class _FakeEcommerceService:
     def __init__(self, retry_config=None):
@@ -75,7 +78,9 @@ class _FakeEcommerceService:
     def normalize_store_url(url):
         return url.rstrip("/")
 
+
 sys.modules["services.integration.base"].EcommerceService = _FakeEcommerceService
+
 
 # Provide schema classes
 class _FakeExternalProduct:
@@ -83,20 +88,24 @@ class _FakeExternalProduct:
         for k, v in kw.items():
             setattr(self, k, v)
 
+
 class _FakeExternalProductVariant:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakeProductSyncResult:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
+
 class _FakeOAuthResult:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakePriceUpdateResult:
     SUCCESS = "success"
@@ -105,15 +114,18 @@ class _FakePriceUpdateResult:
     PRODUCT_NOT_FOUND = "product_not_found"
     RATE_LIMITED = "rate_limited"
 
+
 class _FakePriceUpdateResponse:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
+
 class _FakeWebhookRegistration:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 class _FakeConnectionStatus:
     HEALTHY = "healthy"
@@ -121,10 +133,12 @@ class _FakeConnectionStatus:
     UNAUTHORIZED = "unauthorized"
     RATE_LIMITED = "rate_limited"
 
+
 class _FakePriceUpdateRequest:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 _schemas = sys.modules["services.integration.schemas"]
 _schemas.OAuthResult = _FakeOAuthResult
@@ -137,6 +151,7 @@ _schemas.PriceUpdateResult = _FakePriceUpdateResult
 _schemas.WebhookRegistration = _FakeWebhookRegistration
 _schemas.ConnectionStatus = _FakeConnectionStatus
 
+
 # Provide retry
 class _FakeRetryConfig:
     def __init__(self, **kw):
@@ -144,12 +159,15 @@ class _FakeRetryConfig:
         self.base_delay = kw.get("base_delay", 1.0)
         self.max_delay = kw.get("max_delay", 30.0)
 
+
 sys.modules["services.integration.retry"].RetryConfig = _FakeRetryConfig
 sys.modules["services.integration.retry"].execute_with_retry = AsyncMock()
+
 
 # Provide RetryableClient as a proper async context manager mock
 class _FakeRetryableClient:
     """Mock RetryableClient that supports async with and has .post()"""
+
     def __init__(self, *args, **kwargs):
         self.post = AsyncMock()
         self.get = AsyncMock()
@@ -161,6 +179,7 @@ class _FakeRetryableClient:
 
     async def __aexit__(self, *args):
         pass
+
 
 sys.modules["services.integration.http_client"].RetryableClient = _FakeRetryableClient
 sys.modules["services.integration.circuit_breaker"].CircuitOpenError = type("CircuitOpenError", (Exception,), {})
@@ -193,6 +212,7 @@ for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
 # Helper: Build GraphQL product node (replaces REST format)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def _gql_product_node(
     product_id=123,
     title="Test Widget",
@@ -212,7 +232,7 @@ def _gql_product_node(
     if variants is None:
         variants = [
             {
-                "id": f"gid://shopify/ProductVariant/456",
+                "id": "gid://shopify/ProductVariant/456",
                 "title": "Default",
                 "price": "19.99",
                 "sku": "W-001",
@@ -233,12 +253,8 @@ def _gql_product_node(
         "status": status,
         "createdAt": created_at,
         "updatedAt": updated_at,
-        "variants": {
-            "edges": [{"node": v} for v in variants]
-        },
-        "images": {
-            "edges": [{"node": img} for img in images]
-        },
+        "variants": {"edges": [{"node": v} for v in variants]},
+        "images": {"edges": [{"node": img} for img in images]},
     }
 
 
@@ -253,6 +269,7 @@ def _mock_httpx_response(data, status_code=200):
     mock.status_code = status_code
     mock.raise_for_status = MagicMock()
     return mock
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests
@@ -413,14 +430,16 @@ class TestParseGraphqlProduct:
     def test_compare_at_price(self):
         svc = ShopifyService()
         node = _gql_product_node(
-            variants=[{
-                "id": "gid://shopify/ProductVariant/2",
-                "title": "Default",
-                "price": "15.00",
-                "sku": "S-001",
-                "compareAtPrice": "20.00",
-                "inventoryQuantity": 5,
-            }],
+            variants=[
+                {
+                    "id": "gid://shopify/ProductVariant/2",
+                    "title": "Default",
+                    "price": "15.00",
+                    "sku": "S-001",
+                    "compareAtPrice": "20.00",
+                    "inventoryQuantity": 5,
+                }
+            ],
             images=[],
         )
         product = svc._parse_graphql_product(node)
@@ -436,14 +455,16 @@ class TestParseGraphqlProduct:
     def test_variant_ids_are_numeric(self):
         svc = ShopifyService()
         node = _gql_product_node(
-            variants=[{
-                "id": "gid://shopify/ProductVariant/777",
-                "title": "Default",
-                "price": "10.00",
-                "sku": None,
-                "compareAtPrice": None,
-                "inventoryQuantity": 0,
-            }]
+            variants=[
+                {
+                    "id": "gid://shopify/ProductVariant/777",
+                    "title": "Default",
+                    "price": "10.00",
+                    "sku": None,
+                    "compareAtPrice": None,
+                    "inventoryQuantity": 0,
+                }
+            ]
         )
         product = svc._parse_graphql_product(node)
         assert product.variants[0].id == "777"
@@ -521,14 +542,16 @@ class TestParseGraphqlProduct:
     def test_null_price_variant(self):
         svc = ShopifyService()
         node = _gql_product_node(
-            variants=[{
-                "id": "gid://shopify/ProductVariant/1",
-                "title": "Default",
-                "price": None,
-                "sku": None,
-                "compareAtPrice": None,
-                "inventoryQuantity": None,
-            }]
+            variants=[
+                {
+                    "id": "gid://shopify/ProductVariant/1",
+                    "title": "Default",
+                    "price": None,
+                    "sku": None,
+                    "compareAtPrice": None,
+                    "inventoryQuantity": None,
+                }
+            ]
         )
         product = svc._parse_graphql_product(node)
         assert product.price == 0  # Falls back to 0 when price is None
@@ -561,16 +584,14 @@ class TestParseDatetime:
 
 class TestVerifyWebhookSignature:
     def test_valid_signature(self):
-        import hmac as _hmac
-        import hashlib
         import base64
+        import hashlib
+        import hmac as _hmac
 
         svc = ShopifyService()
         secret = "test-secret"
         payload = b'{"id": 123}'
-        sig = base64.b64encode(
-            _hmac.new(secret.encode(), payload, hashlib.sha256).digest()
-        ).decode()
+        sig = base64.b64encode(_hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()
 
         assert svc.verify_webhook_signature(payload, sig, secret) is True
 
@@ -603,9 +624,7 @@ class TestVerifyCredentials:
         with patch("services.integration.shopify_service.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
             # rc.post() returns a response with {"data": {"shop": {"name": "Test"}}}
-            mock_rc.post.return_value = _mock_httpx_response(
-                {"data": {"shop": {"name": "Test Shop"}}}
-            )
+            mock_rc.post.return_value = _mock_httpx_response({"data": {"shop": {"name": "Test Shop"}}})
             MockRC.return_value = mock_rc
 
             result = await svc.verify_credentials("myshop.myshopify.com", "token123")
@@ -632,12 +651,7 @@ class TestFetchProducts:
 
         gql_data = {
             "data": {
-                "products": {
-                    "edges": [
-                        {"node": node, "cursor": "cursor_abc"}
-                    ],
-                    "pageInfo": {"hasNextPage": False}
-                }
+                "products": {"edges": [{"node": node, "cursor": "cursor_abc"}], "pageInfo": {"hasNextPage": False}}
             }
         }
 
@@ -661,14 +675,7 @@ class TestFetchProducts:
         node = _gql_product_node(product_id=200)
 
         gql_data = {
-            "data": {
-                "products": {
-                    "edges": [
-                        {"node": node, "cursor": "cursor_xyz"}
-                    ],
-                    "pageInfo": {"hasNextPage": True}
-                }
-            }
+            "data": {"products": {"edges": [{"node": node, "cursor": "cursor_xyz"}], "pageInfo": {"hasNextPage": True}}}
         }
 
         with patch("services.integration.shopify_products.RetryableClient") as MockRC:
@@ -685,14 +692,7 @@ class TestFetchProducts:
     async def test_empty_store(self):
         svc = ShopifyService()
 
-        gql_data = {
-            "data": {
-                "products": {
-                    "edges": [],
-                    "pageInfo": {"hasNextPage": False}
-                }
-            }
-        }
+        gql_data = {"data": {"products": {"edges": [], "pageInfo": {"hasNextPage": False}}}}
 
         with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
@@ -711,9 +711,7 @@ class TestFetchProducts:
 
         with patch("services.integration.shopify_products.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
-            mock_rc.post.return_value = _mock_httpx_response(
-                {"errors": [{"message": "Throttled"}]}
-            )
+            mock_rc.post.return_value = _mock_httpx_response({"errors": [{"message": "Throttled"}]})
             MockRC.return_value = mock_rc
 
             result = await svc.fetch_products("myshop.myshopify.com", "token")
@@ -783,9 +781,7 @@ class TestHealthCheck:
 
         with patch("services.integration.shopify_service.RetryableClient") as MockRC:
             mock_rc = _FakeRetryableClient()
-            mock_rc.post.return_value = _mock_httpx_response(
-                {"data": {"shop": {"name": "Test"}}}
-            )
+            mock_rc.post.return_value = _mock_httpx_response({"data": {"shop": {"name": "Test"}}})
             MockRC.return_value = mock_rc
 
             status = await svc.health_check("myshop.myshopify.com", "token")
@@ -802,7 +798,3 @@ class TestHealthCheck:
 
             status = await svc.health_check("myshop.myshopify.com", "token")
             assert status == _FakeConnectionStatus.UNHEALTHY
-
-
-
-            

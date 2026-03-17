@@ -4,10 +4,8 @@ Tests for services.integration.price_push_service
 
 import sys
 import types
-import asyncio
 from enum import Enum
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -18,10 +16,15 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 _needed = [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "models", "models.integration", "models.product",
-    "core", "core.encryption",
+    "models",
+    "models.integration",
+    "models.product",
+    "core",
+    "core.encryption",
     "services.integration.models",
     "services.integration.sync_service",
 ]
@@ -142,6 +145,7 @@ for (_mod_key, _attr_name), _orig_val in _saved_attrs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_service(db=None):
     db = db or AsyncMock()
@@ -346,5 +350,3 @@ class TestCheckProductCanPush:
         result = await svc.check_product_can_push(uuid4(), uuid4())
         assert result["ready"] is True
         assert "integration_id" in result
-
-

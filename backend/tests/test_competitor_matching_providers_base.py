@@ -10,7 +10,7 @@ Total: ~25 tests
 """
 
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 for mod in ["db.session"]:
     if mod not in sys.modules:
@@ -18,21 +18,21 @@ for mod in ["db.session"]:
 
 import pytest
 
-from services.competitor_matching.schemas import (
-    SearchProvider,
-    MatchedProduct,
-    ProviderResult,
-    MatchSearchRequest,
-)
 from services.competitor_matching.providers.base import (
     BaseSearchProvider,
     ProviderRegistry,
 )
-
+from services.competitor_matching.schemas import (
+    MatchedProduct,
+    MatchSearchRequest,
+    ProviderResult,
+    SearchProvider,
+)
 
 # ============================================================
 # Concrete subclass for testing the ABC
 # ============================================================
+
 
 class FakeProvider(BaseSearchProvider):
     """Minimal concrete implementation for testing."""
@@ -59,9 +59,7 @@ class FakeProvider(BaseSearchProvider):
         return ProviderResult(
             provider=self.provider_name,
             success=True,
-            products=[
-                MatchedProduct(title="Test Product", url="https://amazon.com/test", source=self.provider_name)
-            ],
+            products=[MatchedProduct(title="Test Product", url="https://amazon.com/test", source=self.provider_name)],
         )
 
 
@@ -69,8 +67,8 @@ class FakeProvider(BaseSearchProvider):
 # 1. BaseSearchProvider default properties
 # ============================================================
 
-class TestBaseSearchProviderDefaults:
 
+class TestBaseSearchProviderDefaults:
     def test_rate_limit_default(self):
         p = FakeProvider()
         assert p.rate_limit_per_minute == 60
@@ -92,8 +90,8 @@ class TestBaseSearchProviderDefaults:
 # 2. search() template method
 # ============================================================
 
-class TestSearchTemplateMethod:
 
+class TestSearchTemplateMethod:
     @pytest.mark.asyncio
     async def test_successful_search(self):
         p = FakeProvider(available=True)
@@ -125,9 +123,13 @@ class TestSearchTemplateMethod:
     @pytest.mark.asyncio
     async def test_builds_query_from_request(self):
         p = FakeProvider(available=True)
-        p._search = AsyncMock(return_value=ProviderResult(
-            provider=p.provider_name, success=True, products=[],
-        ))
+        p._search = AsyncMock(
+            return_value=ProviderResult(
+                provider=p.provider_name,
+                success=True,
+                products=[],
+            )
+        )
         request = MatchSearchRequest(product_name="Widget Pro", keywords=["extra"])
         await p.search(request)
         # _search should have received the built query
@@ -139,8 +141,8 @@ class TestSearchTemplateMethod:
 # 3. _create_product helper
 # ============================================================
 
-class TestCreateProduct:
 
+class TestCreateProduct:
     def test_valid_product(self):
         p = FakeProvider()
         product = p._create_product(
@@ -194,8 +196,8 @@ class TestCreateProduct:
 # 4. ProviderRegistry
 # ============================================================
 
-class TestProviderRegistry:
 
+class TestProviderRegistry:
     def test_register_and_get(self):
         reg = ProviderRegistry()
         p = FakeProvider()
@@ -234,5 +236,3 @@ class TestProviderRegistry:
     def test_available_count_zero(self):
         reg = ProviderRegistry()
         assert reg.available_count == 0
-
-        

@@ -7,21 +7,18 @@ This is the "Free Pricing Audit" that gets emailed to prospects.
 Uses fpdf2 (no system deps, Railway-safe).
 """
 
-import io
 from datetime import datetime
 from decimal import Decimal
-from typing import List
 
 from fpdf import FPDF
 
 from schemas.retrospective_audit import (
     RetrospectiveAuditResponse,
-    AuditSummary,
     SKUAuditResult,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────
+
 
 def _fmt_currency(value: Decimal | str) -> str:
     num = float(value) if isinstance(value, (Decimal, str)) else value
@@ -47,6 +44,7 @@ def _fmt_date(iso_str: str | datetime) -> str:
 
 # ── PDF Builder ───────────────────────────────────────────────
 
+
 class AuditPDF(FPDF):
     """Custom PDF class with ActualPrice branding."""
 
@@ -69,7 +67,9 @@ class AuditPDF(FPDF):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f"Generated {datetime.utcnow().strftime('%B %d, %Y')}  |  Page {self.page_no()}/{{nb}}", align="C")
+        self.cell(
+            0, 10, f"Generated {datetime.utcnow().strftime('%B %d, %Y')}  |  Page {self.page_no()}/{{nb}}", align="C"
+        )
 
     def section_title(self, title: str):
         self.set_font("Helvetica", "B", 14)
@@ -114,7 +114,12 @@ def generate_audit_pdf(audit: RetrospectiveAuditResponse) -> bytes:
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(107, 114, 128)
     period = f"{_fmt_date(summary.analysis_period_start)} - {_fmt_date(summary.analysis_period_end)}"
-    pdf.cell(0, 6, f"{summary.lookback_days}-day analysis  |  {summary.total_products_analyzed} products  |  {period}", ln=True)
+    pdf.cell(
+        0,
+        6,
+        f"{summary.lookback_days}-day analysis  |  {summary.total_products_analyzed} products  |  {period}",
+        ln=True,
+    )
     pdf.ln(8)
 
     # ── Headline: Total Impact ────────────────────────────
@@ -160,7 +165,7 @@ def generate_audit_pdf(audit: RetrospectiveAuditResponse) -> bytes:
     pdf.section_title("Product-by-Product Breakdown")
 
     # Sort by impact
-    skus: List[SKUAuditResult] = sorted(
+    skus: list[SKUAuditResult] = sorted(
         audit.sku_results,
         key=lambda s: float(s.total_estimated_impact),
         reverse=True,
@@ -192,7 +197,14 @@ def generate_audit_pdf(audit: RetrospectiveAuditResponse) -> bytes:
 
         pdf.cell(col_widths[0], 6, name, border=1, fill=fill)
         pdf.cell(col_widths[1], 6, _fmt_currency(sku.current_price), border=1, align="R", fill=fill)
-        pdf.cell(col_widths[2], 6, _fmt_currency(sku.current_competitor_avg) if sku.current_competitor_avg else "-", border=1, align="R", fill=fill)
+        pdf.cell(
+            col_widths[2],
+            6,
+            _fmt_currency(sku.current_competitor_avg) if sku.current_competitor_avg else "-",
+            border=1,
+            align="R",
+            fill=fill,
+        )
         pdf.cell(col_widths[3], 6, _fmt_pct(sku.current_gap_percent), border=1, align="R", fill=fill)
         pdf.cell(col_widths[4], 6, f"{sku.days_overpriced}d / {sku.days_underpriced}d", border=1, align="C", fill=fill)
         pdf.cell(col_widths[5], 6, f"{sku.days_aligned}d", border=1, align="C", fill=fill)
@@ -254,7 +266,3 @@ def generate_audit_pdf(audit: RetrospectiveAuditResponse) -> bytes:
 
     # Output
     return pdf.output()
-
-
-
-    

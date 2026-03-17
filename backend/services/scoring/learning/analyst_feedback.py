@@ -24,14 +24,14 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional, Sequence
-
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 # ──────────────────────────────────────────────────────────
 # INPUT: Outcome records with component scores
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class OutcomeWithComponents:
@@ -52,7 +52,7 @@ class OutcomeWithComponents:
 
     # ── Outcome ──
     action: str = "unknown"
-    revenue_delta_pct: Optional[float] = None
+    revenue_delta_pct: float | None = None
 
     # ── Final confidence ──
     confidence_score: float = 0.5
@@ -106,6 +106,7 @@ class OutcomeWithComponents:
 # OUTPUT: Weight adjustment recommendations
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class ComponentAnalysis:
     """Analysis of one scoring component's predictive power."""
@@ -127,12 +128,12 @@ class ComponentAnalysis:
     """success_mean - failure_mean. Positive = component predicts success.
     Negative = component anti-predicts (high score → worse outcomes)."""
 
-    correlation_with_revenue: Optional[float] = None
+    correlation_with_revenue: float | None = None
     """Pearson r between component score and revenue_delta_pct.
     Positive = higher score → better outcomes."""
 
     # ── Recommendation ──
-    recommended_weight: Optional[float] = None
+    recommended_weight: float | None = None
     """Suggested new weight. None = no change recommended."""
 
     weight_delta: float = 0.0
@@ -177,10 +178,7 @@ class WeightAdjustmentRecommendation:
             if abs(delta) > 0.005:
                 changes.append(f"{comp}: {old_w:.0%}→{new_w:.0%}")
         change_str = ", ".join(changes) if changes else "no changes"
-        return (
-            f"{self.category}: {self.n_outcomes} outcomes | "
-            f"{change_str} | apply={self.should_apply}"
-        )
+        return f"{self.category}: {self.n_outcomes} outcomes | {change_str} | apply={self.should_apply}"
 
 
 @dataclass
@@ -210,12 +208,12 @@ class AnalystFeedbackReport:
 # ──────────────────────────────────────────────────────────
 
 _COMPONENTS = ["elasticity", "position", "urgency", "data_quality"]
-_MIN_OUTCOMES = 10           # Minimum outcomes per category
-_MIN_PER_GROUP = 3           # Min successes AND failures needed
-_SEPARATION_THRESHOLD = 0.05 # Component must separate success/fail by this much
-_MAX_SINGLE_WEIGHT = 0.50    # No component can exceed 50%
-_MIN_SINGLE_WEIGHT = 0.10    # No component can drop below 10%
-_AUTO_APPLY_THRESHOLD = 0.04 # Max single weight change for auto-apply
+_MIN_OUTCOMES = 10  # Minimum outcomes per category
+_MIN_PER_GROUP = 3  # Min successes AND failures needed
+_SEPARATION_THRESHOLD = 0.05  # Component must separate success/fail by this much
+_MAX_SINGLE_WEIGHT = 0.50  # No component can exceed 50%
+_MIN_SINGLE_WEIGHT = 0.10  # No component can drop below 10%
+_AUTO_APPLY_THRESHOLD = 0.04  # Max single weight change for auto-apply
 
 
 class AnalystFeedbackAnalyzer:
@@ -269,7 +267,7 @@ class AnalystFeedbackAnalyzer:
         self,
         category: str,
         records: list[OutcomeWithComponents],
-    ) -> Optional[WeightAdjustmentRecommendation]:
+    ) -> WeightAdjustmentRecommendation | None:
         """Analyze one category and produce weight recommendations."""
 
         successes = [r for r in records if r.was_successful]
@@ -286,19 +284,14 @@ class AnalystFeedbackAnalyzer:
         # ── Analyze each component ──
         analyses = []
         for comp in _COMPONENTS:
-            analysis = self._analyze_component(
-                comp, successes, failures, records, current_weights.get(comp, 0.25)
-            )
+            analysis = self._analyze_component(comp, successes, failures, records, current_weights.get(comp, 0.25))
             analyses.append(analysis)
 
         # ── Compute recommended weights ──
         recommended = self._compute_recommended_weights(analyses, current_weights)
 
         # ── Determine if we should auto-apply ──
-        max_change = round(max(
-            abs(recommended.get(c, 0) - current_weights.get(c, 0))
-            for c in _COMPONENTS
-        ), 4)
+        max_change = round(max(abs(recommended.get(c, 0) - current_weights.get(c, 0)) for c in _COMPONENTS), 4)
 
         should_apply = max_change > 0.005 and max_change <= _AUTO_APPLY_THRESHOLD
         apply_reason = self._get_apply_reason(max_change, analyses)
@@ -348,18 +341,11 @@ class AnalystFeedbackAnalyzer:
 
         # Generate reasoning
         if separation > _SEPARATION_THRESHOLD:
-            analysis.reasoning = (
-                f"{component} predicts success (sep={separation:.3f})"
-            )
+            analysis.reasoning = f"{component} predicts success (sep={separation:.3f})"
         elif separation < -_SEPARATION_THRESHOLD:
-            analysis.reasoning = (
-                f"{component} anti-predicts: higher scores → worse outcomes "
-                f"(sep={separation:.3f})"
-            )
+            analysis.reasoning = f"{component} anti-predicts: higher scores → worse outcomes (sep={separation:.3f})"
         else:
-            analysis.reasoning = (
-                f"{component} shows weak predictive signal (sep={separation:.3f})"
-            )
+            analysis.reasoning = f"{component} shows weak predictive signal (sep={separation:.3f})"
 
         return analysis
 
@@ -391,10 +377,7 @@ class AnalystFeedbackAnalyzer:
             return dict(current_weights)
 
         # Normalize raw scores to weights
-        ideal_weights = {
-            comp: score / total_raw
-            for comp, score in raw_scores.items()
-        }
+        ideal_weights = {comp: score / total_raw for comp, score in raw_scores.items()}
 
         # Dampen: blend 80% current + 20% ideal (conservative adjustment)
         blended = {}
@@ -410,16 +393,12 @@ class AnalystFeedbackAnalyzer:
 
         # Re-normalize to sum to 1.0
         total = sum(clamped.values())
-        normalized = {
-            comp: round(w / total, 4) for comp, w in clamped.items()
-        }
+        normalized = {comp: round(w / total, 4) for comp, w in clamped.items()}
 
         # Update analyses with recommended weights
         for a in analyses:
             a.recommended_weight = normalized.get(a.component)
-            a.weight_delta = round(
-                (a.recommended_weight or 0) - a.current_weight, 4
-            )
+            a.weight_delta = round((a.recommended_weight or 0) - a.current_weight, 4)
 
         return normalized
 
@@ -449,16 +428,14 @@ class AnalystFeedbackAnalyzer:
     def _pearson_r(
         component: str,
         records: list[OutcomeWithComponents],
-    ) -> Optional[float]:
+    ) -> float | None:
         """
         Compute Pearson r between a component's score and revenue_delta_pct.
 
         Only uses records with measured revenue. Returns None if <5 pairs.
         """
         pairs = [
-            (r.component_scores[component], r.revenue_delta_pct)
-            for r in records
-            if r.revenue_delta_pct is not None
+            (r.component_scores[component], r.revenue_delta_pct) for r in records if r.revenue_delta_pct is not None
         ]
 
         n = len(pairs)
@@ -482,6 +459,3 @@ class AnalystFeedbackAnalyzer:
         return cov / denom
 
     # (End of AnalystFeedbackAnalyzer)
-
-
-    

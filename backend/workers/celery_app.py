@@ -15,6 +15,7 @@ PATCHED (2026-03-13): Added check-integration-health beat entry (every 30 min).
 """
 
 import os
+
 from celery import Celery
 from celery.schedules import crontab
 
@@ -34,7 +35,7 @@ celery_app = Celery(
         "workers.tasks.benchmark_refresh_tasks",
         "workers.tasks.intelligence_tasks",
         "workers.tasks.audit_tasks",
-    ]
+    ],
 )
 
 # Celery configuration
@@ -45,64 +46,54 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=300,        # 5 minutes max per task
-    task_soft_time_limit=270,   # Soft limit 30 seconds before hard limit
-    worker_prefetch_multiplier=1,   # Fetch one task at a time (better for long tasks)
-    task_acks_late=True,            # Acknowledge after task completion (safer)
+    task_time_limit=300,  # 5 minutes max per task
+    task_soft_time_limit=270,  # Soft limit 30 seconds before hard limit
+    worker_prefetch_multiplier=1,  # Fetch one task at a time (better for long tasks)
+    task_acks_late=True,  # Acknowledge after task completion (safer)
 )
 
 # Scheduled tasks (beat schedule)
 # IMPORTANT: Task names must match the `name=` parameter in @celery_app.task decorator
 celery_app.conf.beat_schedule = {
-
     # === Ingestion tasks ===
-
     # Fetch social mentions for all products every 30 minutes
     "fetch-social-mentions": {
         "task": "ingestion.fetch_all_mentions",
         "schedule": crontab(minute="*/30"),
         "options": {"queue": "celery"},
     },
-
     # Process unprocessed mentions every 5 minutes
     "process-mentions": {
         "task": "ingestion.process_pending_mentions",
         "schedule": crontab(minute="*/5"),
         "options": {"queue": "celery"},
     },
-
     # === Pricing tasks ===
-
     # Generate recommendations for all products every hour (at minute 0)
     "generate-recommendations": {
         "task": "workers.tasks.pricing_tasks.generate_all_recommendations",
         "schedule": crontab(minute=0),
         "options": {"queue": "celery"},
     },
-
     # Check competitor prices every 30 minutes (at minute 15 and 45)
     "check-competitor-prices": {
         "task": "workers.tasks.pricing_tasks.check_competitor_prices",
         "schedule": crontab(minute="15,45"),
         "options": {"queue": "celery"},
     },
-
     # Expire old recommendations every 6 hours (at minute 0)
     "expire-recommendations": {
         "task": "workers.tasks.pricing_tasks.expire_recommendations",
         "schedule": crontab(minute=0, hour="*/6"),
         "options": {"queue": "celery"},
     },
-
     # === Sync Verification tasks ===
-
     # Verify price syncs every 6 hours (at minute 30)
     "verify-price-syncs": {
         "task": "workers.tasks.sync_verification_tasks.verify_price_syncs",
         "schedule": crontab(minute=30, hour="*/6"),
         "options": {"queue": "celery"},
     },
-
     # ADDED (2026-03-13): Poll integration health every 30 minutes.
     # Calls health_check() on all ACTIVE + ERROR integrations and writes
     # the result back to the integrations table. This ensures a revoked
@@ -114,41 +105,33 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute="*/30"),
         "options": {"queue": "celery"},
     },
-
     # === Outcome Measurement tasks (Phase 1 feedback loop) ===
-
     # Measure 7-day impact daily at 2 AM
     "measure-outcomes-7d": {
         "task": "workers.tasks.outcome_measurement_tasks.measure_outcomes_7d",
         "schedule": crontab(hour=2, minute=0),
         "options": {"queue": "celery"},
     },
-
     # Measure 14-day impact daily at 3 AM
     "measure-outcomes-14d": {
         "task": "workers.tasks.outcome_measurement_tasks.measure_outcomes_14d",
         "schedule": crontab(hour=3, minute=0),
         "options": {"queue": "celery"},
     },
-
     # Measure 30-day impact daily at 4 AM
     "measure-outcomes-30d": {
         "task": "workers.tasks.outcome_measurement_tasks.measure_outcomes_30d",
         "schedule": crontab(hour=4, minute=0),
         "options": {"queue": "celery"},
     },
-
     # === Benchmark Materialized View Refresh ===
-
     # Refresh category benchmark views daily at 4:30 AM
     "refresh-benchmark-views": {
         "task": "workers.tasks.benchmark_refresh_tasks.refresh_benchmark_views",
         "schedule": crontab(hour=4, minute=30),
         "options": {"queue": "celery"},
     },
-
     # === Retrospective Audit tasks ===
-
     # Generate 90-day pricing audits for all users every Sunday at 5 AM
     "generate-weekly-audits": {
         "task": "workers.tasks.audit_tasks.generate_weekly_audits",
@@ -175,7 +158,5 @@ celery_app.conf.beat_schedule = {
 #   9:00 AM Sun  — weekly_analyst_feedback      (Phase 3C)
 # ═══════════════════════════════════════════════════════════════════════
 from workers.tasks.intelligence_tasks import register_ie_beat_schedule
+
 register_ie_beat_schedule(celery_app)
-
-
-

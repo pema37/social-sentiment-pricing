@@ -3,22 +3,23 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter, ANALYSIS_RATE_LIMIT, BULK_RATE_LIMIT
-from models import Sentiment, Product, User
+from core.rate_limit import ANALYSIS_RATE_LIMIT, BULK_RATE_LIMIT, limiter
+from db.session import get_session
+from models import Product, Sentiment, User
 from schemas.sentiment import (
     SentimentAnalyzeRequest,
-    SentimentResponse,
     SentimentBulkRequest,
+    SentimentResponse,
 )
-from services.sentiment_analyzer import SentimentAnalyzer
+
 # Changed: Use hybrid analyzer (Gemini primary, OpenAI fallback) instead of OpenAI-only
 from services.hybrid_sentiment_analyzer import hybrid_sentiment_analyzer
+from services.sentiment_analyzer import SentimentAnalyzer
 
 router = APIRouter()
 
@@ -69,12 +70,12 @@ async def analyze_text(
 ):
     """
     Analyze sentiment of provided text.
-    
+
     Set use_ai=true to use AI-powered analysis (Gemini primary, OpenAI fallback)
     including sarcasm detection, topic extraction, and nuanced understanding.
     """
     result = await get_sentiment_result(payload.text, use_ai)
-    
+
     return SentimentResponse(
         text=payload.text,
         sentiment_score=result["score"],
@@ -98,15 +99,13 @@ async def analyze_and_save(
     session: AsyncSession = Depends(get_session),
 ):
     """Analyze sentiment and save to database linked to a product."""
-    result = await session.execute(
-        select(Product).where(Product.id == product_id)
-    )
+    result = await session.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     analysis = await get_sentiment_result(payload.text, use_ai)
-    
+
     # Determine source based on which AI was actually used
     sources = analysis.get("sources_used", [])
     if "gemini" in sources:
@@ -117,7 +116,7 @@ async def analyze_and_save(
         source = payload.source
     else:
         source = "vader"
-    
+
     sentiment_record = Sentiment(
         product_id=product_id,
         source=source,
@@ -132,7 +131,7 @@ async def analyze_and_save(
     session.add(sentiment_record)
     await session.commit()
     await session.refresh(sentiment_record)
-    
+
     return SentimentResponse(
         sentiment_id=sentiment_record.id,
         text=payload.text,
@@ -157,18 +156,16 @@ async def analyze_bulk(
     session: AsyncSession = Depends(get_session),
 ):
     """Analyze multiple texts and save all to database."""
-    result = await session.execute(
-        select(Product).where(Product.id == product_id)
-    )
+    result = await session.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     results = []
-    
+
     for item in payload.items:
         analysis = await get_sentiment_result(item.text, use_ai)
-        
+
         # Determine source
         sources = analysis.get("sources_used", [])
         if "gemini" in sources:
@@ -177,7 +174,7 @@ async def analyze_bulk(
             source = "openai"
         else:
             source = "vader"
-        
+
         sentiment_record = Sentiment(
             product_id=product_id,
             source=source,
@@ -189,17 +186,19 @@ async def analyze_bulk(
         )
         session.add(sentiment_record)
         await session.flush()
-        
-        results.append({
-            "sentiment_id": str(sentiment_record.id),
-            "text": item.text,
-            "sentiment_score": analysis["score"],
-            "sentiment_label": analysis["label"],
-            "confidence": analysis["confidence"],
-            "ai_powered": analysis["ai_powered"],
-            "sources_used": analysis.get("sources_used", []),
-        })
-    
+
+        results.append(
+            {
+                "sentiment_id": str(sentiment_record.id),
+                "text": item.text,
+                "sentiment_score": analysis["score"],
+                "sentiment_label": analysis["label"],
+                "confidence": analysis["confidence"],
+                "ai_powered": analysis["ai_powered"],
+                "sources_used": analysis.get("sources_used", []),
+            }
+        )
+
     await session.commit()
     return {"results": results, "count": len(results), "ai_powered": use_ai}
 
@@ -208,7 +207,7 @@ async def analyze_bulk(
 async def ai_status(current_user: User = Depends(get_current_user)):
     """Check if AI-powered sentiment analysis is available."""
     available_sources = hybrid_sentiment_analyzer.get_available_sources()
-    
+
     # Determine primary provider
     if "gemini" in available_sources:
         primary_model = "gemini-2.0-flash-exp"
@@ -219,16 +218,16 @@ async def ai_status(current_user: User = Depends(get_current_user)):
     else:
         primary_model = "vader"
         primary_provider = "vader"
-    
+
     return {
         "ai_available": "gemini" in available_sources or "openai" in available_sources,
         "available_sources": available_sources,
         "primary_provider": primary_provider,
         "primary_model": primary_model,
-        "features": ["sarcasm_detection", "topic_extraction", "nuanced_analysis"] if primary_provider != "vader" else [],
+        "features": ["sarcasm_detection", "topic_extraction", "nuanced_analysis"]
+        if primary_provider != "vader"
+        else [],
         # Backward compatibility
         "openai_available": "openai" in available_sources,
         "gemini_available": "gemini" in available_sources,
     }
-
-

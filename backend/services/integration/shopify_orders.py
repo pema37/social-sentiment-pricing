@@ -16,7 +16,6 @@ Place at: backend/services/integration/shopify_orders.py
 
 import logging
 from decimal import Decimal
-from typing import Optional
 
 from .http_client import RetryableClient
 
@@ -33,7 +32,7 @@ class ShopifyOrdersMixin:
         external_product_id: str,
         created_at_min: str,
         created_at_max: str,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Fetch revenue and units sold for a specific product over a date range.
 
@@ -57,10 +56,7 @@ class ShopifyOrdersMixin:
 
         # Shopify's orders query filter syntax
         # https://shopify.dev/docs/api/admin-graphql/2024-01/queries/orders
-        query_filter = (
-            f"created_at:>='{created_at_min}' "
-            f"AND created_at:<='{created_at_max}'"
-        )
+        query_filter = f"created_at:>='{created_at_min}' AND created_at:<='{created_at_max}'"
 
         query = """
             query FetchOrdersForProduct($query: String!, $cursor: String) {
@@ -105,18 +101,14 @@ class ShopifyOrdersMixin:
                     if cursor:
                         variables["cursor"] = cursor
 
-                    data = await self._graphql(
-                        rc, shop_domain, access_token, query, variables
-                    )
+                    data = await self._graphql(rc, shop_domain, access_token, query, variables)
 
                     edges = data.get("orders", {}).get("edges", [])
                     page_info = data.get("orders", {}).get("pageInfo", {})
 
                     for order_edge in edges:
                         order_node = order_edge.get("node", {})
-                        line_items = (
-                            order_node.get("lineItems", {}).get("edges", [])
-                        )
+                        line_items = order_node.get("lineItems", {}).get("edges", [])
 
                         for li_edge in line_items:
                             li_node = li_edge.get("node", {})
@@ -127,12 +119,7 @@ class ShopifyOrdersMixin:
                             # Match product by GID
                             if li_product.get("id") == product_gid:
                                 quantity = li_node.get("quantity", 0)
-                                amount_str = (
-                                    li_node
-                                    .get("originalTotalSet", {})
-                                    .get("shopMoney", {})
-                                    .get("amount", "0")
-                                )
+                                amount_str = li_node.get("originalTotalSet", {}).get("shopMoney", {}).get("amount", "0")
                                 total_units += quantity
                                 total_revenue += Decimal(str(amount_str))
 
@@ -148,11 +135,5 @@ class ShopifyOrdersMixin:
             }
 
         except Exception as e:
-            logger.error(
-                f"Failed to fetch sales data for product {external_product_id} "
-                f"from {store_url}: {e}"
-            )
+            logger.error(f"Failed to fetch sales data for product {external_product_id} from {store_url}: {e}")
             return None
-        
-
-        

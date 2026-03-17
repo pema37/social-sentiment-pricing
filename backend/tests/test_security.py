@@ -6,36 +6,32 @@ Place this file at: backend/tests/test_security.py
 Run with: pytest backend/tests/test_security.py -v
 """
 
-import time
 from datetime import timedelta
-from unittest.mock import patch
 
-import pytest
 from jose import jwt
-
 
 # ---- Import the module under test ----
 from core.security import (
-    hash_password,
-    verify_password,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    ALGORITHM,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+    RESET_TOKEN_EXPIRE_MINUTES,
+    SECRET_KEY,
     create_access_token,
     create_refresh_token,
     create_reset_token,
     decode_access_token,
     decode_refresh_token,
     decode_reset_token,
-    SECRET_KEY,
-    ALGORITHM,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    REFRESH_TOKEN_EXPIRE_DAYS,
-    RESET_TOKEN_EXPIRE_MINUTES,
+    hash_password,
     pwd_context,
+    verify_password,
 )
-
 
 # =====================================================================
 # PASSWORD HASHING
 # =====================================================================
+
 
 class TestHashPassword:
     """Tests for hash_password()."""
@@ -121,6 +117,7 @@ class TestVerifyPassword:
 # =====================================================================
 # ACCESS TOKENS
 # =====================================================================
+
 
 class TestCreateAccessToken:
     """Tests for create_access_token()."""
@@ -216,6 +213,7 @@ class TestDecodeAccessToken:
 # REFRESH TOKENS
 # =====================================================================
 
+
 class TestCreateRefreshToken:
     """Tests for create_refresh_token()."""
 
@@ -287,6 +285,7 @@ class TestDecodeRefreshToken:
 # RESET TOKENS
 # =====================================================================
 
+
 class TestCreateResetToken:
     """Tests for create_reset_token()."""
 
@@ -349,6 +348,7 @@ class TestDecodeResetToken:
 # CROSS-CUTTING: TOKEN TYPE ISOLATION
 # =====================================================================
 
+
 class TestTokenTypeIsolation:
     """
     Verify that each decoder ONLY accepts its own token type.
@@ -387,6 +387,7 @@ class TestTokenTypeIsolation:
 # CONSTANTS SANITY CHECKS
 # =====================================================================
 
+
 class TestSecurityConstants:
     """Verify security configuration values are reasonable."""
 
@@ -410,6 +411,3 @@ class TestSecurityConstants:
 
     def test_pwd_context_uses_bcrypt(self):
         assert "bcrypt" in pwd_context.schemes()
-
-
-        

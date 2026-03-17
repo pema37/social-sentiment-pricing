@@ -26,7 +26,7 @@ Run: pytest backend/tests/integration/test_e2e_feedback_loop.py -v
 
 import sys
 import types
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -54,11 +54,6 @@ sys.modules.setdefault("core.db.session", _mock_core_db)
 
 # Import after isolation
 from services.pricing.pipeline_adapter import PipelineAdapter
-from services.pricing.recommendation_helpers import (
-    PriceCalculator,
-    BoundaryEnforcer,
-    ReasoningGenerator,
-)
 
 # Pull enums from already-loaded modules
 _outcome_mod = sys.modules["models.recommendation_outcome"]
@@ -74,6 +69,7 @@ RecommendationStatus = _rec_mod.RecommendationStatus
 # ══════════════════════════════════════════════════════════════════
 # REALISTIC TEST DATA
 # ══════════════════════════════════════════════════════════════════
+
 
 def _make_product(
     product_id=None,
@@ -174,6 +170,7 @@ def _make_recommendation(
 # PHASE 1: PipelineAdapter produces typed evidence
 # ══════════════════════════════════════════════════════════════════
 
+
 class TestPhase1TypedEvidence:
     """Verify PipelineAdapter produces complete evidence chain."""
 
@@ -207,9 +204,7 @@ class TestPhase1TypedEvidence:
         }
         rule = _make_rule(action_value="decrease")
 
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown, signals, rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown, signals, rule)
 
         assert analyst.product_id == product.id
         assert analyst.confidence.elasticity == 0.75
@@ -232,16 +227,19 @@ class TestPhase1TypedEvidence:
             },
         }
 
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown, signals, rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown, signals, rule)
 
         factors = {"match_details": {}, "price_impacts": {}}
 
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("29.49"), Decimal("-7.84"), Decimal("0.72"),
-            "Competitor undercut", factors, rule,
+            analyst,
+            product,
+            Decimal("29.49"),
+            Decimal("-7.84"),
+            Decimal("0.72"),
+            "Competitor undercut",
+            factors,
+            rule,
         )
 
         assert strategist.product_id == product.id
@@ -265,14 +263,17 @@ class TestPhase1TypedEvidence:
             },
         }
 
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown, signals, rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown, signals, rule)
 
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("29.49"), Decimal("-7.84"), Decimal("0.72"),
-            "Test reasoning", {}, rule,
+            analyst,
+            product,
+            Decimal("29.49"),
+            Decimal("-7.84"),
+            Decimal("0.72"),
+            "Test reasoning",
+            {},
+            rule,
         )
 
         scout_ev = scout.to_evidence()
@@ -303,13 +304,16 @@ class TestPhase1TypedEvidence:
                 "data_quality": {"score": 0.8},
             },
         }
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown, signals, rule
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown, signals, rule)
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("29.49"), Decimal("-7.84"), Decimal("0.72"),
-            "Test", {}, rule,
+            analyst,
+            product,
+            Decimal("29.49"),
+            Decimal("-7.84"),
+            Decimal("0.72"),
+            "Test",
+            {},
+            rule,
         )
 
         # This is exactly what recommendation_service.py does:
@@ -336,6 +340,7 @@ class TestPhase1TypedEvidence:
 # ══════════════════════════════════════════════════════════════════
 # PHASE 2: apply_price → _record_decision → outcome created
 # ══════════════════════════════════════════════════════════════════
+
 
 class TestPhase2ApplyRecordsOutcome:
     """
@@ -364,9 +369,14 @@ class TestPhase2ApplyRecordsOutcome:
         }
         analyst = PipelineAdapter.build_analyst_output(scout, cb, signals, rule)
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("29.49"), Decimal("-7.84"), Decimal("0.72"),
-            "Competitor undercut", {}, rule,
+            analyst,
+            product,
+            Decimal("29.49"),
+            Decimal("-7.84"),
+            Decimal("0.72"),
+            "Competitor undercut",
+            {},
+            rule,
         )
 
         factors = {
@@ -378,9 +388,7 @@ class TestPhase2ApplyRecordsOutcome:
             "strategist_evidence": strategist.to_evidence(),
         }
 
-        rec = _make_recommendation(
-            user_id, rec_id, product, factors, rule_id=rule.id
-        )
+        rec = _make_recommendation(user_id, rec_id, product, factors, rule_id=rule.id)
 
         # Mock DB
         db = AsyncMock()
@@ -399,9 +407,7 @@ class TestPhase2ApplyRecordsOutcome:
         # Mock push service
         mock_push_cls = MagicMock()
         mock_push_inst = MagicMock()
-        mock_push_inst.push_price = AsyncMock(return_value={
-            "success": True, "platform": "shopify"
-        })
+        mock_push_inst.push_price = AsyncMock(return_value={"success": True, "platform": "shopify"})
         mock_push_cls.return_value = mock_push_inst
 
         # Mock OutcomeService at module level (same pattern as test_approval_service_wiring)
@@ -411,10 +417,13 @@ class TestPhase2ApplyRecordsOutcome:
         mock_outcome_cls.return_value = mock_outcome_inst
 
         from services.pricing.approval_service import ApprovalService
+
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", mock_push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", mock_outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", mock_push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", mock_outcome_cls),
+        ):
             await svc.apply_price(rec_id, user_id)
 
         # Verify record_merchant_decision was called
@@ -431,10 +440,10 @@ class TestPhase2ApplyRecordsOutcome:
             assert call_kwargs.args[1] == user_id
 
 
-
 # ══════════════════════════════════════════════════════════════════
 # PHASE 3: OutcomeService extracts typed evidence correctly
 # ══════════════════════════════════════════════════════════════════
+
 
 class TestPhase3OutcomeExtractsEvidence:
     """
@@ -462,9 +471,14 @@ class TestPhase3OutcomeExtractsEvidence:
         }
         analyst = PipelineAdapter.build_analyst_output(scout, cb, signals, rule)
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("29.49"), Decimal("-7.84"), Decimal("0.72"),
-            "Test", {}, rule,
+            analyst,
+            product,
+            Decimal("29.49"),
+            Decimal("-7.84"),
+            Decimal("0.72"),
+            "Test",
+            {},
+            rule,
         )
 
         factors = {
@@ -480,11 +494,9 @@ class TestPhase3OutcomeExtractsEvidence:
 
         # Mock DB
         db = AsyncMock()
-        db.get = AsyncMock(side_effect=lambda cls, pk: (
-            rec if pk == rec_id else
-            _make_rule() if str(pk) == str(rule.id) else
-            product
-        ))
+        db.get = AsyncMock(
+            side_effect=lambda cls, pk: rec if pk == rec_id else _make_rule() if str(pk) == str(rule.id) else product
+        )
         db.add = MagicMock()
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
@@ -496,6 +508,7 @@ class TestPhase3OutcomeExtractsEvidence:
         db.execute = AsyncMock(return_value=mock_result)
 
         from services.pricing.outcome_service import OutcomeService
+
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -555,6 +568,7 @@ class TestPhase3OutcomeExtractsEvidence:
         db.execute = AsyncMock(return_value=mock_result)
 
         from services.pricing.outcome_service import OutcomeService
+
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -591,6 +605,7 @@ class TestPhase3OutcomeExtractsEvidence:
         db.execute = AsyncMock(return_value=mock_result)
 
         from services.pricing.outcome_service import OutcomeService
+
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -605,6 +620,7 @@ class TestPhase3OutcomeExtractsEvidence:
 # ══════════════════════════════════════════════════════════════════
 # PHASE 4: Competitor fallback also produces typed evidence
 # ══════════════════════════════════════════════════════════════════
+
 
 class TestPhase4CompetitorFallbackEvidence:
     """Verify competitor_fallback path also produces typed evidence."""
@@ -627,13 +643,16 @@ class TestPhase4CompetitorFallbackEvidence:
                 "data_quality": {"score": round(scout.data_completeness, 4)},
             },
         }
-        analyst = PipelineAdapter.build_analyst_output(
-            scout, confidence_breakdown, signals, rule=None
-        )
+        analyst = PipelineAdapter.build_analyst_output(scout, confidence_breakdown, signals, rule=None)
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("26.95"), Decimal("-32.63"), Decimal("0.65"),
-            "Competitor match", {}, rule=None,
+            analyst,
+            product,
+            Decimal("26.95"),
+            Decimal("-32.63"),
+            Decimal("0.65"),
+            "Competitor match",
+            {},
+            rule=None,
         )
 
         factors = {
@@ -665,6 +684,7 @@ class TestPhase4CompetitorFallbackEvidence:
 # PHASE 5: Full chain verification
 # ══════════════════════════════════════════════════════════════════
 
+
 class TestPhase5FullChain:
     """
     Verify the complete data flow: evidence produced by PipelineAdapter
@@ -695,9 +715,14 @@ class TestPhase5FullChain:
         }
         analyst = PipelineAdapter.build_analyst_output(scout, cb, signals, rule)
         strategist = PipelineAdapter.build_strategist_output(
-            analyst, product,
-            Decimal("29.49"), Decimal("-7.84"), Decimal("0.72"),
-            "Test", {}, rule,
+            analyst,
+            product,
+            Decimal("29.49"),
+            Decimal("-7.84"),
+            Decimal("0.72"),
+            "Test",
+            {},
+            rule,
         )
 
         # Step 2: Store in factors (recommendation_service does this)
@@ -714,11 +739,9 @@ class TestPhase5FullChain:
 
         # Step 4: Run through OutcomeService
         db = AsyncMock()
-        db.get = AsyncMock(side_effect=lambda cls, pk: (
-            rec if pk == rec_id else
-            _make_rule() if str(pk) == str(rule.id) else
-            product
-        ))
+        db.get = AsyncMock(
+            side_effect=lambda cls, pk: rec if pk == rec_id else _make_rule() if str(pk) == str(rule.id) else product
+        )
         db.add = MagicMock()
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
@@ -730,6 +753,7 @@ class TestPhase5FullChain:
         db.execute = AsyncMock(return_value=mock_result)
 
         from services.pricing.outcome_service import OutcomeService
+
         svc = OutcomeService(db)
         await svc.record_merchant_decision(
             recommendation_id=rec_id,
@@ -762,8 +786,7 @@ class TestPhase5FullChain:
         assert outcome.merchant_decision == MerchantDecision.ACCEPTED.value
 
         # No modification (exact price match)
-        assert outcome.merchant_modification_percent is None or \
-               abs(outcome.merchant_modification_percent) <= 1.0
+        assert outcome.merchant_modification_percent is None or abs(outcome.merchant_modification_percent) <= 1.0
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -772,6 +795,3 @@ class TestPhase5FullChain:
 
 for _key, _orig in _saved.items():
     sys.modules[_key] = _orig
-
-
-

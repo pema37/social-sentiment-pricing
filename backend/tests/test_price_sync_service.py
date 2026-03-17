@@ -17,7 +17,7 @@ Total: ~45 tests
 
 import sys
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -110,8 +110,8 @@ def make_integration(platform="shopify", status="active"):
 # 1. Initialization
 # ============================================================
 
-class TestPriceSyncServiceInit:
 
+class TestPriceSyncServiceInit:
     def test_stores_db(self):
         db = make_mock_db()
         svc = PriceSyncService(db)
@@ -122,8 +122,8 @@ class TestPriceSyncServiceInit:
 # 2. get_live_price
 # ============================================================
 
-class TestGetLivePrice:
 
+class TestGetLivePrice:
     @pytest.mark.asyncio
     async def test_returns_live_price(self):
         db = make_mock_db()
@@ -197,8 +197,8 @@ class TestGetLivePrice:
 # 3. sync_product_price
 # ============================================================
 
-class TestSyncProductPrice:
 
+class TestSyncProductPrice:
     @pytest.mark.asyncio
     async def test_updates_when_price_differs(self):
         db = make_mock_db()
@@ -264,22 +264,26 @@ class TestSyncProductPrice:
 # 4. _get_active_link
 # ============================================================
 
-class TestGetActiveLink:
 
+class TestGetActiveLink:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_link_and_integration(self, mock_select):
         import types
+
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
         _im.ProductIntegrationLink = _FakeProductLink
         _plm = types.ModuleType("models.product_link")
         _plm.ProductLink = _FakeProductLink
 
-        with patch.dict(sys.modules, {
-            "models.integration": _im,
-            "models.product_link": _plm,
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "models.integration": _im,
+                "models.product_link": _plm,
+            },
+        ):
             mock_chain = MagicMock()
             mock_chain.join.return_value = mock_chain
             mock_chain.where.return_value = mock_chain
@@ -300,16 +304,20 @@ class TestGetActiveLink:
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_none_none_when_not_found(self, mock_select):
         import types
+
         _im = types.ModuleType("models.integration")
         _im.Integration = _FakeIntegration
         _im.ProductIntegrationLink = _FakeProductLink
         _plm = types.ModuleType("models.product_link")
         _plm.ProductLink = _FakeProductLink
 
-        with patch.dict(sys.modules, {
-            "models.integration": _im,
-            "models.product_link": _plm,
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "models.integration": _im,
+                "models.product_link": _plm,
+            },
+        ):
             mock_chain = MagicMock()
             mock_chain.join.return_value = mock_chain
             mock_chain.where.return_value = mock_chain
@@ -329,8 +337,8 @@ class TestGetActiveLink:
 # 5. _fetch_from_platform
 # ============================================================
 
-class TestFetchFromPlatform:
 
+class TestFetchFromPlatform:
     @pytest.mark.asyncio
     async def test_routes_to_shopify(self):
         db = make_mock_db()
@@ -373,8 +381,8 @@ class TestFetchFromPlatform:
 # 6. _fetch_shopify_price
 # ============================================================
 
-class TestFetchShopifyPrice:
 
+class TestFetchShopifyPrice:
     @pytest.mark.asyncio
     @patch("services.integration.shopify_service.ShopifyService")
     async def test_returns_price(self, MockShopify):
@@ -385,10 +393,7 @@ class TestFetchShopifyPrice:
         mock_service.get_product_price.return_value = {"price": "49.99"}
         MockShopify.return_value = mock_service
 
-        link = make_link(
-            external_product_id="prod-1",
-            external_variant_id="var-1"
-        )
+        link = make_link(external_product_id="prod-1", external_variant_id="var-1")
         integ = make_integration(platform="shopify")
 
         result = await svc._fetch_shopify_price(link, integ)
@@ -452,10 +457,7 @@ class TestFetchShopifyPrice:
         mock_service.get_product_price.return_value = {"price": "10"}
         MockShopify.return_value = mock_service
 
-        link = make_link(
-            external_product_id="p-abc",
-            external_variant_id="v-xyz"
-        )
+        link = make_link(external_product_id="p-abc", external_variant_id="v-xyz")
         integ = make_integration()
 
         await svc._fetch_shopify_price(link, integ)
@@ -466,8 +468,8 @@ class TestFetchShopifyPrice:
 # 7. _fetch_woocommerce_price
 # ============================================================
 
-class TestFetchWooCommercePrice:
 
+class TestFetchWooCommercePrice:
     @pytest.mark.asyncio
     @patch("services.integration.woocommerce_service.WooCommerceService")
     async def test_returns_price(self, MockWoo):
@@ -532,7 +534,3 @@ class TestFetchWooCommercePrice:
 
         await svc._fetch_woocommerce_price(link, integ)
         mock_service.get_product_price.assert_awaited_once_with("woo-999")
-
-
-
-        

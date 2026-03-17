@@ -18,8 +18,8 @@ All endpoints require authentication via get_current_user dependency.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -37,8 +37,10 @@ router = APIRouter(prefix="/intelligence", tags=["Intelligence Environment"])
 # Response schemas
 # ---------------------------------------------------------------------------
 
+
 class ExperimentArmStatus(BaseModel):
     """Status of a single Thompson Sampling arm."""
+
     arm_name: str
     alpha: float = Field(description="Beta distribution alpha (successes + prior)")
     beta: float = Field(description="Beta distribution beta (failures + prior)")
@@ -50,35 +52,36 @@ class ExperimentArmStatus(BaseModel):
 
 class ExperimentStatus(BaseModel):
     """Experiment status for a product category."""
+
     category_id: str
     total_pulls: int
     converged: bool
-    converged_arm: Optional[str] = None
-    convergence_confidence: Optional[float] = None
+    converged_arm: str | None = None
+    convergence_confidence: float | None = None
     arms: list[ExperimentArmStatus]
-    last_updated: Optional[datetime] = None
+    last_updated: datetime | None = None
     exploration_rate: float = Field(default=0.05, description="% of pulls reserved for exploration")
 
 
 class CalibrationReport(BaseModel):
     """Calibration accuracy for a category or global."""
-    category_id: Optional[str] = None
+
+    category_id: str | None = None
     sample_count: int
-    pearson_r: Optional[float] = Field(None, description="Correlation between confidence and outcomes")
+    pearson_r: float | None = Field(None, description="Correlation between confidence and outcomes")
     calibration_method: str
     confidence_bands: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="Per-band accuracy: [{band: '0.7-0.8', predicted: 0.75, actual: 0.68, count: 42}]"
+        description="Per-band accuracy: [{band: '0.7-0.8', predicted: 0.75, actual: 0.68, count: 42}]",
     )
     is_reliable: bool = Field(description="True if sample_count >= 30")
-    overconfidence_score: Optional[float] = Field(
-        None, description="Positive = overconfident, negative = underconfident"
-    )
-    last_calibrated: Optional[datetime] = None
+    overconfidence_score: float | None = Field(None, description="Positive = overconfident, negative = underconfident")
+    last_calibrated: datetime | None = None
 
 
 class DriftAlert(BaseModel):
     """Drift detection alert."""
+
     alert_id: str
     category_id: str
     drift_type: str = Field(description="correlation_drop | distribution_shift | acceptance_change | lift_decline")
@@ -93,32 +96,34 @@ class DriftAlert(BaseModel):
 
 class CategoryPerformance(BaseModel):
     """Performance summary for a product category."""
+
     category_id: str
-    category_name: Optional[str] = None
+    category_name: str | None = None
     total_recommendations: int
     acceptance_rate: float
     avg_confidence: float
-    avg_revenue_lift_7d: Optional[float] = None
-    avg_revenue_lift_14d: Optional[float] = None
-    avg_revenue_lift_30d: Optional[float] = None
-    confidence_accuracy_corr: Optional[float] = None
+    avg_revenue_lift_7d: float | None = None
+    avg_revenue_lift_14d: float | None = None
+    avg_revenue_lift_30d: float | None = None
+    confidence_accuracy_corr: float | None = None
     active_experiment: bool
-    converged_strategy: Optional[str] = None
+    converged_strategy: str | None = None
     data_quality_score: float = Field(description="0-1 score based on data completeness")
     merchant_count: int = Field(description="Merchants with outcomes in this category")
 
 
 class IEHealthStatus(BaseModel):
     """Overall health of the Intelligence Environment pipeline."""
+
     status: str = Field(description="healthy | degraded | unhealthy")
     scoring_engine_healthy: bool
     experiment_manager_healthy: bool
     calibrator_healthy: bool
     context_injector_healthy: bool
-    last_measurement_run: Optional[datetime] = None
-    last_learning_cycle: Optional[datetime] = None
-    last_bandit_update: Optional[datetime] = None
-    last_calibration: Optional[datetime] = None
+    last_measurement_run: datetime | None = None
+    last_learning_cycle: datetime | None = None
+    last_bandit_update: datetime | None = None
+    last_calibration: datetime | None = None
     active_experiments: int
     converged_categories: int
     total_categories: int
@@ -128,15 +133,17 @@ class IEHealthStatus(BaseModel):
 
 class IEDashboard(BaseModel):
     """Combined dashboard payload — single API call for the frontend."""
+
     health: IEHealthStatus
     top_categories: list[CategoryPerformance]
     active_drift_alerts: list[DriftAlert]
-    recent_calibration: Optional[CalibrationReport] = None
+    recent_calibration: CalibrationReport | None = None
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/health", response_model=IEHealthStatus)
 async def get_ie_health(
@@ -200,7 +207,7 @@ async def get_ie_dashboard(
 async def get_experiment_statuses(
     db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
-    category_id: Optional[str] = Query(default=None, description="Filter by category"),
+    category_id: str | None = Query(default=None, description="Filter by category"),
 ):
     """
     Get Thompson Sampling experiment status for all (or specific) categories.
@@ -210,7 +217,8 @@ async def get_experiment_statuses(
     """
     from sqlalchemy import text
 
-    query = text("""
+    query = text(
+        """
         SELECT
             bs.category_id,
             bs.arm_states,
@@ -223,9 +231,8 @@ async def get_experiment_statuses(
         WHERE 1=1
         {category_filter}
         ORDER BY bs.total_pulls DESC
-    """.format(
-        category_filter="AND bs.category_id = :category_id" if category_id else ""
-    ))
+    """.format(category_filter="AND bs.category_id = :category_id" if category_id else "")
+    )
 
     params = {}
     if category_id:
@@ -244,15 +251,17 @@ async def get_experiment_statuses(
             beta_val = state.get("beta", 19)
             expected = alpha / (alpha + beta_val) if (alpha + beta_val) > 0 else 0
             max_reward = max(max_reward, expected)
-            arms.append(ExperimentArmStatus(
-                arm_name=arm_name,
-                alpha=alpha,
-                beta=beta_val,
-                pulls=state.get("pulls", 0),
-                wins=state.get("wins", 0),
-                expected_reward=round(expected, 4),
-                is_leader=False,  # Set below
-            ))
+            arms.append(
+                ExperimentArmStatus(
+                    arm_name=arm_name,
+                    alpha=alpha,
+                    beta=beta_val,
+                    pulls=state.get("pulls", 0),
+                    wins=state.get("wins", 0),
+                    expected_reward=round(expected, 4),
+                    is_leader=False,  # Set below
+                )
+            )
 
         # Mark the leader
         for arm in arms:
@@ -261,16 +270,18 @@ async def get_experiment_statuses(
                 break
 
         metadata = row.metadata or {}
-        statuses.append(ExperimentStatus(
-            category_id=row.category_id,
-            total_pulls=row.total_pulls or 0,
-            converged=row.converged_arm is not None,
-            converged_arm=row.converged_arm,
-            convergence_confidence=row.convergence_confidence,
-            arms=arms,
-            last_updated=row.last_updated,
-            exploration_rate=metadata.get("exploration_rate", 0.05),
-        ))
+        statuses.append(
+            ExperimentStatus(
+                category_id=row.category_id,
+                total_pulls=row.total_pulls or 0,
+                converged=row.converged_arm is not None,
+                converged_arm=row.converged_arm,
+                convergence_confidence=row.convergence_confidence,
+                arms=arms,
+                last_updated=row.last_updated,
+                exploration_rate=metadata.get("exploration_rate", 0.05),
+            )
+        )
 
     return statuses
 
@@ -292,7 +303,7 @@ async def get_experiment_status(
 async def get_calibration_reports(
     db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
-    category_id: Optional[str] = Query(default=None),
+    category_id: str | None = Query(default=None),
 ):
     """
     Get calibration accuracy reports.
@@ -308,7 +319,7 @@ async def get_calibration_reports(
 async def get_drift_alerts(
     db: AsyncSession = Depends(get_session),
     current_user: Any = Depends(get_current_user),
-    severity: Optional[str] = Query(default=None, description="Filter: info | warning | critical"),
+    severity: str | None = Query(default=None, description="Filter: info | warning | critical"),
     active_only: bool = Query(default=True, description="Only show unresolved alerts"),
 ):
     """
@@ -336,9 +347,7 @@ async def get_category_performance(
 
     Reads from mv_category_benchmarks materialized view for fast lookups.
     """
-    categories = await _get_top_categories(
-        db, current_user, limit=100, min_recommendations=min_recommendations
-    )
+    categories = await _get_top_categories(db, current_user, limit=100, min_recommendations=min_recommendations)
     return categories
 
 
@@ -378,8 +387,7 @@ async def get_category_detail(
 
     # Check experiment status
     exp_result = await db.execute(
-        text("SELECT converged_arm FROM bandit_state WHERE category_id = :cid"),
-        {"cid": category_id}
+        text("SELECT converged_arm FROM bandit_state WHERE category_id = :cid"), {"cid": category_id}
     )
     exp_row = exp_result.fetchone()
 
@@ -402,6 +410,7 @@ async def get_category_detail(
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
 
 async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
     """Build the IE health status by checking component availability."""
@@ -434,11 +443,7 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
 
     # Count experiments
     try:
-        result = await db.execute(text(
-            "SELECT COUNT(*) as total, "
-            "COUNT(converged_arm) as converged "
-            "FROM bandit_state"
-        ))
+        result = await db.execute(text("SELECT COUNT(*) as total, COUNT(converged_arm) as converged FROM bandit_state"))
         row = result.fetchone()
         total_cats = row.total if row else 0
         converged_cats = row.converged if row else 0
@@ -474,7 +479,8 @@ async def _get_top_categories(
     from sqlalchemy import text
 
     try:
-        result = await db.execute(text("""
+        result = await db.execute(
+            text("""
             SELECT
                 cb.category_id,
                 cb.total_recommendations,
@@ -486,32 +492,36 @@ async def _get_top_categories(
             WHERE cb.total_recommendations >= :min_recs
             ORDER BY cb.total_recommendations DESC
             LIMIT :lim
-        """), {"min_recs": min_recommendations, "lim": limit})
+        """),
+            {"min_recs": min_recommendations, "lim": limit},
+        )
 
         rows = result.fetchall()
         categories = []
         for row in rows:
             total = row.total_recommendations or 1
-            categories.append(CategoryPerformance(
-                category_id=row.category_id,
-                total_recommendations=total,
-                acceptance_rate=round((row.accepted or 0) / total, 3),
-                avg_confidence=round(row.avg_confidence or 0, 3),
-                avg_revenue_lift_7d=round(row.avg_revenue_lift_7d, 3) if row.avg_revenue_lift_7d else None,
-                confidence_accuracy_corr=round(row.confidence_accuracy_corr, 3) if row.confidence_accuracy_corr else None,
-                active_experiment=False,  # Enriched later if needed
-                data_quality_score=min(1.0, total / 50),
-                merchant_count=1,
-            ))
+            categories.append(
+                CategoryPerformance(
+                    category_id=row.category_id,
+                    total_recommendations=total,
+                    acceptance_rate=round((row.accepted or 0) / total, 3),
+                    avg_confidence=round(row.avg_confidence or 0, 3),
+                    avg_revenue_lift_7d=round(row.avg_revenue_lift_7d, 3) if row.avg_revenue_lift_7d else None,
+                    confidence_accuracy_corr=round(row.confidence_accuracy_corr, 3)
+                    if row.confidence_accuracy_corr
+                    else None,
+                    active_experiment=False,  # Enriched later if needed
+                    data_quality_score=min(1.0, total / 50),
+                    merchant_count=1,
+                )
+            )
         return categories
     except Exception as exc:
         logger.warning("Failed to read mv_category_benchmarks: %s", exc)
         return []
 
 
-async def _get_active_drift_alerts(
-    db: AsyncSession, user: Any, severity: Optional[str] = None
-) -> list[DriftAlert]:
+async def _get_active_drift_alerts(db: AsyncSession, user: Any, severity: str | None = None) -> list[DriftAlert]:
     """
     Get active drift alerts.
 
@@ -526,7 +536,7 @@ async def _get_active_drift_alerts(
 
 
 async def _get_calibration_reports(
-    db: AsyncSession, user: Any, category_id: Optional[str] = None
+    db: AsyncSession, user: Any, category_id: str | None = None
 ) -> list[CalibrationReport]:
     """
     Get calibration reports.
@@ -535,7 +545,8 @@ async def _get_calibration_reports(
     """
     from sqlalchemy import text
 
-    query = text("""
+    query = text(
+        """
         SELECT
             po.confidence_decomposition->>'overall' as raw_confidence,
             CASE WHEN pi.revenue_delta_pct > 0 THEN 1 ELSE 0 END as success,
@@ -549,9 +560,8 @@ async def _get_calibration_reports(
         {category_filter}
         ORDER BY po.created_at DESC
         LIMIT 500
-    """.format(
-        category_filter="AND pr.category_id = :category_id" if category_id else ""
-    ))
+    """.format(category_filter="AND pr.category_id = :category_id" if category_id else "")
+    )
 
     params = {}
     if category_id:
@@ -562,12 +572,14 @@ async def _get_calibration_reports(
         rows = result.fetchall()
 
         if not rows:
-            return [CalibrationReport(
-                category_id=category_id,
-                sample_count=0,
-                calibration_method="insufficient_data",
-                is_reliable=False,
-            )]
+            return [
+                CalibrationReport(
+                    category_id=category_id,
+                    sample_count=0,
+                    calibration_method="insufficient_data",
+                    is_reliable=False,
+                )
+            ]
 
         # Compute per-band accuracy
         bands: dict[str, dict] = {}
@@ -613,39 +625,40 @@ async def _get_calibration_reports(
             predicted = data["predicted_sum"] / data["count"]
             actual = data["actual_sum"] / data["count"]
             overconfidence_sum += (predicted - actual) * data["count"]
-            band_list.append({
-                "band": band_key,
-                "predicted": round(predicted, 3),
-                "actual": round(actual, 3),
-                "count": data["count"],
-            })
+            band_list.append(
+                {
+                    "band": band_key,
+                    "predicted": round(predicted, 3),
+                    "actual": round(actual, 3),
+                    "count": data["count"],
+                }
+            )
 
-        return [CalibrationReport(
-            category_id=category_id,
-            sample_count=n,
-            pearson_r=pearson_r,
-            calibration_method="isotonic" if n >= 30 else "insufficient_data",
-            confidence_bands=band_list,
-            is_reliable=n >= 30,
-            overconfidence_score=round(overconfidence_sum / n, 4) if n > 0 else None,
-        )]
+        return [
+            CalibrationReport(
+                category_id=category_id,
+                sample_count=n,
+                pearson_r=pearson_r,
+                calibration_method="isotonic" if n >= 30 else "insufficient_data",
+                confidence_bands=band_list,
+                is_reliable=n >= 30,
+                overconfidence_score=round(overconfidence_sum / n, 4) if n > 0 else None,
+            )
+        ]
 
     except Exception as exc:
         logger.warning("Calibration report query failed: %s", exc)
-        return [CalibrationReport(
-            category_id=category_id,
-            sample_count=0,
-            calibration_method="error",
-            is_reliable=False,
-        )]
+        return [
+            CalibrationReport(
+                category_id=category_id,
+                sample_count=0,
+                calibration_method="error",
+                is_reliable=False,
+            )
+        ]
 
 
-async def _get_latest_calibration(
-    db: AsyncSession, user: Any
-) -> Optional[CalibrationReport]:
+async def _get_latest_calibration(db: AsyncSession, user: Any) -> CalibrationReport | None:
     """Get the most recent global calibration report."""
     reports = await _get_calibration_reports(db, user, category_id=None)
     return reports[0] if reports else None
-
-
-    

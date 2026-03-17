@@ -27,17 +27,16 @@ Place at: backend/services/scoring/elasticity_calculator.py
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from decimal import Decimal
-from typing import Optional, Sequence
+from datetime import datetime
 
 from .category_priors import CategoryPrior, CategoryPriorStore
-
 
 # ──────────────────────────────────────────────────────────
 # INPUT TYPES
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class PriceChangeEvent:
@@ -58,13 +57,13 @@ class PriceChangeEvent:
     price_changed_at: datetime
 
     # Volume data (from Shopify orders or similar)
-    avg_daily_units_before: float   # Average daily units sold BEFORE change
-    avg_daily_units_after: float    # Average daily units sold AFTER change
+    avg_daily_units_before: float  # Average daily units sold BEFORE change
+    avg_daily_units_after: float  # Average daily units sold AFTER change
 
     # Quality indicators
-    days_before_measured: int = 7   # How many days of pre-change data
-    days_after_measured: int = 7    # How many days of post-change data
-    confounders_noted: bool = False # Holiday, promotion, stockout, etc.
+    days_before_measured: int = 7  # How many days of pre-change data
+    days_after_measured: int = 7  # How many days of post-change data
+    confounders_noted: bool = False  # Holiday, promotion, stockout, etc.
 
     @property
     def price_change_pct(self) -> float:
@@ -81,7 +80,7 @@ class PriceChangeEvent:
         return (self.avg_daily_units_after - self.avg_daily_units_before) / self.avg_daily_units_before
 
     @property
-    def observed_ped(self) -> Optional[float]:
+    def observed_ped(self) -> float | None:
         """
         Point estimate of PED from this event.
 
@@ -101,6 +100,7 @@ class PriceChangeEvent:
 # RESULT TYPE
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class ElasticityResult:
     """
@@ -116,16 +116,16 @@ class ElasticityResult:
       (confidence)        → confidence (0-1 score for ConfidenceDecomposition)
     """
 
-    estimate: float           # Posterior mean PED (negative for normal goods)
-    ci_lower: float           # 95% CI lower bound
-    ci_upper: float           # 95% CI upper bound
-    confidence: float         # 0-1 confidence score
-    method: str               # "bayesian_hierarchical", "category_prior", etc.
-    prior_source: str         # "category_benchmark", "merchant_history", "default"
-    n_observations: int       # Number of valid price change events used
-    prior_mu: float           # The prior mean that was used
-    prior_sigma: float        # The prior sigma that was used
-    posterior_sigma: float    # The posterior sigma (tighter = more data)
+    estimate: float  # Posterior mean PED (negative for normal goods)
+    ci_lower: float  # 95% CI lower bound
+    ci_upper: float  # 95% CI upper bound
+    confidence: float  # 0-1 confidence score
+    method: str  # "bayesian_hierarchical", "category_prior", etc.
+    prior_source: str  # "category_benchmark", "merchant_history", "default"
+    n_observations: int  # Number of valid price change events used
+    prior_mu: float  # The prior mean that was used
+    prior_sigma: float  # The prior sigma that was used
+    posterior_sigma: float  # The posterior sigma (tighter = more data)
 
 
 # ──────────────────────────────────────────────────────────
@@ -140,15 +140,15 @@ MIN_POST_CHANGE_DAYS: int = 3
 
 # Clamp observed PED to this range (extreme values are likely noise)
 PED_CLAMP_MIN: float = -10.0  # Extremely elastic
-PED_CLAMP_MAX: float = 0.5    # Slight Giffen/Veblen effect allowed
+PED_CLAMP_MAX: float = 0.5  # Slight Giffen/Veblen effect allowed
 
 # Default observation noise — how much we trust a single observation
 # Lower = trust more. 0.5 = moderately noisy (single merchant, limited data)
 DEFAULT_OBSERVATION_NOISE: float = 0.5
 
 # Noise adjustment for high-quality observations
-HIGH_QUALITY_NOISE: float = 0.3     # 7+ days before AND after, no confounders
-LOW_QUALITY_NOISE: float = 0.8      # Short windows or confounders present
+HIGH_QUALITY_NOISE: float = 0.3  # 7+ days before AND after, no confounders
+LOW_QUALITY_NOISE: float = 0.8  # Short windows or confounders present
 
 # Confidence floor when using pure prior (no observations)
 PRIOR_ONLY_CONFIDENCE: float = 0.15
@@ -160,6 +160,7 @@ MAX_CONFIDENCE: float = 0.95
 # ──────────────────────────────────────────────────────────
 # CALCULATOR
 # ──────────────────────────────────────────────────────────
+
 
 class ElasticityCalculator:
     """
@@ -211,9 +212,7 @@ class ElasticityCalculator:
         prior_source = self._prior_store.get_prior_source(category)
 
         # Filter to valid observations
-        valid_observations = self._extract_valid_observations(
-            price_change_events or []
-        )
+        valid_observations = self._extract_valid_observations(price_change_events or [])
 
         if not valid_observations:
             # No data — return category prior as-is
@@ -273,17 +272,13 @@ class ElasticityCalculator:
         if event.confounders_noted:
             return LOW_QUALITY_NOISE
 
-        if (
-            event.days_before_measured >= 7
-            and event.days_after_measured >= 7
-        ):
+        if event.days_before_measured >= 7 and event.days_after_measured >= 7:
             return HIGH_QUALITY_NOISE
 
         # Linear interpolation based on post-change days
         # 3 days → LOW_QUALITY_NOISE, 7+ days → HIGH_QUALITY_NOISE
         days_factor = min(
-            (event.days_after_measured - MIN_POST_CHANGE_DAYS)
-            / (7 - MIN_POST_CHANGE_DAYS),
+            (event.days_after_measured - MIN_POST_CHANGE_DAYS) / (7 - MIN_POST_CHANGE_DAYS),
             1.0,
         )
         return LOW_QUALITY_NOISE - (LOW_QUALITY_NOISE - HIGH_QUALITY_NOISE) * days_factor
@@ -333,7 +328,7 @@ class ElasticityCalculator:
 
         n_used = 0
         for obs_ped, obs_noise in observations:
-            obs_precision = 1.0 / (obs_noise ** 2)
+            obs_precision = 1.0 / (obs_noise**2)
             weighted_sum += obs_ped * obs_precision
             total_precision += obs_precision
             n_used += 1
@@ -355,9 +350,7 @@ class ElasticityCalculator:
         # With 1 observation, typical confidence is 0.3-0.5.
         # With 5+ observations, typical confidence is 0.6-0.8.
         # Floor is above PRIOR_ONLY_CONFIDENCE so any data helps.
-        confidence = PRIOR_ONLY_CONFIDENCE + (
-            (MAX_CONFIDENCE - PRIOR_ONLY_CONFIDENCE) * raw_confidence
-        )
+        confidence = PRIOR_ONLY_CONFIDENCE + ((MAX_CONFIDENCE - PRIOR_ONLY_CONFIDENCE) * raw_confidence)
         confidence = min(confidence, MAX_CONFIDENCE)
         confidence = round(confidence, 4)
 
@@ -373,6 +366,3 @@ class ElasticityCalculator:
             prior_sigma=prior.sigma,
             posterior_sigma=round(posterior_sigma, 6),
         )
-    
-
-    

@@ -8,8 +8,8 @@ PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
 - Refresh tokens: Long-lived (7 days) for getting new access tokens
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -37,41 +37,41 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-    data: Dict[str, Any],
-    expires_delta: Optional[timedelta] = None,
+    data: dict[str, Any],
+    expires_delta: timedelta | None = None,
 ) -> str:
     """
     Create a signed JWT access token.
     `data` should contain at least an identifier like 'sub'.
     """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update(
+        {
+            "exp": expire,
+            "type": "access",
+        }
     )
-    to_encode.update({
-        "exp": expire,
-        "type": "access",
-    })
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 def create_refresh_token(
-    data: Dict[str, Any],
-    expires_delta: Optional[timedelta] = None,
+    data: dict[str, Any],
+    expires_delta: timedelta | None = None,
 ) -> str:
     """
     Create a signed JWT refresh token.
     Refresh tokens are long-lived and used to get new access tokens.
     """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(UTC) + (expires_delta or timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+    to_encode.update(
+        {
+            "exp": expire,
+            "type": "refresh",
+        }
     )
-    to_encode.update({
-        "exp": expire,
-        "type": "refresh",
-    })
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -80,7 +80,7 @@ def create_reset_token(user_id: str) -> str:
     """
     Create a password reset token (30-min expiry).
     """
-    expire = datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
     to_encode = {
         "sub": user_id,
         "exp": expire,
@@ -89,7 +89,7 @@ def create_reset_token(user_id: str) -> str:
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_access_token(token: str) -> dict[str, Any] | None:
     """
     Decode and validate a JWT access token.
     Returns payload dict if valid, or None if invalid/expired.
@@ -104,7 +104,7 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def decode_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_refresh_token(token: str) -> dict[str, Any] | None:
     """
     Decode and validate a JWT refresh token.
     Returns payload dict if valid, or None if invalid/expired/wrong type.
@@ -118,7 +118,7 @@ def decode_refresh_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def decode_reset_token(token: str) -> Optional[str]:
+def decode_reset_token(token: str) -> str | None:
     """
     Decode and validate a password reset token.
     Returns user_id if valid, or None if invalid/expired/wrong type.
@@ -130,6 +130,3 @@ def decode_reset_token(token: str) -> Optional[str]:
         return payload.get("sub")
     except JWTError:
         return None
-    
-
-    

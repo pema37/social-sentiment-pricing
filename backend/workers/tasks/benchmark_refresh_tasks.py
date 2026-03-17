@@ -19,14 +19,14 @@ Then add to celery_app.py include list and beat_schedule.
 import asyncio
 import re
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
-from sqlalchemy import text
 
-from workers.celery_app import celery_app
 from core.config import settings
 from core.logging import get_logger
+from workers.celery_app import celery_app
 
 logger = get_logger(__name__)
 
@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 # ──────────────────────────────────────────────
 # HELPERS (same pattern as outcome_measurement_tasks.py)
 # ──────────────────────────────────────────────
+
 
 def get_task_session_maker():
     """Create a fresh async session maker for Celery tasks."""
@@ -43,8 +44,8 @@ def get_task_session_maker():
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     if "sslmode=" in db_url:
-        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
-        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
+        db_url = re.sub(r"[\?&]sslmode=[^&]*", "", db_url)
+        db_url = db_url.replace("?&", "?").replace("&&", "&").rstrip("?&")
 
     use_ssl = "neon.tech" in db_url or "railway" in db_url
 
@@ -107,9 +108,7 @@ async def _refresh_benchmark_views():
         for view_name in MATERIALIZED_VIEWS:
             try:
                 # Try concurrent refresh first (non-blocking reads)
-                await db.execute(
-                    text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}")
-                )
+                await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}"))
                 await db.commit()
                 results[view_name] = "refreshed_concurrently"
                 logger.info(f"Refreshed {view_name} concurrently")
@@ -122,9 +121,7 @@ async def _refresh_benchmark_views():
                 # fall back to regular refresh
                 if "concurrently" in error_msg or "unique" in error_msg or "has not been populated" in error_msg:
                     try:
-                        await db.execute(
-                            text(f"REFRESH MATERIALIZED VIEW {view_name}")
-                        )
+                        await db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
                         await db.commit()
                         results[view_name] = "refreshed_regular"
                         logger.info(f"Refreshed {view_name} (regular, not concurrent)")
@@ -149,9 +146,7 @@ async def _get_view_stats():
     async with session_maker() as db:
         for view_name in MATERIALIZED_VIEWS:
             try:
-                result = await db.execute(
-                    text(f"SELECT COUNT(*) FROM {view_name}")
-                )
+                result = await db.execute(text(f"SELECT COUNT(*) FROM {view_name}"))
                 count = result.scalar() or 0
                 stats[view_name] = count
             except Exception as e:
@@ -163,6 +158,7 @@ async def _get_view_stats():
 # ──────────────────────────────────────────────
 # CELERY TASKS
 # ──────────────────────────────────────────────
+
 
 @celery_app.task(name="workers.tasks.benchmark_refresh_tasks.refresh_benchmark_views")
 def refresh_benchmark_views():
@@ -183,6 +179,3 @@ def benchmark_view_stats():
     Use: Manual trigger or monitoring dashboard.
     """
     return run_async(_get_view_stats())
-
-
-

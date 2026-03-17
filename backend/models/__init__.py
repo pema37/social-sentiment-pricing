@@ -1,32 +1,31 @@
 # backend/models/__init__.py
-from models.user import User
-from models.product import Product
-from models.integration import Integration
-from models.social_mention import SocialMention
-from models.sentiment import Sentiment
+from models.alert import Alert, AlertChannel, AlertConfiguration, AlertSeverity, AlertStatus, AlertType
 from models.competitor import Competitor
-from models.competitor_product import CompetitorProduct
 from models.competitor_price_history import CompetitorPriceHistory
-from models.pricing_rule import PricingRule, RuleType, RuleAction
-from models.price_recommendation import PriceRecommendation, RecommendationStatus
-from models.pricing_settings import PricingSettings
-from models.price_history import PriceHistory, ChangeReason
-from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
-from models.alert import Alert, AlertConfiguration, AlertType, AlertSeverity, AlertChannel, AlertStatus
-from models.retrospective_audit import RetrospectiveAudit
+from models.competitor_product import CompetitorProduct
+from models.integration import Integration
 
 # Payment models
 from models.payment import Payment, PaymentStatus, PaymentType
-from models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
-
+from models.price_history import ChangeReason, PriceHistory
+from models.price_recommendation import PriceRecommendation, RecommendationStatus
+from models.pricing_rule import PricingRule, RuleAction, RuleType
+from models.pricing_settings import PricingSettings
+from models.product import Product
+from models.recommendation_outcome import OutcomeLabel, RecommendationOutcome
+from models.retrospective_audit import RetrospectiveAudit
+from models.sentiment import Sentiment
+from models.social_mention import SocialMention
+from models.subscription import Subscription, SubscriptionStatus, SubscriptionTier
+from models.user import User
 
 __all__ = [
     "User",
     "Product",
     "Sentiment",
-    "SocialMention",           
+    "SocialMention",
     "PriceHistory",
-    "ChangeReason",            
+    "ChangeReason",
     "PricingRule",
     "RuleType",
     "RuleAction",
@@ -34,13 +33,13 @@ __all__ = [
     "RecommendationStatus",
     "PricingSettings",
     "Competitor",
-    "CompetitorProduct",       
-    "CompetitorPriceHistory",  
-    "RecommendationOutcome",   
-    "OutcomeLabel",            
+    "CompetitorProduct",
+    "CompetitorPriceHistory",
+    "RecommendationOutcome",
+    "OutcomeLabel",
     "Integration",
     "Alert",
-    "AlertConfiguration", 
+    "AlertConfiguration",
     "AlertType",
     "AlertSeverity",
     "AlertChannel",

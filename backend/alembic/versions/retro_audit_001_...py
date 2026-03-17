@@ -5,9 +5,10 @@ Revises: (add your current head here)
 Create Date: 2026-03-02
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import JSON, UUID
+
+from alembic import op
 
 # revision identifiers
 revision = "retro_audit_001"
@@ -53,6 +54,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_retrospective_audits_user_created")
     op.drop_table("retrospective_audits")
-
-
-

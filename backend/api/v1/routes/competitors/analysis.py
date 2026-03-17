@@ -2,23 +2,22 @@
 """Competitor analysis and comparison endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from api.v1.routes.auth import get_current_user
 from db.session import get_session
-from models.user import User
-from models.product import Product
 from models.competitor import Competitor
-from models.competitor_product import CompetitorProduct
 from models.competitor_price_history import CompetitorPriceHistory
-from schemas.competitor import CompetitorPriceComparison, CompetitorAlert
+from models.competitor_product import CompetitorProduct
+from models.product import Product
+from models.user import User
+from schemas.competitor import CompetitorAlert, CompetitorPriceComparison
 
 router = APIRouter()
 
@@ -31,16 +30,12 @@ async def compare_prices(
     current_user: User = Depends(get_current_user),
 ):
     """Compare your product price against all tracked competitors."""
-    result = await db.execute(
-        select(Product)
-        .where(Product.id == product_id)
-        .where(Product.user_id == current_user.id)
-    )
+    result = await db.execute(select(Product).where(Product.id == product_id).where(Product.user_id == current_user.id))
     product = result.scalars().first()
-    
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     cp_result = await db.execute(
         select(CompetitorProduct)
         .where(CompetitorProduct.product_id == product_id)
@@ -48,7 +43,7 @@ async def compare_prices(
         .where(CompetitorProduct.current_price.is_not(None))
     )
     competitor_products = cp_result.scalars().all()
-    
+
     if not competitor_products:
         return CompetitorPriceComparison(
             product_id=product_id,
@@ -58,43 +53,45 @@ async def compare_prices(
             your_position="no_data",
             recommendation="Add competitor product links to enable price comparison.",
         )
-    
+
     competitor_prices = []
     for cp in competitor_products:
-        comp_result = await db.execute(
-            select(Competitor).where(Competitor.id == cp.competitor_id)
-        )
+        comp_result = await db.execute(select(Competitor).where(Competitor.id == cp.competitor_id))
         competitor = comp_result.scalars().first()
-        
+
         diff = product.current_price - cp.current_price
-        competitor_prices.append({
-            "competitor_name": competitor.name,
-            "price": cp.current_price,
-            "url": cp.competitor_product_url,
-            "difference": diff,
-            "difference_percent": (diff / cp.current_price * 100).quantize(Decimal("0.01")) if cp.current_price else None,
-            "last_updated": cp.last_price_update,
-        })
-    
+        competitor_prices.append(
+            {
+                "competitor_name": competitor.name,
+                "price": cp.current_price,
+                "url": cp.competitor_product_url,
+                "difference": diff,
+                "difference_percent": (diff / cp.current_price * 100).quantize(Decimal("0.01"))
+                if cp.current_price
+                else None,
+                "last_updated": cp.last_price_update,
+            }
+        )
+
     prices = [cp.current_price for cp in competitor_products]
     lowest = min(prices)
     highest = max(prices)
     average = sum(prices) / len(prices)
-    
+
     if product.current_price <= lowest:
         position = "lowest"
     elif product.current_price >= highest:
         position = "highest"
     else:
         position = "middle"
-    
+
     if position == "highest":
         recommendation = f"You're priced {((product.current_price - average) / average * 100):.1f}% above average. Consider lowering price to remain competitive."
     elif position == "lowest":
         recommendation = f"You're the price leader at {((average - product.current_price) / average * 100):.1f}% below average. Opportunity to increase margins."
     else:
         recommendation = "Competitively positioned. Monitor for competitor changes."
-    
+
     return CompetitorPriceComparison(
         product_id=product_id,
         product_name=product.name,
@@ -108,7 +105,7 @@ async def compare_prices(
     )
 
 
-@router.get("/alerts", response_model=List[CompetitorAlert])
+@router.get("/alerts", response_model=list[CompetitorAlert])
 async def get_competitor_alerts(
     request: Request,
     hours: int = Query(24, ge=1, le=168),
@@ -117,7 +114,7 @@ async def get_competitor_alerts(
 ):
     """Get recent significant competitor price changes."""
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
-    
+
     result = await db.execute(
         select(CompetitorPriceHistory)
         .join(CompetitorProduct)
@@ -125,31 +122,25 @@ async def get_competitor_alerts(
         .where(Product.user_id == current_user.id)
         .where(CompetitorPriceHistory.observed_at >= cutoff)
         .where(
-            (CompetitorPriceHistory.change_type == "promotion") |
-            (CompetitorPriceHistory.change_type == "restock") |
-            (func.abs(CompetitorPriceHistory.change_percent) > 5)
+            (CompetitorPriceHistory.change_type == "promotion")
+            | (CompetitorPriceHistory.change_type == "restock")
+            | (func.abs(CompetitorPriceHistory.change_percent) > 5)
         )
         .order_by(CompetitorPriceHistory.observed_at.desc())
     )
     histories = result.scalars().all()
-    
+
     alerts = []
     for h in histories:
-        cp_result = await db.execute(
-            select(CompetitorProduct).where(CompetitorProduct.id == h.competitor_product_id)
-        )
+        cp_result = await db.execute(select(CompetitorProduct).where(CompetitorProduct.id == h.competitor_product_id))
         cp = cp_result.scalars().first()
-        
-        comp_result = await db.execute(
-            select(Competitor).where(Competitor.id == cp.competitor_id)
-        )
+
+        comp_result = await db.execute(select(Competitor).where(Competitor.id == cp.competitor_id))
         competitor = comp_result.scalars().first()
-        
-        prod_result = await db.execute(
-            select(Product).where(Product.id == cp.product_id)
-        )
+
+        prod_result = await db.execute(select(Product).where(Product.id == cp.product_id))
         product = prod_result.scalars().first()
-        
+
         if h.change_type == "promotion":
             alert_type = "price_drop"
             suggested_action = "Monitor closely. Consider matching if promotion persists."
@@ -162,32 +153,37 @@ async def get_competitor_alerts(
         else:
             alert_type = "price_increase"
             suggested_action = "Opportunity to increase margins while remaining competitive."
-        
-        alerts.append(CompetitorAlert(
-            alert_type=alert_type,
-            competitor_name=competitor.name,
-            competitor_product_name=cp.competitor_product_name,
-            product_id=product.id,
-            your_product_name=product.name,
-            old_price=h.old_price,
-            new_price=h.new_price,
-            change_percent=h.change_percent,
-            your_current_price=product.current_price,
-            suggested_action=suggested_action,
-            observed_at=h.observed_at,
-        ))
-    
+
+        alerts.append(
+            CompetitorAlert(
+                alert_type=alert_type,
+                competitor_name=competitor.name,
+                competitor_product_name=cp.competitor_product_name,
+                product_id=product.id,
+                your_product_name=product.name,
+                old_price=h.old_price,
+                new_price=h.new_price,
+                change_percent=h.change_percent,
+                your_current_price=product.current_price,
+                suggested_action=suggested_action,
+                observed_at=h.observed_at,
+            )
+        )
+
     return alerts
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # AI COMPETITOR ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 from pydantic import BaseModel
-from typing import Optional
 
 
 class AICompetitorAnalysisResponse(BaseModel):
     """AI-generated competitor analysis."""
+
     competitor_id: uuid_lib.UUID
     competitor_name: str
     strategy_detected: str  # "aggressive", "premium", "discount", "stable"
@@ -206,25 +202,23 @@ async def get_ai_competitor_analysis(
 ):
     """
     Get AI-powered analysis of a competitor's pricing strategy.
-    
+
     Analyzes price history patterns to detect:
     - Pricing strategy (aggressive, premium, discount, stable)
     - Seasonal patterns
     - Response recommendations
     """
     from services.ai_generator import ai_generator
-    
+
     # Get competitor
     result = await db.execute(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
+        select(Competitor).where(Competitor.id == competitor_id).where(Competitor.user_id == current_user.id)
     )
     competitor = result.scalars().first()
-    
+
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
-    
+
     # Get competitor products with price history
     cp_result = await db.execute(
         select(CompetitorProduct)
@@ -232,7 +226,7 @@ async def get_ai_competitor_analysis(
         .where(CompetitorProduct.is_active == True)
     )
     competitor_products = cp_result.scalars().all()
-    
+
     # Get price history for analysis
     price_changes = []
     for cp in competitor_products:
@@ -243,16 +237,18 @@ async def get_ai_competitor_analysis(
             .limit(20)
         )
         histories = history_result.scalars().all()
-        
+
         for h in histories:
             if h.change_percent:
-                price_changes.append({
-                    "product": cp.competitor_product_name,
-                    "change_percent": float(h.change_percent),
-                    "change_type": h.change_type,
-                    "date": h.observed_at.isoformat() if h.observed_at else None,
-                })
-    
+                price_changes.append(
+                    {
+                        "product": cp.competitor_product_name,
+                        "change_percent": float(h.change_percent),
+                        "change_type": h.change_type,
+                        "date": h.observed_at.isoformat() if h.observed_at else None,
+                    }
+                )
+
     # Detect strategy based on patterns
     if not price_changes:
         strategy = "unknown"
@@ -265,7 +261,7 @@ async def get_ai_competitor_analysis(
         drops = sum(1 for p in price_changes if p["change_percent"] < -2)
         increases = sum(1 for p in price_changes if p["change_percent"] > 2)
         promotions = sum(1 for p in price_changes if p.get("change_type") == "promotion")
-        
+
         # Determine strategy
         if promotions > len(price_changes) * 0.3 or drops > increases * 2:
             strategy = "aggressive"
@@ -275,9 +271,9 @@ async def get_ai_competitor_analysis(
             strategy = "discount"
         else:
             strategy = "stable"
-        
+
         confidence = min(0.9, 0.3 + len(price_changes) * 0.03)
-        
+
         # Use AI for deeper analysis if available
         if ai_generator.is_available():
             try:
@@ -299,7 +295,7 @@ async def get_ai_competitor_analysis(
             analysis, recommendation = _generate_basic_analysis(
                 competitor.name, strategy, avg_change, len(price_changes)
             )
-    
+
     return AICompetitorAnalysisResponse(
         competitor_id=competitor_id,
         competitor_name=competitor.name,
@@ -316,23 +312,23 @@ def _generate_basic_analysis(name: str, strategy: str, avg_change: float, data_p
     strategies = {
         "aggressive": (
             f"{name} shows aggressive pricing with frequent discounts and promotions.",
-            "Monitor closely. Match critical promotions but avoid a price war."
+            "Monitor closely. Match critical promotions but avoid a price war.",
         ),
         "premium": (
             f"{name} is positioning as premium with consistent price increases.",
-            "Opportunity to capture price-sensitive customers. Emphasize value."
+            "Opportunity to capture price-sensitive customers. Emphasize value.",
         ),
         "discount": (
             f"{name} appears to be in discount mode with declining prices.",
-            "Focus on value differentiation rather than price matching."
+            "Focus on value differentiation rather than price matching.",
         ),
         "stable": (
             f"{name} maintains stable pricing with minimal changes.",
-            "Safe to maintain current pricing strategy. Focus on other differentiators."
+            "Safe to maintain current pricing strategy. Focus on other differentiators.",
         ),
         "unknown": (
             f"Insufficient data to analyze {name}'s pricing strategy.",
-            "Continue monitoring to gather more pricing data."
+            "Continue monitoring to gather more pricing data.",
         ),
     }
     return strategies.get(strategy, strategies["unknown"])
@@ -341,7 +337,7 @@ def _generate_basic_analysis(name: str, strategy: str, avg_change: float, data_p
 async def _generate_ai_analysis(ai_generator, name: str, strategy: str, changes: list, avg_change: float) -> dict:
     """Generate AI-powered analysis."""
     import json
-    
+
     prompt = f"""Analyze this competitor's pricing behavior:
 
 Competitor: {name}
@@ -359,17 +355,16 @@ Return JSON: {{"analysis": "...", "recommendation": "..."}}"""
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a competitive pricing analyst. Be specific and actionable."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ],
         temperature=0.5,
-        max_tokens=300
+        max_tokens=300,
     )
-    
+
     result_text = response.choices[0].message.content.strip()
     if result_text.startswith("```"):
         result_text = result_text.split("```")[1]
         if result_text.startswith("json"):
             result_text = result_text[4:]
-    
-    return json.loads(result_text)
 
+    return json.loads(result_text)

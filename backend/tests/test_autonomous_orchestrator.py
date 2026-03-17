@@ -10,17 +10,16 @@ Covers:
 - AutonomousTrigger: start_monitoring, stop_monitoring
 """
 
-import sys
 import json
-import asyncio
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+import sys
 
 # ── Import isolation ──────────────────────────────────────────────
 # Stub google.genai to avoid API key requirement at import
 import types as _types
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 _google = _types.ModuleType("google")
 _genai = _types.ModuleType("google.genai")
 _genai.Client = MagicMock()
@@ -42,26 +41,26 @@ for mod in ["db.session"]:
 
 from services.ai_trend_analysis.autonomous_orchestrator import (
     AgentPhase,
-    MarketSignal,
-    MarketAssessment,
-    PricingDecision,
     AgentStreamEvent,
-    handle_tool_call,
-    _handle_fetch_competitor_price,
-    _handle_detect_price_change,
-    _handle_analyze_sentiment,
-    _handle_calculate_elasticity,
-    _handle_assess_risk,
-    _handle_calculate_optimal_price,
-    _handle_write_price_to_chain,
     AutonomousOrchestrator,
     AutonomousTrigger,
+    MarketAssessment,
+    MarketSignal,
+    PricingDecision,
+    _handle_analyze_sentiment,
+    _handle_assess_risk,
+    _handle_calculate_elasticity,
+    _handle_calculate_optimal_price,
+    _handle_detect_price_change,
+    _handle_fetch_competitor_price,
+    _handle_write_price_to_chain,
+    handle_tool_call,
 )
-
 
 # ==================================================================
 # Enums
 # ==================================================================
+
 
 class TestAgentPhase:
     def test_scout(self):
@@ -83,6 +82,7 @@ class TestAgentPhase:
 # ==================================================================
 # Pydantic Schemas
 # ==================================================================
+
 
 class TestMarketSignal:
     def test_basic_creation(self):
@@ -259,6 +259,7 @@ class TestAgentStreamEvent:
 # Tool Handlers
 # ==================================================================
 
+
 class TestHandleToolCall:
     @pytest.mark.asyncio
     async def test_unknown_tool(self):
@@ -291,11 +292,13 @@ class TestFetchCompetitorPrice:
 class TestDetectPriceChange:
     @pytest.mark.asyncio
     async def test_price_drop(self):
-        result = await _handle_detect_price_change({
-            "current_price": 80.0,
-            "last_known_price": 100.0,
-            "product_id": "test",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 80.0,
+                "last_known_price": 100.0,
+                "product_id": "test",
+            }
+        )
         assert result["change_detected"] is True
         assert result["change_pct"] == -20.0
         assert result["signal_type"] == "price_drop"
@@ -303,49 +306,59 @@ class TestDetectPriceChange:
 
     @pytest.mark.asyncio
     async def test_price_increase(self):
-        result = await _handle_detect_price_change({
-            "current_price": 110.0,
-            "last_known_price": 100.0,
-            "product_id": "test",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 110.0,
+                "last_known_price": 100.0,
+                "product_id": "test",
+            }
+        )
         assert result["change_detected"] is True
         assert result["signal_type"] == "price_increase"
 
     @pytest.mark.asyncio
     async def test_stable_price(self):
-        result = await _handle_detect_price_change({
-            "current_price": 100.0,
-            "last_known_price": 100.0,
-            "product_id": "test",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 100.0,
+                "last_known_price": 100.0,
+                "product_id": "test",
+            }
+        )
         assert result["change_detected"] is False
         assert result["signal_type"] == "stable"
 
     @pytest.mark.asyncio
     async def test_zero_last_known_price(self):
-        result = await _handle_detect_price_change({
-            "current_price": 50.0,
-            "last_known_price": 0,
-            "product_id": "test",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 50.0,
+                "last_known_price": 0,
+                "product_id": "test",
+            }
+        )
         assert result["change_pct"] == 0
 
     @pytest.mark.asyncio
     async def test_medium_significance(self):
-        result = await _handle_detect_price_change({
-            "current_price": 93.0,
-            "last_known_price": 100.0,
-            "product_id": "test",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 93.0,
+                "last_known_price": 100.0,
+                "product_id": "test",
+            }
+        )
         assert result["significance"] == "medium"
 
     @pytest.mark.asyncio
     async def test_low_significance(self):
-        result = await _handle_detect_price_change({
-            "current_price": 97.0,
-            "last_known_price": 100.0,
-            "product_id": "test",
-        })
+        result = await _handle_detect_price_change(
+            {
+                "current_price": 97.0,
+                "last_known_price": 100.0,
+                "product_id": "test",
+            }
+        )
         assert result["significance"] == "low"
 
 
@@ -390,47 +403,57 @@ class TestAssessRisk:
 class TestCalculateOptimalPrice:
     @pytest.mark.asyncio
     async def test_decrease_direction(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "decrease"},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "decrease"},
+            }
+        )
         assert result["optimal_price"] == 88.0  # 100 * 0.88
         assert result["change_pct"] < 0
 
     @pytest.mark.asyncio
     async def test_increase_direction(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "increase"},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "increase"},
+            }
+        )
         assert result["optimal_price"] == 105.0  # 100 * 1.05
         assert result["change_pct"] > 0
 
     @pytest.mark.asyncio
     async def test_hold_direction(self):
-        result = await _handle_calculate_optimal_price({
-            "current_price": 100.0,
-            "assessment": {"recommended_direction": "hold"},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "current_price": 100.0,
+                "assessment": {"recommended_direction": "hold"},
+            }
+        )
         assert result["optimal_price"] == 100.0
         assert result["change_pct"] == 0.0
 
     @pytest.mark.asyncio
     async def test_default_price(self):
-        result = await _handle_calculate_optimal_price({
-            "assessment": {"recommended_direction": "hold"},
-        })
+        result = await _handle_calculate_optimal_price(
+            {
+                "assessment": {"recommended_direction": "hold"},
+            }
+        )
         assert result["optimal_price"] == 99.99
 
 
 class TestWritePriceToChain:
     @pytest.mark.asyncio
     async def test_returns_tx_data(self):
-        result = await _handle_write_price_to_chain({
-            "product_id": "test",
-            "new_price": 87.99,
-            "confidence": 0.87,
-        })
+        result = await _handle_write_price_to_chain(
+            {
+                "product_id": "test",
+                "new_price": 87.99,
+                "confidence": 0.87,
+            }
+        )
         assert result["success"] is True
         assert result["tx_hash"].startswith("0x")
         assert result["chain"] == "BNB Chain Testnet"
@@ -442,6 +465,7 @@ class TestWritePriceToChain:
 # ==================================================================
 # AutonomousOrchestrator
 # ==================================================================
+
 
 class TestOrchestratorInit:
     def test_creates_with_defaults(self):
@@ -473,15 +497,17 @@ class TestRunScout:
     async def test_returns_market_signal(self):
         orch = AutonomousOrchestrator()
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "competitor_name": "TestComp",
-            "competitor_price": 79.99,
-            "price_change_pct": -10.0,
-            "signal_type": "price_drop",
-            "product_category": "electronics",
-            "source": "google_search",
-            "confidence": 0.9,
-        })
+        mock_response.text = json.dumps(
+            {
+                "competitor_name": "TestComp",
+                "competitor_price": 79.99,
+                "price_change_pct": -10.0,
+                "signal_type": "price_drop",
+                "product_category": "electronics",
+                "source": "google_search",
+                "confidence": 0.9,
+            }
+        )
         orch.client = MagicMock()
         orch.client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
@@ -510,24 +536,30 @@ class TestRunAnalyst:
     async def test_returns_market_assessment(self):
         orch = AutonomousOrchestrator()
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "sentiment_score": -0.5,
-            "sentiment_label": "bearish",
-            "demand_elasticity": -2.0,
-            "risk_level": "high",
-            "risk_factors": ["Competitor undercut"],
-            "opportunity_score": 0.7,
-            "market_context": "Bearish",
-            "recommended_direction": "decrease",
-            "max_safe_change_pct": 12.0,
-        })
+        mock_response.text = json.dumps(
+            {
+                "sentiment_score": -0.5,
+                "sentiment_label": "bearish",
+                "demand_elasticity": -2.0,
+                "risk_level": "high",
+                "risk_factors": ["Competitor undercut"],
+                "opportunity_score": 0.7,
+                "market_context": "Bearish",
+                "recommended_direction": "decrease",
+                "max_safe_change_pct": 12.0,
+            }
+        )
         orch.client = MagicMock()
         orch.client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
         signal = MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=-10.0,
-            signal_type="price_drop", product_category="electronics",
-            source="api", confidence=0.8,
+            competitor_name="X",
+            competitor_price=80.0,
+            price_change_pct=-10.0,
+            signal_type="price_drop",
+            product_category="electronics",
+            source="api",
+            confidence=0.8,
         )
         result = await orch._run_analyst(signal)
         assert isinstance(result, MarketAssessment)
@@ -543,9 +575,13 @@ class TestRunAnalyst:
         orch.client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
         signal = MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=-10.0,
-            signal_type="price_drop", product_category="electronics",
-            source="api", confidence=0.8,
+            competitor_name="X",
+            competitor_price=80.0,
+            price_change_pct=-10.0,
+            signal_type="price_drop",
+            product_category="electronics",
+            source="api",
+            confidence=0.8,
         )
         result = await orch._run_analyst(signal)
         assert isinstance(result, MarketAssessment)
@@ -563,22 +599,33 @@ class TestRunStrategist:
         orch.client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
         signal = MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=-15.0,
-            signal_type="price_drop", product_category="electronics",
-            source="api", confidence=0.85,
+            competitor_name="X",
+            competitor_price=80.0,
+            price_change_pct=-15.0,
+            signal_type="price_drop",
+            product_category="electronics",
+            source="api",
+            confidence=0.85,
         )
         assessment = MarketAssessment(
-            sentiment_score=-0.42, sentiment_label="bearish",
-            demand_elasticity=-1.8, risk_level="medium",
+            sentiment_score=-0.42,
+            sentiment_label="bearish",
+            demand_elasticity=-1.8,
+            risk_level="medium",
             risk_factors=["Competitor undercut"],
-            opportunity_score=0.65, market_context="Bearish market",
-            recommended_direction="decrease", max_safe_change_pct=15.0,
+            opportunity_score=0.65,
+            market_context="Bearish market",
+            recommended_direction="decrease",
+            max_safe_change_pct=15.0,
         )
 
         result = await orch._run_strategist(
-            signal, assessment,
-            current_price=99.99, cost_basis=45.0,
-            margin_floor_pct=20.0, product_id="prod-1",
+            signal,
+            assessment,
+            current_price=99.99,
+            cost_basis=45.0,
+            margin_floor_pct=20.0,
+            product_id="prod-1",
         )
         assert isinstance(result, PricingDecision)
         assert result.recommended_price < result.current_price
@@ -595,22 +642,33 @@ class TestRunStrategist:
         orch.client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
         signal = MarketSignal(
-            competitor_name="X", competitor_price=100.0, price_change_pct=0.0,
-            signal_type="stable", product_category="electronics",
-            source="api", confidence=0.5,
+            competitor_name="X",
+            competitor_price=100.0,
+            price_change_pct=0.0,
+            signal_type="stable",
+            product_category="electronics",
+            source="api",
+            confidence=0.5,
         )
         assessment = MarketAssessment(
-            sentiment_score=0.0, sentiment_label="neutral",
-            demand_elasticity=-1.0, risk_level="low",
+            sentiment_score=0.0,
+            sentiment_label="neutral",
+            demand_elasticity=-1.0,
+            risk_level="low",
             risk_factors=[],
-            opportunity_score=0.3, market_context="Stable",
-            recommended_direction="hold", max_safe_change_pct=5.0,
+            opportunity_score=0.3,
+            market_context="Stable",
+            recommended_direction="hold",
+            max_safe_change_pct=5.0,
         )
 
         result = await orch._run_strategist(
-            signal, assessment,
-            current_price=99.99, cost_basis=45.0,
-            margin_floor_pct=20.0, product_id="prod-1",
+            signal,
+            assessment,
+            current_price=99.99,
+            cost_basis=45.0,
+            margin_floor_pct=20.0,
+            product_id="prod-1",
         )
         assert result.action == "hold"
         assert result.change_pct == 0.0
@@ -644,22 +702,33 @@ class TestRunStrategist:
         orch.client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
         signal = MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=-15.0,
-            signal_type="price_drop", product_category="electronics",
-            source="api", confidence=0.85,
+            competitor_name="X",
+            competitor_price=80.0,
+            price_change_pct=-15.0,
+            signal_type="price_drop",
+            product_category="electronics",
+            source="api",
+            confidence=0.85,
         )
         assessment = MarketAssessment(
-            sentiment_score=-0.42, sentiment_label="bearish",
-            demand_elasticity=-1.8, risk_level="medium",
+            sentiment_score=-0.42,
+            sentiment_label="bearish",
+            demand_elasticity=-1.8,
+            risk_level="medium",
             risk_factors=["Undercut"],
-            opportunity_score=0.65, market_context="Bearish",
-            recommended_direction="decrease", max_safe_change_pct=15.0,
+            opportunity_score=0.65,
+            market_context="Bearish",
+            recommended_direction="decrease",
+            max_safe_change_pct=15.0,
         )
 
         result = await orch._run_strategist(
-            signal, assessment,
-            current_price=99.99, cost_basis=45.0,
-            margin_floor_pct=20.0, product_id="prod-1",
+            signal,
+            assessment,
+            current_price=99.99,
+            cost_basis=45.0,
+            margin_floor_pct=20.0,
+            product_id="prod-1",
         )
         assert result.tx_hash is not None
         assert result.action == "execute"
@@ -669,25 +738,44 @@ class TestRunPipeline:
     @pytest.mark.asyncio
     async def test_full_pipeline(self):
         orch = AutonomousOrchestrator()
-        orch._run_scout = AsyncMock(return_value=MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=-15.0,
-            signal_type="price_drop", product_category="electronics",
-            source="api", confidence=0.85,
-        ))
-        orch._run_analyst = AsyncMock(return_value=MarketAssessment(
-            sentiment_score=-0.42, sentiment_label="bearish",
-            demand_elasticity=-1.8, risk_level="medium",
-            risk_factors=[],
-            opportunity_score=0.65, market_context="Bearish",
-            recommended_direction="decrease", max_safe_change_pct=15.0,
-        ))
-        orch._run_strategist = AsyncMock(return_value=PricingDecision(
-            recommended_price=87.99, current_price=99.99,
-            change_pct=-12.0, confidence_score=0.87,
-            reasoning="Decrease needed", action="execute",
-            risk_acknowledgment="Known", expected_revenue_impact="Positive",
-            tx_hash="0xabc", executed_at="2026-02-08T12:00:00Z",
-        ))
+        orch._run_scout = AsyncMock(
+            return_value=MarketSignal(
+                competitor_name="X",
+                competitor_price=80.0,
+                price_change_pct=-15.0,
+                signal_type="price_drop",
+                product_category="electronics",
+                source="api",
+                confidence=0.85,
+            )
+        )
+        orch._run_analyst = AsyncMock(
+            return_value=MarketAssessment(
+                sentiment_score=-0.42,
+                sentiment_label="bearish",
+                demand_elasticity=-1.8,
+                risk_level="medium",
+                risk_factors=[],
+                opportunity_score=0.65,
+                market_context="Bearish",
+                recommended_direction="decrease",
+                max_safe_change_pct=15.0,
+            )
+        )
+        orch._run_strategist = AsyncMock(
+            return_value=PricingDecision(
+                recommended_price=87.99,
+                current_price=99.99,
+                change_pct=-12.0,
+                confidence_score=0.87,
+                reasoning="Decrease needed",
+                action="execute",
+                risk_acknowledgment="Known",
+                expected_revenue_impact="Positive",
+                tx_hash="0xabc",
+                executed_at="2026-02-08T12:00:00Z",
+            )
+        )
 
         result = await orch.run_pipeline("prod-1")
         assert isinstance(result, PricingDecision)
@@ -699,23 +787,42 @@ class TestRunPipeline:
     @pytest.mark.asyncio
     async def test_passes_params_through(self):
         orch = AutonomousOrchestrator()
-        orch._run_scout = AsyncMock(return_value=MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=0,
-            signal_type="stable", product_category="toys",
-            source="api", confidence=0.5,
-        ))
-        orch._run_analyst = AsyncMock(return_value=MarketAssessment(
-            sentiment_score=0, sentiment_label="neutral",
-            demand_elasticity=-1.0, risk_level="low", risk_factors=[],
-            opportunity_score=0.3, market_context="Stable",
-            recommended_direction="hold", max_safe_change_pct=5.0,
-        ))
-        orch._run_strategist = AsyncMock(return_value=PricingDecision(
-            recommended_price=50.0, current_price=50.0,
-            change_pct=0, confidence_score=0.5,
-            reasoning="Hold", action="hold",
-            risk_acknowledgment="None", expected_revenue_impact="None",
-        ))
+        orch._run_scout = AsyncMock(
+            return_value=MarketSignal(
+                competitor_name="X",
+                competitor_price=80.0,
+                price_change_pct=0,
+                signal_type="stable",
+                product_category="toys",
+                source="api",
+                confidence=0.5,
+            )
+        )
+        orch._run_analyst = AsyncMock(
+            return_value=MarketAssessment(
+                sentiment_score=0,
+                sentiment_label="neutral",
+                demand_elasticity=-1.0,
+                risk_level="low",
+                risk_factors=[],
+                opportunity_score=0.3,
+                market_context="Stable",
+                recommended_direction="hold",
+                max_safe_change_pct=5.0,
+            )
+        )
+        orch._run_strategist = AsyncMock(
+            return_value=PricingDecision(
+                recommended_price=50.0,
+                current_price=50.0,
+                change_pct=0,
+                confidence_score=0.5,
+                reasoning="Hold",
+                action="hold",
+                risk_acknowledgment="None",
+                expected_revenue_impact="None",
+            )
+        )
 
         await orch.run_pipeline(
             product_id="prod-2",
@@ -731,24 +838,44 @@ class TestRunPipelineStreaming:
     @pytest.mark.asyncio
     async def test_yields_sse_events(self):
         orch = AutonomousOrchestrator()
-        orch._run_scout = AsyncMock(return_value=MarketSignal(
-            competitor_name="X", competitor_price=80.0, price_change_pct=-15.0,
-            signal_type="price_drop", product_category="electronics",
-            source="api", confidence=0.85,
-        ))
-        orch._run_analyst = AsyncMock(return_value=MarketAssessment(
-            sentiment_score=-0.42, sentiment_label="bearish",
-            demand_elasticity=-1.8, risk_level="medium", risk_factors=[],
-            opportunity_score=0.65, market_context="Bearish",
-            recommended_direction="decrease", max_safe_change_pct=15.0,
-        ))
-        orch._run_strategist = AsyncMock(return_value=PricingDecision(
-            recommended_price=87.99, current_price=99.99,
-            change_pct=-12.0, confidence_score=0.87,
-            reasoning="Decrease", action="execute",
-            risk_acknowledgment="Known", expected_revenue_impact="Positive",
-            tx_hash="0xabc", executed_at="2026-02-08T12:00:00Z",
-        ))
+        orch._run_scout = AsyncMock(
+            return_value=MarketSignal(
+                competitor_name="X",
+                competitor_price=80.0,
+                price_change_pct=-15.0,
+                signal_type="price_drop",
+                product_category="electronics",
+                source="api",
+                confidence=0.85,
+            )
+        )
+        orch._run_analyst = AsyncMock(
+            return_value=MarketAssessment(
+                sentiment_score=-0.42,
+                sentiment_label="bearish",
+                demand_elasticity=-1.8,
+                risk_level="medium",
+                risk_factors=[],
+                opportunity_score=0.65,
+                market_context="Bearish",
+                recommended_direction="decrease",
+                max_safe_change_pct=15.0,
+            )
+        )
+        orch._run_strategist = AsyncMock(
+            return_value=PricingDecision(
+                recommended_price=87.99,
+                current_price=99.99,
+                change_pct=-12.0,
+                confidence_score=0.87,
+                reasoning="Decrease",
+                action="execute",
+                risk_acknowledgment="Known",
+                expected_revenue_impact="Positive",
+                tx_hash="0xabc",
+                executed_at="2026-02-08T12:00:00Z",
+            )
+        )
 
         events = []
         async for event in orch.run_pipeline_streaming("prod-1"):
@@ -778,6 +905,7 @@ class TestRunPipelineStreaming:
 # AutonomousTrigger
 # ==================================================================
 
+
 class TestAutonomousTrigger:
     def test_init(self):
         trigger = AutonomousTrigger()
@@ -800,11 +928,16 @@ class TestAutonomousTrigger:
             call_count += 1
             trigger.stop_monitoring()  # Stop after first iteration
             return PricingDecision(
-                recommended_price=87.99, current_price=99.99,
-                change_pct=-12.0, confidence_score=0.87,
-                reasoning="Test", action="execute",
-                risk_acknowledgment="None", expected_revenue_impact="Positive",
-                tx_hash="0xabc", executed_at="2026-02-08T12:00:00Z",
+                recommended_price=87.99,
+                current_price=99.99,
+                change_pct=-12.0,
+                confidence_score=0.87,
+                reasoning="Test",
+                action="execute",
+                risk_acknowledgment="None",
+                expected_revenue_impact="Positive",
+                tx_hash="0xabc",
+                executed_at="2026-02-08T12:00:00Z",
             )
 
         trigger.orchestrator.run_pipeline = mock_pipeline
@@ -832,11 +965,16 @@ class TestAutonomousTrigger:
             if call_count >= 2:
                 trigger.stop_monitoring()
             return PricingDecision(
-                recommended_price=87.99, current_price=current_price,
-                change_pct=-12.0, confidence_score=0.87,
-                reasoning="Test", action="execute",
-                risk_acknowledgment="None", expected_revenue_impact="Positive",
-                tx_hash="0xabc", executed_at="2026-02-08T12:00:00Z",
+                recommended_price=87.99,
+                current_price=current_price,
+                change_pct=-12.0,
+                confidence_score=0.87,
+                reasoning="Test",
+                action="execute",
+                risk_acknowledgment="None",
+                expected_revenue_impact="Positive",
+                tx_hash="0xabc",
+                executed_at="2026-02-08T12:00:00Z",
             )
 
         trigger.orchestrator.run_pipeline = mock_pipeline
@@ -863,10 +1001,14 @@ class TestAutonomousTrigger:
                 raise Exception("Transient error")
             trigger.stop_monitoring()
             return PricingDecision(
-                recommended_price=99.99, current_price=99.99,
-                change_pct=0, confidence_score=0.5,
-                reasoning="Hold", action="hold",
-                risk_acknowledgment="None", expected_revenue_impact="None",
+                recommended_price=99.99,
+                current_price=99.99,
+                change_pct=0,
+                confidence_score=0.5,
+                reasoning="Hold",
+                action="hold",
+                risk_acknowledgment="None",
+                expected_revenue_impact="None",
             )
 
         trigger.orchestrator.run_pipeline = mock_pipeline
@@ -879,6 +1021,3 @@ class TestAutonomousTrigger:
             )
 
         assert call_count == 2  # Recovered and ran again
-
-
-        

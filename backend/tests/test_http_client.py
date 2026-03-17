@@ -9,10 +9,10 @@ Covers:
 - Convenience methods: get, post, put, delete
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -28,7 +28,7 @@ _MOCKED = [
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
 # Ensure db.session stub
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -68,8 +68,10 @@ _cb_stub = ModuleType("services.integration.circuit_breaker")
 
 class _FakeCircuitBreaker:
     """Fake circuit breaker that supports async context manager."""
+
     async def __aenter__(self):
         return self
+
     async def __aexit__(self, *a):
         pass
 
@@ -105,6 +107,7 @@ _circuit_breaker_registry = _fake_registry
 # Helpers
 # ===========================================================================
 
+
 def _make_response(status_code=200, headers=None, json_data=None):
     """Build a fake httpx.Response-like object."""
     resp = MagicMock()
@@ -114,15 +117,15 @@ def _make_response(status_code=200, headers=None, json_data=None):
     resp.raise_for_status = MagicMock()
     if status_code >= 400:
         import httpx as _httpx
-        resp.raise_for_status.side_effect = _httpx.HTTPStatusError(
-            "error", request=MagicMock(), response=resp
-        )
+
+        resp.raise_for_status.side_effect = _httpx.HTTPStatusError("error", request=MagicMock(), response=resp)
     return resp
 
 
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestRetryableClientInit:
     """Test __init__ defaults and overrides."""
@@ -227,7 +230,7 @@ class TestDoRequestWithRetry:
         _rate_limit_tracker.wait_if_needed.reset_mock()
         _rate_limit_tracker.update_from_response.reset_mock()
         _rate_limit_tracker.mark_rate_limited.reset_mock()
-        
+
     @pytest.mark.asyncio
     async def test_calls_rate_limit_wait(self):
         rc = RetryableClient("https://s.com", "shopify")
@@ -237,8 +240,10 @@ class TestDoRequestWithRetry:
 
         with patch("services.integration.http_client.rate_limit_tracker", _rate_limit_tracker):
             with patch("services.integration.http_client.execute_with_retry", new_callable=AsyncMock) as mock_ewr:
+
                 async def run_callback(fn, config=None, operation_name=None):
                     return await fn()
+
                 mock_ewr.side_effect = run_callback
 
                 await rc._do_request_with_retry("GET", "/url", "op")
@@ -253,8 +258,10 @@ class TestDoRequestWithRetry:
 
         with patch("services.integration.http_client.rate_limit_tracker", _rate_limit_tracker):
             with patch("services.integration.http_client.execute_with_retry", new_callable=AsyncMock) as mock_ewr:
+
                 async def run_callback(fn, config=None, operation_name=None):
                     return await fn()
+
                 mock_ewr.side_effect = run_callback
 
                 await rc._do_request_with_retry("GET", "/url", "op")
@@ -269,8 +276,10 @@ class TestDoRequestWithRetry:
 
         with patch("services.integration.http_client.rate_limit_tracker", _rate_limit_tracker):
             with patch("services.integration.http_client.execute_with_retry", new_callable=AsyncMock) as mock_ewr:
+
                 async def run_callback(fn, config=None, operation_name=None):
                     return await fn()
+
                 mock_ewr.side_effect = run_callback
 
                 with pytest.raises(Exception):
@@ -287,8 +296,10 @@ class TestDoRequestWithRetry:
 
         with patch("services.integration.http_client.rate_limit_tracker", _rate_limit_tracker):
             with patch("services.integration.http_client.execute_with_retry", new_callable=AsyncMock) as mock_ewr:
+
                 async def run_callback(fn, config=None, operation_name=None):
                     return await fn()
+
                 mock_ewr.side_effect = run_callback
 
                 with pytest.raises(Exception):
@@ -305,8 +316,10 @@ class TestDoRequestWithRetry:
 
         with patch("services.integration.http_client.rate_limit_tracker", _rate_limit_tracker):
             with patch("services.integration.http_client.execute_with_retry", new_callable=AsyncMock) as mock_ewr:
+
                 async def run_callback(fn, config=None, operation_name=None):
                     return await fn()
+
                 mock_ewr.side_effect = run_callback
 
                 await rc._do_request_with_retry("POST", "/url", "op", json={"a": 1})
@@ -362,5 +375,3 @@ class TestConvenienceMethods:
         result = await rc.delete("/products/1")
         rc._request.assert_awaited_once_with("DELETE", "/products/1", "DELETE /products/1")
         assert result == "resp"
-
-        

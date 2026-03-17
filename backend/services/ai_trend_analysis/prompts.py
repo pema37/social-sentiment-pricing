@@ -302,6 +302,3 @@ def build_insight_prompt(
         trends=trends,
         events=events,
     )
-
-
-

@@ -12,20 +12,18 @@ Pricing: ~$50/month for 5,000 searches
 Docs: https://serpapi.com/google-shopping-api
 """
 
-import os
 import logging
-from typing import Optional, List, Dict, Any
-from decimal import Decimal
+import os
+from typing import Any
 
 import httpx
 
-from .base import BaseSearchProvider
 from ..schemas import (
-    SearchProvider,
     MatchedProduct,
     ProviderResult,
+    SearchProvider,
 )
-
+from .base import BaseSearchProvider
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +31,7 @@ logger = logging.getLogger(__name__)
 class SerpAPIProvider(BaseSearchProvider):
     """
     Google Shopping search via SerpAPI.
-    
+
     This is the highest quality provider, returning structured
     product data including prices, ratings, and images.
     """
@@ -42,14 +40,14 @@ class SerpAPIProvider(BaseSearchProvider):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         timeout: float = 30.0,
         country: str = "us",
         language: str = "en",
     ):
         """
         Initialize SerpAPI provider.
-        
+
         Args:
             api_key: SerpAPI key (or set SERPAPI_KEY env var)
             timeout: Request timeout in seconds
@@ -60,7 +58,7 @@ class SerpAPIProvider(BaseSearchProvider):
         self.timeout = timeout
         self.country = country
         self.language = language
-        
+
         # Track usage
         self._requests_made = 0
 
@@ -100,11 +98,11 @@ class SerpAPIProvider(BaseSearchProvider):
     ) -> ProviderResult:
         """
         Search Google Shopping via SerpAPI.
-        
+
         Args:
             query: Search query
             max_results: Maximum results to return
-            
+
         Returns:
             ProviderResult with products
         """
@@ -152,7 +150,7 @@ class SerpAPIProvider(BaseSearchProvider):
 
         except httpx.HTTPStatusError as e:
             error_msg = f"HTTP {e.response.status_code}"
-            
+
             # Check for specific errors
             if e.response.status_code == 401:
                 error_msg = "Invalid API key"
@@ -164,7 +162,7 @@ class SerpAPIProvider(BaseSearchProvider):
                     error=error_msg,
                     rate_limited=True,
                 )
-            
+
             return ProviderResult(
                 provider=self.provider_name,
                 success=False,
@@ -190,20 +188,20 @@ class SerpAPIProvider(BaseSearchProvider):
     # Private Methods
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _parse_results(self, data: Dict[str, Any]) -> List[MatchedProduct]:
+    def _parse_results(self, data: dict[str, Any]) -> list[MatchedProduct]:
         """
         Parse SerpAPI shopping results into MatchedProduct objects.
-        
+
         Args:
             data: Raw API response
-            
+
         Returns:
             List of MatchedProduct
         """
         products = []
-        
+
         shopping_results = data.get("shopping_results", [])
-        
+
         for item in shopping_results:
             product = self._parse_item(item)
             if product:
@@ -218,19 +216,19 @@ class SerpAPIProvider(BaseSearchProvider):
 
         return products
 
-    def _parse_item(self, item: Dict[str, Any]) -> Optional[MatchedProduct]:
+    def _parse_item(self, item: dict[str, Any]) -> MatchedProduct | None:
         """
         Parse a single shopping result item.
-        
+
         Args:
             item: Single result from API
-            
+
         Returns:
             MatchedProduct or None
         """
         title = item.get("title", "")
         url = item.get("link", "")
-        
+
         if not title or not url:
             return None
 
@@ -278,11 +276,11 @@ class SerpAPIProvider(BaseSearchProvider):
             raw_data=item,
         )
 
-    def _extract_currency(self, item: Dict[str, Any]) -> str:
+    def _extract_currency(self, item: dict[str, Any]) -> str:
         """Extract currency from item."""
         # SerpAPI usually returns USD for US searches
         price_str = item.get("price", "")
-        
+
         if "$" in price_str or "USD" in price_str:
             return "USD"
         elif "€" in price_str or "EUR" in price_str:
@@ -291,14 +289,14 @@ class SerpAPIProvider(BaseSearchProvider):
             return "GBP"
         elif "CA$" in price_str or "CAD" in price_str:
             return "CAD"
-        
+
         return "USD"  # Default
 
     # ─────────────────────────────────────────────────────────────────────────
     # Public Utility Methods
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Get usage statistics."""
         return {
             "provider": self.provider_name.value,
@@ -306,10 +304,10 @@ class SerpAPIProvider(BaseSearchProvider):
             "estimated_cost": self._requests_made * self.cost_per_request,
         }
 
-    async def check_api_status(self) -> Dict[str, Any]:
+    async def check_api_status(self) -> dict[str, Any]:
         """
         Check API key status and remaining credits.
-        
+
         Returns:
             Dict with status info
         """
@@ -320,7 +318,7 @@ class SerpAPIProvider(BaseSearchProvider):
             params = {
                 "api_key": self.api_key,
             }
-            
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     "https://serpapi.com/account.json",
@@ -341,7 +339,3 @@ class SerpAPIProvider(BaseSearchProvider):
                 "status": "error",
                 "error": str(e),
             }
-        
-
-
-        

@@ -20,7 +20,6 @@ Total: ~90 tests
 """
 
 import sys
-from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -56,7 +55,6 @@ try:
 except (AttributeError, TypeError):
     pass  # Real SQLAlchemy model — operators already work
 
-import pytest
 
 from services.pricing.confidence_calculator import ConfidenceCalculator
 from services.pricing.rule_evaluator import MarketSignals
@@ -106,8 +104,8 @@ def make_impacts_mixed():
 # 1. Initialization
 # ============================================================
 
-class TestConfidenceCalculatorInit:
 
+class TestConfidenceCalculatorInit:
     def test_init_without_db(self):
         calc = ConfidenceCalculator()
         assert calc.db is None
@@ -128,8 +126,8 @@ class TestConfidenceCalculatorInit:
 # 2. _score_data_quality
 # ============================================================
 
-class TestScoreDataQuality:
 
+class TestScoreDataQuality:
     def setup_method(self):
         self.calc = ConfidenceCalculator()
 
@@ -227,8 +225,8 @@ class TestScoreDataQuality:
 # 3. _score_signal_agreement
 # ============================================================
 
-class TestScoreSignalAgreement:
 
+class TestScoreSignalAgreement:
     def setup_method(self):
         self.calc = ConfidenceCalculator()
 
@@ -250,9 +248,7 @@ class TestScoreSignalAgreement:
 
     def test_only_total_key(self):
         """total_contribution_percent is skipped."""
-        score = self.calc._score_signal_agreement(
-            {"total_contribution_percent": 5.0}
-        )
+        score = self.calc._score_signal_agreement({"total_contribution_percent": 5.0})
         assert score == Decimal("0.5")
 
     def test_three_positive_one_negative(self):
@@ -313,8 +309,8 @@ class TestScoreSignalAgreement:
 # 4. _score_rule_confidence
 # ============================================================
 
-class TestScoreRuleConfidence:
 
+class TestScoreRuleConfidence:
     def setup_method(self):
         self.calc = ConfidenceCalculator()
 
@@ -397,8 +393,8 @@ class TestScoreRuleConfidence:
 # 5. _score_historical_accuracy
 # ============================================================
 
-class TestScoreHistoricalAccuracy:
 
+class TestScoreHistoricalAccuracy:
     def test_no_db_returns_default(self):
         calc = ConfidenceCalculator(db=None)
         score = calc._score_historical_accuracy("sentiment_threshold", USER_ID)
@@ -430,8 +426,8 @@ class TestScoreHistoricalAccuracy:
 # 6. _score_market_stability
 # ============================================================
 
-class TestScoreMarketStability:
 
+class TestScoreMarketStability:
     def test_no_db_returns_default(self):
         calc = ConfidenceCalculator(db=None)
         score = calc._score_market_stability(PRODUCT_ID)
@@ -489,8 +485,8 @@ class TestScoreMarketStability:
 # 7. _calculate_price_volatility
 # ============================================================
 
-class TestCalculatePriceVolatility:
 
+class TestCalculatePriceVolatility:
     @patch(f"{SERVICE_PATH}.select")
     def test_insufficient_data_returns_stable(self, mock_select):
         mock_select.return_value.where.return_value.order_by.return_value = MagicMock()
@@ -547,8 +543,8 @@ class TestCalculatePriceVolatility:
 # 8. _calculate_sentiment_volatility
 # ============================================================
 
-class TestCalculateSentimentVolatility:
 
+class TestCalculateSentimentVolatility:
     @patch(f"{SERVICE_PATH}.select")
     def test_insufficient_data_returns_stable(self, mock_select):
         mock_select.return_value.where.return_value.order_by.return_value.limit.return_value = MagicMock()
@@ -595,8 +591,8 @@ class TestCalculateSentimentVolatility:
 # 9. calculate() — Overall Pipeline
 # ============================================================
 
-class TestCalculateOverall:
 
+class TestCalculateOverall:
     def test_returns_decimal(self):
         calc = ConfidenceCalculator()
         signals = make_signals()
@@ -667,8 +663,8 @@ class TestCalculateOverall:
 # 10. get_confidence_breakdown
 # ============================================================
 
-class TestGetConfidenceBreakdown:
 
+class TestGetConfidenceBreakdown:
     def test_returns_dict(self):
         calc = ConfidenceCalculator()
         signals = make_signals()
@@ -690,8 +686,11 @@ class TestGetConfidenceBreakdown:
         result = calc.get_confidence_breakdown(make_signals(), {})
         components = result["components"]
         expected = {
-            "data_quality", "signal_agreement", "rule_confidence",
-            "historical_accuracy", "market_stability",
+            "data_quality",
+            "signal_agreement",
+            "rule_confidence",
+            "historical_accuracy",
+            "market_stability",
         }
         assert set(components.keys()) == expected
 
@@ -717,9 +716,7 @@ class TestGetConfidenceBreakdown:
 
     def test_rule_confidence_includes_rule_type(self):
         calc = ConfidenceCalculator()
-        result = calc.get_confidence_breakdown(
-            make_signals(), {}, triggered_rule_type="sentiment_threshold"
-        )
+        result = calc.get_confidence_breakdown(make_signals(), {}, triggered_rule_type="sentiment_threshold")
         assert result["components"]["rule_confidence"]["rule_type"] == "sentiment_threshold"
 
     def test_volatility_none_without_db(self):
@@ -734,9 +731,7 @@ class TestGetConfidenceBreakdown:
         calc._calculate_price_volatility = MagicMock(return_value=Decimal("0.08"))
         calc._calculate_sentiment_volatility = MagicMock(return_value=Decimal("0.04"))
 
-        result = calc.get_confidence_breakdown(
-            make_signals(), {}, product_id=PRODUCT_ID
-        )
+        result = calc.get_confidence_breakdown(make_signals(), {}, product_id=PRODUCT_ID)
         assert result["components"]["market_stability"]["price_volatility"] == 0.08
         assert result["components"]["market_stability"]["sentiment_volatility"] == 0.04
 
@@ -747,6 +742,3 @@ class TestGetConfidenceBreakdown:
         breakdown = calc.get_confidence_breakdown(signals, impacts)
         direct = calc.calculate(signals, impacts)
         assert abs(breakdown["overall"] - float(direct)) < 0.01
-
-
-        

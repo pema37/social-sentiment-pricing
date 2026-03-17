@@ -19,9 +19,9 @@ Total: ~65 tests
 """
 
 import sys
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -36,7 +36,6 @@ for mod in [
         sys.modules[mod] = MagicMock()
 
 import pytest
-
 
 # ============================================================
 # Helpers
@@ -107,18 +106,35 @@ def make_mock_settings(
     return settings
 
 
-
 # ── Column mock for comparison operators ──
 class _ColumnMock:
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
-    def desc(self): return MagicMock()
-    def asc(self): return MagicMock()
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
+
+    def desc(self):
+        return MagicMock()
+
+    def asc(self):
+        return MagicMock()
+
 
 class _FakePriceRecommendation:
     id = _ColumnMock()
@@ -128,9 +144,11 @@ class _FakePriceRecommendation:
     valid_until = _ColumnMock()
     created_at = _ColumnMock()
     updated_at = _ColumnMock()
+
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 # We need to patch at the module level where the imports happen
 SERVICE_PATH = "services.pricing.recommendation_service"
@@ -139,6 +157,7 @@ SERVICE_PATH = "services.pricing.recommendation_service"
 # ============================================================
 # 1. Initialization
 # ============================================================
+
 
 class TestRecommendationServiceInit:
     """Tests for __init__ and sub-service wiring."""
@@ -151,6 +170,7 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
     def test_creates_rule_evaluator(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         MockRule.assert_called_once_with(db)
@@ -163,6 +183,7 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
     def test_creates_signal_processor(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         MockSignal.assert_called_once_with(db)
@@ -173,8 +194,11 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.ConfidenceCalculator")
     @patch(f"{SERVICE_PATH}.SignalProcessor")
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
-    def test_creates_confidence_calculator_without_db(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
+    def test_creates_confidence_calculator_without_db(
+        self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback
+    ):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         MockConf.assert_called_once_with()
@@ -187,6 +211,7 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
     def test_creates_price_sync(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         MockSync.assert_called_once_with(db)
@@ -199,6 +224,7 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
     def test_creates_settings_service(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         MockSettings.assert_called_once_with(db)
@@ -211,6 +237,7 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
     def test_creates_competitor_fallback(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         MockFallback.assert_called_once_with(db)
@@ -223,6 +250,7 @@ class TestRecommendationServiceInit:
     @patch(f"{SERVICE_PATH}.RuleEvaluator")
     def test_stores_db_reference(self, MockRule, MockSignal, MockConf, MockSync, MockSettings, MockFallback):
         from services.pricing.recommendation_service import RecommendationService
+
         db = make_mock_db()
         svc = RecommendationService(db)
         assert svc.db is db
@@ -232,6 +260,7 @@ class TestRecommendationServiceInit:
 # 2. generate_recommendation — Full Flow
 # ============================================================
 
+
 class TestGenerateRecommendation:
     """Tests for the main 8-step generate_recommendation pipeline."""
 
@@ -239,13 +268,16 @@ class TestGenerateRecommendation:
         """Create a RecommendationService with all sub-services mocked."""
         db = make_mock_db()
 
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
 
         # Configure defaults
@@ -302,9 +334,7 @@ class TestGenerateRecommendation:
         svc.signal_processor.gather_signals = AsyncMock(return_value=signals)
 
         await svc.generate_recommendation(product, USER_ID)
-        svc.rule_evaluator.find_matching_rule.assert_awaited_once_with(
-            product, USER_ID, signals
-        )
+        svc.rule_evaluator.find_matching_rule.assert_awaited_once_with(product, USER_ID, signals)
 
     @pytest.mark.asyncio
     async def test_falls_back_to_competitor_when_no_rule(self):
@@ -316,9 +346,7 @@ class TestGenerateRecommendation:
         svc.rule_evaluator.find_matching_rule = AsyncMock(return_value=None)
 
         await svc.generate_recommendation(product, USER_ID)
-        svc.competitor_fallback.generate.assert_awaited_once_with(
-            product, USER_ID, signals
-        )
+        svc.competitor_fallback.generate.assert_awaited_once_with(product, USER_ID, signals)
 
     @pytest.mark.asyncio
     async def test_falls_back_when_rule_is_none_tuple(self):
@@ -341,22 +369,19 @@ class TestGenerateRecommendation:
         signals = {"sentiment": 0.5}
         svc._has_pending_recommendation = AsyncMock(return_value=False)
         svc.signal_processor.gather_signals = AsyncMock(return_value=signals)
-        svc.rule_evaluator.find_matching_rule = AsyncMock(
-            return_value=(rule, match_details)
-        )
+        svc.rule_evaluator.find_matching_rule = AsyncMock(return_value=(rule, match_details))
 
         # Mock the internal method to isolate this test
         svc._create_rule_based_recommendation = AsyncMock(return_value=make_mock_recommendation())
 
         result = await svc.generate_recommendation(product, USER_ID)
-        svc._create_rule_based_recommendation.assert_awaited_once_with(
-            product, USER_ID, rule, match_details, signals
-        )
+        svc._create_rule_based_recommendation.assert_awaited_once_with(product, USER_ID, rule, match_details, signals)
 
 
 # ============================================================
 # 3. _has_pending_recommendation
 # ============================================================
+
 
 @patch(f"{SERVICE_PATH}.PriceRecommendation", _FakePriceRecommendation)
 class TestHasPendingRecommendation:
@@ -364,13 +389,16 @@ class TestHasPendingRecommendation:
 
     def _build_service(self):
         db = make_mock_db()
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
         return svc, db
 
@@ -378,7 +406,9 @@ class TestHasPendingRecommendation:
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_true_when_pending_exists(self, mock_select):
         svc, db = self._build_service()
-        mock_select.return_value.where.return_value.where.return_value.where.return_value.where.return_value = MagicMock()
+        mock_select.return_value.where.return_value.where.return_value.where.return_value.where.return_value = (
+            MagicMock()
+        )
         mock_result = MagicMock()
         mock_result.scalars.return_value.first.return_value = make_mock_recommendation()
         db.execute.return_value = mock_result
@@ -389,7 +419,9 @@ class TestHasPendingRecommendation:
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_false_when_no_pending(self, mock_select):
         svc, db = self._build_service()
-        mock_select.return_value.where.return_value.where.return_value.where.return_value.where.return_value = MagicMock()
+        mock_select.return_value.where.return_value.where.return_value.where.return_value.where.return_value = (
+            MagicMock()
+        )
         mock_result = MagicMock()
         mock_result.scalars.return_value.first.return_value = None
         db.execute.return_value = mock_result
@@ -400,7 +432,9 @@ class TestHasPendingRecommendation:
     @patch(f"{SERVICE_PATH}.select")
     async def test_queries_database(self, mock_select):
         svc, db = self._build_service()
-        mock_select.return_value.where.return_value.where.return_value.where.return_value.where.return_value = MagicMock()
+        mock_select.return_value.where.return_value.where.return_value.where.return_value.where.return_value = (
+            MagicMock()
+        )
         mock_result = MagicMock()
         mock_result.scalars.return_value.first.return_value = None
         db.execute.return_value = mock_result
@@ -413,33 +447,31 @@ class TestHasPendingRecommendation:
 # 4. _create_rule_based_recommendation
 # ============================================================
 
+
 class TestCreateRuleBasedRecommendation:
     """Tests for rule-based recommendation creation."""
 
     def _build_service(self):
         db = make_mock_db()
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
         return svc, db
 
     def _configure_service(self, svc, new_price=Decimal("110.00"), confidence=0.8):
         """Configure sub-service mocks for a standard recommendation flow."""
-        svc.signal_processor.calculate_price_impact = MagicMock(
-            return_value={"impact": 0.1}
-        )
+        svc.signal_processor.calculate_price_impact = MagicMock(return_value={"impact": 0.1})
         svc.confidence_calculator.calculate = MagicMock(return_value=confidence)
-        svc.confidence_calculator.get_confidence_breakdown = MagicMock(
-            return_value={"breakdown": True}
-        )
-        svc.settings_service.get_or_create = AsyncMock(
-            return_value=make_mock_settings()
-        )
+        svc.confidence_calculator.get_confidence_breakdown = MagicMock(return_value={"breakdown": True})
+        svc.settings_service.get_or_create = AsyncMock(return_value=make_mock_settings())
         svc.settings_service.check_requires_approval = MagicMock(return_value=False)
         return svc
 
@@ -448,18 +480,14 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_returns_none_when_no_price_change(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_returns_none_when_no_price_change(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         product = make_mock_product(current_price=Decimal("100.00"))
         rule = make_mock_rule()
 
         MockCalc.calculate_new_price.return_value = Decimal("100.00")  # same as current
 
-        result = await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        result = await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         assert result is None
 
     @pytest.mark.asyncio
@@ -467,18 +495,14 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_returns_none_when_price_is_none(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_returns_none_when_price_is_none(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         product = make_mock_product()
         rule = make_mock_rule()
 
         MockCalc.calculate_new_price.return_value = None
 
-        result = await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        result = await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         assert result is None
 
     @pytest.mark.asyncio
@@ -486,9 +510,7 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_applies_boundaries(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_applies_boundaries(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc)
         product = make_mock_product()
@@ -499,21 +521,15 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("8.0")
         MockReason.generate.return_value = "Test reasoning"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
-        MockBound.apply_boundaries.assert_called_once_with(
-            Decimal("110.00"), product, rule
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
+        MockBound.apply_boundaries.assert_called_once_with(Decimal("110.00"), product, rule)
 
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.ReasoningGenerator")
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_calculates_confidence(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_calculates_confidence(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc, confidence=0.85)
         product = make_mock_product()
@@ -525,9 +541,7 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("10.0")
         MockReason.generate.return_value = "Test"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, signals
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, signals)
         svc.confidence_calculator.calculate.assert_called_once()
 
     @pytest.mark.asyncio
@@ -535,9 +549,7 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_generates_reasoning(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_generates_reasoning(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc)
         product = make_mock_product()
@@ -548,9 +560,7 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("10.0")
         MockReason.generate.return_value = "Price increase due to positive sentiment"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         MockReason.generate.assert_called_once()
 
     @pytest.mark.asyncio
@@ -558,9 +568,7 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_commits_to_database(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_commits_to_database(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc)
         product = make_mock_product()
@@ -571,9 +579,7 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("10.0")
         MockReason.generate.return_value = "Test"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         db.commit.assert_awaited()
 
     @pytest.mark.asyncio
@@ -581,9 +587,7 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_updates_rule_last_triggered(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_updates_rule_last_triggered(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc)
         product = make_mock_product()
@@ -594,9 +598,7 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("10.0")
         MockReason.generate.return_value = "Test"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         assert rule.last_triggered_at is not None
 
     @pytest.mark.asyncio
@@ -604,9 +606,7 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_gets_user_settings(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_gets_user_settings(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc)
         product = make_mock_product()
@@ -617,9 +617,7 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("10.0")
         MockReason.generate.return_value = "Test"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         svc.settings_service.get_or_create.assert_awaited_once_with(USER_ID)
 
     @pytest.mark.asyncio
@@ -627,9 +625,7 @@ class TestCreateRuleBasedRecommendation:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_checks_approval_requirement(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_checks_approval_requirement(self, MockRec, MockCalc, MockBound, MockReason):
         svc, db = self._build_service()
         svc = self._configure_service(svc)
         product = make_mock_product()
@@ -640,9 +636,7 @@ class TestCreateRuleBasedRecommendation:
         MockBound.calculate_change_percent.return_value = Decimal("10.0")
         MockReason.generate.return_value = "Test"
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         svc.settings_service.check_requires_approval.assert_called_once()
 
 
@@ -650,18 +644,22 @@ class TestCreateRuleBasedRecommendation:
 # 5. Auto-Apply Logic
 # ============================================================
 
+
 class TestAutoApply:
     """Tests for _try_auto_apply and auto-apply triggering."""
 
     def _build_service(self):
         db = make_mock_db()
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
         return svc, db
 
@@ -684,9 +682,7 @@ class TestAutoApply:
         rec = make_mock_recommendation()
 
         with patch("services.pricing.approval_service.ApprovalService") as MockApproval:
-            MockApproval.return_value.auto_approve_and_apply = AsyncMock(
-                side_effect=Exception("Platform push failed")
-            )
+            MockApproval.return_value.auto_approve_and_apply = AsyncMock(side_effect=Exception("Platform push failed"))
 
             # Should NOT raise — just logs warning
             await svc._try_auto_apply(rec, USER_ID)
@@ -696,9 +692,7 @@ class TestAutoApply:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_auto_apply_triggered_when_no_approval_needed(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_auto_apply_triggered_when_no_approval_needed(self, MockRec, MockCalc, MockBound, MockReason):
         """When requires_approval=False and auto_approve_enabled=True → auto-apply."""
         svc, db = self._build_service()
         product = make_mock_product()
@@ -712,16 +706,12 @@ class TestAutoApply:
         svc.signal_processor.calculate_price_impact = MagicMock(return_value={})
         svc.confidence_calculator.calculate = MagicMock(return_value=0.8)
         svc.confidence_calculator.get_confidence_breakdown = MagicMock(return_value={})
-        svc.settings_service.get_or_create = AsyncMock(
-            return_value=make_mock_settings(auto_approve_enabled=True)
-        )
+        svc.settings_service.get_or_create = AsyncMock(return_value=make_mock_settings(auto_approve_enabled=True))
         svc.settings_service.check_requires_approval = MagicMock(return_value=False)
 
         svc._try_auto_apply = AsyncMock()
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         svc._try_auto_apply.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -729,9 +719,7 @@ class TestAutoApply:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_auto_apply_skipped_when_approval_required(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_auto_apply_skipped_when_approval_required(self, MockRec, MockCalc, MockBound, MockReason):
         """When requires_approval=True → skip auto-apply."""
         svc, db = self._build_service()
         product = make_mock_product()
@@ -745,16 +733,12 @@ class TestAutoApply:
         svc.signal_processor.calculate_price_impact = MagicMock(return_value={})
         svc.confidence_calculator.calculate = MagicMock(return_value=0.8)
         svc.confidence_calculator.get_confidence_breakdown = MagicMock(return_value={})
-        svc.settings_service.get_or_create = AsyncMock(
-            return_value=make_mock_settings(auto_approve_enabled=True)
-        )
+        svc.settings_service.get_or_create = AsyncMock(return_value=make_mock_settings(auto_approve_enabled=True))
         svc.settings_service.check_requires_approval = MagicMock(return_value=True)
 
         svc._try_auto_apply = AsyncMock()
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         svc._try_auto_apply.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -762,9 +746,7 @@ class TestAutoApply:
     @patch(f"{SERVICE_PATH}.BoundaryEnforcer")
     @patch(f"{SERVICE_PATH}.PriceCalculator")
     @patch(f"{SERVICE_PATH}.PriceRecommendation")
-    async def test_auto_apply_skipped_when_auto_approve_disabled(
-        self, MockRec, MockCalc, MockBound, MockReason
-    ):
+    async def test_auto_apply_skipped_when_auto_approve_disabled(self, MockRec, MockCalc, MockBound, MockReason):
         """When auto_approve_enabled=False → skip auto-apply even if no approval needed."""
         svc, db = self._build_service()
         product = make_mock_product()
@@ -778,16 +760,12 @@ class TestAutoApply:
         svc.signal_processor.calculate_price_impact = MagicMock(return_value={})
         svc.confidence_calculator.calculate = MagicMock(return_value=0.8)
         svc.confidence_calculator.get_confidence_breakdown = MagicMock(return_value={})
-        svc.settings_service.get_or_create = AsyncMock(
-            return_value=make_mock_settings(auto_approve_enabled=False)
-        )
+        svc.settings_service.get_or_create = AsyncMock(return_value=make_mock_settings(auto_approve_enabled=False))
         svc.settings_service.check_requires_approval = MagicMock(return_value=False)
 
         svc._try_auto_apply = AsyncMock()
 
-        await svc._create_rule_based_recommendation(
-            product, USER_ID, rule, {}, {}
-        )
+        await svc._create_rule_based_recommendation(product, USER_ID, rule, {}, {})
         svc._try_auto_apply.assert_not_awaited()
 
 
@@ -795,19 +773,23 @@ class TestAutoApply:
 # 6. Query Methods
 # ============================================================
 
+
 @patch(f"{SERVICE_PATH}.PriceRecommendation", _FakePriceRecommendation)
 class TestGetPendingRecommendations:
     """Tests for get_pending_recommendations."""
 
     def _build_service(self):
         db = make_mock_db()
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
         return svc, db
 
@@ -892,19 +874,23 @@ class TestGetPendingRecommendations:
 # 7. expire_old_recommendations
 # ============================================================
 
+
 @patch(f"{SERVICE_PATH}.PriceRecommendation", _FakePriceRecommendation)
 class TestExpireOldRecommendations:
     """Tests for the batch expiration of old recommendations."""
 
     def _build_service(self):
         db = make_mock_db()
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
         return svc, db
 
@@ -952,6 +938,7 @@ class TestExpireOldRecommendations:
         mock_select.return_value.where.return_value.where.return_value = MagicMock()
 
         from models.price_recommendation import RecommendationStatus
+
         rec = make_mock_recommendation()
 
         mock_result = MagicMock()
@@ -979,18 +966,22 @@ class TestExpireOldRecommendations:
 # 8. Edge Cases
 # ============================================================
 
+
 class TestEdgeCases:
     """Edge cases across the recommendation service."""
 
     def _build_service(self):
         db = make_mock_db()
-        with patch(f"{SERVICE_PATH}.RuleEvaluator"), \
-             patch(f"{SERVICE_PATH}.SignalProcessor"), \
-             patch(f"{SERVICE_PATH}.ConfidenceCalculator"), \
-             patch(f"{SERVICE_PATH}.PriceSyncService"), \
-             patch(f"{SERVICE_PATH}.SettingsService"), \
-             patch(f"{SERVICE_PATH}.CompetitorFallbackService"):
+        with (
+            patch(f"{SERVICE_PATH}.RuleEvaluator"),
+            patch(f"{SERVICE_PATH}.SignalProcessor"),
+            patch(f"{SERVICE_PATH}.ConfidenceCalculator"),
+            patch(f"{SERVICE_PATH}.PriceSyncService"),
+            patch(f"{SERVICE_PATH}.SettingsService"),
+            patch(f"{SERVICE_PATH}.CompetitorFallbackService"),
+        ):
             from services.pricing.recommendation_service import RecommendationService
+
             svc = RecommendationService(db)
         return svc, db
 
@@ -1039,6 +1030,3 @@ class TestEdgeCases:
 
         result = await svc.generate_recommendation(product, USER_ID)
         assert result is fallback_rec
-
-
-        

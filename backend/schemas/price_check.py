@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, EmailStr
-
+from pydantic import BaseModel, EmailStr, Field
 
 # ── Request ───────────────────────────────────────────────────────────
+
 
 class PriceCheckRequest(BaseModel):
     store_url: str = Field(..., description="Shopify or WooCommerce store URL")
@@ -14,6 +14,7 @@ class PriceCheckRequest(BaseModel):
 
 
 # ── Opportunity detail ────────────────────────────────────────────────
+
 
 class PriceCheckOpportunity(BaseModel):
     product_name: str
@@ -25,6 +26,7 @@ class PriceCheckOpportunity(BaseModel):
 
 # ── Competitor detail ─────────────────────────────────────────────────
 
+
 class CompetitorMatch(BaseModel):
     competitor_name: str
     competitor_url: str
@@ -35,6 +37,7 @@ class CompetitorMatch(BaseModel):
 
 
 # ── Sentiment detail ──────────────────────────────────────────────────
+
 
 class SentimentSummary(BaseModel):
     total_mentions: int = 0
@@ -48,6 +51,7 @@ class SentimentSummary(BaseModel):
 
 
 # ── Full report ───────────────────────────────────────────────────────
+
 
 class PriceCheckReport(BaseModel):
     store_name: str
@@ -67,8 +71,10 @@ class PriceCheckReport(BaseModel):
 
 # ── SSE event wrapper ─────────────────────────────────────────────────
 
+
 class SSEEvent(BaseModel):
     """Streamed to the frontend during the Price Check scan."""
+
     agent: str = Field(..., description="scout | analyst | strategist | complete | error")
     status: str = Field(..., description="started | progress | done | error")
     message: str = ""
@@ -77,13 +83,10 @@ class SSEEvent(BaseModel):
 
 # ── Lead storage ──────────────────────────────────────────────────────
 
+
 class PriceCheckLead(BaseModel):
     email: str
     store_url: str
     store_name: str = ""
     products_scanned: int = 0
     estimated_impact: float = 0.0
-
-
-
-    

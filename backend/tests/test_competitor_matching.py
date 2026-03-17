@@ -11,36 +11,40 @@ from decimal import Decimal
 
 import pytest
 
-
 # ===================================================================
 # ScoringWeights Tests
 # ===================================================================
 
-class TestScoringWeights:
 
+class TestScoringWeights:
     def test_default_weights_exist(self):
         from services.competitor_matching.scoring import ScoringWeights
+
         w = ScoringWeights()
         assert w is not None
 
     def test_exact_match_preset(self):
         from services.competitor_matching.scoring import ScoringWeights
+
         w = ScoringWeights.for_exact_match()
         assert w is not None
 
     def test_price_comparison_preset(self):
         from services.competitor_matching.scoring import ScoringWeights
+
         w = ScoringWeights.for_price_comparison()
         assert w is not None
 
     def test_discovery_preset(self):
         from services.competitor_matching.scoring import ScoringWeights
+
         w = ScoringWeights.for_discovery()
         assert w is not None
 
     def test_weights_validate(self):
         """Post-init validation should succeed for valid weights."""
         from services.competitor_matching.scoring import ScoringWeights
+
         w = ScoringWeights()
         # Should not raise
         assert True
@@ -50,15 +54,17 @@ class TestScoringWeights:
 # ConfidenceScorer Tests
 # ===================================================================
 
-class TestConfidenceScorer:
 
+class TestConfidenceScorer:
     def test_scorer_initializes(self):
         from services.competitor_matching.scoring import ConfidenceScorer
+
         scorer = ConfidenceScorer()
         assert scorer is not None
 
     def test_has_calculate_method(self):
         from services.competitor_matching.scoring import ConfidenceScorer
+
         scorer = ConfidenceScorer()
         assert callable(getattr(scorer, "calculate", None))
 
@@ -67,16 +73,19 @@ class TestConfidenceScorer:
 # ScoreBreakdown Tests
 # ===================================================================
 
-class TestScoreBreakdown:
 
+class TestScoreBreakdown:
     def test_breakdown_class_exists(self):
         from services.competitor_matching.scoring import ScoreBreakdown
+
         assert ScoreBreakdown is not None
 
     def test_breakdown_has_to_dict(self):
-        from services.competitor_matching.scoring import ScoreBreakdown
         # Inspect the dataclass fields to construct correctly
         import dataclasses
+
+        from services.competitor_matching.scoring import ScoreBreakdown
+
         fields = [f.name for f in dataclasses.fields(ScoreBreakdown)]
         assert "to_dict" in dir(ScoreBreakdown)
         assert len(fields) > 0
@@ -86,31 +95,36 @@ class TestScoreBreakdown:
 # CompetitorMatchingService Tests
 # ===================================================================
 
-class TestCompetitorMatchingService:
 
+class TestCompetitorMatchingService:
     def test_service_initializes(self):
         from services.competitor_matching.service import CompetitorMatchingService
+
         service = CompetitorMatchingService()
         assert service is not None
 
     def test_has_find_competitors(self):
         from services.competitor_matching.service import CompetitorMatchingService
+
         service = CompetitorMatchingService()
         assert callable(getattr(service, "find_competitors", None))
 
     def test_has_get_available_providers(self):
         from services.competitor_matching.service import CompetitorMatchingService
+
         service = CompetitorMatchingService()
         providers = service.get_available_providers()
         assert isinstance(providers, list)
 
     def test_has_clear_cache(self):
         from services.competitor_matching.service import CompetitorMatchingService
+
         service = CompetitorMatchingService()
         assert callable(getattr(service, "clear_cache", None))
 
     def test_clear_cache_returns_int(self):
         from services.competitor_matching.service import CompetitorMatchingService
+
         service = CompetitorMatchingService()
         cleared = service.clear_cache()
         assert isinstance(cleared, int)
@@ -121,18 +135,21 @@ class TestCompetitorMatchingService:
 # BaseSearchProvider Tests
 # ===================================================================
 
-class TestBaseSearchProvider:
 
+class TestBaseSearchProvider:
     def test_base_class_exists(self):
         from services.competitor_matching.providers.base import BaseSearchProvider
+
         assert BaseSearchProvider is not None
 
     def test_has_search_method(self):
         from services.competitor_matching.providers.base import BaseSearchProvider
+
         assert callable(getattr(BaseSearchProvider, "search", None))
 
     def test_has_is_available(self):
         from services.competitor_matching.providers.base import BaseSearchProvider
+
         assert callable(getattr(BaseSearchProvider, "is_available", None))
 
 
@@ -140,15 +157,17 @@ class TestBaseSearchProvider:
 # CompetitorScraperService Tests
 # ===================================================================
 
-class TestCompetitorScraperService:
 
+class TestCompetitorScraperService:
     def test_scraper_initializes(self):
         from services.competitor_scraper import CompetitorScraperService
+
         scraper = CompetitorScraperService()
         assert scraper is not None
 
     def test_has_scrape_price(self):
         from services.competitor_scraper import CompetitorScraperService
+
         scraper = CompetitorScraperService()
         assert callable(getattr(scraper, "scrape_price", None))
 
@@ -157,8 +176,8 @@ class TestCompetitorScraperService:
 # Price Comparison Logic (pure math — no service imports needed)
 # ===================================================================
 
-class TestPriceComparison:
 
+class TestPriceComparison:
     def test_price_gap_calculation(self):
         our_price = Decimal("79.99")
         comp_price = Decimal("74.99")
@@ -194,7 +213,3 @@ class TestPriceComparison:
         cheapest = min(comp_prices)
         most_expensive = max(comp_prices)
         assert cheapest < our_price < most_expensive
-
-
-
-        

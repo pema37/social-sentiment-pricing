@@ -7,13 +7,14 @@ test files until their batch migration.
 """
 
 import sys
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
 
 # ─────────────────────────────────────────────────────────────────
 # AUTOUSE FIXTURES — core.logging + core.config only
 # ─────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(autouse=True)
 def _mock_core_logging(monkeypatch):
@@ -37,6 +38,7 @@ def _mock_core_config(monkeypatch):
 # OPT-IN FIXTURES
 # ─────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def mock_core_logging(_mock_core_logging):
     """Public accessor for tests that need to configure the logging mock."""
@@ -47,5 +49,3 @@ def mock_core_logging(_mock_core_logging):
 def mock_core_config(_mock_core_config):
     """Public accessor for tests that need to configure settings."""
     return _mock_core_config
-
-

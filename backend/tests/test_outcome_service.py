@@ -8,7 +8,7 @@ Total: ~24 tests
 import sys
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Minimal isolation — only mock db.session ===
@@ -17,11 +17,13 @@ if "db.session" not in sys.modules:
 
 import pytest
 
-# Import real enums — these work fine
-from models.recommendation_outcome import OutcomeLabel
 from models.price_recommendation import RecommendationStatus
 
+# Import real enums — these work fine
+from models.recommendation_outcome import OutcomeLabel
+
 SERVICE_PATH = "services.pricing.outcome_service"
+
 
 # We need a fake class that stores kwargs as attributes
 # AND has class-level column mocks for SQLAlchemy query building
@@ -47,6 +49,7 @@ class _FakeOutcome:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
+
 
 # Patch RecommendationOutcome at the SERVICE level so the service
 # constructs _FakeOutcome instead of the real SQLModel class
@@ -104,8 +107,8 @@ def make_recommendation(
 # 1. Initialization & Constants
 # ============================================================
 
-class TestOutcomeServiceInit:
 
+class TestOutcomeServiceInit:
     def test_stores_db(self):
         db = make_mock_db()
         svc = OutcomeService(db)
@@ -121,59 +124,91 @@ class TestOutcomeServiceInit:
 # 2. _calculate_outcome
 # ============================================================
 
-class TestCalculateOutcome:
 
+class TestCalculateOutcome:
     def setup_method(self):
         self.svc = OutcomeService(make_mock_db())
 
     def test_positive_outcome(self):
         score, label = self.svc._calculate_outcome(
-            Decimal("1000"), Decimal("1200"), 50, 55, Decimal("5"),
+            Decimal("1000"),
+            Decimal("1200"),
+            50,
+            55,
+            Decimal("5"),
         )
         assert score > Decimal("0")
         assert label == OutcomeLabel.POSITIVE
 
     def test_negative_outcome(self):
         score, label = self.svc._calculate_outcome(
-            Decimal("1000"), Decimal("800"), 50, 40, Decimal("5"),
+            Decimal("1000"),
+            Decimal("800"),
+            50,
+            40,
+            Decimal("5"),
         )
         assert score < Decimal("0")
         assert label == OutcomeLabel.NEGATIVE
 
     def test_neutral_outcome(self):
         score, label = self.svc._calculate_outcome(
-            Decimal("1000"), Decimal("1005"), 50, 50, Decimal("5"),
+            Decimal("1000"),
+            Decimal("1005"),
+            50,
+            50,
+            Decimal("5"),
         )
         assert label == OutcomeLabel.NEUTRAL
 
     def test_inconclusive_low_data(self):
         score, label = self.svc._calculate_outcome(
-            Decimal("50"), Decimal("60"), 2, 2, Decimal("5"),
+            Decimal("50"),
+            Decimal("60"),
+            2,
+            2,
+            Decimal("5"),
         )
         assert label == OutcomeLabel.INCONCLUSIVE
         assert score == Decimal("0")
 
     def test_score_clamped_to_range(self):
         score, _ = self.svc._calculate_outcome(
-            Decimal("100"), Decimal("1000"), 10, 100, Decimal("5"),
+            Decimal("100"),
+            Decimal("1000"),
+            10,
+            100,
+            Decimal("5"),
         )
         assert Decimal("-1") <= score <= Decimal("1")
 
     def test_zero_revenue_before(self):
         score, _ = self.svc._calculate_outcome(
-            Decimal("0"), Decimal("500"), 0, 10, Decimal("5"),
+            Decimal("0"),
+            Decimal("500"),
+            0,
+            10,
+            Decimal("5"),
         )
         assert score > Decimal("0")
 
     def test_zero_both(self):
         score, label = self.svc._calculate_outcome(
-            Decimal("0"), Decimal("0"), 0, 0, Decimal("5"),
+            Decimal("0"),
+            Decimal("0"),
+            0,
+            0,
+            Decimal("5"),
         )
         assert label == OutcomeLabel.INCONCLUSIVE
 
     def test_revenue_weighted_more_than_units(self):
         score, _ = self.svc._calculate_outcome(
-            Decimal("1000"), Decimal("1200"), 100, 90, Decimal("10"),
+            Decimal("1000"),
+            Decimal("1200"),
+            100,
+            90,
+            Decimal("10"),
         )
         assert score > Decimal("0")
 
@@ -182,8 +217,8 @@ class TestCalculateOutcome:
 # 3. record_outcome
 # ============================================================
 
-class TestRecordOutcome:
 
+class TestRecordOutcome:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_recommendation_not_found(self, mock_select):
@@ -193,7 +228,14 @@ class TestRecordOutcome:
 
         with pytest.raises(ValueError, match="Recommendation not found"):
             await svc.record_outcome(
-                REC_ID, USER_ID, 10, 50, Decimal("1000"), 12, 55, Decimal("1100"),
+                REC_ID,
+                USER_ID,
+                10,
+                50,
+                Decimal("1000"),
+                12,
+                55,
+                Decimal("1100"),
             )
 
     @pytest.mark.asyncio
@@ -206,7 +248,14 @@ class TestRecordOutcome:
 
         with pytest.raises(ValueError, match="Recommendation not found"):
             await svc.record_outcome(
-                REC_ID, USER_ID, 10, 50, Decimal("1000"), 12, 55, Decimal("1100"),
+                REC_ID,
+                USER_ID,
+                10,
+                50,
+                Decimal("1000"),
+                12,
+                55,
+                Decimal("1100"),
             )
 
     @pytest.mark.asyncio
@@ -219,7 +268,14 @@ class TestRecordOutcome:
 
         with pytest.raises(ValueError, match="not applied"):
             await svc.record_outcome(
-                REC_ID, USER_ID, 10, 50, Decimal("1000"), 12, 55, Decimal("1100"),
+                REC_ID,
+                USER_ID,
+                10,
+                50,
+                Decimal("1000"),
+                12,
+                55,
+                Decimal("1100"),
             )
 
     @pytest.mark.asyncio
@@ -240,7 +296,14 @@ class TestRecordOutcome:
 
         with pytest.raises(ValueError, match="already recorded"):
             await svc.record_outcome(
-                REC_ID, USER_ID, 10, 50, Decimal("1000"), 12, 55, Decimal("1100"),
+                REC_ID,
+                USER_ID,
+                10,
+                50,
+                Decimal("1000"),
+                12,
+                55,
+                Decimal("1100"),
             )
 
     @pytest.mark.asyncio
@@ -260,7 +323,14 @@ class TestRecordOutcome:
 
         svc = OutcomeService(db)
         outcome = await svc.record_outcome(
-            REC_ID, USER_ID, 10, 50, Decimal("1000"), 12, 55, Decimal("1100"),
+            REC_ID,
+            USER_ID,
+            10,
+            50,
+            Decimal("1000"),
+            12,
+            55,
+            Decimal("1100"),
         )
 
         db.add.assert_called_once()
@@ -284,7 +354,14 @@ class TestRecordOutcome:
 
         svc = OutcomeService(db)
         outcome = await svc.record_outcome(
-            REC_ID, USER_ID, 10, 50, Decimal("1000"), 12, 55, Decimal("1100"),
+            REC_ID,
+            USER_ID,
+            10,
+            50,
+            Decimal("1000"),
+            12,
+            55,
+            Decimal("1100"),
         )
         assert outcome.revenue_change_percent == Decimal("10.00")
 
@@ -293,8 +370,8 @@ class TestRecordOutcome:
 # 4. get_outcomes
 # ============================================================
 
-class TestGetOutcomes:
 
+class TestGetOutcomes:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_list(self, mock_select):
@@ -338,8 +415,8 @@ class TestGetOutcomes:
 # 5. get_rule_performance
 # ============================================================
 
-class TestGetRulePerformance:
 
+class TestGetRulePerformance:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_rule_not_found(self, mock_select):
@@ -430,8 +507,8 @@ class TestGetRulePerformance:
 # 6. get_historical_accuracy_for_rule_type
 # ============================================================
 
-class TestGetHistoricalAccuracy:
 
+class TestGetHistoricalAccuracy:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_not_enough_data(self, mock_select):
@@ -469,5 +546,3 @@ class TestGetHistoricalAccuracy:
         svc = OutcomeService(db)
         result = await svc.get_historical_accuracy_for_rule_type(USER_ID, "sentiment")
         assert result == Decimal("0.70")
-
-        

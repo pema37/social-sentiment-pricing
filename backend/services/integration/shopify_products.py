@@ -15,17 +15,16 @@ Place at: backend/services/integration/shopify_products.py
 """
 
 import logging
-from typing import Optional
 
 import httpx
 
+from .circuit_breaker import CircuitOpenError
+from .http_client import RetryableClient
 from .schemas import (
     ExternalProduct,
     ExternalProductVariant,
     ProductSyncResult,
 )
-from .http_client import RetryableClient
-from .circuit_breaker import CircuitOpenError
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ class ShopifyProductsMixin:
         self,
         store_url: str,
         access_token: str,
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         limit: int = 50,
     ) -> ProductSyncResult:
         """Fetch products with cursor-based pagination."""
@@ -117,7 +116,7 @@ class ShopifyProductsMixin:
         store_url: str,
         access_token: str,
         external_product_id: str,
-    ) -> Optional[ExternalProduct]:
+    ) -> ExternalProduct | None:
         """Fetch one product by numeric ID."""
         shop_domain = self._get_shop_domain(store_url)
         gid = self._gid("Product", external_product_id)
@@ -130,9 +129,7 @@ class ShopifyProductsMixin:
         """
         try:
             async with RetryableClient(store_url, "shopify", self.retry_config, 10.0) as rc:
-                data = await self._graphql(
-                    rc, shop_domain, access_token, query, {"id": gid}
-                )
+                data = await self._graphql(rc, shop_domain, access_token, query, {"id": gid})
             node = data.get("product")
             return self._parse_graphql_product(node) if node else None
         except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
@@ -157,11 +154,7 @@ class ShopifyProductsMixin:
                 price=float(v["node"]["price"]) if v["node"].get("price") else 0,
                 sku=v["node"].get("sku"),
                 inventory_quantity=v["node"].get("inventoryQuantity"),
-                compare_at_price=(
-                    float(v["node"]["compareAtPrice"])
-                    if v["node"].get("compareAtPrice")
-                    else None
-                ),
+                compare_at_price=(float(v["node"]["compareAtPrice"]) if v["node"].get("compareAtPrice") else None),
             )
             for v in variant_edges
         ]
@@ -191,6 +184,3 @@ class ShopifyProductsMixin:
             created_at=self._parse_datetime(node.get("createdAt")),
             updated_at=self._parse_datetime(node.get("updatedAt")),
         )
-    
-
-    

@@ -10,7 +10,7 @@ PATCHED (2026-02-22): Updated assertions to match repo changes:
 import sys
 import types
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -21,9 +21,12 @@ import pytest
 _stubs: dict[str, types.ModuleType] = {}
 
 for _mod_name in (
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
+    "sqlalchemy",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
     "sqlmodel",
-    "models", "models.product",
+    "models",
+    "models.product",
 ):
     if _mod_name not in sys.modules:
         _stubs[_mod_name] = types.ModuleType(_mod_name)
@@ -36,6 +39,7 @@ _sqlmodel.select = MagicMock()
 _async_mod = sys.modules["sqlalchemy.ext.asyncio"]
 _async_mod.AsyncSession = MagicMock()
 
+
 # Provide Product model
 class _FakeProduct:
     # Class-level attrs for SQLAlchemy-style column comparisons
@@ -46,6 +50,7 @@ class _FakeProduct:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
 
 sys.modules["models.product"].Product = _FakeProduct
 
@@ -61,6 +66,7 @@ for _name, _mod in _stubs.items():
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _make_db():
     db = AsyncMock()
@@ -209,8 +215,12 @@ class TestUpdate:
         """base_price is platform-owned — synced from Shopify."""
         repo, db = _make_repo()
         product = _FakeProduct(
-            id=uuid4(), name="W", sku="S",
-            current_price=10.0, base_price=8.0, updated_at=None,
+            id=uuid4(),
+            name="W",
+            sku="S",
+            current_price=10.0,
+            base_price=8.0,
+            updated_at=None,
         )
 
         await repo.update(product, base_price=12.0)
@@ -235,7 +245,3 @@ class TestUpdate:
         assert product.name == "W"
         assert product.sku == "S"
         assert product.current_price == 10.0
-
-
-
-        

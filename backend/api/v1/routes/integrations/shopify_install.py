@@ -17,7 +17,7 @@ from sqlmodel import select
 
 from core.config import settings
 from db.session import get_session
-from models.integration import Integration, EcommercePlatform, IntegrationStatus
+from models.integration import EcommercePlatform, Integration, IntegrationStatus
 
 logger = logging.getLogger(__name__)
 
@@ -68,18 +68,17 @@ async def shopify_install(
     scopes = "read_inventory,read_orders,read_products,write_products"
     redirect_uri = f"{settings.BACKEND_URL}/api/v1/integrations/oauth/callback"
 
-    params = urlencode({
-        "client_id": settings.SHOPIFY_CLIENT_ID,
-        "scope": scopes,
-        "redirect_uri": redirect_uri,
-        "state": state,
-    })
+    params = urlencode(
+        {
+            "client_id": settings.SHOPIFY_CLIENT_ID,
+            "scope": scopes,
+            "redirect_uri": redirect_uri,
+            "state": state,
+        }
+    )
 
     auth_url = f"https://{shop}/admin/oauth/authorize?{params}"
 
     logger.info(f"Shopify install initiated for shop: {shop}, integration_id: {integration.id}")
 
     return RedirectResponse(url=auth_url)
-
-
-

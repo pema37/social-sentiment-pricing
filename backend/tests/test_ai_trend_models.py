@@ -7,7 +7,7 @@ Total: ~25 tests
 """
 
 import sys
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -18,23 +18,23 @@ for mod in ["db.session"]:
 import pytest
 
 from services.ai_trend_analysis.schemas import (
-    TrendDirection,
-    TrendCategory,
-    OpportunityType,
-    RiskLevel,
+    AIInsight,
     ConfidenceLevel,
-    TrendSignal,
-    TrendPrediction,
+    OpportunityType,
     PricingOpportunity,
     RiskAlert,
-    AIInsight,
+    RiskLevel,
     TrendAnalysisResult,
+    TrendCategory,
+    TrendDirection,
+    TrendPrediction,
+    TrendSignal,
 )
-
 
 # ============================================================
 # 1. Enums
 # ============================================================
+
 
 class TestTrendDirection:
     def test_values(self):
@@ -79,6 +79,7 @@ class TestConfidenceLevel:
 # ============================================================
 # 2. Dataclasses
 # ============================================================
+
 
 class TestTrendSignal:
     def test_creation(self):
@@ -162,8 +163,8 @@ class TestAIInsight:
 # 3. TrendAnalysisResult + to_dict
 # ============================================================
 
-class TestTrendAnalysisResult:
 
+class TestTrendAnalysisResult:
     @pytest.fixture
     def sample_result(self):
         now = datetime.now(UTC)
@@ -295,7 +296,3 @@ class TestTrendAnalysisResult:
         assert d["opportunities"] == []
         assert d["risks"] == []
         assert d["insights"] == []
-
-
-
-        

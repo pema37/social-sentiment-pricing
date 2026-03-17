@@ -15,9 +15,8 @@ Place at: backend/services/scoring/category_priors.py
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -32,10 +31,10 @@ class CategoryPrior:
         0 = pure research-based prior. >0 = posterior incorporating merchant data.
     """
 
-    mu: float             # Prior mean (negative for normal goods)
-    sigma: float          # Prior standard deviation (uncertainty)
+    mu: float  # Prior mean (negative for normal goods)
+    sigma: float  # Prior standard deviation (uncertainty)
     sample_size: int = 0  # Observations used to update from base prior
-    last_updated: Optional[datetime] = None
+    last_updated: datetime | None = None
     version: str = "research_v1"  # Tracks prior source for auditability
 
     def __post_init__(self):
@@ -44,7 +43,7 @@ class CategoryPrior:
 
     @property
     def variance(self) -> float:
-        return self.sigma ** 2
+        return self.sigma**2
 
     @property
     def is_informed(self) -> bool:
@@ -76,69 +75,81 @@ class CategoryPrior:
 _BASE_PRIORS: dict[str, CategoryPrior] = {
     # ── High elasticity (price-sensitive, easy to comparison-shop) ──
     "electronics": CategoryPrior(
-        mu=-1.8, sigma=0.6,
+        mu=-1.8,
+        sigma=0.6,
         version="research_v1",
     ),
     "books_media": CategoryPrior(
-        mu=-2.0, sigma=0.5,
+        mu=-2.0,
+        sigma=0.5,
         version="research_v1",
     ),
     "toys_games": CategoryPrior(
-        mu=-1.7, sigma=0.6,
+        mu=-1.7,
+        sigma=0.6,
         version="research_v1",
     ),
-
     # ── Moderate elasticity ──
     "fashion_apparel": CategoryPrior(
-        mu=-1.2, sigma=0.8,
+        mu=-1.2,
+        sigma=0.8,
         version="research_v1",
     ),
     "home_garden": CategoryPrior(
-        mu=-1.5, sigma=0.7,
+        mu=-1.5,
+        sigma=0.7,
         version="research_v1",
     ),
     "sports_outdoors": CategoryPrior(
-        mu=-1.3, sigma=0.6,
+        mu=-1.3,
+        sigma=0.6,
         version="research_v1",
     ),
     "beauty_personal_care": CategoryPrior(
-        mu=-1.0, sigma=0.5,
+        mu=-1.0,
+        sigma=0.5,
         version="research_v1",
     ),
     "pet_supplies": CategoryPrior(
-        mu=-1.1, sigma=0.5,
+        mu=-1.1,
+        sigma=0.5,
         version="research_v1",
     ),
     "automotive": CategoryPrior(
-        mu=-1.4, sigma=0.7,
+        mu=-1.4,
+        sigma=0.7,
         version="research_v1",
     ),
     "office_supplies": CategoryPrior(
-        mu=-1.3, sigma=0.6,
+        mu=-1.3,
+        sigma=0.6,
         version="research_v1",
     ),
-
     # ── Low elasticity (necessities, brand-loyal, hard to compare) ──
     "groceries_food": CategoryPrior(
-        mu=-0.4, sigma=0.3,
+        mu=-0.4,
+        sigma=0.3,
         version="research_v1",
     ),
     "health_supplements": CategoryPrior(
-        mu=-0.6, sigma=0.4,
+        mu=-0.6,
+        sigma=0.4,
         version="research_v1",
     ),
     "baby_kids": CategoryPrior(
-        mu=-0.7, sigma=0.4,
+        mu=-0.7,
+        sigma=0.4,
         version="research_v1",
     ),
-
     # ── Luxury / premium (complex elasticity, high variance) ──
     "jewelry_watches": CategoryPrior(
-        mu=-0.8, sigma=0.9,
+        mu=-0.8,
+        sigma=0.9,
         version="research_v1",
     ),
     "luxury_goods": CategoryPrior(
-        mu=-0.5, sigma=1.0,
+        mu=-0.5,
+        sigma=1.0,
         version="research_v1",
     ),
 }
@@ -146,7 +157,8 @@ _BASE_PRIORS: dict[str, CategoryPrior] = {
 # Default prior: used when category is unknown or unmapped.
 # Wide sigma means "we don't know much — learn fast from data."
 _DEFAULT_PRIOR = CategoryPrior(
-    mu=-1.2, sigma=1.0,
+    mu=-1.2,
+    sigma=1.0,
     version="default_v1",
 )
 
@@ -331,13 +343,10 @@ class CategoryPriorStore:
 
         # Normal-Normal conjugate Bayesian update
         prior_precision = prior.precision  # 1 / sigma^2
-        obs_precision = 1.0 / (observation_noise_sigma ** 2)
+        obs_precision = 1.0 / (observation_noise_sigma**2)
 
         posterior_precision = prior_precision + obs_precision
-        posterior_mu = (
-            (prior.mu * prior_precision + observed_elasticity * obs_precision)
-            / posterior_precision
-        )
+        posterior_mu = (prior.mu * prior_precision + observed_elasticity * obs_precision) / posterior_precision
         posterior_sigma = math.sqrt(1.0 / posterior_precision)
 
         # Update in place
@@ -345,11 +354,7 @@ class CategoryPriorStore:
         prior.sigma = round(posterior_sigma, 6)
         prior.sample_size += 1
         prior.last_updated = datetime.now(UTC)
-        prior.version = (
-            f"posterior_n{prior.sample_size}"
-            if prior.sample_size > 0
-            else prior.version
-        )
+        prior.version = f"posterior_n{prior.sample_size}" if prior.sample_size > 0 else prior.version
 
         return prior
 
@@ -392,17 +397,14 @@ class CategoryPriorStore:
 
         n = len(observations)
         obs_mean = sum(observations) / n
-        obs_variance = observation_noise_sigma ** 2
+        obs_variance = observation_noise_sigma**2
 
         # Normal-Normal conjugate with n observations
         prior_precision = prior.precision
         obs_precision = n / obs_variance
 
         posterior_precision = prior_precision + obs_precision
-        posterior_mu = (
-            (prior.mu * prior_precision + obs_mean * obs_precision)
-            / posterior_precision
-        )
+        posterior_mu = (prior.mu * prior_precision + obs_mean * obs_precision) / posterior_precision
         posterior_sigma = math.sqrt(1.0 / posterior_precision)
 
         prior.mu = round(posterior_mu, 6)
@@ -432,6 +434,3 @@ class CategoryPriorStore:
             version=base.version,
         )
         return self._priors[key]
-    
-
-    

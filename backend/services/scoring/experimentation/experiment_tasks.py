@@ -22,16 +22,13 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, UTC
-from typing import Any, Callable, Optional, Sequence
+from datetime import UTC, datetime
 
-from .bandit import ThompsonSamplingBandit
-from .strategies import StrategyRegistry
 from .experiment_manager import (
-    ExperimentManager,
     ExperimentAssignment,
-    OutcomeProcessingResult,
+    ExperimentManager,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,13 +38,14 @@ logger = logging.getLogger(__name__)
 # TASK RESULTS
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class BanditUpdateResult:
     """Result of a daily bandit update cycle."""
 
     task_id: str
     started_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
     # Processing stats
     outcomes_fetched: int = 0
@@ -66,7 +64,7 @@ class BanditUpdateResult:
     total_time_ms: float = 0
 
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def summary(self) -> str:
@@ -93,26 +91,25 @@ class ConvergenceReport:
 
     @property
     def summary(self) -> str:
-        return (
-            f"Convergence {self.task_id}: "
-            f"{self.categories_converged}/{self.categories_checked} converged"
-        )
+        return f"Convergence {self.task_id}: {self.categories_converged}/{self.categories_checked} converged"
 
 
 @dataclass
 class PersistenceResult:
     """Result of persisting bandit state."""
+
     task_id: str
     persisted_at: datetime
     categories_persisted: int = 0
     state_size_bytes: int = 0
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ──────────────────────────────────────────────────────────
 # OUTCOME ROW STRUCTURE (from DB query)
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class MeasuredOutcomeRow:
@@ -130,7 +127,7 @@ class MeasuredOutcomeRow:
     category: str
     strategy_name: str
     is_exploration: bool
-    revenue_delta_pct: Optional[float]
+    revenue_delta_pct: float | None
     action: str  # accepted, modified, rejected, ignored
 
     @property
@@ -154,6 +151,7 @@ class MeasuredOutcomeRow:
 # EXPERIMENT TASK RUNNER
 # ──────────────────────────────────────────────────────────
 
+
 class ExperimentTaskRunner:
     """
     Framework-agnostic runner for experiment background tasks.
@@ -174,7 +172,7 @@ class ExperimentTaskRunner:
         self,
         experiment_manager: ExperimentManager,
         outcome_fetcher: Callable[[], Sequence[MeasuredOutcomeRow]],
-        state_persister: Optional[Callable[[dict], bool]] = None,
+        state_persister: Callable[[dict], bool] | None = None,
     ):
         self._manager = experiment_manager
         self._fetcher = outcome_fetcher
@@ -193,7 +191,7 @@ class ExperimentTaskRunner:
     # DAILY BANDIT UPDATE
     # ──────────────────────────────────────────────
 
-    def run_daily_update(self, task_id: Optional[str] = None) -> BanditUpdateResult:
+    def run_daily_update(self, task_id: str | None = None) -> BanditUpdateResult:
         """
         Process all unprocessed measured outcomes through the bandit.
 
@@ -272,7 +270,7 @@ class ExperimentTaskRunner:
             result.success = True
 
         except Exception as e:
-            result.error = f"{type(e).__name__}: {str(e)}"
+            result.error = f"{type(e).__name__}: {e!s}"
             logger.exception("Bandit update %s failed: %s", task_id, result.error)
 
         result.completed_at = datetime.now(UTC)
@@ -286,7 +284,7 @@ class ExperimentTaskRunner:
     # WEEKLY CONVERGENCE CHECK
     # ──────────────────────────────────────────────
 
-    def run_convergence_check(self, task_id: Optional[str] = None) -> ConvergenceReport:
+    def run_convergence_check(self, task_id: str | None = None) -> ConvergenceReport:
         """
         Check which categories have converged on a winning strategy.
 
@@ -340,7 +338,7 @@ class ExperimentTaskRunner:
     # STATE PERSISTENCE
     # ──────────────────────────────────────────────
 
-    def run_persist_state(self, task_id: Optional[str] = None) -> PersistenceResult:
+    def run_persist_state(self, task_id: str | None = None) -> PersistenceResult:
         """
         Persist bandit state to DB for recovery after restarts.
 
@@ -361,6 +359,7 @@ class ExperimentTaskRunner:
             result.categories_persisted = len(state.get("categories", {}))
 
             import json
+
             state_json = json.dumps(state)
             result.state_size_bytes = len(state_json.encode("utf-8"))
 
@@ -370,7 +369,7 @@ class ExperimentTaskRunner:
             result.success = True
 
         except Exception as e:
-            result.error = f"{type(e).__name__}: {str(e)}"
+            result.error = f"{type(e).__name__}: {e!s}"
             logger.exception("State persistence %s failed: %s", task_id, result.error)
 
         return result
@@ -379,6 +378,7 @@ class ExperimentTaskRunner:
 # ──────────────────────────────────────────────────────────
 # SQL QUERY for fetching unprocessed outcomes
 # ──────────────────────────────────────────────────────────
+
 
 def build_unprocessed_outcomes_sql() -> str:
     """
@@ -416,10 +416,7 @@ def row_to_measured_outcome(row: dict) -> MeasuredOutcomeRow:
         category=str(row.get("category", "unknown")),
         strategy_name=str(row["strategy_name"]),
         is_exploration=bool(row.get("is_exploration", False)),
-        revenue_delta_pct=(
-            float(row["revenue_delta_pct"])
-            if row.get("revenue_delta_pct") is not None else None
-        ),
+        revenue_delta_pct=(float(row["revenue_delta_pct"]) if row.get("revenue_delta_pct") is not None else None),
         action=str(row.get("action", "unknown")),
     )
 
@@ -455,5 +452,3 @@ CELERY_BEAT_SCHEDULE = {
         "description": "Persist bandit state to DB for crash recovery",
     },
 }
-
-

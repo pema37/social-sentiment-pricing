@@ -8,9 +8,10 @@ Covers:
   - Shopify URL parsing / normalization
 """
 
-import pytest
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from schemas.prospect_audit import (
     ProspectAuditRequest,
@@ -18,8 +19,8 @@ from schemas.prospect_audit import (
 )
 from services.prospect_audit_service import ProspectAuditService
 
-
 # ── Fixtures ──────────────────────────────────────────────────
+
 
 def make_products(data: list[tuple[str, float]]) -> list[ProspectProductRow]:
     """Helper to create product lists from (name, price) tuples."""
@@ -28,8 +29,8 @@ def make_products(data: list[tuple[str, float]]) -> list[ProspectProductRow]:
 
 # ── Analysis Tests ────────────────────────────────────────────
 
-class TestAnalyzeProducts:
 
+class TestAnalyzeProducts:
     def test_empty_input(self):
         service = ProspectAuditService()
         results = service._analyze_products([])
@@ -45,10 +46,12 @@ class TestAnalyzeProducts:
 
     def test_two_products_detects_overpriced(self):
         """If one product is much higher than the other, it should be overpriced."""
-        products = make_products([
-            ("Running Shoes Pro", 150.00),
-            ("Running Shoes Basic", 50.00),
-        ])
+        products = make_products(
+            [
+                ("Running Shoes Pro", 150.00),
+                ("Running Shoes Basic", 50.00),
+            ]
+        )
         service = ProspectAuditService()
         results = service._analyze_products(products)
         assert len(results) == 2
@@ -58,11 +61,13 @@ class TestAnalyzeProducts:
 
     def test_all_same_price_aligned(self):
         """Products at the same price should all be aligned."""
-        products = make_products([
-            ("T-Shirt Red", 25.00),
-            ("T-Shirt Blue", 25.00),
-            ("T-Shirt Green", 25.00),
-        ])
+        products = make_products(
+            [
+                ("T-Shirt Red", 25.00),
+                ("T-Shirt Blue", 25.00),
+                ("T-Shirt Green", 25.00),
+            ]
+        )
         service = ProspectAuditService()
         results = service._analyze_products(products)
         for r in results:
@@ -70,10 +75,12 @@ class TestAnalyzeProducts:
 
     def test_zero_price_excluded(self):
         """Products with zero price should get no_data."""
-        products = make_products([
-            ("Free Sample", 0.00),
-            ("Paid Item", 30.00),
-        ])
+        products = make_products(
+            [
+                ("Free Sample", 0.00),
+                ("Paid Item", 30.00),
+            ]
+        )
         service = ProspectAuditService()
         results = service._analyze_products(products)
         free = [r for r in results if r.name == "Free Sample"][0]
@@ -81,11 +88,13 @@ class TestAnalyzeProducts:
 
     def test_market_avg_populated(self):
         """Results should include a market average price."""
-        products = make_products([
-            ("Gadget A", 100.00),
-            ("Gadget B", 80.00),
-            ("Gadget C", 120.00),
-        ])
+        products = make_products(
+            [
+                ("Gadget A", 100.00),
+                ("Gadget B", 80.00),
+                ("Gadget C", 120.00),
+            ]
+        )
         service = ProspectAuditService()
         results = service._analyze_products(products)
         for r in results:
@@ -94,14 +103,15 @@ class TestAnalyzeProducts:
 
 
 class TestCategorization:
-
     def test_groups_by_keyword(self):
-        products = make_products([
-            ("Running Shoes Pro", 150.00),
-            ("Running Shoes Basic", 50.00),
-            ("Yoga Mat Premium", 80.00),
-            ("Yoga Mat Standard", 30.00),
-        ])
+        products = make_products(
+            [
+                ("Running Shoes Pro", 150.00),
+                ("Running Shoes Basic", 50.00),
+                ("Yoga Mat Premium", 80.00),
+                ("Yoga Mat Standard", 30.00),
+            ]
+        )
         service = ProspectAuditService()
         categories = service._categorize_products(products)
         # Should create at least 2 groups
@@ -115,13 +125,14 @@ class TestCategorization:
 
 
 class TestImpactEstimation:
-
     def test_no_overpriced_zero_impact(self):
         """If nothing is overpriced, monthly impact is zero."""
-        products = make_products([
-            ("Widget A", 25.00),
-            ("Widget B", 25.00),
-        ])
+        products = make_products(
+            [
+                ("Widget A", 25.00),
+                ("Widget B", 25.00),
+            ]
+        )
         service = ProspectAuditService()
         results = service._analyze_products(products)
         impact = service._estimate_monthly_impact(results)
@@ -129,12 +140,14 @@ class TestImpactEstimation:
 
     def test_overpriced_produces_positive_impact(self):
         """Overpriced items should generate positive impact estimate."""
-        products = make_products([
-            ("Premium Widget", 200.00),
-            ("Budget Widget", 20.00),
-            ("Standard Widget", 30.00),
-            ("Basic Widget", 25.00),
-        ])
+        products = make_products(
+            [
+                ("Premium Widget", 200.00),
+                ("Budget Widget", 20.00),
+                ("Standard Widget", 30.00),
+                ("Basic Widget", 25.00),
+            ]
+        )
         service = ProspectAuditService()
         results = service._analyze_products(products)
         impact = service._estimate_monthly_impact(results)
@@ -143,10 +156,6 @@ class TestImpactEstimation:
 
     def test_impact_math_formula(self):
         """Verify: lost_daily = daily_units × elasticity × gap% × price × 30."""
-        from services.prospect_audit_service import (
-            DEFAULT_DAILY_UNITS,
-            ELASTICITY_FACTOR,
-        )
         # Manual calc: 3 units × 0.015 × 10% gap × $50 price × 30 days
         expected_daily = Decimal("3") * Decimal("0.015") * Decimal("10") * Decimal("50")
         expected_monthly = expected_daily * Decimal("30")
@@ -155,19 +164,21 @@ class TestImpactEstimation:
 
 # ── Teaser Generation Tests ───────────────────────────────────
 
-class TestGenerateTeaser:
 
+class TestGenerateTeaser:
     @pytest.mark.asyncio
     async def test_csv_products_teaser(self):
-        products = make_products([
-            ("Sneakers A", 120.00),
-            ("Sneakers B", 80.00),
-            ("Jacket A", 200.00),
-            ("Jacket B", 150.00),
-            ("Socks Pack", 15.00),
-            ("Hat Classic", 25.00),
-            ("Belt Leather", 45.00),
-        ])
+        products = make_products(
+            [
+                ("Sneakers A", 120.00),
+                ("Sneakers B", 80.00),
+                ("Jacket A", 200.00),
+                ("Jacket B", 150.00),
+                ("Socks Pack", 15.00),
+                ("Hat Classic", 25.00),
+                ("Belt Leather", 45.00),
+            ]
+        )
         request = ProspectAuditRequest(products=products)
         service = ProspectAuditService()
         teaser = await service.generate_teaser(request)
@@ -187,10 +198,7 @@ class TestGenerateTeaser:
 
     @pytest.mark.asyncio
     async def test_top_products_capped_at_5(self):
-        products = make_products([
-            (f"Product {i}", 10.00 + i * 20)
-            for i in range(20)
-        ])
+        products = make_products([(f"Product {i}", 10.00 + i * 20) for i in range(20)])
         request = ProspectAuditRequest(products=products)
         service = ProspectAuditService()
         teaser = await service.generate_teaser(request)
@@ -201,8 +209,8 @@ class TestGenerateTeaser:
 
 # ── Shopify URL Tests ─────────────────────────────────────────
 
-class TestShopifyScraper:
 
+class TestShopifyScraper:
     @pytest.mark.asyncio
     async def test_url_normalization(self):
         """Service should handle URLs with/without https."""
@@ -213,14 +221,16 @@ class TestShopifyScraper:
             mock_response = AsyncMock()
             mock_response.status_code = 200
             mock_response.raise_for_status = MagicMock()
-            mock_response.json = MagicMock(return_value={
-              "products": [
-                {
-                  "title": "Test Product",
-                  "variants": [{"price": "29.99", "sku": "TEST-001"}],
+            mock_response.json = MagicMock(
+                return_value={
+                    "products": [
+                        {
+                            "title": "Test Product",
+                            "variants": [{"price": "29.99", "sku": "TEST-001"}],
+                        }
+                    ]
                 }
-              ]
-            })
+            )
 
             mock_instance = AsyncMock()
             mock_instance.get.return_value = mock_response
@@ -250,8 +260,3 @@ class TestShopifyScraper:
             store_name, products = await service._fetch_shopify_products("https://deadstore.myshopify.com")
 
             assert products == []
-
-
-
-
-

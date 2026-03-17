@@ -11,7 +11,6 @@ Endpoints:
 """
 
 import json
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -20,8 +19,8 @@ from pydantic import BaseModel, Field
 from core.config import settings
 from core.logging import get_logger
 from services.market_intelligence import (
-    MarketIntelligencePipeline,
     IntelligenceRequest,
+    MarketIntelligencePipeline,
 )
 
 logger = get_logger(__name__)
@@ -33,27 +32,20 @@ router = APIRouter(prefix="/market-intelligence", tags=["Market Intelligence Dem
 # SCHEMAS
 # =============================================================================
 
+
 class IntelligenceQueryRequest(BaseModel):
     """Request body for market intelligence analysis."""
-    product_name: str = Field(
-        ..., min_length=1, max_length=200, description="Product name to analyze"
-    )
-    current_price: Optional[float] = Field(
-        default=None, gt=0, description="Your current price"
-    )
-    brand: Optional[str] = Field(
-        default=None, max_length=100, description="Brand name"
-    )
-    category: Optional[str] = Field(
-        default=None, max_length=100, description="Product category"
-    )
-    features: Optional[list[str]] = Field(
-        default=None, description="List of product features"
-    )
+
+    product_name: str = Field(..., min_length=1, max_length=200, description="Product name to analyze")
+    current_price: float | None = Field(default=None, gt=0, description="Your current price")
+    brand: str | None = Field(default=None, max_length=100, description="Brand name")
+    category: str | None = Field(default=None, max_length=100, description="Product category")
+    features: list[str] | None = Field(default=None, description="List of product features")
 
 
 class IntelligenceHealthResponse(BaseModel):
     """Health check response."""
+
     status: str
     youcom_configured: bool
     gemini_configured: bool
@@ -65,9 +57,10 @@ class IntelligenceHealthResponse(BaseModel):
 # HELPER
 # =============================================================================
 
+
 async def generate_sse_stream(request: IntelligenceRequest):
     """Generate Server-Sent Events from the multi-agent pipeline."""
-    pipeline: Optional[MarketIntelligencePipeline] = None
+    pipeline: MarketIntelligencePipeline | None = None
     try:
         pipeline = MarketIntelligencePipeline()
 
@@ -90,6 +83,7 @@ async def generate_sse_stream(request: IntelligenceRequest):
 # =============================================================================
 # ENDPOINTS
 # =============================================================================
+
 
 @router.get("/health", response_model=IntelligenceHealthResponse)
 async def intelligence_health_check():
@@ -167,9 +161,9 @@ async def analyze_market_streaming(body: IntelligenceQueryRequest):
 @router.get("/analyze")
 async def analyze_market_streaming_get(
     product_name: str = Query(..., min_length=1, max_length=200, description="Product name"),
-    current_price: Optional[float] = Query(default=None, gt=0, description="Your current price"),
-    brand: Optional[str] = Query(default=None, max_length=100, description="Brand name"),
-    category: Optional[str] = Query(default=None, max_length=100, description="Product category"),
+    current_price: float | None = Query(default=None, gt=0, description="Your current price"),
+    brand: str | None = Query(default=None, max_length=100, description="Brand name"),
+    category: str | None = Query(default=None, max_length=100, description="Product category"),
 ):
     """
     GET version of /analyze for easy browser and curl testing.
@@ -200,5 +194,3 @@ async def analyze_market_streaming_get(
             "X-Accel-Buffering": "no",
         },
     )
-
-

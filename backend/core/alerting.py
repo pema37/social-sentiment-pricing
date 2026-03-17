@@ -4,9 +4,9 @@ Alerting service for critical notifications.
 Supports Slack webhooks and email (via SendGrid).
 """
 
-import httpx
-from typing import Optional, Dict, Any
 from enum import Enum
+
+import httpx
 
 from core.config import settings
 from core.logging import get_logger
@@ -22,9 +22,9 @@ class AlertSeverity(str, Enum):
 
 
 SEVERITY_COLORS = {
-    AlertSeverity.INFO: "#36a64f",      # Green
-    AlertSeverity.WARNING: "#ff9800",   # Orange
-    AlertSeverity.ERROR: "#f44336",     # Red
+    AlertSeverity.INFO: "#36a64f",  # Green
+    AlertSeverity.WARNING: "#ff9800",  # Orange
+    AlertSeverity.ERROR: "#f44336",  # Red
     AlertSeverity.CRITICAL: "#9c27b0",  # Purple
 }
 
@@ -40,45 +40,42 @@ async def send_slack_alert(
     title: str,
     message: str,
     severity: AlertSeverity = AlertSeverity.INFO,
-    fields: Optional[Dict[str, str]] = None,
-    link: Optional[str] = None,
+    fields: dict[str, str] | None = None,
+    link: str | None = None,
 ) -> bool:
     """
     Send an alert to Slack via webhook.
-    
+
     Args:
         title: Alert title
         message: Alert message body
         severity: Alert severity level
         fields: Optional key-value pairs to display
         link: Optional link to include
-        
+
     Returns:
         True if sent successfully, False otherwise
     """
     if not settings.SLACK_WEBHOOK_URL:
         logger.debug("Slack webhook not configured, skipping alert")
         return False
-    
+
     emoji = SEVERITY_EMOJI.get(severity, "")
     color = SEVERITY_COLORS.get(severity, "#808080")
-    
+
     # Build Slack attachment
     attachment = {
         "color": color,
         "title": f"{emoji} {title}",
         "text": message,
         "footer": f"{settings.APP_NAME} | {settings.ENVIRONMENT}",
-        "ts": int(__import__('time').time()),
+        "ts": int(__import__("time").time()),
     }
-    
+
     # Add fields if provided
     if fields:
-        attachment["fields"] = [
-            {"title": k, "value": v, "short": len(v) < 30}
-            for k, v in fields.items()
-        ]
-    
+        attachment["fields"] = [{"title": k, "value": v, "short": len(v) < 30} for k, v in fields.items()]
+
     # Add link button if provided
     if link:
         attachment["actions"] = [
@@ -88,16 +85,16 @@ async def send_slack_alert(
                 "url": link,
             }
         ]
-    
+
     payload = {"attachments": [attachment]}
-    
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 settings.SLACK_WEBHOOK_URL,
                 json=payload,
             )
-            
+
             if response.status_code == 200:
                 logger.info("Slack alert sent", title=title, severity=severity.value)
                 return True
@@ -108,7 +105,7 @@ async def send_slack_alert(
                     response=response.text,
                 )
                 return False
-                
+
     except Exception as e:
         logger.error("Failed to send Slack alert", error=str(e))
         return False
@@ -118,35 +115,35 @@ async def send_email_alert(
     subject: str,
     message: str,
     severity: AlertSeverity = AlertSeverity.INFO,
-    to_email: Optional[str] = None,
+    to_email: str | None = None,
 ) -> bool:
     """
     Send an alert via email using SendGrid.
-    
+
     Args:
         subject: Email subject
         message: Email body (plain text)
         severity: Alert severity level
         to_email: Recipient email (defaults to ALERT_EMAIL)
-        
+
     Returns:
         True if sent successfully, False otherwise
     """
     if not settings.SENDGRID_API_KEY:
         logger.debug("SendGrid not configured, skipping email alert")
         return False
-    
+
     recipient = to_email or settings.ALERT_EMAIL
     if not recipient:
         logger.debug("No alert email configured, skipping")
         return False
-    
+
     if not settings.SENDGRID_FROM_EMAIL:
         logger.debug("No from email configured, skipping")
         return False
-    
+
     emoji = SEVERITY_EMOJI.get(severity, "")
-    
+
     payload = {
         "personalizations": [{"to": [{"email": recipient}]}],
         "from": {"email": settings.SENDGRID_FROM_EMAIL},
@@ -158,7 +155,7 @@ async def send_email_alert(
             }
         ],
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
@@ -169,7 +166,7 @@ async def send_email_alert(
                     "Content-Type": "application/json",
                 },
             )
-            
+
             if response.status_code in (200, 202):
                 logger.info("Email alert sent", subject=subject, to=recipient)
                 return True
@@ -180,7 +177,7 @@ async def send_email_alert(
                     response=response.text,
                 )
                 return False
-                
+
     except Exception as e:
         logger.error("Failed to send email alert", error=str(e))
         return False
@@ -190,27 +187,27 @@ async def send_alert(
     title: str,
     message: str,
     severity: AlertSeverity = AlertSeverity.INFO,
-    fields: Optional[Dict[str, str]] = None,
-    channels: Optional[list] = None,
-) -> Dict[str, bool]:
+    fields: dict[str, str] | None = None,
+    channels: list | None = None,
+) -> dict[str, bool]:
     """
     Send alert to multiple channels.
-    
+
     Args:
         title: Alert title
         message: Alert message
         severity: Alert severity
         fields: Optional additional fields
         channels: List of channels ('slack', 'email'). Defaults to all configured.
-        
+
     Returns:
         Dict of channel -> success status
     """
     if channels is None:
         channels = ["slack", "email"]
-    
+
     results = {}
-    
+
     if "slack" in channels:
         results["slack"] = await send_slack_alert(
             title=title,
@@ -218,14 +215,14 @@ async def send_alert(
             severity=severity,
             fields=fields,
         )
-    
+
     if "email" in channels:
         results["email"] = await send_email_alert(
             subject=title,
             message=message,
             severity=severity,
         )
-    
+
     return results
 
 

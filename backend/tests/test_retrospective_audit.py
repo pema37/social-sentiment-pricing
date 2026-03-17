@@ -11,21 +11,16 @@ Covers:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
-from schemas.retrospective_audit import AuditRequest
 from services.retrospective_audit_service import (
     RetrospectiveAuditService,
-    DEFAULT_DAILY_UNITS,
-    ELASTICITY_FACTOR,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────
+
 
 def _make_product(**overrides):
     """Create a mock Product."""
@@ -68,12 +63,13 @@ def _make_comp_product(product_id, competitor_id, current_price=Decimal("45.00")
 
 # ── Tests ─────────────────────────────────────────────────────
 
+
 class TestForwardFill:
     """Test the static forward-fill utility."""
 
     def test_fills_gaps(self):
-        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        end = datetime(2026, 1, 5, tzinfo=timezone.utc)
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        end = datetime(2026, 1, 5, tzinfo=UTC)
         sparse = {
             "2026-01-01": Decimal("10.00"),
             "2026-01-03": Decimal("12.00"),
@@ -86,8 +82,8 @@ class TestForwardFill:
         assert filled["2026-01-05"] == Decimal("12.00")  # forward-filled
 
     def test_empty_returns_empty(self):
-        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        end = datetime(2026, 1, 3, tzinfo=timezone.utc)
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        end = datetime(2026, 1, 3, tzinfo=UTC)
         filled = RetrospectiveAuditService._forward_fill_prices({}, start, end)
         assert filled == {}
 
@@ -97,7 +93,7 @@ class TestBuildSummary:
 
     def test_empty_sku_results(self):
         service = RetrospectiveAuditService.__new__(RetrospectiveAuditService)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=90)
 
         summary = service._build_summary(
@@ -112,7 +108,7 @@ class TestBuildSummary:
 
     def test_single_sku_projection(self):
         service = RetrospectiveAuditService.__new__(RetrospectiveAuditService)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=90)
 
         # Mock a SKU result with $900 total impact over 90 days
@@ -174,7 +170,3 @@ class TestElasticityMath:
 
         missed_margin = Decimal(str(daily_units)) * gap_amount
         assert missed_margin == Decimal("25.00")
-
-
-
-        

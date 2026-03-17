@@ -8,12 +8,13 @@ Adds shopify_charge_id and shopify_plan_name columns to the subscriptions table
 for Shopify Billing API support. Both columns are nullable — only populated
 for merchants who subscribe via the Shopify App Store.
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "shopify_billing_001"
-down_revision = '3ee400620558'
+down_revision = "3ee400620558"
 branch_labels = None
 depends_on = None
 
@@ -32,6 +33,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("subscriptions", "shopify_plan_name")
     op.drop_column("subscriptions", "shopify_charge_id")
-
-
-    

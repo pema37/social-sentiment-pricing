@@ -22,8 +22,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional, Sequence
+from datetime import UTC, datetime
 
 # Phase 2 imports (duck-typed for testing without actual imports)
 # In production: from services.scoring.category_priors import CategoryPriorStore, CategoryPrior
@@ -76,6 +75,7 @@ class UpdateConfig:
 @dataclass
 class PriorSnapshot:
     """Snapshot of a prior before/after update for audit trail."""
+
     category: str
     before_mu: float
     before_sigma: float
@@ -83,20 +83,21 @@ class PriorSnapshot:
     after_mu: float
     after_sigma: float
     after_sample_size: int
-    raw_posterior_mu: float          # What the posterior would be without dampening
+    raw_posterior_mu: float  # What the posterior would be without dampening
     raw_posterior_sigma: float
-    observations_received: int       # Total from feature_engineer
-    observations_used: int           # After outlier filtering
-    observations_dropped: int        # Outlier-filtered count
-    was_dampened: bool               # True if EMA or bounds changed the raw posterior
-    dampening_applied: list[str]     # Which dampening strategies fired
-    skipped: bool = False            # True if update was skipped entirely
-    skip_reason: Optional[str] = None
+    observations_received: int  # Total from feature_engineer
+    observations_used: int  # After outlier filtering
+    observations_dropped: int  # Outlier-filtered count
+    was_dampened: bool  # True if EMA or bounds changed the raw posterior
+    dampening_applied: list[str]  # Which dampening strategies fired
+    skipped: bool = False  # True if update was skipped entirely
+    skip_reason: str | None = None
 
 
 @dataclass
 class UpdateResult:
     """Result of a full prior update cycle across all categories."""
+
     updated_categories: list[PriorSnapshot]
     skipped_categories: list[PriorSnapshot]
     total_observations_processed: int
@@ -126,7 +127,7 @@ class PriorUpdater:
     def __init__(
         self,
         prior_store,  # CategoryPriorStore (duck-typed)
-        config: Optional[UpdateConfig] = None,
+        config: UpdateConfig | None = None,
     ):
         self._store = prior_store
         self._config = config or UpdateConfig()
@@ -183,7 +184,7 @@ class PriorUpdater:
         self,
         category: str,
         observed_elasticities: list[float],
-        exploration_flags: Optional[list[bool]] = None,
+        exploration_flags: list[bool] | None = None,
     ) -> PriorSnapshot:
         """
         Update a single category's prior. Lower-level than update_all().
@@ -196,9 +197,7 @@ class PriorUpdater:
         Returns:
             PriorSnapshot with audit trail.
         """
-        return self._update_from_observations(
-            category, observed_elasticities, exploration_flags
-        )
+        return self._update_from_observations(category, observed_elasticities, exploration_flags)
 
     # ──────────────────────────────────────────────
     # INTERNAL: Category update pipeline
@@ -213,14 +212,19 @@ class PriorUpdater:
             prior = self._store.get_prior(category)
             return PriorSnapshot(
                 category=category,
-                before_mu=prior.mu, before_sigma=prior.sigma,
+                before_mu=prior.mu,
+                before_sigma=prior.sigma,
                 before_sample_size=prior.sample_size,
-                after_mu=prior.mu, after_sigma=prior.sigma,
+                after_mu=prior.mu,
+                after_sigma=prior.sigma,
                 after_sample_size=prior.sample_size,
-                raw_posterior_mu=prior.mu, raw_posterior_sigma=prior.sigma,
+                raw_posterior_mu=prior.mu,
+                raw_posterior_sigma=prior.sigma,
                 observations_received=len(elasticities),
-                observations_used=0, observations_dropped=0,
-                was_dampened=False, dampening_applied=[],
+                observations_used=0,
+                observations_dropped=0,
+                was_dampened=False,
+                dampening_applied=[],
                 skipped=True,
                 skip_reason=f"Insufficient observations: {len(elasticities)} < {self._config.min_observations}",
             )
@@ -233,7 +237,7 @@ class PriorUpdater:
         self,
         category: str,
         raw_observations: list[float],
-        exploration_flags: Optional[list[bool]] = None,
+        exploration_flags: list[bool] | None = None,
     ) -> PriorSnapshot:
         """Core update logic with full dampening pipeline."""
 
@@ -245,21 +249,24 @@ class PriorUpdater:
         before_n = prior.sample_size
 
         # ── Step 1: Outlier filtering ──
-        filtered, n_dropped = self._filter_outliers(
-            raw_observations, prior.mu, prior.sigma
-        )
+        filtered, n_dropped = self._filter_outliers(raw_observations, prior.mu, prior.sigma)
 
         if not filtered:
             return PriorSnapshot(
                 category=category,
-                before_mu=before_mu, before_sigma=before_sigma,
+                before_mu=before_mu,
+                before_sigma=before_sigma,
                 before_sample_size=before_n,
-                after_mu=before_mu, after_sigma=before_sigma,
+                after_mu=before_mu,
+                after_sigma=before_sigma,
                 after_sample_size=before_n,
-                raw_posterior_mu=before_mu, raw_posterior_sigma=before_sigma,
+                raw_posterior_mu=before_mu,
+                raw_posterior_sigma=before_sigma,
                 observations_received=len(raw_observations),
-                observations_used=0, observations_dropped=n_dropped,
-                was_dampened=False, dampening_applied=[],
+                observations_used=0,
+                observations_dropped=n_dropped,
+                was_dampened=False,
+                dampening_applied=[],
                 skipped=True,
                 skip_reason="All observations filtered as outliers",
             )
@@ -279,9 +286,7 @@ class PriorUpdater:
         ema_mu = cfg.ema_decay * before_mu + (1 - cfg.ema_decay) * raw_mu
         if abs(ema_mu - raw_mu) > 1e-6:
             dampened_mu = ema_mu
-            dampening_applied.append(
-                f"EMA(decay={cfg.ema_decay}): raw_mu={raw_mu:.4f} → ema_mu={ema_mu:.4f}"
-            )
+            dampening_applied.append(f"EMA(decay={cfg.ema_decay}): raw_mu={raw_mu:.4f} → ema_mu={ema_mu:.4f}")
 
         # 3b: Bounded shift on mu
         if before_mu != 0:
@@ -355,10 +360,7 @@ class PriorUpdater:
         threshold = self._config.outlier_sigma_threshold
         cutoff = threshold * prior_sigma
 
-        filtered = [
-            obs for obs in observations
-            if abs(obs - prior_mu) <= cutoff
-        ]
+        filtered = [obs for obs in observations if abs(obs - prior_mu) <= cutoff]
         return filtered, len(observations) - len(filtered)
 
     def _compute_raw_posterior(
@@ -366,7 +368,7 @@ class PriorUpdater:
         prior_mu: float,
         prior_sigma: float,
         filtered_obs: list[float],
-        exploration_flags: Optional[list[bool]],
+        exploration_flags: list[bool] | None,
         raw_observations: list[float],
     ) -> tuple[float, float]:
         """
@@ -376,7 +378,7 @@ class PriorUpdater:
         If exploration_flags provided, exploration observations get lower noise.
         """
         cfg = self._config
-        prior_precision = 1.0 / (prior_sigma ** 2)
+        prior_precision = 1.0 / (prior_sigma**2)
 
         # Separate observations by trust level if flags provided
         if (
@@ -399,31 +401,21 @@ class PriorUpdater:
 
             # If mapping didn't work cleanly, fall back to uniform noise
             if len(obs_with_noise) != len(filtered_obs):
-                obs_with_noise = [
-                    (obs, cfg.production_noise_sigma) for obs in filtered_obs
-                ]
+                obs_with_noise = [(obs, cfg.production_noise_sigma) for obs in filtered_obs]
         else:
-            obs_with_noise = [
-                (obs, cfg.production_noise_sigma) for obs in filtered_obs
-            ]
+            obs_with_noise = [(obs, cfg.production_noise_sigma) for obs in filtered_obs]
 
         # Accumulate precision-weighted observations
         total_obs_precision = 0.0
         precision_weighted_sum = 0.0
 
         for obs, noise_sigma in obs_with_noise:
-            obs_precision = 1.0 / (noise_sigma ** 2)
+            obs_precision = 1.0 / (noise_sigma**2)
             total_obs_precision += obs_precision
             precision_weighted_sum += obs * obs_precision
 
         posterior_precision = prior_precision + total_obs_precision
-        posterior_mu = (
-            (prior_mu * prior_precision + precision_weighted_sum)
-            / posterior_precision
-        )
+        posterior_mu = (prior_mu * prior_precision + precision_weighted_sum) / posterior_precision
         posterior_sigma = math.sqrt(1.0 / posterior_precision)
 
         return posterior_mu, posterior_sigma
-    
-
-    

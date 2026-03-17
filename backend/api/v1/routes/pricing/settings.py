@@ -9,20 +9,21 @@ immediately evaluated against the new settings instead of staying stuck.
 """
 
 import logging
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
-from models.user import User
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
+from db.session import get_session
 from models.pricing_settings import PricingSettings
-from services.pricing.approval_service import ApprovalService
+from models.user import User
 from schemas.pricing import (
-    PricingSettingsUpdate,
     PricingSettingsResponse,
+    PricingSettingsUpdate,
 )
+from services.pricing.approval_service import ApprovalService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -38,13 +39,13 @@ async def get_settings(
     stmt = select(PricingSettings).where(PricingSettings.user_id == current_user.id)
     result = await db.execute(stmt)
     settings = result.scalars().first()
-    
+
     if not settings:
         settings = PricingSettings(user_id=current_user.id)
         db.add(settings)
         await db.commit()
         await db.refresh(settings)
-    
+
     return settings
 
 
@@ -58,7 +59,7 @@ async def update_settings(
 ):
     """
     Update pricing settings.
-    
+
     FIX: After saving new settings, automatically re-process any PENDING
     recommendations to check if they now qualify for auto-approval under
     the updated thresholds.
@@ -66,21 +67,21 @@ async def update_settings(
     stmt = select(PricingSettings).where(PricingSettings.user_id == current_user.id)
     result = await db.execute(stmt)
     settings = result.scalars().first()
-    
+
     if not settings:
         settings = PricingSettings(user_id=current_user.id)
-    
+
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(settings, key, value)
-    
+
     db.add(settings)
     await db.commit()
     await db.refresh(settings)
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # FIX: Re-process pending recommendations with new settings
-    # 
+    #
     # When user updates thresholds (e.g., max_decrease from 10% to 75%),
     # existing PENDING recommendations should be re-evaluated immediately.
     # Without this, recommendations created before the settings change would
@@ -92,16 +93,12 @@ async def update_settings(
             applied = await service.process_auto_approvals(current_user.id)
             if applied:
                 logger.info(
-                    f"Auto-applied {len(applied)} recommendations after settings update "
-                    f"for user {current_user.id}"
+                    f"Auto-applied {len(applied)} recommendations after settings update for user {current_user.id}"
                 )
         except Exception as e:
             # Log but don't fail the settings update - the settings were saved successfully
-            logger.warning(
-                f"Failed to process auto-approvals after settings update for user "
-                f"{current_user.id}: {e}"
-            )
-    
+            logger.warning(f"Failed to process auto-approvals after settings update for user {current_user.id}: {e}")
+
     return settings
 
 
@@ -115,7 +112,3 @@ async def get_pricing_stats(
     """Get pricing statistics."""
     service = ApprovalService(db)
     return await service.get_approval_stats(current_user.id, days)
-
-
-
-

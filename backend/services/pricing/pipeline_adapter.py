@@ -20,26 +20,23 @@ the gap.
 Place at: backend/services/pricing/pipeline_adapter.py
 """
 
-import time
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
-from uuid import UUID
 
-from schemas.agent_contracts.shared import (
-    DataSource,
-    PriceDirection,
-    UrgencyLevel,
-)
-from schemas.agent_contracts.scout import (
-    CompetitorPrice,
-    SentimentSnapshot,
-    ScoutOutput,
-)
 from schemas.agent_contracts.analyst import (
     AnalystOutput,
     ConfidenceDecomposition,
     ElasticityEstimate,
+)
+from schemas.agent_contracts.scout import (
+    CompetitorPrice,
+    ScoutOutput,
+    SentimentSnapshot,
+)
+from schemas.agent_contracts.shared import (
+    DataSource,
+    PriceDirection,
+    UrgencyLevel,
 )
 from schemas.agent_contracts.strategist import (
     GuardrailCheck,
@@ -92,12 +89,14 @@ class PipelineAdapter:
         # ── Build competitor list ──
         competitors = []
         for comp_id, price in (signals.competitor_prices or {}).items():
-            competitors.append(CompetitorPrice(
-                competitor_name=str(comp_id),
-                price=price,
-                currency="USD",
-                scraped_at=now,
-            ))
+            competitors.append(
+                CompetitorPrice(
+                    competitor_name=str(comp_id),
+                    price=price,
+                    currency="USD",
+                    scraped_at=now,
+                )
+            )
 
         competitor_count = len(competitors)
 
@@ -139,10 +138,8 @@ class PipelineAdapter:
                 positive_ratio=max(0.0, min(1.0, (float(signals.sentiment_score) + 1) / 2)),
                 negative_ratio=max(0.0, min(1.0, 1 - (float(signals.sentiment_score) + 1) / 2)),
                 neutral_ratio=0.0,
-                crisis_detected=signals.viral_detected and (
-                    signals.sentiment_score is not None
-                    and float(signals.sentiment_score) < -0.5
-                ),
+                crisis_detected=signals.viral_detected
+                and (signals.sentiment_score is not None and float(signals.sentiment_score) < -0.5),
             )
 
         # ── Calculate data completeness ──
@@ -168,15 +165,11 @@ class PipelineAdapter:
         if signals.is_trending:
             data_sources.append(DataSource.MARKET_TREND)
 
-        data_completeness = (
-            sum(completeness_factors) / len(completeness_factors)
-            if completeness_factors
-            else 0.0
-        )
+        data_completeness = sum(completeness_factors) / len(completeness_factors) if completeness_factors else 0.0
 
         # ── Determine price trend from signals ──
         price_trend = None
-        if hasattr(signals, 'trend_direction'):
+        if hasattr(signals, "trend_direction"):
             trend_map = {"up": "rising", "down": "falling", "stable": "stable"}
             price_trend = trend_map.get(signals.trend_direction, "stable")
 
@@ -234,10 +227,10 @@ class PipelineAdapter:
         historical_score = components.get("historical_accuracy", {}).get("score", 0.5)
 
         confidence = ConfidenceDecomposition(
-            elasticity=signal_agreement_score,     # Best proxy: signal agreement
-            position=market_stability_score,       # Best proxy: market stability
-            urgency=rule_confidence_score,         # Best proxy: rule confidence
-            data_quality=data_quality_score,       # Direct map
+            elasticity=signal_agreement_score,  # Best proxy: signal agreement
+            position=market_stability_score,  # Best proxy: market stability
+            urgency=rule_confidence_score,  # Best proxy: rule confidence
+            data_quality=data_quality_score,  # Direct map
         )
 
         # ── Build elasticity estimate (placeholder) ──
@@ -294,9 +287,9 @@ class PipelineAdapter:
         direction_reasoning = "No clear signal for price change."
 
         if rule is not None:
-            rule_action = getattr(rule, 'action', None)
+            rule_action = getattr(rule, "action", None)
             if rule_action is not None:
-                action_val = rule_action.value if hasattr(rule_action, 'value') else str(rule_action)
+                action_val = rule_action.value if hasattr(rule_action, "value") else str(rule_action)
                 if "increase" in action_val.lower():
                     recommended_direction = PriceDirection.INCREASE
                     direction_reasoning = f"Rule '{rule.name}' triggered price increase."
@@ -342,9 +335,7 @@ class PipelineAdapter:
             sentiment_score=sentiment_score,
             sentiment_impact=sentiment_impact,
             competitive_position_index=(
-                scout.competitive_position_index
-                if scout.competitive_position_index is not None
-                else 0.5
+                scout.competitive_position_index if scout.competitive_position_index is not None else 0.5
             ),
             market_pressure=market_pressure,
             recommended_direction=recommended_direction,
@@ -369,7 +360,7 @@ class PipelineAdapter:
         reasoning: str,
         factors: dict,
         rule=None,
-        raw_price_before_boundaries: Optional[Decimal] = None,
+        raw_price_before_boundaries: Decimal | None = None,
     ) -> StrategistOutput:
         """
         Build StrategistOutput from AnalystOutput + recommendation data.
@@ -397,34 +388,42 @@ class PipelineAdapter:
         if raw_price_before_boundaries is not None:
             if raw_price_before_boundaries != recommended_price:
                 was_clamped = True
-                guardrails.append(GuardrailCheck(
-                    name="boundary_enforcement",
-                    passed=False,
-                    original_value=str(raw_price_before_boundaries),
-                    clamped_value=str(recommended_price),
-                    reason="Price clamped by min/max boundaries or max_change_percent",
-                ))
+                guardrails.append(
+                    GuardrailCheck(
+                        name="boundary_enforcement",
+                        passed=False,
+                        original_value=str(raw_price_before_boundaries),
+                        clamped_value=str(recommended_price),
+                        reason="Price clamped by min/max boundaries or max_change_percent",
+                    )
+                )
             else:
-                guardrails.append(GuardrailCheck(
-                    name="boundary_enforcement",
-                    passed=True,
-                ))
+                guardrails.append(
+                    GuardrailCheck(
+                        name="boundary_enforcement",
+                        passed=True,
+                    )
+                )
 
         if rule is not None:
-            min_price = getattr(rule, 'min_price', None)
-            max_price = getattr(rule, 'max_price', None)
+            min_price = getattr(rule, "min_price", None)
+            max_price = getattr(rule, "max_price", None)
             if min_price is not None:
-                guardrails.append(GuardrailCheck(
-                    name="min_price_floor",
-                    passed=recommended_price >= min_price,
-                    original_value=str(min_price),
-                ))
+                guardrails.append(
+                    GuardrailCheck(
+                        name="min_price_floor",
+                        passed=recommended_price >= min_price,
+                        original_value=str(min_price),
+                    )
+                )
             if max_price is not None:
-                guardrails.append(GuardrailCheck(
-                    name="max_price_ceiling",
-                    passed=recommended_price <= max_price,
-                    original_value=str(max_price),
-                ))
+                guardrails.append(
+                    GuardrailCheck(
+                        name="max_price_ceiling",
+                        passed=recommended_price <= max_price,
+                        original_value=str(max_price),
+                    )
+                )
 
         return StrategistOutput(
             product_id=product.id,
@@ -440,14 +439,8 @@ class PipelineAdapter:
             factors=factors,
             guardrails_applied=guardrails,
             was_clamped=was_clamped,
-            raw_recommended_price=(
-                raw_price_before_boundaries if was_clamped else None
-            ),
+            raw_recommended_price=(raw_price_before_boundaries if was_clamped else None),
             pipeline_source="rule_based",
             strategist_version="1.0-adapter",
             model_used="rule_engine",
         )
-
-
-
-        

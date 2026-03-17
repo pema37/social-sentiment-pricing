@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
@@ -33,8 +33,8 @@ AUDIT_ALLOWED_ORIGINS = {
     "https://www.getactualprice.com",
     "https://ssp-staging.vercel.app",
     "https://ssp-staging-f3zwnp7el-msakou-bcitcas-projects.vercel.app",
-    "http://localhost:4321",   # Astro dev
-    "http://localhost:3000",   # Next.js dev
+    "http://localhost:4321",  # Astro dev
+    "http://localhost:3000",  # Next.js dev
 }
 
 
@@ -78,6 +78,7 @@ def _check_rate_limit(ip: str) -> bool:
 
 # ── Lead storage ──────────────────────────────────────────────────────
 
+
 async def _store_lead(
     email: str,
     store_url: str,
@@ -106,7 +107,7 @@ async def _store_lead(
                     "store_name": store_name,
                     "category": category,
                     "ip_hash": ip_hash,
-                    "now": datetime.now(timezone.utc),
+                    "now": datetime.now(UTC),
                 },
             )
             await db.commit()
@@ -163,6 +164,7 @@ async def _update_lead_report(
 
 # ── SSE streaming endpoint ────────────────────────────────────────────
 
+
 @router.get("/price-check/stream")
 async def price_check_stream(
     request: Request,
@@ -188,6 +190,7 @@ async def price_check_stream(
     # Rate limiting
     client_ip = request.client.host if request.client else "unknown"
     if not _check_rate_limit(client_ip):
+
         async def rate_limited():
             event = {
                 "agent": "error",
@@ -205,6 +208,7 @@ async def price_check_stream(
 
     # Input validation
     if not store_url or not store_url.strip():
+
         async def missing_url():
             event = {
                 "agent": "error",
@@ -221,6 +225,7 @@ async def price_check_stream(
         )
 
     if not email or not email.strip():
+
         async def missing_email():
             event = {
                 "agent": "error",
@@ -260,11 +265,7 @@ async def price_check_stream(
                     return
 
                 # On completion, backfill full report data
-                if (
-                    event.get("agent") == "complete"
-                    and event.get("status") == "done"
-                    and event.get("data")
-                ):
+                if event.get("agent") == "complete" and event.get("status") == "done" and event.get("data"):
                     try:
                         await _update_lead_report(
                             email=email.strip(),
@@ -281,7 +282,7 @@ async def price_check_stream(
             error_event = {
                 "agent": "error",
                 "status": "error",
-                "message": f"An unexpected error occurred: {str(e)}",
+                "message": f"An unexpected error occurred: {e!s}",
                 "data": None,
             }
             yield f"data: {json.dumps(error_event)}\n\n"
@@ -291,6 +292,3 @@ async def price_check_stream(
         media_type="text/event-stream",
         headers=sse_headers,
     )
-
-
-

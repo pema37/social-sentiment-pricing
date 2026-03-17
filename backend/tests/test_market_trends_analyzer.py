@@ -21,9 +21,7 @@ Covers:
 """
 
 import sys
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from dataclasses import fields
 
 import pytest
 
@@ -35,19 +33,19 @@ mock_settings = MagicMock()
 mock_settings.OPENAI_API_KEY = "test"
 mock_settings.GEMINI_API_KEY = "test"
 
+from services.ai_trend_analysis.ai_clients import StreamChunk, ThoughtType
 from services.ai_trend_analysis.market_trends_visual import (
+    MarketDataPoint,
+    MarketTrendsAnalyzer,
     TrendAgent,
     TrendDirection,
-    TrendTimeframe,
-    TrendMessage,
-    MarketDataPoint,
     TrendForecast,
-    MarketTrendsAnalyzer,
+    TrendMessage,
+    TrendTimeframe,
 )
-from services.ai_trend_analysis.ai_clients import ThoughtType, StreamChunk
-
 
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _sample_market_data():
     return {
@@ -74,6 +72,7 @@ async def _fake_stream(*chunks):
 # ==================================================================
 # Enums
 # ==================================================================
+
 
 class TestTrendAgent:
     def test_observer(self):
@@ -109,6 +108,7 @@ class TestTrendTimeframe:
 # ==================================================================
 # Dataclasses
 # ==================================================================
+
 
 class TestTrendMessage:
     def test_basic_creation(self):
@@ -224,6 +224,7 @@ class TestTrendForecast:
 # MarketTrendsAnalyzer.__init__
 # ==================================================================
 
+
 class TestInit:
     def test_defaults(self):
         analyzer = MarketTrendsAnalyzer()
@@ -236,6 +237,7 @@ class TestInit:
 # ==================================================================
 # _format_market_data
 # ==================================================================
+
 
 class TestFormatMarketData:
     def test_includes_all_sections(self):
@@ -265,6 +267,7 @@ class TestFormatMarketData:
 # _classify_observer_thought
 # ==================================================================
 
+
 class TestClassifyObserverThought:
     def test_always_returns_observation(self):
         analyzer = MarketTrendsAnalyzer()
@@ -277,6 +280,7 @@ class TestClassifyObserverThought:
 # ==================================================================
 # _classify_analyst_thought
 # ==================================================================
+
 
 class TestClassifyAnalystThought:
     def test_hypothesis_keywords(self):
@@ -300,6 +304,7 @@ class TestClassifyAnalystThought:
 # ==================================================================
 # _classify_forecaster_thought
 # ==================================================================
+
 
 class TestClassifyForecasterThought:
     def test_recommendation_keywords(self):
@@ -335,6 +340,7 @@ class TestClassifyForecasterThought:
 # ==================================================================
 # _extract_observations
 # ==================================================================
+
 
 class TestExtractObservations:
     def test_strong_sentiment_signal(self):
@@ -392,6 +398,7 @@ class TestExtractObservations:
 # _parse_analyst_json
 # ==================================================================
 
+
 class TestParseAnalystJson:
     def test_json_code_block(self):
         analyzer = MarketTrendsAnalyzer()
@@ -442,6 +449,7 @@ class TestParseAnalystJson:
 # _parse_forecaster_json
 # ==================================================================
 
+
 class TestParseForecasterJson:
     def test_json_code_block(self):
         analyzer = MarketTrendsAnalyzer()
@@ -488,6 +496,7 @@ class TestParseForecasterJson:
 # analyze_image
 # ==================================================================
 
+
 class TestAnalyzeImage:
     @pytest.mark.asyncio
     async def test_success(self):
@@ -498,12 +507,8 @@ class TestAnalyzeImage:
             yield StreamChunk(text=" with support at $80", is_final=False)
             yield StreamChunk(text="", is_final=True)
 
-        with patch.object(
-            type(analyzer), "_MarketTrendsAnalyzer__class__", create=True
-        ):
-            with patch(
-                "services.ai_trend_analysis.market_trends_visual.ai_clients"
-            ) as mock_ai:
+        with patch.object(type(analyzer), "_MarketTrendsAnalyzer__class__", create=True):
+            with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
                 mock_ai.analyze_image_stream = mock_stream
                 result = await analyzer.analyze_image(b"fake", "png", "Widget", "electronics")
 
@@ -518,9 +523,7 @@ class TestAnalyzeImage:
             raise Exception("Image processing failed")
             yield  # Make it a generator
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.analyze_image_stream = mock_stream
             result = await analyzer.analyze_image(b"fake", "png", "Widget", "electronics")
 
@@ -531,6 +534,7 @@ class TestAnalyzeImage:
 # run_observer_agent
 # ==================================================================
 
+
 class TestRunObserverAgent:
     @pytest.mark.asyncio
     async def test_yields_messages(self):
@@ -540,15 +544,11 @@ class TestRunObserverAgent:
             yield StreamChunk(text="I see market patterns", is_final=False)
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
-            async for msg in analyzer.run_observer_agent(
-                "Widget", "electronics", _sample_market_data()
-            ):
+            async for msg in analyzer.run_observer_agent("Widget", "electronics", _sample_market_data()):
                 messages.append(msg)
 
         assert len(messages) >= 2  # At least opening + final
@@ -563,15 +563,11 @@ class TestRunObserverAgent:
             yield StreamChunk(text="Analysis text", is_final=False)
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
-            async for msg in analyzer.run_observer_agent(
-                "Widget", "electronics", _sample_market_data()
-            ):
+            async for msg in analyzer.run_observer_agent("Widget", "electronics", _sample_market_data()):
                 messages.append(msg)
 
         final = messages[-1]
@@ -585,9 +581,7 @@ class TestRunObserverAgent:
             yield StreamChunk(text="Chart shows decline", is_final=False)
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
@@ -603,6 +597,7 @@ class TestRunObserverAgent:
 # run_analyst_agent
 # ==================================================================
 
+
 class TestRunAnalystAgent:
     @pytest.mark.asyncio
     async def test_yields_messages(self):
@@ -612,14 +607,13 @@ class TestRunAnalystAgent:
             yield StreamChunk(text='{"trend_strength": "strong"}', is_final=False)
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
             async for msg in analyzer.run_analyst_agent(
-                "Widget", "electronics",
+                "Widget",
+                "electronics",
                 _sample_market_data(),
                 {"full_analysis": "Observer found patterns"},
             ):
@@ -640,15 +634,11 @@ class TestRunAnalystAgent:
             )
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
-            async for msg in analyzer.run_analyst_agent(
-                "Widget", "electronics", {}, {}
-            ):
+            async for msg in analyzer.run_analyst_agent("Widget", "electronics", {}, {}):
                 messages.append(msg)
 
         final = messages[-1]
@@ -658,6 +648,7 @@ class TestRunAnalystAgent:
 # ==================================================================
 # run_forecaster_agent
 # ==================================================================
+
 
 class TestRunForecasterAgent:
     @pytest.mark.asyncio
@@ -671,15 +662,11 @@ class TestRunForecasterAgent:
             )
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
-            async for msg in analyzer.run_forecaster_agent(
-                "Widget", "electronics", _sample_market_data(), {}, {}
-            ):
+            async for msg in analyzer.run_forecaster_agent("Widget", "electronics", _sample_market_data(), {}, {}):
                 messages.append(msg)
 
         assert len(messages) >= 2
@@ -697,15 +684,11 @@ class TestRunForecasterAgent:
             )
             yield StreamChunk(text="", is_final=True)
 
-        with patch(
-            "services.ai_trend_analysis.market_trends_visual.ai_clients"
-        ) as mock_ai:
+        with patch("services.ai_trend_analysis.market_trends_visual.ai_clients") as mock_ai:
             mock_ai.stream_gemini3 = mock_stream
 
             messages = []
-            async for msg in analyzer.run_forecaster_agent(
-                "Widget", "electronics", {}, {}, {}
-            ):
+            async for msg in analyzer.run_forecaster_agent("Widget", "electronics", {}, {}, {}):
                 messages.append(msg)
 
         final = messages[-1]
@@ -716,6 +699,7 @@ class TestRunForecasterAgent:
 # analyze_stream (full orchestration)
 # ==================================================================
 
+
 class TestAnalyzeStream:
     @pytest.mark.asyncio
     async def test_runs_all_three_agents(self):
@@ -724,18 +708,33 @@ class TestAnalyzeStream:
         # Mock each agent runner
         observer_msgs = [
             TrendMessage(TrendAgent.OBSERVER, ThoughtType.OBSERVATION, "Observing..."),
-            TrendMessage(TrendAgent.OBSERVER, ThoughtType.DECISION, "Done",
-                         is_final=True, metadata={"observations": {"signals": [], "full_analysis": "text"}}),
+            TrendMessage(
+                TrendAgent.OBSERVER,
+                ThoughtType.DECISION,
+                "Done",
+                is_final=True,
+                metadata={"observations": {"signals": [], "full_analysis": "text"}},
+            ),
         ]
         analyst_msgs = [
             TrendMessage(TrendAgent.ANALYST, ThoughtType.ANALYSIS, "Analyzing..."),
-            TrendMessage(TrendAgent.ANALYST, ThoughtType.DECISION, "Done",
-                         is_final=True, metadata={"analysis": {"trend_strength": "strong"}}),
+            TrendMessage(
+                TrendAgent.ANALYST,
+                ThoughtType.DECISION,
+                "Done",
+                is_final=True,
+                metadata={"analysis": {"trend_strength": "strong"}},
+            ),
         ]
         forecaster_msgs = [
             TrendMessage(TrendAgent.FORECASTER, ThoughtType.HYPOTHESIS, "Forecasting..."),
-            TrendMessage(TrendAgent.FORECASTER, ThoughtType.RECOMMENDATION, "Done",
-                         is_final=True, metadata={"forecast": {"direction": "down"}}),
+            TrendMessage(
+                TrendAgent.FORECASTER,
+                ThoughtType.RECOMMENDATION,
+                "Done",
+                is_final=True,
+                metadata={"forecast": {"direction": "down"}},
+            ),
         ]
 
         async def mock_observer(*args, **kwargs):
@@ -769,16 +768,23 @@ class TestAnalyzeStream:
         analyzer.analyze_image = AsyncMock(return_value="Chart shows uptrend")
 
         async def mock_observer(*args, **kwargs):
-            yield TrendMessage(TrendAgent.OBSERVER, ThoughtType.OBSERVATION, "Done",
-                               is_final=True, metadata={"observations": {"signals": []}})
+            yield TrendMessage(
+                TrendAgent.OBSERVER,
+                ThoughtType.OBSERVATION,
+                "Done",
+                is_final=True,
+                metadata={"observations": {"signals": []}},
+            )
 
         async def mock_analyst(*args, **kwargs):
-            yield TrendMessage(TrendAgent.ANALYST, ThoughtType.ANALYSIS, "Done",
-                               is_final=True, metadata={"analysis": {}})
+            yield TrendMessage(
+                TrendAgent.ANALYST, ThoughtType.ANALYSIS, "Done", is_final=True, metadata={"analysis": {}}
+            )
 
         async def mock_forecaster(*args, **kwargs):
-            yield TrendMessage(TrendAgent.FORECASTER, ThoughtType.RECOMMENDATION, "Done",
-                               is_final=True, metadata={"forecast": {}})
+            yield TrendMessage(
+                TrendAgent.FORECASTER, ThoughtType.RECOMMENDATION, "Done", is_final=True, metadata={"forecast": {}}
+            )
 
         analyzer.run_observer_agent = mock_observer
         analyzer.run_analyst_agent = mock_analyst
@@ -800,16 +806,23 @@ class TestAnalyzeStream:
         analyzer.analyze_image = AsyncMock()
 
         async def mock_observer(*args, **kwargs):
-            yield TrendMessage(TrendAgent.OBSERVER, ThoughtType.OBSERVATION, "Done",
-                               is_final=True, metadata={"observations": {"signals": []}})
+            yield TrendMessage(
+                TrendAgent.OBSERVER,
+                ThoughtType.OBSERVATION,
+                "Done",
+                is_final=True,
+                metadata={"observations": {"signals": []}},
+            )
 
         async def mock_analyst(*args, **kwargs):
-            yield TrendMessage(TrendAgent.ANALYST, ThoughtType.ANALYSIS, "Done",
-                               is_final=True, metadata={"analysis": {}})
+            yield TrendMessage(
+                TrendAgent.ANALYST, ThoughtType.ANALYSIS, "Done", is_final=True, metadata={"analysis": {}}
+            )
 
         async def mock_forecaster(*args, **kwargs):
-            yield TrendMessage(TrendAgent.FORECASTER, ThoughtType.RECOMMENDATION, "Done",
-                               is_final=True, metadata={"forecast": {}})
+            yield TrendMessage(
+                TrendAgent.FORECASTER, ThoughtType.RECOMMENDATION, "Done", is_final=True, metadata={"forecast": {}}
+            )
 
         analyzer.run_observer_agent = mock_observer
         analyzer.run_analyst_agent = mock_analyst
@@ -820,5 +833,3 @@ class TestAnalyzeStream:
             messages.append(msg)
 
         analyzer.analyze_image.assert_not_awaited()
-
-        

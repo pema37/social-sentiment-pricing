@@ -21,22 +21,20 @@ Cons:
 Use this as a fallback when paid providers are unavailable.
 """
 
-import os
-import logging
 import asyncio
-from typing import Optional, List, Dict, Any
-from urllib.parse import parse_qs, urlparse, unquote
+import logging
+from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 
-from .base import BaseSearchProvider
 from ..schemas import (
-    SearchProvider,
     MatchedProduct,
     ProviderResult,
+    SearchProvider,
 )
 from ..utils import extract_price_from_text
-
+from .base import BaseSearchProvider
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +42,14 @@ logger = logging.getLogger(__name__)
 class DuckDuckGoProvider(BaseSearchProvider):
     """
     DuckDuckGo search provider.
-    
+
     Free fallback that scrapes DDG's HTML interface.
     No API key needed, but results are less structured.
     """
 
     # DDG HTML search endpoint
     ENDPOINT = "https://html.duckduckgo.com/html/"
-    
+
     # Alternative: DDG lite
     LITE_ENDPOINT = "https://lite.duckduckgo.com/lite/"
 
@@ -70,7 +68,7 @@ class DuckDuckGoProvider(BaseSearchProvider):
     ):
         """
         Initialize DuckDuckGo provider.
-        
+
         Args:
             timeout: Request timeout in seconds
             use_lite: Use lite version (simpler HTML)
@@ -79,7 +77,7 @@ class DuckDuckGoProvider(BaseSearchProvider):
         self.timeout = timeout
         self.use_lite = use_lite
         self.delay = delay_between_requests
-        
+
         self._last_request_time: float = 0
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -118,11 +116,11 @@ class DuckDuckGoProvider(BaseSearchProvider):
     ) -> ProviderResult:
         """
         Search using DuckDuckGo HTML interface.
-        
+
         Args:
             query: Search query
             max_results: Maximum results to return
-            
+
         Returns:
             ProviderResult with products
         """
@@ -133,7 +131,7 @@ class DuckDuckGoProvider(BaseSearchProvider):
         shopping_query = f"{query} buy price shop"
 
         endpoint = self.LITE_ENDPOINT if self.use_lite else self.ENDPOINT
-        
+
         headers = {
             "User-Agent": self.USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -171,12 +169,12 @@ class DuckDuckGoProvider(BaseSearchProvider):
 
         except httpx.HTTPStatusError as e:
             error_msg = f"HTTP {e.response.status_code}"
-            
+
             if e.response.status_code == 403:
                 error_msg = "Blocked by DuckDuckGo (try again later)"
             elif e.response.status_code == 503:
                 error_msg = "DuckDuckGo temporarily unavailable"
-            
+
             return ProviderResult(
                 provider=self.provider_name,
                 success=False,
@@ -202,18 +200,14 @@ class DuckDuckGoProvider(BaseSearchProvider):
     # Private Methods
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _parse_html_results(
-        self, 
-        html: str, 
-        max_results: int
-    ) -> List[MatchedProduct]:
+    def _parse_html_results(self, html: str, max_results: int) -> list[MatchedProduct]:
         """
         Parse DuckDuckGo HTML results.
-        
+
         Args:
             html: Raw HTML response
             max_results: Maximum results to parse
-            
+
         Returns:
             List of MatchedProduct
         """
@@ -223,63 +217,61 @@ class DuckDuckGoProvider(BaseSearchProvider):
             logger.error("BeautifulSoup not installed. Run: pip install beautifulsoup4")
             return []
 
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
         products = []
 
         # Find result containers
         # DDG HTML uses .result class
-        results = soup.select('.result')
-        
+        results = soup.select(".result")
+
         if not results:
             # Try alternative selectors
-            results = soup.select('.links_main')
-        
+            results = soup.select(".links_main")
+
         if not results:
             # Lite version uses different structure
-            results = soup.select('tr')
+            results = soup.select("tr")
 
         for result in results:
             if len(products) >= max_results:
                 break
-                
+
             product = self._parse_result_element(result)
             if product:
                 products.append(product)
 
         return products
 
-    def _parse_result_element(self, element) -> Optional[MatchedProduct]:
+    def _parse_result_element(self, element) -> MatchedProduct | None:
         """
         Parse a single result element.
-        
+
         Args:
             element: BeautifulSoup element
-            
+
         Returns:
             MatchedProduct or None
         """
         # Try to find link
         link_elem = (
-            element.select_one('.result__a') or
-            element.select_one('a.result__url') or
-            element.select_one('a[href]')
+            element.select_one(".result__a") or element.select_one("a.result__url") or element.select_one("a[href]")
         )
-        
+
         if not link_elem:
             return None
 
         # Extract URL
-        href = link_elem.get('href', '')
+        href = link_elem.get("href", "")
         url = self._extract_real_url(href)
-        
+
         if not url:
             return None
 
         # Extract title
         title = link_elem.get_text(strip=True)
-        
+
         # Try to get better title from heading
-        title_elem = element.select_one('.result__title')
+        title_elem = element.select_one(".result__title")
         if title_elem:
             title = title_elem.get_text(strip=True)
 
@@ -289,16 +281,16 @@ class DuckDuckGoProvider(BaseSearchProvider):
         # Extract snippet for price
         snippet = ""
         snippet_elem = (
-            element.select_one('.result__snippet') or
-            element.select_one('.result__body') or
-            element.select_one('td:last-child')
+            element.select_one(".result__snippet")
+            or element.select_one(".result__body")
+            or element.select_one("td:last-child")
         )
         if snippet_elem:
             snippet = snippet_elem.get_text(strip=True)
 
         # Try to extract price from snippet
         price = extract_price_from_text(snippet)
-        
+
         # Also try from title
         if not price:
             price = extract_price_from_text(title)
@@ -311,16 +303,16 @@ class DuckDuckGoProvider(BaseSearchProvider):
             raw_data={"snippet": snippet},
         )
 
-    def _extract_real_url(self, href: str) -> Optional[str]:
+    def _extract_real_url(self, href: str) -> str | None:
         """
         Extract real URL from DuckDuckGo redirect URL.
-        
+
         DDG wraps URLs like:
         //duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.amazon.com%2F...
-        
+
         Args:
             href: Raw href from DDG
-            
+
         Returns:
             Real URL or None
         """
@@ -328,30 +320,30 @@ class DuckDuckGoProvider(BaseSearchProvider):
             return None
 
         # If it's already a clean URL
-        if href.startswith('http://') or href.startswith('https://'):
+        if href.startswith("http://") or href.startswith("https://"):
             return href
 
         # Handle DDG redirect format
-        if 'uddg=' in href:
+        if "uddg=" in href:
             try:
                 # Parse the redirect URL
-                if href.startswith('//'):
-                    href = 'https:' + href
-                elif href.startswith('/'):
-                    href = 'https://duckduckgo.com' + href
-                    
+                if href.startswith("//"):
+                    href = "https:" + href
+                elif href.startswith("/"):
+                    href = "https://duckduckgo.com" + href
+
                 parsed = urlparse(href)
                 params = parse_qs(parsed.query)
-                
-                if 'uddg' in params:
-                    real_url = unquote(params['uddg'][0])
+
+                if "uddg" in params:
+                    real_url = unquote(params["uddg"][0])
                     return real_url
             except Exception as e:
                 self._log_debug(f"Failed to parse DDG URL: {e}")
                 return None
 
         # Handle relative URLs (shouldn't happen but just in case)
-        if href.startswith('/'):
+        if href.startswith("/"):
             return None  # Skip relative URLs
 
         return None
@@ -359,26 +351,26 @@ class DuckDuckGoProvider(BaseSearchProvider):
     async def _respect_rate_limit(self) -> None:
         """
         Ensure we don't hit DDG too fast.
-        
+
         Adds delay between requests to be respectful.
         """
         import time
-        
+
         now = time.time()
         elapsed = now - self._last_request_time
-        
+
         if elapsed < self.delay:
             wait_time = self.delay - elapsed
             self._log_debug(f"Rate limiting: waiting {wait_time:.2f}s")
             await asyncio.sleep(wait_time)
-        
+
         self._last_request_time = time.time()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Public Utility Methods
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Get usage statistics."""
         return {
             "provider": self.provider_name.value,
@@ -386,7 +378,3 @@ class DuckDuckGoProvider(BaseSearchProvider):
             "cost": "Free",
             "note": "No usage limits tracked (be respectful)",
         }
-    
-
-
-    

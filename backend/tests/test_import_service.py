@@ -12,12 +12,12 @@ Covers:
 - parse_csv_row: Shopify fields, WooCommerce fields, missing fields
 """
 
-import sys
 import os
-from types import ModuleType
+import sys
 from decimal import Decimal
-from uuid import uuid4, UUID
-from unittest.mock import MagicMock, AsyncMock, patch
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -32,7 +32,7 @@ _MOCKED = [
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
 # Ensure db.session stub
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -62,6 +62,7 @@ _product_stub = ModuleType("models.product")
 
 class _FakeProduct:
     """Dual-purpose fake: class-level attrs for queries, instance for construction."""
+
     user_id = MagicMock()
     sku = MagicMock()
     # sku.isnot must return a MagicMock for query building
@@ -104,6 +105,7 @@ del _m
 # Helpers
 # ===========================================================================
 
+
 def _make_row(**overrides) -> ImportProductRow:
     defaults = {"name": "Test Product", "base_price": Decimal("19.99")}
     defaults.update(overrides)
@@ -123,6 +125,7 @@ def _make_service(session=None) -> ProductImportService:
 # ===========================================================================
 # ImportProductRow Tests
 # ===========================================================================
+
 
 class TestImportProductRow:
     """Test ImportProductRow schema validation."""
@@ -220,6 +223,7 @@ class TestImportResult:
 # ProductImportService Tests
 # ===========================================================================
 
+
 class TestImportServiceInit:
     """Test __init__."""
 
@@ -275,9 +279,7 @@ class TestImportProducts:
         svc._get_existing_skus = AsyncMock(return_value={"SKU-001"})
         rows = [_make_row(name="Existing", sku="SKU-001")]
 
-        result = await svc.import_products(
-            user_id=uuid4(), products=rows, update_existing=True
-        )
+        result = await svc.import_products(user_id=uuid4(), products=rows, update_existing=True)
         assert result.updated == 1
         assert result.created == 0
 
@@ -299,10 +301,12 @@ class TestImportProducts:
     async def test_row_error_isolated(self):
         svc = _make_service()
         svc._get_existing_skus = AsyncMock(return_value=set())
-        svc._create_product_from_row = MagicMock(side_effect=[
-            Exception("bad row"),
-            _FakeProduct(name="Good"),
-        ])
+        svc._create_product_from_row = MagicMock(
+            side_effect=[
+                Exception("bad row"),
+                _FakeProduct(name="Good"),
+            ]
+        )
         rows = [_make_row(name="Bad"), _make_row(name="Good")]
 
         result = await svc.import_products(user_id=uuid4(), products=rows)
@@ -482,5 +486,3 @@ class TestParseCsvRow:
         row_dict = {"name": "X", "base_price": "10", "price": "20"}
         row = ProductImportService.parse_csv_row(row_dict)
         assert row.base_price == Decimal("10")
-
-        

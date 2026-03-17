@@ -5,6 +5,7 @@ Token encryption utilities using Fernet symmetric encryption.
 """
 
 from cryptography.fernet import Fernet
+
 from core.config import settings
 
 
@@ -26,4 +27,3 @@ def decrypt_token(encrypted: bytes) -> str:
     """Decrypt a token"""
     f = get_fernet()
     return f.decrypt(encrypted).decode()
-

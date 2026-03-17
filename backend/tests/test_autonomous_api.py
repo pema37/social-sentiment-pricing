@@ -39,9 +39,7 @@ def _load_autonomous_pipeline_module():
     backend/api/v1/routes/__init__.py, which imports ALL routes including
     health → db.session → create_async_engine (fails without async driver).
     """
-    module_path = os.path.join(
-        os.path.dirname(__file__), "..", "api", "v1", "routes", "autonomous_pipeline.py"
-    )
+    module_path = os.path.join(os.path.dirname(__file__), "..", "api", "v1", "routes", "autonomous_pipeline.py")
     module_path = os.path.normpath(module_path)
     spec = importlib.util.spec_from_file_location("autonomous_pipeline_isolated", module_path)
     mod = importlib.util.module_from_spec(spec)
@@ -52,6 +50,7 @@ def _load_autonomous_pipeline_module():
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_gemini_response(response_json: dict) -> MagicMock:
     """Create a mock Gemini response that returns structured JSON."""
@@ -142,24 +141,31 @@ def client(app_with_mocked_gemini) -> TestClient:
 # POST /api/v1/autonomous/trigger
 # ---------------------------------------------------------------------------
 
+
 class TestTriggerEndpoint:
     """One-shot pipeline execution."""
 
     def test_trigger_returns_200_with_valid_request(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": 99.99,
-            "product_category": "electronics",
-            "cost_basis": 45.00,
-            "margin_floor_pct": 20.0,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": 99.99,
+                "product_category": "electronics",
+                "cost_basis": 45.00,
+                "margin_floor_pct": 20.0,
+            },
+        )
         assert response.status_code == 200
 
     def test_trigger_returns_pipeline_response_shape(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": 99.99,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": 99.99,
+            },
+        )
         data = response.json()
         assert "success" in data
         assert "decision" in data
@@ -167,10 +173,13 @@ class TestTriggerEndpoint:
         assert "agents_executed" in data
 
     def test_trigger_decision_contains_pricing_fields(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": 99.99,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": 99.99,
+            },
+        )
         decision = response.json()["decision"]
         assert "recommended_price" in decision
         assert "current_price" in decision
@@ -180,28 +189,37 @@ class TestTriggerEndpoint:
         assert "action" in decision
 
     def test_trigger_decision_has_tx_hash_on_execute(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": 99.99,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": 99.99,
+            },
+        )
         decision = response.json()["decision"]
         if decision["action"] == "execute":
             assert decision["tx_hash"] is not None
             assert decision["tx_hash"].startswith("0x")
 
     def test_trigger_records_pipeline_duration(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": 99.99,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": 99.99,
+            },
+        )
         duration = response.json()["pipeline_duration_ms"]
         assert isinstance(duration, int)
         assert duration >= 0
 
     def test_trigger_lists_all_agents_executed(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+            },
+        )
         agents = response.json()["agents_executed"]
         assert "Scout" in agents
         assert "Analyst" in agents
@@ -215,18 +233,24 @@ class TestTriggerEndpoint:
         assert decision["current_price"] == 99.99  # default
 
     def test_trigger_accepts_custom_product_category(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "fashion-001",
-            "product_category": "fashion",
-            "current_price": 149.99,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "fashion-001",
+                "product_category": "fashion",
+                "current_price": 149.99,
+            },
+        )
         assert response.status_code == 200
 
     def test_trigger_preserves_current_price(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": 249.99,
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": 249.99,
+            },
+        )
         decision = response.json()["decision"]
         assert decision["current_price"] == 249.99
 
@@ -234,6 +258,7 @@ class TestTriggerEndpoint:
 # ---------------------------------------------------------------------------
 # GET /api/v1/autonomous/stream/{product_id}
 # ---------------------------------------------------------------------------
+
 
 class TestStreamEndpoint:
     """SSE streaming pipeline — real-time agent reasoning."""
@@ -292,10 +317,7 @@ class TestStreamEndpoint:
 
     def test_stream_ends_with_pipeline_complete(self, client):
         response = client.get("/api/v1/autonomous/stream/test-001")
-        data_lines = [
-            l for l in response.text.strip().split("\n")
-            if l.startswith("data: ")
-        ]
+        data_lines = [l for l in response.text.strip().split("\n") if l.startswith("data: ")]
         assert len(data_lines) > 0
         last_event = json.loads(data_lines[-1].replace("data: ", "", 1))
         assert last_event["agent"] == "pipeline"
@@ -322,50 +344,67 @@ class TestStreamEndpoint:
 # POST /api/v1/autonomous/monitor/start
 # ---------------------------------------------------------------------------
 
+
 class TestMonitorStartEndpoint:
     """Start autonomous continuous monitoring."""
 
     def test_monitor_start_returns_200(self, client):
-        response = client.post("/api/v1/autonomous/monitor/start", json={
-            "product_id": "test-001",
-            "current_price": 99.99,
-            "check_interval_seconds": 300,
-        })
+        response = client.post(
+            "/api/v1/autonomous/monitor/start",
+            json={
+                "product_id": "test-001",
+                "current_price": 99.99,
+                "check_interval_seconds": 300,
+            },
+        )
         assert response.status_code == 200
 
     def test_monitor_start_returns_status(self, client):
-        response = client.post("/api/v1/autonomous/monitor/start", json={
-            "product_id": "test-001",
-        })
+        response = client.post(
+            "/api/v1/autonomous/monitor/start",
+            json={
+                "product_id": "test-001",
+            },
+        )
         data = response.json()
         assert data["status"] == "monitoring_started"
         assert "product_id" in data
 
     def test_monitor_start_uses_default_interval(self, client):
-        response = client.post("/api/v1/autonomous/monitor/start", json={
-            "product_id": "test-001",
-        })
+        response = client.post(
+            "/api/v1/autonomous/monitor/start",
+            json={
+                "product_id": "test-001",
+            },
+        )
         data = response.json()
         assert data["interval_seconds"] == 300  # 5 min default
 
     def test_monitor_start_rejects_interval_below_60(self, client):
-        response = client.post("/api/v1/autonomous/monitor/start", json={
-            "product_id": "test-001",
-            "check_interval_seconds": 10,  # Too low
-        })
+        response = client.post(
+            "/api/v1/autonomous/monitor/start",
+            json={
+                "product_id": "test-001",
+                "check_interval_seconds": 10,  # Too low
+            },
+        )
         assert response.status_code == 422  # Validation error
 
     def test_monitor_start_rejects_interval_above_3600(self, client):
-        response = client.post("/api/v1/autonomous/monitor/start", json={
-            "product_id": "test-001",
-            "check_interval_seconds": 7200,  # Too high
-        })
+        response = client.post(
+            "/api/v1/autonomous/monitor/start",
+            json={
+                "product_id": "test-001",
+                "check_interval_seconds": 7200,  # Too high
+            },
+        )
         assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
 # POST /api/v1/autonomous/monitor/stop
 # ---------------------------------------------------------------------------
+
 
 class TestMonitorStopEndpoint:
     """Stop autonomous monitoring."""
@@ -383,6 +422,7 @@ class TestMonitorStopEndpoint:
 # ---------------------------------------------------------------------------
 # GET /api/v1/autonomous/health
 # ---------------------------------------------------------------------------
+
 
 class TestHealthEndpoint:
     """Gemini connectivity and agent readiness check."""
@@ -442,14 +482,18 @@ class TestHealthEndpoint:
 # Request Validation (422 errors)
 # ---------------------------------------------------------------------------
 
+
 class TestRequestValidation:
     """Pydantic schema validation at the API boundary."""
 
     def test_trigger_rejects_negative_price(self, client):
-        response = client.post("/api/v1/autonomous/trigger", json={
-            "product_id": "test-001",
-            "current_price": -10.00,  # Negative — should this pass Pydantic?
-        })
+        response = client.post(
+            "/api/v1/autonomous/trigger",
+            json={
+                "product_id": "test-001",
+                "current_price": -10.00,  # Negative — should this pass Pydantic?
+            },
+        )
         # Current schema doesn't enforce > 0, but the pipeline handles it
         # This is a documentation test — we note the behavior
         assert response.status_code in (200, 422)
@@ -472,6 +516,7 @@ class TestRequestValidation:
 # Response Headers & CORS
 # ---------------------------------------------------------------------------
 
+
 class TestResponseHeaders:
     """Verify response headers are correct for SSE and caching."""
 
@@ -486,6 +531,3 @@ class TestResponseHeaders:
     def test_trigger_returns_json_content_type(self, client):
         response = client.post("/api/v1/autonomous/trigger", json={})
         assert "application/json" in response.headers.get("content-type", "")
-
-
-        

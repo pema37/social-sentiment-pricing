@@ -27,7 +27,7 @@ Run: pytest backend/tests/unit/test_record_merchant_decision.py -v
 
 import sys
 import types
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -71,6 +71,7 @@ RecommendationStatus = _rec_mod.RecommendationStatus
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
 
+
 def _make_db(existing_outcome=None, rule=None, product=None):
     """Build a mock AsyncSession that returns the right objects."""
     db = AsyncMock()
@@ -78,13 +79,14 @@ def _make_db(existing_outcome=None, rule=None, product=None):
     # db.get() dispatch: PriceRecommendation, PricingRule, Product
     # We'll configure per-test via the recommendation fixture
     async def _get(model_cls, pk):
-        name = model_cls.__name__ if hasattr(model_cls, '__name__') else str(model_cls)
+        name = model_cls.__name__ if hasattr(model_cls, "__name__") else str(model_cls)
         if "PricingRule" in name:
             return rule
         if "Product" in name:
             return product
         # Default: PriceRecommendation — set per test
         return db._recommendation
+
     db.get = AsyncMock(side_effect=_get)
 
     # db.execute() → result.scalars().first() → existing_outcome or None
@@ -197,6 +199,7 @@ def _old_style_factors():
 # FIXTURES
 # ══════════════════════════════════════════════════════════════════
 
+
 @pytest.fixture
 def user_id():
     return uuid4()
@@ -234,8 +237,8 @@ def mock_product():
 # 1. TYPED EVIDENCE EXTRACTION
 # ══════════════════════════════════════════════════════════════════
 
-class TestTypedEvidenceExtraction:
 
+class TestTypedEvidenceExtraction:
     @pytest.mark.asyncio
     async def test_extracts_scout_evidence(self, user_id, recommendation_id, mock_product):
         factors = _typed_factors()
@@ -335,8 +338,8 @@ class TestTypedEvidenceExtraction:
 # 2. OLD-STYLE EVIDENCE EXTRACTION
 # ══════════════════════════════════════════════════════════════════
 
-class TestOldStyleEvidenceExtraction:
 
+class TestOldStyleEvidenceExtraction:
     @pytest.mark.asyncio
     async def test_falls_back_to_match_details(self, user_id, recommendation_id, mock_product):
         factors = _old_style_factors()
@@ -386,10 +389,10 @@ class TestOldStyleEvidenceExtraction:
         )
 
         created = db.add.call_args[0][0]
-        assert created.confidence_elasticity == 0.7   # signal_agreement.score
-        assert created.confidence_position == 0.65     # market_stability.score
-        assert created.confidence_urgency == 0.6       # rule_confidence.score
-        assert created.confidence_data_quality == 0.75 # data_quality.score
+        assert created.confidence_elasticity == 0.7  # signal_agreement.score
+        assert created.confidence_position == 0.65  # market_stability.score
+        assert created.confidence_urgency == 0.6  # rule_confidence.score
+        assert created.confidence_data_quality == 0.75  # data_quality.score
 
     @pytest.mark.asyncio
     async def test_old_style_sentiment_from_price_impacts(self, user_id, recommendation_id, mock_product):
@@ -414,8 +417,8 @@ class TestOldStyleEvidenceExtraction:
 # 3. BACKWARD COMPATIBILITY (empty / missing factors)
 # ══════════════════════════════════════════════════════════════════
 
-class TestBackwardCompatibility:
 
+class TestBackwardCompatibility:
     @pytest.mark.asyncio
     async def test_empty_factors(self, user_id, recommendation_id, mock_product):
         rec = _make_recommendation(user_id, recommendation_id, factors={})
@@ -487,8 +490,8 @@ class TestBackwardCompatibility:
 # 4. IDEMPOTENCY
 # ══════════════════════════════════════════════════════════════════
 
-class TestIdempotency:
 
+class TestIdempotency:
     @pytest.mark.asyncio
     async def test_returns_existing_outcome(self, user_id, recommendation_id, mock_product):
         existing = MagicMock()
@@ -536,8 +539,8 @@ class TestIdempotency:
 # 5. MEASUREMENT STATUS ROUTING
 # ══════════════════════════════════════════════════════════════════
 
-class TestMeasurementStatus:
 
+class TestMeasurementStatus:
     @pytest.mark.asyncio
     async def test_accepted_gets_decision_recorded(self, user_id, recommendation_id, mock_product):
         rec = _make_recommendation(user_id, recommendation_id)
@@ -608,13 +611,14 @@ class TestMeasurementStatus:
 # 6. MERCHANT MODIFICATION DETECTION
 # ══════════════════════════════════════════════════════════════════
 
-class TestModificationDetection:
 
+class TestModificationDetection:
     @pytest.mark.asyncio
     async def test_auto_detects_modification_over_1pct(self, user_id, recommendation_id, mock_product):
         """'accepted' with >1% price diff auto-upgrades to 'modified'."""
         rec = _make_recommendation(
-            user_id, recommendation_id,
+            user_id,
+            recommendation_id,
             recommended_price=Decimal("29.49"),
         )
         db = _make_db(product=mock_product)
@@ -637,7 +641,8 @@ class TestModificationDetection:
     async def test_no_modification_under_1pct(self, user_id, recommendation_id, mock_product):
         """'accepted' with <1% price diff stays 'accepted'."""
         rec = _make_recommendation(
-            user_id, recommendation_id,
+            user_id,
+            recommendation_id,
             recommended_price=Decimal("29.49"),
         )
         db = _make_db(product=mock_product)
@@ -657,7 +662,8 @@ class TestModificationDetection:
     @pytest.mark.asyncio
     async def test_no_actual_price_uses_recommended(self, user_id, recommendation_id, mock_product):
         rec = _make_recommendation(
-            user_id, recommendation_id,
+            user_id,
+            recommendation_id,
             recommended_price=Decimal("29.49"),
         )
         db = _make_db(product=mock_product)
@@ -680,12 +686,13 @@ class TestModificationDetection:
 # 7. PRICE AND PRODUCT FIELDS
 # ══════════════════════════════════════════════════════════════════
 
-class TestPriceAndProductFields:
 
+class TestPriceAndProductFields:
     @pytest.mark.asyncio
     async def test_price_fields_from_recommendation(self, user_id, recommendation_id, mock_product):
         rec = _make_recommendation(
-            user_id, recommendation_id,
+            user_id,
+            recommendation_id,
             current_price=Decimal("32.00"),
             recommended_price=Decimal("29.49"),
             change_percent=Decimal("-7.84"),
@@ -780,8 +787,8 @@ class TestPriceAndProductFields:
 # 8. VALIDATION
 # ══════════════════════════════════════════════════════════════════
 
-class TestValidation:
 
+class TestValidation:
     @pytest.mark.asyncio
     async def test_recommendation_not_found_raises(self, user_id, recommendation_id):
         db = _make_db()
@@ -815,8 +822,8 @@ class TestValidation:
 # 9. RULE TYPE EXTRACTION
 # ══════════════════════════════════════════════════════════════════
 
-class TestRuleTypeExtraction:
 
+class TestRuleTypeExtraction:
     @pytest.mark.asyncio
     async def test_extracts_rule_type(self, user_id, recommendation_id, mock_product, mock_rule, rule_id):
         rec = _make_recommendation(user_id, recommendation_id, triggered_rule_id=rule_id)
@@ -856,6 +863,3 @@ class TestRuleTypeExtraction:
 
 for _key, _orig in _saved.items():
     sys.modules[_key] = _orig
-
-
-    

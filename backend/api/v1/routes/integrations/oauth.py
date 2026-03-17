@@ -19,29 +19,29 @@ so the reconnect CTA must be able to re-initiate OAuth from ERROR state.
 
 import logging
 import secrets
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
-from db.session import get_session
 from core.encryption import encrypt_token
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
+from db.session import get_session
+from models.integration import EcommercePlatform, Integration, IntegrationStatus
 from models.user import User
-from models.integration import Integration, EcommercePlatform, IntegrationStatus
 from schemas.integration import (
+    IntegrationResponse,
     OAuthInitRequest,
     OAuthInitResponse,
-    IntegrationResponse,
     WooCommerceConnectRequest,
 )
-from services.integration import ShopifyService, WooCommerceService, WebhookRegistrationService
+from services.integration import ShopifyService, WebhookRegistrationService, WooCommerceService
 
 logger = logging.getLogger(__name__)
 
@@ -256,15 +256,8 @@ async def oauth_callback(
 
     else:
         # Path 3: Direct install, merchant was NOT logged in — needs to claim
-        claim_path = (
-            f"/integrations/claim"
-            f"?integration_id={integration.id}"
-            f"&platform={integration.platform.value}"
-        )
-        success_url = (
-            f"{settings.FRONTEND_URL}/login"
-            f"?redirect={quote(claim_path)}"
-        )
+        claim_path = f"/integrations/claim?integration_id={integration.id}&platform={integration.platform.value}"
+        success_url = f"{settings.FRONTEND_URL}/login?redirect={quote(claim_path)}"
 
     return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
 
@@ -376,6 +369,3 @@ async def claim_integration(
     logger.info(f"Integration {integration_id} claimed by user {current_user.id}")
 
     return {"ok": True, "integration_id": str(integration.id)}
-
-
-

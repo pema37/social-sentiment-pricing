@@ -70,11 +70,11 @@ if "core.logging" not in sys.modules:
 
 # Now import the module under test
 from workers.tasks.benchmark_refresh_tasks import (
-    _refresh_benchmark_views,
-    _get_view_stats,
-    refresh_benchmark_views,
-    benchmark_view_stats,
     MATERIALIZED_VIEWS,
+    _get_view_stats,
+    _refresh_benchmark_views,
+    benchmark_view_stats,
+    refresh_benchmark_views,
 )
 
 # ══════════════════════════════════════════════════════════════════
@@ -87,6 +87,7 @@ PATCH_PATH = "workers.tasks.benchmark_refresh_tasks.get_task_session_maker"
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+
 
 def _mock_session_maker(execute_side_effect=None):
     """
@@ -114,8 +115,8 @@ def _mock_session_maker(execute_side_effect=None):
 # 1. MATERIALIZED_VIEWS LIST
 # ══════════════════════════════════════════════════════════════════
 
-class TestMaterializedViewsList:
 
+class TestMaterializedViewsList:
     def test_contains_three_views(self):
         assert len(MATERIALIZED_VIEWS) == 3
 
@@ -129,8 +130,8 @@ class TestMaterializedViewsList:
 # 2. REFRESH ALL VIEWS — SUCCESS
 # ══════════════════════════════════════════════════════════════════
 
-class TestRefreshSuccess:
 
+class TestRefreshSuccess:
     @pytest.mark.asyncio
     async def test_refreshes_all_views_concurrently(self):
         mock_factory, mock_db = _mock_session_maker()
@@ -166,11 +167,12 @@ class TestRefreshSuccess:
 # 3. CONCURRENT REFRESH FALLBACK
 # ══════════════════════════════════════════════════════════════════
 
-class TestConcurrentFallback:
 
+class TestConcurrentFallback:
     @pytest.mark.asyncio
     async def test_falls_back_to_regular_refresh(self):
         """When CONCURRENTLY fails, falls back to regular REFRESH."""
+
         async def _execute(stmt, *args, **kwargs):
             stmt_str = str(stmt)
             if "CONCURRENTLY" in stmt_str:
@@ -204,8 +206,8 @@ class TestConcurrentFallback:
 # 4. TOTAL FAILURE
 # ══════════════════════════════════════════════════════════════════
 
-class TestTotalFailure:
 
+class TestTotalFailure:
     @pytest.mark.asyncio
     async def test_reports_failure_for_all_views(self):
         async def _execute(stmt, *args, **kwargs):
@@ -224,8 +226,8 @@ class TestTotalFailure:
 # 5. VIEW STATS
 # ══════════════════════════════════════════════════════════════════
 
-class TestViewStats:
 
+class TestViewStats:
     @pytest.mark.asyncio
     async def test_returns_counts_for_all_views(self):
         mock_result = MagicMock()
@@ -259,8 +261,8 @@ class TestViewStats:
 # 6. CELERY TASK WRAPPERS
 # ══════════════════════════════════════════════════════════════════
 
-class TestCeleryWrappers:
 
+class TestCeleryWrappers:
     def test_refresh_task_is_callable(self):
         assert callable(refresh_benchmark_views)
 
@@ -277,7 +279,3 @@ for _key, _orig in _saved.items():
         sys.modules.pop(_key, None)
     else:
         sys.modules[_key] = _orig
-
-
-
-        

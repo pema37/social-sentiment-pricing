@@ -24,20 +24,16 @@ Place at: backend/services/scoring/experimentation/experiment_manager.py
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Any, Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from .strategies import (
-    PricingStrategy,
-    StrategyRegistry,
-    GuardrailOverride,
-    WeightOverride,
-)
 from .bandit import (
     ThompsonSamplingBandit,
-    ArmState,
-    SelectionResult,
+)
+from .strategies import (
+    GuardrailOverride,
+    StrategyRegistry,
+    WeightOverride,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +42,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────
 # EXPERIMENT CONFIG: What the scoring engine receives
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class ExperimentConfig:
@@ -71,29 +68,27 @@ class ExperimentConfig:
     magnitude_multiplier: float = 1.0
     """Apply to raw recommended price change after scoring."""
 
-    guardrail_override: Optional[GuardrailOverride] = None
+    guardrail_override: GuardrailOverride | None = None
     """Selective guardrail overrides (max_change, min_margin, etc.)."""
 
-    weight_override: Optional[WeightOverride] = None
+    weight_override: WeightOverride | None = None
     """Selective scoring component weight overrides."""
 
     # ── Metadata for persistence ──
     selection_reason: str = ""
     """How the arm was selected (thompson_sampling / exploration_holdout)."""
 
-    sampled_values: Optional[dict[str, float]] = None
+    sampled_values: dict[str, float] | None = None
     """Thompson Sampling sampled θ values for each arm (for audit)."""
 
-    arm_probabilities: Optional[dict[str, float]] = None
+    arm_probabilities: dict[str, float] | None = None
     """Estimated probability each arm is best (optional, expensive)."""
 
     @property
     def has_overrides(self) -> bool:
         """True if this config changes default scoring behavior."""
         return (
-            self.magnitude_multiplier != 1.0
-            or self.guardrail_override is not None
-            or self.weight_override is not None
+            self.magnitude_multiplier != 1.0 or self.guardrail_override is not None or self.weight_override is not None
         )
 
 
@@ -113,7 +108,7 @@ class ExperimentAssignment:
     assigned_at: datetime
     selection_reason: str
     magnitude_multiplier: float = 1.0
-    sampled_values: Optional[dict[str, float]] = None
+    sampled_values: dict[str, float] | None = None
 
     def to_dict(self) -> dict:
         """Serialize for DB persistence (JSONB column)."""
@@ -145,6 +140,7 @@ class ExperimentAssignment:
 @dataclass
 class OutcomeProcessingResult:
     """Result of processing a single measured outcome."""
+
     recommendation_id: str
     category: str
     strategy_name: str
@@ -158,6 +154,7 @@ class OutcomeProcessingResult:
 # ──────────────────────────────────────────────────────────
 # EXPERIMENT MANAGER
 # ──────────────────────────────────────────────────────────
+
 
 class ExperimentManager:
     """
@@ -231,8 +228,7 @@ class ExperimentManager:
             "total_outcomes_processed": self._total_outcomes_processed,
             "active_assignments": len(self._assignments),
             "exploration_rate_actual": (
-                round(self._total_explorations / self._total_selections, 4)
-                if self._total_selections > 0 else 0.0
+                round(self._total_explorations / self._total_selections, 4) if self._total_selections > 0 else 0.0
             ),
         }
 
@@ -294,9 +290,7 @@ class ExperimentManager:
 
         # ── Step 4: Optional probability estimation ──
         if self._compute_probs:
-            config.arm_probabilities = self._bandit.get_probabilities(
-                category, n_samples=1000
-            )
+            config.arm_probabilities = self._bandit.get_probabilities(category, n_samples=1000)
 
         return config
 
@@ -343,8 +337,8 @@ class ExperimentManager:
         recommendation_id: str,
         success: bool,
         reward: float = 0.0,
-        assignment: Optional[ExperimentAssignment] = None,
-    ) -> Optional[OutcomeProcessingResult]:
+        assignment: ExperimentAssignment | None = None,
+    ) -> OutcomeProcessingResult | None:
         """
         Process a measured outcome and update the bandit.
 
@@ -365,15 +359,11 @@ class ExperimentManager:
             assignment = self._assignments.get(recommendation_id)
 
         if assignment is None:
-            logger.warning(
-                "No assignment found for recommendation %s", recommendation_id
-            )
+            logger.warning("No assignment found for recommendation %s", recommendation_id)
             return None
 
         # ── Get arm state before update ──
-        arm_before = self._bandit.get_arm_state(
-            assignment.category, assignment.strategy_name
-        )
+        arm_before = self._bandit.get_arm_state(assignment.category, assignment.strategy_name)
         mean_before = arm_before.mean
 
         # ── Update bandit ──
@@ -467,7 +457,7 @@ class ExperimentManager:
         arm_summaries = []
         for name, arm in arms.items():
             summary = arm.to_dict()
-            summary["is_leader"] = (name == leader)
+            summary["is_leader"] = name == leader
             arm_summaries.append(summary)
 
         # Sort by mean descending
@@ -485,16 +475,13 @@ class ExperimentManager:
 
     def get_all_category_statuses(self) -> list[dict]:
         """Get experiment status for all active categories."""
-        return [
-            self.get_category_status(cat)
-            for cat in self._bandit.categories
-        ]
+        return [self.get_category_status(cat) for cat in self._bandit.categories]
 
     # ──────────────────────────────────────────────
     # MANAGEMENT: Reset, persist, etc.
     # ──────────────────────────────────────────────
 
-    def get_assignment(self, recommendation_id: str) -> Optional[ExperimentAssignment]:
+    def get_assignment(self, recommendation_id: str) -> ExperimentAssignment | None:
         """Look up a pending assignment."""
         return self._assignments.get(recommendation_id)
 
@@ -527,7 +514,3 @@ class ExperimentManager:
             adjusted = max(-cap, min(cap, adjusted))
 
         return round(adjusted, 6)
-    
-
-
-    

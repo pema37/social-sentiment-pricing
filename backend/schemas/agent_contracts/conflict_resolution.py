@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Resolution result types
 # ---------------------------------------------------------------------------
+
 
 class ConflictType(str, Enum):
     DIRECTION_DISAGREE = "direction_disagree"
@@ -54,12 +55,13 @@ class ConflictResolution:
 
     All fields are immutable (frozen dataclass).
     """
+
     conflict_type: ConflictType
-    resolved_direction: str          # "increase" | "decrease" | "hold"
-    magnitude_adjustment: float      # Multiplier on original magnitude (0-1)
-    confidence_penalty: float        # Subtracted from confidence (0-1)
-    explanation: str                 # Human-readable why
-    requires_manual_review: bool     # Flag for merchant attention
+    resolved_direction: str  # "increase" | "decrease" | "hold"
+    magnitude_adjustment: float  # Multiplier on original magnitude (0-1)
+    confidence_penalty: float  # Subtracted from confidence (0-1)
+    explanation: str  # Human-readable why
+    requires_manual_review: bool  # Flag for merchant attention
     rule_version: str = "v1.0"
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -67,6 +69,7 @@ class ConflictResolution:
 # ---------------------------------------------------------------------------
 # The resolver
 # ---------------------------------------------------------------------------
+
 
 class ConflictResolver:
     """
@@ -81,7 +84,7 @@ class ConflictResolver:
         resolution = resolver.resolve(scoring_signals)
     """
 
-    def __init__(self, config: Optional[dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         self._config = config or {}
         # Thresholds (configurable for experimentation)
         self._min_confidence = self._config.get("min_confidence", 0.3)
@@ -189,8 +192,9 @@ class ConflictResolver:
 
         sorted_resolutions = sorted(
             resolutions,
-            key=lambda r: priority_order.index(r.conflict_type)
-            if r.conflict_type in priority_order else len(priority_order)
+            key=lambda r: (
+                priority_order.index(r.conflict_type) if r.conflict_type in priority_order else len(priority_order)
+            ),
         )
 
         for resolution in sorted_resolutions:
@@ -215,9 +219,7 @@ class ConflictResolver:
     # Individual conflict checks
     # -------------------------------------------------------------------
 
-    def _check_direction_disagree(
-        self, signals: dict[str, Any]
-    ) -> Optional[ConflictResolution]:
+    def _check_direction_disagree(self, signals: dict[str, Any]) -> ConflictResolution | None:
         """
         Scenario 1: Elasticity says "increase" but urgency says "hold" (or vice versa).
 
@@ -261,9 +263,7 @@ class ConflictResolver:
                 )
         return None
 
-    def _check_position_sentiment_mismatch(
-        self, signals: dict[str, Any]
-    ) -> Optional[ConflictResolution]:
+    def _check_position_sentiment_mismatch(self, signals: dict[str, Any]) -> ConflictResolution | None:
         """
         Scenario 2: Position shows "cheapest" but sentiment is negative.
 
@@ -289,9 +289,7 @@ class ConflictResolver:
             )
         return None
 
-    def _check_margin_floor_violation(
-        self, signals: dict[str, Any]
-    ) -> Optional[ConflictResolution]:
+    def _check_margin_floor_violation(self, signals: dict[str, Any]) -> ConflictResolution | None:
         """
         Scenario 3: Recommendation would violate margin floor.
 
@@ -318,9 +316,7 @@ class ConflictResolver:
             )
         return None
 
-    def _check_insufficient_data(
-        self, signals: dict[str, Any]
-    ) -> Optional[ConflictResolution]:
+    def _check_insufficient_data(self, signals: dict[str, Any]) -> ConflictResolution | None:
         """
         Scenario 4: Insufficient data (confidence < 0.3).
 
@@ -344,9 +340,7 @@ class ConflictResolver:
             )
         return None
 
-    def _check_scorer_divergence(
-        self, signals: dict[str, Any]
-    ) -> Optional[ConflictResolution]:
+    def _check_scorer_divergence(self, signals: dict[str, Any]) -> ConflictResolution | None:
         """
         Scenario 5: Component scores diverge significantly.
 
@@ -379,7 +373,3 @@ class ConflictResolver:
                 metadata={"scorer_values": scorer_values, "spread": spread},
             )
         return None
-    
-
-
-    

@@ -13,11 +13,11 @@ Covers:
 - Helper functions: register_webhooks_for_integration, unregister_webhooks_for_integration
 """
 
-import sys
 import os
+import sys
 from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 
 import pytest
 
@@ -27,7 +27,8 @@ import pytest
 _MOCKED = [
     "db.session",
     "models.integration",
-    "core.config", "core.encryption",
+    "core.config",
+    "core.encryption",
     "services.integration.schemas",
     "services.integration.shopify_service",
     "services.integration.woocommerce_service",
@@ -36,7 +37,7 @@ _MOCKED = [
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
 # Ensure db.session stub
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -159,6 +160,7 @@ del _m
 # Helpers
 # ===========================================================================
 
+
 def _make_session():
     s = AsyncMock()
     s.add = MagicMock()
@@ -201,6 +203,7 @@ def _mock_db_returns_none(session):
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestWebhookRegistrationServiceInit:
     def test_stores_db(self):
@@ -297,9 +300,7 @@ class TestRegisterWebhooks:
             _FakeWebhookRegistration(success=False, webhook_id=None, topic="products/delete", error="403"),
         ]
 
-        svc._get_service = MagicMock(return_value=MagicMock(
-            register_webhooks=AsyncMock(return_value=webhook_results)
-        ))
+        svc._get_service = MagicMock(return_value=MagicMock(register_webhooks=AsyncMock(return_value=webhook_results)))
 
         with patch("services.integration.webhook_registration.select"):
             with patch("services.integration.webhook_registration.decrypt_token", return_value="tok"):
@@ -322,9 +323,7 @@ class TestRegisterWebhooks:
             _FakeWebhookRegistration(success=False, webhook_id=None, topic="products/update", error="500"),
         ]
 
-        svc._get_service = MagicMock(return_value=MagicMock(
-            register_webhooks=AsyncMock(return_value=webhook_results)
-        ))
+        svc._get_service = MagicMock(return_value=MagicMock(register_webhooks=AsyncMock(return_value=webhook_results)))
 
         with patch("services.integration.webhook_registration.select"):
             with patch("services.integration.webhook_registration.decrypt_token", return_value="tok"):
@@ -407,8 +406,9 @@ class TestUnregisterWebhooks:
         svc = WebhookRegistrationService(session)
 
         with patch("services.integration.webhook_registration.select"):
-            with patch("services.integration.webhook_registration.decrypt_token",
-                        side_effect=Exception("decrypt failed")):
+            with patch(
+                "services.integration.webhook_registration.decrypt_token", side_effect=Exception("decrypt failed")
+            ):
                 result = await svc.unregister_webhooks(integration.id)
 
         assert result is False
@@ -444,7 +444,9 @@ class TestVerifyWebhooks:
         with patch("services.integration.webhook_registration.select"):
             with patch("services.integration.webhook_registration.settings", _fake_settings):
                 # Need _get_callback_url to work with the mock platform
-                svc._get_callback_url = MagicMock(return_value="https://api.actualprice.com/api/v1/webhooks/shopify/" + str(iid))
+                svc._get_callback_url = MagicMock(
+                    return_value="https://api.actualprice.com/api/v1/webhooks/shopify/" + str(iid)
+                )
                 result = await svc.verify_webhooks(iid)
 
         assert result["status"] == "ok"
@@ -476,9 +478,7 @@ class TestHelperFunctions:
         session = _make_session()
         iid = uuid4()
 
-        with patch(
-            "services.integration.webhook_registration.WebhookRegistrationService"
-        ) as MockSvc:
+        with patch("services.integration.webhook_registration.WebhookRegistrationService") as MockSvc:
             mock_instance = AsyncMock()
             mock_instance.register_webhooks = AsyncMock(return_value=["result"])
             MockSvc.return_value = mock_instance
@@ -494,9 +494,7 @@ class TestHelperFunctions:
         session = _make_session()
         iid = uuid4()
 
-        with patch(
-            "services.integration.webhook_registration.WebhookRegistrationService"
-        ) as MockSvc:
+        with patch("services.integration.webhook_registration.WebhookRegistrationService") as MockSvc:
             mock_instance = AsyncMock()
             mock_instance.unregister_webhooks = AsyncMock(return_value=True)
             MockSvc.return_value = mock_instance
@@ -506,7 +504,3 @@ class TestHelperFunctions:
         MockSvc.assert_called_once_with(session)
         mock_instance.unregister_webhooks.assert_awaited_once_with(iid)
         assert result is True
-
-
-
-        

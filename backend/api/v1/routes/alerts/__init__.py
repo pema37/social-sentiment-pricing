@@ -20,4 +20,3 @@ router.include_router(crisis_detection_router)
 
 # 3. Management last (includes dynamic /{alert_id} routes)
 router.include_router(management_router)
-

@@ -17,7 +17,7 @@ Run: pytest backend/tests/unit/test_approval_service_wiring.py -v
 
 import sys
 import types
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -41,7 +41,7 @@ _mock_core_db = types.ModuleType("core.db.session")
 _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
-from services.pricing.approval_service import ApprovalService, ApprovalError
+from services.pricing.approval_service import ApprovalError, ApprovalService
 
 # Pull enums from already-loaded modules (same path source uses)
 _rec_mod = sys.modules["models.price_recommendation"]
@@ -51,6 +51,7 @@ RecommendationStatus = _rec_mod.RecommendationStatus
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+
 
 def _make_recommendation(
     user_id,
@@ -109,11 +110,13 @@ def _mock_push_service(success=True, platform="shopify"):
     """Create a mock EcommercePushService class."""
     mock_cls = MagicMock()
     mock_instance = MagicMock()
-    mock_instance.push_price = AsyncMock(return_value={
-        "success": success,
-        "platform": platform,
-        **({"error": "Push failed", "error_code": "PUSH_ERROR"} if not success else {}),
-    })
+    mock_instance.push_price = AsyncMock(
+        return_value={
+            "success": success,
+            "platform": platform,
+            **({"error": "Push failed", "error_code": "PUSH_ERROR"} if not success else {}),
+        }
+    )
     mock_cls.return_value = mock_instance
     return mock_cls
 
@@ -123,9 +126,7 @@ def _mock_outcome_service(should_fail=False):
     mock_cls = MagicMock()
     mock_instance = MagicMock()
     if should_fail:
-        mock_instance.record_merchant_decision = AsyncMock(
-            side_effect=Exception("OutcomeService crashed")
-        )
+        mock_instance.record_merchant_decision = AsyncMock(side_effect=Exception("OutcomeService crashed"))
     else:
         mock_instance.record_merchant_decision = AsyncMock(return_value=MagicMock())
     mock_cls.return_value = mock_instance
@@ -135,6 +136,7 @@ def _mock_outcome_service(should_fail=False):
 # ══════════════════════════════════════════════════════════════════
 # FIXTURES
 # ══════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def user_id():
@@ -150,8 +152,8 @@ def recommendation_id():
 # apply_price() RECORDS DECISION
 # ══════════════════════════════════════════════════════════════════
 
-class TestApplyPriceRecordsDecision:
 
+class TestApplyPriceRecordsDecision:
     @pytest.mark.asyncio
     async def test_records_accepted_after_apply(self, user_id, recommendation_id):
         rec = _make_recommendation(user_id, recommendation_id, status=RecommendationStatus.APPROVED)
@@ -165,14 +167,19 @@ class TestApplyPriceRecordsDecision:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             await svc.apply_price(recommendation_id, user_id)
 
         outcome_inst.record_merchant_decision.assert_called_once()
         call_kwargs = outcome_inst.record_merchant_decision.call_args
-        assert call_kwargs.kwargs.get("merchant_decision") or call_kwargs[1].get("merchant_decision") or \
-               (len(call_kwargs[0]) > 2 and call_kwargs[0][2]) == "accepted"
+        assert (
+            call_kwargs.kwargs.get("merchant_decision")
+            or call_kwargs[1].get("merchant_decision")
+            or (len(call_kwargs[0]) > 2 and call_kwargs[0][2]) == "accepted"
+        )
 
     @pytest.mark.asyncio
     async def test_no_record_on_push_failure(self, user_id, recommendation_id):
@@ -187,8 +194,10 @@ class TestApplyPriceRecordsDecision:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             with pytest.raises(ApprovalError):
                 await svc.apply_price(recommendation_id, user_id)
 
@@ -200,8 +209,8 @@ class TestApplyPriceRecordsDecision:
 # auto_approve_and_apply() RECORDS DECISION
 # ══════════════════════════════════════════════════════════════════
 
-class TestAutoApproveRecordsDecision:
 
+class TestAutoApproveRecordsDecision:
     @pytest.mark.asyncio
     async def test_records_auto_applied(self, user_id, recommendation_id):
         rec = _make_recommendation(user_id, recommendation_id, status=RecommendationStatus.PENDING)
@@ -223,8 +232,10 @@ class TestAutoApproveRecordsDecision:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             await svc.auto_approve_and_apply(recommendation_id, user_id)
 
         outcome_inst.record_merchant_decision.assert_called_once()
@@ -253,8 +264,10 @@ class TestAutoApproveRecordsDecision:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             with pytest.raises(ApprovalError):
                 await svc.auto_approve_and_apply(recommendation_id, user_id)
 
@@ -265,8 +278,8 @@ class TestAutoApproveRecordsDecision:
 # reject() RECORDS DECISION
 # ══════════════════════════════════════════════════════════════════
 
-class TestRejectRecordsDecision:
 
+class TestRejectRecordsDecision:
     @pytest.mark.asyncio
     async def test_records_rejected(self, user_id, recommendation_id):
         rec = _make_recommendation(user_id, recommendation_id, status=RecommendationStatus.PENDING)
@@ -308,8 +321,8 @@ class TestRejectRecordsDecision:
 # approve() does NOT record decision
 # ══════════════════════════════════════════════════════════════════
 
-class TestApproveDoesNotRecord:
 
+class TestApproveDoesNotRecord:
     @pytest.mark.asyncio
     async def test_approve_does_not_record(self, user_id, recommendation_id):
         """approve() only changes status — no _record_decision call."""
@@ -332,8 +345,8 @@ class TestApproveDoesNotRecord:
 # _record_decision() FIRE-AND-FORGET
 # ══════════════════════════════════════════════════════════════════
 
-class TestRecordDecisionFireAndForget:
 
+class TestRecordDecisionFireAndForget:
     @pytest.mark.asyncio
     async def test_record_failure_does_not_crash_apply(self, user_id, recommendation_id):
         rec = _make_recommendation(user_id, recommendation_id, status=RecommendationStatus.APPROVED)
@@ -347,8 +360,10 @@ class TestRecordDecisionFireAndForget:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             # Should not raise even though OutcomeService crashes
             result = await svc.apply_price(recommendation_id, user_id)
 
@@ -374,8 +389,10 @@ class TestRecordDecisionFireAndForget:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             result = await svc.auto_approve_and_apply(recommendation_id, user_id)
 
         assert result.status == RecommendationStatus.APPLIED
@@ -385,8 +402,8 @@ class TestRecordDecisionFireAndForget:
 # DECISION ARGS CORRECTNESS
 # ══════════════════════════════════════════════════════════════════
 
-class TestRecordDecisionArgs:
 
+class TestRecordDecisionArgs:
     @pytest.mark.asyncio
     async def test_passes_recommendation_id(self, user_id, recommendation_id):
         rec = _make_recommendation(user_id, recommendation_id, status=RecommendationStatus.APPROVED)
@@ -400,8 +417,10 @@ class TestRecordDecisionArgs:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             await svc.apply_price(recommendation_id, user_id)
 
         call_kwargs = outcome_inst.record_merchant_decision.call_args.kwargs
@@ -411,7 +430,8 @@ class TestRecordDecisionArgs:
     @pytest.mark.asyncio
     async def test_passes_actual_price_on_apply(self, user_id, recommendation_id):
         rec = _make_recommendation(
-            user_id, recommendation_id,
+            user_id,
+            recommendation_id,
             status=RecommendationStatus.APPROVED,
             recommended_price=Decimal("29.49"),
         )
@@ -425,8 +445,10 @@ class TestRecordDecisionArgs:
 
         svc = ApprovalService(db)
 
-        with patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls), \
-             patch("services.pricing.outcome_service.OutcomeService", outcome_cls):
+        with (
+            patch("services.pricing.ecommerce_push_service.EcommercePushService", push_cls),
+            patch("services.pricing.outcome_service.OutcomeService", outcome_cls),
+        ):
             await svc.apply_price(recommendation_id, user_id)
 
         call_kwargs = outcome_inst.record_merchant_decision.call_args.kwargs
@@ -439,6 +461,3 @@ class TestRecordDecisionArgs:
 
 for _key, _orig in _saved.items():
     sys.modules[_key] = _orig
-
-
-

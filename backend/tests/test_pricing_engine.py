@@ -29,23 +29,21 @@ if "db.session" not in sys.modules:
 if "models.product" not in sys.modules:
     sys.modules["models.product"] = MagicMock()
 
-import pytest
-from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, timezone
-from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
 
 # Now safe to import
 from services.pricing_engine import (
-    PricingEngine,
     CompetitorPriceData,
     PriceSuggestion,
+    PricingEngine,
     pricing_engine,
 )
-
 
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def make_product(
     id="prod-123",
@@ -79,7 +77,7 @@ def make_competitor(
         competitor_price=price,
         price_difference=difference,
         price_difference_percent=difference_percent,
-        last_updated=datetime.now(timezone.utc),
+        last_updated=datetime.now(UTC),
         is_promotion=is_promotion,
     )
 
@@ -87,6 +85,7 @@ def make_competitor(
 # ============================================================
 # 1. Dataclass Tests
 # ============================================================
+
 
 class TestCompetitorPriceData:
     """Tests for CompetitorPriceData dataclass."""
@@ -103,7 +102,7 @@ class TestCompetitorPriceData:
             competitor_price=Decimal("10"),
             price_difference=Decimal("1"),
             price_difference_percent=Decimal("10"),
-            last_updated=datetime.now(timezone.utc),
+            last_updated=datetime.now(UTC),
         )
         assert cpd.is_promotion is False
 
@@ -150,6 +149,7 @@ class TestPriceSuggestion:
 # 2. PricingEngine Initialization
 # ============================================================
 
+
 class TestPricingEngineInit:
     """Tests for PricingEngine constructor and defaults."""
 
@@ -189,6 +189,7 @@ class TestPricingEngineInit:
 # ============================================================
 # 3. Sentiment Adjustment
 # ============================================================
+
 
 class TestSentimentAdjustment:
     """Tests for _calculate_sentiment_adjustment."""
@@ -282,6 +283,7 @@ class TestSentimentAdjustment:
 # ============================================================
 # 4. Competitor Adjustment
 # ============================================================
+
 
 class TestCompetitorAdjustment:
     """Tests for _calculate_competitor_adjustment."""
@@ -419,6 +421,7 @@ class TestCompetitorAdjustment:
 # 5. Clamp Change
 # ============================================================
 
+
 class TestClampChange:
     """Tests for _clamp_change."""
 
@@ -464,6 +467,7 @@ class TestClampChange:
 # 6. Apply Boundaries
 # ============================================================
 
+
 class TestApplyBoundaries:
     """Tests for _apply_boundaries."""
 
@@ -475,51 +479,38 @@ class TestApplyBoundaries:
         assert result == Decimal("100")
 
     def test_below_min_price(self):
-        result = self.engine._apply_boundaries(
-            Decimal("40"), Decimal("50"), Decimal("200")
-        )
+        result = self.engine._apply_boundaries(Decimal("40"), Decimal("50"), Decimal("200"))
         assert result == Decimal("50")
 
     def test_above_max_price(self):
-        result = self.engine._apply_boundaries(
-            Decimal("250"), Decimal("50"), Decimal("200")
-        )
+        result = self.engine._apply_boundaries(Decimal("250"), Decimal("50"), Decimal("200"))
         assert result == Decimal("200")
 
     def test_within_boundaries(self):
-        result = self.engine._apply_boundaries(
-            Decimal("100"), Decimal("50"), Decimal("200")
-        )
+        result = self.engine._apply_boundaries(Decimal("100"), Decimal("50"), Decimal("200"))
         assert result == Decimal("100")
 
     def test_only_min_boundary(self):
-        result = self.engine._apply_boundaries(
-            Decimal("40"), Decimal("50"), None
-        )
+        result = self.engine._apply_boundaries(Decimal("40"), Decimal("50"), None)
         assert result == Decimal("50")
 
     def test_only_max_boundary(self):
-        result = self.engine._apply_boundaries(
-            Decimal("250"), None, Decimal("200")
-        )
+        result = self.engine._apply_boundaries(Decimal("250"), None, Decimal("200"))
         assert result == Decimal("200")
 
     def test_exactly_at_min(self):
-        result = self.engine._apply_boundaries(
-            Decimal("50"), Decimal("50"), Decimal("200")
-        )
+        result = self.engine._apply_boundaries(Decimal("50"), Decimal("50"), Decimal("200"))
         assert result == Decimal("50")
 
     def test_exactly_at_max(self):
-        result = self.engine._apply_boundaries(
-            Decimal("200"), Decimal("50"), Decimal("200")
-        )
+        result = self.engine._apply_boundaries(Decimal("200"), Decimal("50"), Decimal("200"))
         assert result == Decimal("200")
 
 
 # ============================================================
 # 7. Confidence Calculation
 # ============================================================
+
 
 class TestConfidenceCalculation:
     """Tests for _calculate_confidence."""
@@ -596,6 +587,7 @@ class TestConfidenceCalculation:
 # 8. Trend Detection
 # ============================================================
 
+
 class TestGetTrend:
     """Tests for _get_trend."""
 
@@ -627,6 +619,7 @@ class TestGetTrend:
 # ============================================================
 # 9. Reasoning Generation
 # ============================================================
+
 
 class TestGenerateReasoning:
     """Tests for _generate_reasoning."""
@@ -759,6 +752,7 @@ class TestGenerateReasoning:
 # 10. Competitive Position Analysis
 # ============================================================
 
+
 class TestCompetitivePosition:
     """Tests for get_competitive_position."""
 
@@ -766,16 +760,12 @@ class TestCompetitivePosition:
         self.engine = PricingEngine()
 
     def test_no_competitors(self):
-        result = self.engine.get_competitive_position(
-            Decimal("100"), []
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), [])
         assert result["position"] == "no_data"
 
     def test_single_competitor_we_are_higher(self):
         competitors = [make_competitor(price=Decimal("80"))]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         assert result["competitor_count"] == 1
         assert result["your_price"] == Decimal("100")
         assert result["your_rank"] == 2  # we're #2 (highest of 2)
@@ -783,16 +773,12 @@ class TestCompetitivePosition:
 
     def test_single_competitor_we_are_lower(self):
         competitors = [make_competitor(price=Decimal("120"))]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         assert result["your_rank"] == 1
 
     def test_vs_average_percent(self):
         competitors = [make_competitor(price=Decimal("80"))]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         # (100 - 80) / 80 * 100 = 25.00%
         assert result["vs_average_percent"] == Decimal("25.00")
 
@@ -802,9 +788,7 @@ class TestCompetitivePosition:
             make_competitor(name="B", price=Decimal("90")),
             make_competitor(name="C", price=Decimal("110")),
         ]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         # sorted: 80, 90, 100, 110 → rank 3
         assert result["your_rank"] == 3
         assert result["total_in_market"] == 4
@@ -814,9 +798,7 @@ class TestCompetitivePosition:
             make_competitor(price=Decimal("80")),
             make_competitor(price=Decimal("120")),
         ]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         # sorted: 80, 100, 120 → rank=2, total=3
         # percentile = (3-2)/3*100 = 33.33...
         assert result["percentile"] > 0
@@ -826,9 +808,7 @@ class TestCompetitivePosition:
             make_competitor(price=Decimal("60")),
             make_competitor(price=Decimal("150")),
         ]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         assert result["min_competitor_price"] == Decimal("60")
         assert result["max_competitor_price"] == Decimal("150")
 
@@ -836,6 +816,7 @@ class TestCompetitivePosition:
 # ============================================================
 # 11. Price War Detection
 # ============================================================
+
 
 class TestPriceWarDetection:
     """Tests for detect_price_war."""
@@ -912,6 +893,7 @@ class TestPriceWarDetection:
 # ============================================================
 # 12. Full Integration: calculate_suggestion
 # ============================================================
+
 
 class TestCalculateSuggestion:
     """Integration tests for the full calculate_suggestion pipeline."""
@@ -1071,9 +1053,14 @@ class TestCalculateSuggestion:
         )
         factors = result["factors"]
         expected_keys = {
-            "sentiment_score", "mention_volume", "multiplier", "trend",
-            "sentiment_weight", "competitor_weight",
-            "sentiment_adjustment_raw", "competitor_adjustment_raw",
+            "sentiment_score",
+            "mention_volume",
+            "multiplier",
+            "trend",
+            "sentiment_weight",
+            "competitor_weight",
+            "sentiment_adjustment_raw",
+            "competitor_adjustment_raw",
         }
         assert set(factors.keys()) == expected_keys
 
@@ -1115,6 +1102,7 @@ class TestCalculateSuggestion:
 # 13. Singleton Instance
 # ============================================================
 
+
 class TestSingletonInstance:
     """Tests for the module-level pricing_engine singleton."""
 
@@ -1133,6 +1121,7 @@ class TestSingletonInstance:
 # ============================================================
 # 14. Edge Cases
 # ============================================================
+
 
 class TestEdgeCases:
     """Edge cases and boundary conditions."""
@@ -1175,10 +1164,7 @@ class TestEdgeCases:
         assert result["suggested_price"] > Decimal("0")
 
     def test_many_competitors(self):
-        competitors = [
-            make_competitor(name=f"C{i}", price=Decimal(str(80 + i)))
-            for i in range(20)
-        ]
+        competitors = [make_competitor(name=f"C{i}", price=Decimal(str(80 + i))) for i in range(20)]
         _, analysis = self.engine._calculate_competitor_adjustment(
             current_price=Decimal("100"),
             competitor_prices=competitors,
@@ -1186,13 +1172,8 @@ class TestEdgeCases:
         assert analysis["competitor_count"] == 20
 
     def test_all_competitors_same_price(self):
-        competitors = [
-            make_competitor(name=f"C{i}", price=Decimal("100"))
-            for i in range(3)
-        ]
-        result = self.engine.get_competitive_position(
-            Decimal("100"), competitors
-        )
+        competitors = [make_competitor(name=f"C{i}", price=Decimal("100")) for i in range(3)]
+        result = self.engine.get_competitive_position(Decimal("100"), competitors)
         assert result["vs_average_percent"] == Decimal("0.00")
 
     def test_max_change_clamp_integration(self):
@@ -1210,6 +1191,3 @@ class TestEdgeCases:
         # 100 * 1.0 * 0.5 = 50 → 50% change → clamped to 15%
         assert result["change_percent"] <= Decimal("15.00")
         assert result["suggested_price"] <= Decimal("115.00")
-
-
-        

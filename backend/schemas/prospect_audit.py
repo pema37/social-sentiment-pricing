@@ -8,19 +8,21 @@ Full PDF requires email capture.
 """
 
 from decimal import Decimal
-from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, EmailStr
+from typing import Literal
 
+from pydantic import BaseModel, EmailStr, Field
 
 # ═══════════════════════════════════════════════════════════════
 # REQUEST
 # ═══════════════════════════════════════════════════════════════
 
+
 class ProspectProductRow(BaseModel):
     """A single product from CSV paste."""
+
     name: str = Field(max_length=500)
     price: Decimal = Field(ge=0)
-    sku: Optional[str] = Field(default=None, max_length=100)
+    sku: str | None = Field(default=None, max_length=100)
 
 
 class ProspectAuditRequest(BaseModel):
@@ -28,40 +30,39 @@ class ProspectAuditRequest(BaseModel):
     Request for a public prospect audit.
     Provide EITHER store_url OR products — not both.
     """
+
     # Option A: Shopify store URL (we fetch /products.json)
-    store_url: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description="Shopify store URL, e.g. https://mystore.myshopify.com"
+    store_url: str | None = Field(
+        default=None, max_length=500, description="Shopify store URL, e.g. https://mystore.myshopify.com"
     )
     # Option B: CSV-pasted products
-    products: Optional[List[ProspectProductRow]] = Field(
-        default=None,
-        description="List of products with name + price"
-    )
+    products: list[ProspectProductRow] | None = Field(default=None, description="List of products with name + price")
 
 
 class ProspectPDFRequest(BaseModel):
     """Request for the full PDF — requires email."""
+
     email: EmailStr
-    company_name: Optional[str] = Field(default=None, max_length=255)
+    company_name: str | None = Field(default=None, max_length=255)
     # Include the original audit request so we can regenerate
-    store_url: Optional[str] = None
-    products: Optional[List[ProspectProductRow]] = None
+    store_url: str | None = None
+    products: list[ProspectProductRow] | None = None
 
 
 # ═══════════════════════════════════════════════════════════════
 # PER-PRODUCT TEASER RESULT
 # ═══════════════════════════════════════════════════════════════
 
+
 class ProspectProductResult(BaseModel):
     """Lightweight audit result for one product."""
+
     name: str
-    sku: Optional[str] = None
+    sku: str | None = None
     your_price: Decimal
-    market_avg_price: Optional[Decimal] = None
-    gap_percent: Optional[Decimal] = None
-    gap_type: Optional[Literal["overpriced", "underpriced", "aligned", "no_data"]] = "no_data"
+    market_avg_price: Decimal | None = None
+    gap_percent: Decimal | None = None
+    gap_type: Literal["overpriced", "underpriced", "aligned", "no_data"] | None = "no_data"
     competitor_count: int = 0
 
 
@@ -69,40 +70,33 @@ class ProspectProductResult(BaseModel):
 # TEASER RESPONSE (shown free, no email required)
 # ═══════════════════════════════════════════════════════════════
 
+
 class ProspectAuditTeaser(BaseModel):
     """
     Public teaser results. Shows headline numbers + top 5 products.
     Full breakdown + PDF requires email.
     """
+
     # Source info
-    store_name: Optional[str] = None
+    store_name: str | None = None
     total_products_found: int
     products_with_market_data: int
 
     # Headline numbers (the hook)
-    estimated_monthly_impact: Decimal = Field(
-        description="Projected monthly loss from pricing gaps"
-    )
+    estimated_monthly_impact: Decimal = Field(description="Projected monthly loss from pricing gaps")
     products_overpriced: int
     products_underpriced: int
-    avg_gap_percent: Optional[Decimal] = None
+    avg_gap_percent: Decimal | None = None
 
     # Top 5 worst offenders (teaser)
-    top_products: List[ProspectProductResult] = Field(
-        max_length=5,
-        description="Top 5 products by estimated impact — the teaser"
+    top_products: list[ProspectProductResult] = Field(
+        max_length=5, description="Top 5 products by estimated impact — the teaser"
     )
 
     # Total count withheld (drives email capture)
-    remaining_products_count: int = Field(
-        description="Number of additional products in the full report"
-    )
+    remaining_products_count: int = Field(description="Number of additional products in the full report")
 
     # CTA
     cta_message: str = Field(
         default="Enter your email to get the full report with all products and a downloadable PDF."
     )
-
-
-
-    

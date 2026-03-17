@@ -8,28 +8,27 @@ Run with: pytest backend/tests/test_auth_schemas.py -v
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
 from schemas.auth import (
-    RegisterRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     RefreshRequest,
-    UserResponse,
-    TokenResponse,
-    ForgotPasswordRequest,
+    RegisterRequest,
     ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
 )
-
 
 # =====================================================================
 # RegisterRequest
 # =====================================================================
 
-class TestRegisterRequest:
 
+class TestRegisterRequest:
     def test_valid_minimal(self):
         """Email + password is enough (full_name is optional)."""
         req = RegisterRequest(email="user@example.com", password="secret123")
@@ -78,8 +77,8 @@ class TestRegisterRequest:
 # LoginRequest
 # =====================================================================
 
-class TestLoginRequest:
 
+class TestLoginRequest:
     def test_valid(self):
         req = LoginRequest(email="user@example.com", password="secret")
         assert req.email == "user@example.com"
@@ -106,8 +105,8 @@ class TestLoginRequest:
 # RefreshRequest
 # =====================================================================
 
-class TestRefreshRequest:
 
+class TestRefreshRequest:
     def test_valid(self):
         req = RefreshRequest(refresh_token="eyJhbGciOiJIUzI1NiJ9.test")
         assert req.refresh_token == "eyJhbGciOiJIUzI1NiJ9.test"
@@ -126,8 +125,8 @@ class TestRefreshRequest:
 # TokenResponse
 # =====================================================================
 
-class TestTokenResponse:
 
+class TestTokenResponse:
     def test_valid_minimal(self):
         """Only access_token required; refresh_token optional."""
         resp = TokenResponse(access_token="abc123")
@@ -156,8 +155,8 @@ class TestTokenResponse:
 # UserResponse
 # =====================================================================
 
-class TestUserResponse:
 
+class TestUserResponse:
     @pytest.fixture
     def valid_user_data(self):
         return {
@@ -165,7 +164,7 @@ class TestUserResponse:
             "email": "test@example.com",
             "role": "USER",
             "is_active": True,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
 
     def test_valid_minimal(self, valid_user_data):
@@ -182,7 +181,7 @@ class TestUserResponse:
             **valid_user_data,
             "username": "testuser",
             "full_name": "Test User",
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         resp = UserResponse(**data)
         assert resp.username == "testuser"
@@ -192,8 +191,10 @@ class TestUserResponse:
     def test_missing_id_raises(self):
         with pytest.raises(ValidationError):
             UserResponse(
-                email="t@t.com", role="USER",
-                is_active=True, created_at=datetime.now(timezone.utc),
+                email="t@t.com",
+                role="USER",
+                is_active=True,
+                created_at=datetime.now(UTC),
             )
 
     def test_missing_email_raises(self, valid_user_data):
@@ -220,8 +221,10 @@ class TestUserResponse:
         """UUID can be passed as string — Pydantic coerces it."""
         resp = UserResponse(
             id="12345678-1234-5678-1234-567812345678",
-            email="t@t.com", role="USER",
-            is_active=True, created_at=datetime.now(timezone.utc),
+            email="t@t.com",
+            role="USER",
+            is_active=True,
+            created_at=datetime.now(UTC),
         )
         assert isinstance(resp.id, uuid.UUID)
 
@@ -230,8 +233,8 @@ class TestUserResponse:
 # ForgotPasswordRequest
 # =====================================================================
 
-class TestForgotPasswordRequest:
 
+class TestForgotPasswordRequest:
     def test_valid(self):
         req = ForgotPasswordRequest(email="user@example.com")
         assert req.email == "user@example.com"
@@ -249,8 +252,8 @@ class TestForgotPasswordRequest:
 # ResetPasswordRequest
 # =====================================================================
 
-class TestResetPasswordRequest:
 
+class TestResetPasswordRequest:
     def test_valid(self):
         req = ResetPasswordRequest(token="abc123", new_password="newpass")
         assert req.token == "abc123"
@@ -267,6 +270,3 @@ class TestResetPasswordRequest:
     def test_both_missing_raises(self):
         with pytest.raises(ValidationError):
             ResetPasswordRequest()
-
-
-            

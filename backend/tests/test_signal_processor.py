@@ -22,9 +22,8 @@ Total: ~85 tests
 """
 
 import sys
-from datetime import datetime, timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -43,7 +42,8 @@ for mod in [
 # Must directly configure the exact model class attributes that signal_processor.py imports.
 
 from models.sentiment import Sentiment
-for _col in ['analyzed_at', 'compound_score', 'product_id']:
+
+for _col in ["analyzed_at", "compound_score", "product_id"]:
     _c = getattr(Sentiment, _col)
     try:
         _c.__ge__ = MagicMock(return_value=MagicMock())
@@ -55,7 +55,8 @@ for _col in ['analyzed_at', 'compound_score', 'product_id']:
         pass  # Real SQLAlchemy model — operators already work
 
 from models.social_mention import SocialMention
-for _col in ['published_at', 'product_id', 'id', 'engagement_count']:
+
+for _col in ["published_at", "product_id", "id", "engagement_count"]:
     _c = getattr(SocialMention, _col)
     try:
         _c.__ge__ = MagicMock(return_value=MagicMock())
@@ -68,7 +69,8 @@ for _col in ['published_at', 'product_id', 'id', 'engagement_count']:
         pass  # Real SQLAlchemy model — operators already work
 
 from models.competitor_product import CompetitorProduct
-for _col in ['product_id', 'is_active', 'competitor_id', 'current_price']:
+
+for _col in ["product_id", "is_active", "competitor_id", "current_price"]:
     _c = getattr(CompetitorProduct, _col)
     try:
         _c.__ge__ = MagicMock(return_value=MagicMock())
@@ -78,8 +80,8 @@ for _col in ['product_id', 'is_active', 'competitor_id', 'current_price']:
 
 import pytest
 
-from services.pricing.signal_processor import SignalProcessor
 from services.pricing.rule_evaluator import MarketSignals
+from services.pricing.signal_processor import SignalProcessor
 
 SERVICE_PATH = "services.pricing.signal_processor"
 
@@ -113,8 +115,8 @@ def make_signals(**kwargs):
 # 1. Initialization
 # ============================================================
 
-class TestSignalProcessorInit:
 
+class TestSignalProcessorInit:
     def test_stores_db(self):
         db = make_mock_db()
         sp = SignalProcessor(db)
@@ -129,8 +131,8 @@ class TestSignalProcessorInit:
 # 2. gather_signals (orchestration)
 # ============================================================
 
-class TestGatherSignals:
 
+class TestGatherSignals:
     @pytest.mark.asyncio
     async def test_returns_market_signals(self):
         db = make_mock_db()
@@ -140,11 +142,16 @@ class TestGatherSignals:
         sp._get_volume_signals = AsyncMock(return_value=(50, 30))
         sp._get_viral_signals = AsyncMock(return_value=(False, 0, 0, None))
         sp._get_competitor_prices = AsyncMock(return_value={})
-        sp._get_trend_signals = AsyncMock(return_value={
-            "direction": "stable", "strength": Decimal("0"),
-            "velocity": Decimal("0"), "mention_growth_rate": Decimal("0"),
-            "sentiment_momentum": Decimal("0"), "is_trending": False,
-        })
+        sp._get_trend_signals = AsyncMock(
+            return_value={
+                "direction": "stable",
+                "strength": Decimal("0"),
+                "velocity": Decimal("0"),
+                "mention_growth_rate": Decimal("0"),
+                "sentiment_momentum": Decimal("0"),
+                "is_trending": False,
+            }
+        )
 
         result = await sp.gather_signals(make_product())
         assert isinstance(result, MarketSignals)
@@ -158,11 +165,16 @@ class TestGatherSignals:
         sp._get_volume_signals = AsyncMock(return_value=(0, 0))
         sp._get_viral_signals = AsyncMock(return_value=(False, 0, 0, None))
         sp._get_competitor_prices = AsyncMock(return_value={})
-        sp._get_trend_signals = AsyncMock(return_value={
-            "direction": "stable", "strength": Decimal("0"),
-            "velocity": Decimal("0"), "mention_growth_rate": Decimal("0"),
-            "sentiment_momentum": Decimal("0"), "is_trending": False,
-        })
+        sp._get_trend_signals = AsyncMock(
+            return_value={
+                "direction": "stable",
+                "strength": Decimal("0"),
+                "velocity": Decimal("0"),
+                "mention_growth_rate": Decimal("0"),
+                "sentiment_momentum": Decimal("0"),
+                "is_trending": False,
+            }
+        )
 
         result = await sp.gather_signals(make_product())
         assert result.sentiment_score == Decimal("0.75")
@@ -177,11 +189,16 @@ class TestGatherSignals:
         sp._get_volume_signals = AsyncMock(return_value=(150, 50))
         sp._get_viral_signals = AsyncMock(return_value=(False, 0, 0, None))
         sp._get_competitor_prices = AsyncMock(return_value={})
-        sp._get_trend_signals = AsyncMock(return_value={
-            "direction": "stable", "strength": Decimal("0"),
-            "velocity": Decimal("0"), "mention_growth_rate": Decimal("0"),
-            "sentiment_momentum": Decimal("0"), "is_trending": False,
-        })
+        sp._get_trend_signals = AsyncMock(
+            return_value={
+                "direction": "stable",
+                "strength": Decimal("0"),
+                "velocity": Decimal("0"),
+                "mention_growth_rate": Decimal("0"),
+                "sentiment_momentum": Decimal("0"),
+                "is_trending": False,
+            }
+        )
 
         result = await sp.gather_signals(make_product())
         assert result.mention_count_24h == 150
@@ -196,11 +213,16 @@ class TestGatherSignals:
         sp._get_volume_signals = AsyncMock(return_value=(0, 0))
         sp._get_viral_signals = AsyncMock(return_value=(True, 50000, 5000, Decimal("0.8")))
         sp._get_competitor_prices = AsyncMock(return_value={})
-        sp._get_trend_signals = AsyncMock(return_value={
-            "direction": "stable", "strength": Decimal("0"),
-            "velocity": Decimal("0"), "mention_growth_rate": Decimal("0"),
-            "sentiment_momentum": Decimal("0"), "is_trending": False,
-        })
+        sp._get_trend_signals = AsyncMock(
+            return_value={
+                "direction": "stable",
+                "strength": Decimal("0"),
+                "velocity": Decimal("0"),
+                "mention_growth_rate": Decimal("0"),
+                "sentiment_momentum": Decimal("0"),
+                "is_trending": False,
+            }
+        )
 
         result = await sp.gather_signals(make_product())
         assert result.viral_detected is True
@@ -218,11 +240,16 @@ class TestGatherSignals:
         sp._get_volume_signals = AsyncMock(return_value=(0, 0))
         sp._get_viral_signals = AsyncMock(return_value=(False, 0, 0, None))
         sp._get_competitor_prices = AsyncMock(return_value=prices)
-        sp._get_trend_signals = AsyncMock(return_value={
-            "direction": "stable", "strength": Decimal("0"),
-            "velocity": Decimal("0"), "mention_growth_rate": Decimal("0"),
-            "sentiment_momentum": Decimal("0"), "is_trending": False,
-        })
+        sp._get_trend_signals = AsyncMock(
+            return_value={
+                "direction": "stable",
+                "strength": Decimal("0"),
+                "velocity": Decimal("0"),
+                "mention_growth_rate": Decimal("0"),
+                "sentiment_momentum": Decimal("0"),
+                "is_trending": False,
+            }
+        )
 
         result = await sp.gather_signals(make_product())
         assert result.competitor_prices == prices
@@ -236,11 +263,16 @@ class TestGatherSignals:
         sp._get_volume_signals = AsyncMock(return_value=(0, 0))
         sp._get_viral_signals = AsyncMock(return_value=(False, 0, 0, None))
         sp._get_competitor_prices = AsyncMock(return_value={})
-        sp._get_trend_signals = AsyncMock(return_value={
-            "direction": "up", "strength": Decimal("0.7"),
-            "velocity": Decimal("0.3"), "mention_growth_rate": Decimal("0.6"),
-            "sentiment_momentum": Decimal("0.2"), "is_trending": True,
-        })
+        sp._get_trend_signals = AsyncMock(
+            return_value={
+                "direction": "up",
+                "strength": Decimal("0.7"),
+                "velocity": Decimal("0.3"),
+                "mention_growth_rate": Decimal("0.6"),
+                "sentiment_momentum": Decimal("0.2"),
+                "is_trending": True,
+            }
+        )
 
         result = await sp.gather_signals(make_product())
         assert result.trend_direction == "up"
@@ -252,8 +284,8 @@ class TestGatherSignals:
 # 3. _get_sentiment_signals
 # ============================================================
 
-class TestGetSentimentSignals:
 
+class TestGetSentimentSignals:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     @patch(f"{SERVICE_PATH}.func")
@@ -314,8 +346,8 @@ class TestGetSentimentSignals:
 # 4. _get_volume_signals
 # ============================================================
 
-class TestGetVolumeSignals:
 
+class TestGetVolumeSignals:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     @patch(f"{SERVICE_PATH}.func")
@@ -378,8 +410,8 @@ class TestGetVolumeSignals:
 # 5. _get_viral_signals
 # ============================================================
 
-class TestGetViralSignals:
 
+class TestGetViralSignals:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_no_posts_returns_false(self, mock_select):
@@ -457,8 +489,8 @@ class TestGetViralSignals:
 # 6. _get_competitor_prices
 # ============================================================
 
-class TestGetCompetitorPrices:
 
+class TestGetCompetitorPrices:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_active_prices(self, mock_select):
@@ -518,8 +550,8 @@ class TestGetCompetitorPrices:
 # 7. _calculate_growth_rate (pure function)
 # ============================================================
 
-class TestCalculateGrowthRate:
 
+class TestCalculateGrowthRate:
     def setup_method(self):
         self.sp = SignalProcessor(make_mock_db())
 
@@ -561,8 +593,8 @@ class TestCalculateGrowthRate:
 # 8. _calculate_momentum (pure function)
 # ============================================================
 
-class TestCalculateMomentum:
 
+class TestCalculateMomentum:
     def setup_method(self):
         self.sp = SignalProcessor(make_mock_db())
 
@@ -605,8 +637,8 @@ class TestCalculateMomentum:
 # 9. _calculate_velocity (pure function)
 # ============================================================
 
-class TestCalculateVelocity:
 
+class TestCalculateVelocity:
     def setup_method(self):
         self.sp = SignalProcessor(make_mock_db())
 
@@ -638,56 +670,42 @@ class TestCalculateVelocity:
 # 10. _determine_trend (pure function)
 # ============================================================
 
-class TestDetermineTrend:
 
+class TestDetermineTrend:
     def setup_method(self):
         self.sp = SignalProcessor(make_mock_db())
 
     def test_upward_trend(self):
-        direction, strength = self.sp._determine_trend(
-            Decimal("0.5"), Decimal("0.3")
-        )
+        direction, strength = self.sp._determine_trend(Decimal("0.5"), Decimal("0.3"))
         assert direction == "up"
         assert strength > Decimal("0")
 
     def test_downward_trend(self):
-        direction, strength = self.sp._determine_trend(
-            Decimal("-0.5"), Decimal("-0.3")
-        )
+        direction, strength = self.sp._determine_trend(Decimal("-0.5"), Decimal("-0.3"))
         assert direction == "down"
 
     def test_stable_trend(self):
-        direction, strength = self.sp._determine_trend(
-            Decimal("0.05"), Decimal("0.0")
-        )
+        direction, strength = self.sp._determine_trend(Decimal("0.05"), Decimal("0.0"))
         assert direction == "stable"
 
     def test_strength_capped_at_1(self):
-        direction, strength = self.sp._determine_trend(
-            Decimal("5.0"), Decimal("5.0")
-        )
+        direction, strength = self.sp._determine_trend(Decimal("5.0"), Decimal("5.0"))
         assert strength <= Decimal("1")
 
     def test_growth_weighted_70_percent(self):
         """Growth rate weighted 0.7, sentiment 0.3."""
         # combined = 0.2*0.7 + (-0.1)*0.3 = 0.14 - 0.03 = 0.11 → up
-        direction, _ = self.sp._determine_trend(
-            Decimal("0.2"), Decimal("-0.1")
-        )
+        direction, _ = self.sp._determine_trend(Decimal("0.2"), Decimal("-0.1"))
         assert direction == "up"
 
     def test_threshold_boundary_positive(self):
         # combined = 0.1*0.7 + 0.1*0.3 = 0.07+0.03 = 0.10 → exactly at boundary → up
-        direction, _ = self.sp._determine_trend(
-            Decimal("0.1"), Decimal("0.1")
-        )
+        direction, _ = self.sp._determine_trend(Decimal("0.1"), Decimal("0.1"))
         assert direction == "up"
 
     def test_threshold_boundary_negative(self):
         # combined = -0.1*0.7 + -0.1*0.3 = -0.10 → exactly at boundary → down
-        direction, _ = self.sp._determine_trend(
-            Decimal("-0.1"), Decimal("-0.1")
-        )
+        direction, _ = self.sp._determine_trend(Decimal("-0.1"), Decimal("-0.1"))
         assert direction == "down"
 
     def test_strength_is_quantized(self):
@@ -699,8 +717,8 @@ class TestDetermineTrend:
 # 11. calculate_price_impact (pure function)
 # ============================================================
 
-class TestCalculatePriceImpact:
 
+class TestCalculatePriceImpact:
     def setup_method(self):
         self.sp = SignalProcessor(make_mock_db())
 
@@ -789,17 +807,15 @@ class TestCalculatePriceImpact:
 # 12. _get_trend_signals (orchestration)
 # ============================================================
 
-class TestGetTrendSignals:
 
+class TestGetTrendSignals:
     @pytest.mark.asyncio
     async def test_returns_trend_dict(self):
         db = make_mock_db()
         sp = SignalProcessor(db)
 
         sp._get_daily_mention_counts = AsyncMock(return_value=[10, 10, 10, 10, 10, 10, 10])
-        sp._get_daily_sentiment = AsyncMock(return_value=[
-            Decimal("0.5")] * 7
-        )
+        sp._get_daily_sentiment = AsyncMock(return_value=[Decimal("0.5")] * 7)
 
         result = await sp._get_trend_signals(PRODUCT_ID)
         assert "direction" in result
@@ -832,6 +848,3 @@ class TestGetTrendSignals:
 
         result = await sp._get_trend_signals(PRODUCT_ID)
         assert result["is_trending"] is False
-
-
-        

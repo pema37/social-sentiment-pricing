@@ -18,7 +18,7 @@ Total: ~50 tests
 import sys
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 # === Import isolation ===
@@ -35,7 +35,8 @@ sys.modules.pop("services.pricing.settings_service", None)
 
 # Fix comparison operators on PricingSettings columns
 from models.pricing_settings import PricingSettings
-for _col in ['user_id']:
+
+for _col in ["user_id"]:
     _c = getattr(PricingSettings, _col)
     try:
         _c.__eq__ = MagicMock(return_value=MagicMock())
@@ -44,7 +45,7 @@ for _col in ['user_id']:
 
 import pytest
 
-from services.pricing.settings_service import SettingsService, DEFAULT_SETTINGS
+from services.pricing.settings_service import DEFAULT_SETTINGS, SettingsService
 
 SERVICE_PATH = "services.pricing.settings_service"
 
@@ -94,8 +95,8 @@ def make_settings(
 # 1. DEFAULT_SETTINGS constant
 # ============================================================
 
-class TestDefaultSettings:
 
+class TestDefaultSettings:
     def test_auto_approve_enabled(self):
         assert DEFAULT_SETTINGS["auto_approve_enabled"] is True
 
@@ -136,8 +137,8 @@ class TestDefaultSettings:
 # 2. Initialization
 # ============================================================
 
-class TestSettingsServiceInit:
 
+class TestSettingsServiceInit:
     def test_stores_db(self):
         db = make_mock_db()
         svc = SettingsService(db)
@@ -148,8 +149,8 @@ class TestSettingsServiceInit:
 # 3. get_or_create
 # ============================================================
 
-class TestGetOrCreate:
 
+class TestGetOrCreate:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_existing_settings(self, mock_select):
@@ -201,8 +202,8 @@ class TestGetOrCreate:
 # 4. get_settings (deprecated)
 # ============================================================
 
-class TestGetSettings:
 
+class TestGetSettings:
     @pytest.mark.asyncio
     @patch(f"{SERVICE_PATH}.select")
     async def test_returns_existing(self, mock_select):
@@ -235,8 +236,8 @@ class TestGetSettings:
 # 5. _create_default_settings
 # ============================================================
 
-class TestCreateDefaultSettings:
 
+class TestCreateDefaultSettings:
     @pytest.mark.asyncio
     async def test_adds_and_commits(self):
         db = make_mock_db()
@@ -262,8 +263,8 @@ class TestCreateDefaultSettings:
 # 6. update_settings
 # ============================================================
 
-class TestUpdateSettings:
 
+class TestUpdateSettings:
     @pytest.mark.asyncio
     async def test_updates_provided_fields(self):
         db = make_mock_db()
@@ -273,10 +274,7 @@ class TestUpdateSettings:
         existing.auto_approve_max_increase = Decimal("5.0")
         svc.get_or_create = AsyncMock(return_value=existing)
 
-        result = await svc.update_settings(
-            USER_ID,
-            auto_approve_max_increase=Decimal("8.0")
-        )
+        result = await svc.update_settings(USER_ID, auto_approve_max_increase=Decimal("8.0"))
         assert result.auto_approve_max_increase == Decimal("8.0")
 
     @pytest.mark.asyncio
@@ -334,117 +332,89 @@ class TestUpdateSettings:
 # 7. check_requires_approval
 # ============================================================
 
-class TestCheckRequiresApproval:
 
+class TestCheckRequiresApproval:
     def setup_method(self):
         self.svc = SettingsService(make_mock_db())
         self.product = make_product()
 
     def test_none_settings_requires_approval(self):
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.8"), None
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.8"), None)
         assert result is True
 
     def test_auto_approve_disabled(self):
         settings = make_settings(auto_approve_enabled=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.8"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.8"), settings)
         assert result is True
 
     def test_low_confidence_requires_approval(self):
         settings = make_settings(auto_approve_min_confidence=Decimal("0.80"))
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.70"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.70"), settings)
         assert result is True
 
     def test_confidence_at_threshold_passes(self):
         settings = make_settings(auto_approve_min_confidence=Decimal("0.70"))
         self.svc._is_blackout_period = MagicMock(return_value=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.70"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.70"), settings)
         assert result is False
 
     def test_increase_exceeds_threshold(self):
         settings = make_settings(auto_approve_max_increase=Decimal("5.0"))
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("6.0"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("6.0"), Decimal("0.9"), settings)
         assert result is True
 
     def test_increase_within_threshold(self):
         settings = make_settings(auto_approve_max_increase=Decimal("5.0"))
         self.svc._is_blackout_period = MagicMock(return_value=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("4.0"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("4.0"), Decimal("0.9"), settings)
         assert result is False
 
     def test_decrease_exceeds_threshold(self):
         settings = make_settings(auto_approve_max_decrease=Decimal("10.0"))
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("-11.0"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("-11.0"), Decimal("0.9"), settings)
         assert result is True
 
     def test_decrease_within_threshold(self):
         settings = make_settings(auto_approve_max_decrease=Decimal("10.0"))
         self.svc._is_blackout_period = MagicMock(return_value=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("-9.0"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("-9.0"), Decimal("0.9"), settings)
         assert result is False
 
     def test_high_value_product_requires_approval(self):
         settings = make_settings(require_approval_above_price=Decimal("50"))
         product = make_product(current_price=Decimal("100"))
-        result = self.svc.check_requires_approval(
-            product, Decimal("3"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(product, Decimal("3"), Decimal("0.9"), settings)
         assert result is True
 
     def test_low_value_product_auto_approves(self):
         settings = make_settings(require_approval_above_price=Decimal("200"))
         self.svc._is_blackout_period = MagicMock(return_value=False)
         product = make_product(current_price=Decimal("100"))
-        result = self.svc.check_requires_approval(
-            product, Decimal("3"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(product, Decimal("3"), Decimal("0.9"), settings)
         assert result is False
 
     def test_no_price_threshold_skips_check(self):
         settings = make_settings(require_approval_above_price=None)
         self.svc._is_blackout_period = MagicMock(return_value=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.9"), settings)
         assert result is False
 
     def test_blackout_period_requires_approval(self):
         settings = make_settings()
         self.svc._is_blackout_period = MagicMock(return_value=True)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.9"), settings)
         assert result is True
 
     def test_outside_blackout_auto_approves(self):
         settings = make_settings()
         self.svc._is_blackout_period = MagicMock(return_value=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("3"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("3"), Decimal("0.9"), settings)
         assert result is False
 
     def test_zero_change_auto_approves(self):
         settings = make_settings()
         self.svc._is_blackout_period = MagicMock(return_value=False)
-        result = self.svc.check_requires_approval(
-            self.product, Decimal("0"), Decimal("0.9"), settings
-        )
+        result = self.svc.check_requires_approval(self.product, Decimal("0"), Decimal("0.9"), settings)
         assert result is False
 
 
@@ -452,8 +422,8 @@ class TestCheckRequiresApproval:
 # 8. _is_blackout_period
 # ============================================================
 
-class TestIsBlackoutPeriod:
 
+class TestIsBlackoutPeriod:
     def setup_method(self):
         self.svc = SettingsService(make_mock_db())
 
@@ -506,6 +476,3 @@ class TestIsBlackoutPeriod:
         mock_dt.now.return_value = datetime(2026, 1, 1, 6, 0)  # 6am
         settings = make_settings(blackout_hours_start=0, blackout_hours_end=6)
         assert self.svc._is_blackout_period(settings) is False
-
-
-        

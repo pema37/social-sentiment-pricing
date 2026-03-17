@@ -1,25 +1,26 @@
 # backend/services/sentiment_analyzer.py
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 
 @dataclass
 class SentimentResult:
     """Standardized sentiment analysis result."""
-    score: float          # -1.0 (negative) to +1.0 (positive)
-    label: str            # "very_negative", "negative", "neutral", "positive", "very_positive"
-    confidence: float     # 0.0 to 1.0
-    emotions: Dict[str, float]  # {"positive": 0.x, "negative": 0.x, "neutral": 0.x}
-    raw_scores: Optional[Dict[str, float]] = None
+
+    score: float  # -1.0 (negative) to +1.0 (positive)
+    label: str  # "very_negative", "negative", "neutral", "positive", "very_positive"
+    confidence: float  # 0.0 to 1.0
+    emotions: dict[str, float]  # {"positive": 0.x, "negative": 0.x, "neutral": 0.x}
+    raw_scores: dict[str, float] | None = None
 
 
 class SentimentAnalyzer:
     """
     VADER-based sentiment analysis service.
     VADER is optimized for social media text (handles emojis, slang, etc.)
-    
+
     All methods are async for consistency with the rest of the codebase.
     """
 
@@ -39,7 +40,7 @@ class SentimentAnalyzer:
         else:
             return "neutral"
 
-    def _calculate_confidence(self, scores: Dict[str, float]) -> float:
+    def _calculate_confidence(self, scores: dict[str, float]) -> float:
         """
         Calculate confidence based on how decisive the sentiment is.
         High neutral = low confidence, strong pos/neg = high confidence.
@@ -52,14 +53,14 @@ class SentimentAnalyzer:
     async def analyze(self, text: str) -> SentimentResult:
         """
         Analyze a single piece of text.
-        
+
         Returns:
             SentimentResult with score, label, confidence, and emotions
         """
         # VADER is CPU-bound and fast, so we run it directly
         # For slower/IO-bound operations, use asyncio.to_thread()
         scores = self.analyzer.polarity_scores(text)
-        
+
         return SentimentResult(
             score=round(scores["compound"], 3),
             label=self._get_label(scores["compound"]),
@@ -69,10 +70,10 @@ class SentimentAnalyzer:
                 "negative": round(scores["neg"], 3),
                 "neutral": round(scores["neu"], 3),
             },
-            raw_scores=scores
+            raw_scores=scores,
         )
 
-    async def analyze_batch(self, texts: List[str]) -> List[SentimentResult]:
+    async def analyze_batch(self, texts: list[str]) -> list[SentimentResult]:
         """Analyze multiple texts at once."""
         results = []
         for text in texts:
@@ -80,7 +81,7 @@ class SentimentAnalyzer:
             results.append(result)
         return results
 
-    async def calculate_aggregate(self, results: List[SentimentResult]) -> Dict:
+    async def calculate_aggregate(self, results: list[SentimentResult]) -> dict:
         """Calculate aggregate sentiment from multiple analyses."""
         if not results:
             return {
@@ -98,7 +99,7 @@ class SentimentAnalyzer:
         total = len(results)
         score_sum = sum(r.score for r in results)
         confidence_sum = sum(r.confidence for r in results)
-        
+
         label_counts = {
             "very_positive": 0,
             "positive": 0,
@@ -111,7 +112,7 @@ class SentimentAnalyzer:
 
         positive_total = label_counts["positive"] + label_counts["very_positive"]
         negative_total = label_counts["negative"] + label_counts["very_negative"]
-        
+
         if positive_total > negative_total * 1.5:
             trend = "positive"
         elif negative_total > positive_total * 1.5:
@@ -130,6 +131,7 @@ class SentimentAnalyzer:
             "very_negative_count": label_counts["very_negative"],
             "trend": trend,
         }
-    
+
+
 # Singleton instance
 sentiment_analyzer = SentimentAnalyzer()

@@ -14,10 +14,10 @@ Covers:
 - CrisisDetector.analyze orchestration (insufficient data, no anomaly, full pipeline)
 """
 
-import sys
 import json
-from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+import sys
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,16 +27,16 @@ for mod in ["db.session", "google.genai"]:
         sys.modules[mod] = MagicMock()
 
 from services.ai_trend_analysis.crisis_detector import (
-    CrisisAgentRole,
-    CrisisSeverity,
     CrisisAgentMessage,
-    SentimentDataPoint,
+    CrisisAgentRole,
     CrisisAlert,
     CrisisDetector,
+    CrisisSeverity,
+    SentimentDataPoint,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_data_point(
     score=0.5,
@@ -46,7 +46,7 @@ def _make_data_point(
     hours_ago=0,
 ):
     return SentimentDataPoint(
-        timestamp=datetime(2026, 2, 8, 12, 0, tzinfo=timezone.utc) - timedelta(hours=hours_ago),
+        timestamp=datetime(2026, 2, 8, 12, 0, tzinfo=UTC) - timedelta(hours=hours_ago),
         score=score,
         volume=volume,
         source=source,
@@ -57,6 +57,7 @@ def _make_data_point(
 # ==================================================================
 # Enums
 # ==================================================================
+
 
 class TestCrisisAgentRole:
     def test_monitor(self):
@@ -95,6 +96,7 @@ class TestCrisisSeverity:
 # ==================================================================
 # Dataclasses
 # ==================================================================
+
 
 class TestCrisisAgentMessage:
     def test_basic_creation(self):
@@ -179,6 +181,7 @@ class TestCrisisAlert:
 # CrisisDetector.__init__
 # ==================================================================
 
+
 class TestCrisisDetectorInit:
     def test_default_thresholds(self):
         detector = CrisisDetector()
@@ -190,6 +193,7 @@ class TestCrisisDetectorInit:
 # ==================================================================
 # _prepare_data_summary
 # ==================================================================
+
 
 class TestPrepareDataSummary:
     def test_empty_data(self):
@@ -266,6 +270,7 @@ class TestPrepareDataSummary:
 # _calculate_anomaly_metrics
 # ==================================================================
 
+
 class TestCalculateAnomalyMetrics:
     def test_empty_data(self):
         detector = CrisisDetector()
@@ -340,6 +345,7 @@ class TestCalculateAnomalyMetrics:
 # _get_negative_samples
 # ==================================================================
 
+
 class TestGetNegativeSamples:
     def test_no_negative_data(self):
         detector = CrisisDetector()
@@ -395,6 +401,7 @@ class TestGetNegativeSamples:
 # _get_affected_sources
 # ==================================================================
 
+
 class TestGetAffectedSources:
     def test_no_negative_sources(self):
         detector = CrisisDetector()
@@ -440,6 +447,7 @@ class TestGetAffectedSources:
 # ==================================================================
 # _assess_severity
 # ==================================================================
+
 
 class TestAssessSeverity:
     def test_critical_high_sentiment_change(self):
@@ -514,6 +522,7 @@ class TestAssessSeverity:
 # _parse_response_json
 # ==================================================================
 
+
 class TestParseResponseJson:
     def test_valid_json_block(self):
         detector = CrisisDetector()
@@ -536,7 +545,7 @@ class TestParseResponseJson:
 
     def test_invalid_json_returns_default(self):
         detector = CrisisDetector()
-        response = '```json\n{invalid json here}\n```'
+        response = "```json\n{invalid json here}\n```"
         result = detector._parse_response_json(response)
         assert result["crisis_title"] == "Crisis Response Plan"
 
@@ -547,7 +556,7 @@ class TestParseResponseJson:
             "immediate_actions": ["Stop sales", "Issue statement"],
             "stakeholders_to_notify": ["CEO", "PR team"],
         }
-        response = f'Analysis:\n```json\n{json.dumps(data)}\n```'
+        response = f"Analysis:\n```json\n{json.dumps(data)}\n```"
         result = detector._parse_response_json(response)
         assert result["crisis_title"] == "Product Recall"
         assert len(result["immediate_actions"]) == 2
@@ -561,6 +570,7 @@ class TestParseResponseJson:
 # ==================================================================
 # analyze — orchestration
 # ==================================================================
+
 
 class TestAnalyze:
     @pytest.mark.asyncio
@@ -628,6 +638,3 @@ class TestAnalyze:
 
         # Should NOT have insufficient data error
         assert not any("Insufficient data" in m.content for m in messages)
-
-
-        

@@ -9,12 +9,12 @@ Aligned with actual service signatures:
 """
 
 import dataclasses
-import pytest
 
 
 def _make_profile(**overrides):
     """Create an AuthorProfile using only fields the dataclass actually has."""
     from services.trust_scoring.schemas import AuthorProfile
+
     valid_fields = {f.name for f in dataclasses.fields(AuthorProfile)}
 
     # Map common test names to possible real field names
@@ -55,7 +55,6 @@ def _make_profile(**overrides):
 
 
 class TestAuthorScorer:
-
     def test_profile_creates_successfully(self):
         """AuthorProfile should be constructable with _make_profile helper."""
         profile = _make_profile(username="test", account_age_days=500)
@@ -63,26 +62,36 @@ class TestAuthorScorer:
 
     def test_established_author_scores_high(self):
         from services.trust_scoring.author_scorer import AuthorScorer
+
         scorer = AuthorScorer()
         profile = _make_profile(
-            username="audiofan42", account_age_days=1200,
-            karma=15000, post_count=300, subreddit_diversity=12,
+            username="audiofan42",
+            account_age_days=1200,
+            karma=15000,
+            post_count=300,
+            subreddit_diversity=12,
         )
         result = scorer.score_author(profile)
         assert result.trust_score >= 0.5
 
     def test_new_account_scores_low(self):
         from services.trust_scoring.author_scorer import AuthorScorer
+
         scorer = AuthorScorer()
         profile = _make_profile(
-            username="newuser_xyz123", account_age_days=2,
-            karma=1, verified_email=False, post_count=1, subreddit_diversity=1,
+            username="newuser_xyz123",
+            account_age_days=2,
+            karma=1,
+            verified_email=False,
+            post_count=1,
+            subreddit_diversity=1,
         )
         result = scorer.score_author(profile)
         assert result.trust_score <= 0.6
 
     def test_score_always_bounded(self):
         from services.trust_scoring.author_scorer import AuthorScorer
+
         scorer = AuthorScorer()
         for kwargs in [
             dict(username="x", account_age_days=0),
@@ -94,6 +103,7 @@ class TestAuthorScorer:
 
     def test_result_has_expected_fields(self):
         from services.trust_scoring.author_scorer import AuthorScorer
+
         scorer = AuthorScorer()
         profile = _make_profile(username="test", account_age_days=100)
         result = scorer.score_author(profile)
@@ -102,9 +112,9 @@ class TestAuthorScorer:
 
 
 class TestContentAnalyzer:
-
     def test_genuine_review_scores_high(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         result = analyzer.analyze(
             "test-001",
@@ -116,6 +126,7 @@ class TestContentAnalyzer:
 
     def test_spam_review_scores_low(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         result = analyzer.analyze(
             "test-002",
@@ -125,12 +136,14 @@ class TestContentAnalyzer:
 
     def test_empty_content_scores_low(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         result = analyzer.analyze("test-003", "")
         assert result.content_quality_score <= 0.6
 
     def test_short_vs_detailed_content(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         short = analyzer.analyze("t4", "Good.")
         detailed = analyzer.analyze(
@@ -142,6 +155,7 @@ class TestContentAnalyzer:
 
     def test_caps_text_penalized(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         caps = analyzer.analyze("t6", "THIS IS THE BEST PRODUCT EVER MADE I LOVE IT SO MUCH")
         normal = analyzer.analyze("t7", "This is the best product ever made, I love it so much.")
@@ -149,6 +163,7 @@ class TestContentAnalyzer:
 
     def test_url_heavy_penalized(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         result = analyzer.analyze(
             "t8",
@@ -158,6 +173,7 @@ class TestContentAnalyzer:
 
     def test_promotional_language_low(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         result = analyzer.analyze(
             "t9",
@@ -167,6 +183,7 @@ class TestContentAnalyzer:
 
     def test_legitimate_negative_review_decent(self):
         from services.trust_scoring.content_analyzer import ContentAnalyzer
+
         analyzer = ContentAnalyzer()
         result = analyzer.analyze(
             "t10",
@@ -178,20 +195,22 @@ class TestContentAnalyzer:
 
 
 class TestCampaignDetector:
-
     def test_empty_mentions_no_campaign(self):
         from services.trust_scoring.campaign_detector import CampaignDetector
+
         detector = CampaignDetector()
         result = detector.detect([])
         assert result.is_campaign_detected is False
 
     def test_detector_initializes(self):
         from services.trust_scoring.campaign_detector import CampaignDetector
+
         detector = CampaignDetector()
         assert detector is not None
 
     def test_result_has_fields(self):
         from services.trust_scoring.campaign_detector import CampaignDetector
+
         detector = CampaignDetector()
         result = detector.detect([])
         assert hasattr(result, "is_campaign_detected")
@@ -199,29 +218,33 @@ class TestCampaignDetector:
 
 
 class TestTrustScoringService:
-
     def test_service_initializes(self):
         from services.trust_scoring.service import TrustScoringService
+
         service = TrustScoringService()
         assert service is not None
 
     def test_has_score_author(self):
         from services.trust_scoring.service import TrustScoringService
+
         service = TrustScoringService()
         assert callable(getattr(service, "score_author", None))
 
     def test_has_analyze_content(self):
         from services.trust_scoring.service import TrustScoringService
+
         service = TrustScoringService()
         assert callable(getattr(service, "analyze_content", None))
 
     def test_has_detect_campaign(self):
         from services.trust_scoring.service import TrustScoringService
+
         service = TrustScoringService()
         assert callable(getattr(service, "detect_campaign", None))
 
     def test_score_author_returns_result(self):
         from services.trust_scoring.service import TrustScoringService
+
         service = TrustScoringService()
         profile = _make_profile(username="test_user", account_age_days=500)
         result = service.score_author(profile, "test_user", "reddit")
@@ -230,6 +253,7 @@ class TestTrustScoringService:
 
     def test_analyze_content_returns_result(self):
         from services.trust_scoring.service import TrustScoringService
+
         service = TrustScoringService()
         result = service.analyze_content(
             "svc-001",
@@ -237,6 +261,3 @@ class TestTrustScoringService:
         )
         assert result is not None
         assert hasattr(result, "content_quality_score")
-
-
-        

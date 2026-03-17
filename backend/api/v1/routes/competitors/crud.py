@@ -2,23 +2,22 @@
 """Competitor CRUD endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from api.v1.routes.auth import get_current_user
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
 from db.session import get_session
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
-from models.user import User
 from models.competitor import Competitor
-from models.competitor_product import CompetitorProduct
 from models.competitor_price_history import CompetitorPriceHistory
-from schemas.competitor import CompetitorCreate, CompetitorUpdate, CompetitorResponse
+from models.competitor_product import CompetitorProduct
+from models.user import User
 from schemas.common import PaginatedResponse, PaginationParams
+from schemas.competitor import CompetitorCreate, CompetitorResponse, CompetitorUpdate
 
 router = APIRouter()
 
@@ -50,27 +49,27 @@ async def create_competitor(
 @router.get("/", response_model=PaginatedResponse[CompetitorResponse])
 async def list_competitors(
     request: Request,
-    is_active: Optional[bool] = None,
+    is_active: bool | None = None,
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """List all competitors for the current user."""
     query = select(Competitor).where(Competitor.user_id == current_user.id)
-    
+
     if is_active is not None:
         query = query.where(Competitor.is_active == is_active)
-    
+
     count_query = select(func.count()).select_from(query.subquery())
     count_result = await db.execute(count_query)
     total = count_result.scalar_one()
-    
+
     query = query.offset(pagination.offset).limit(pagination.page_size)
     result = await db.execute(query)
     competitors = list(result.scalars().all())
-    
+
     total_pages = (total + pagination.page_size - 1) // pagination.page_size
-    
+
     return PaginatedResponse(
         items=competitors,
         total=total,
@@ -89,15 +88,13 @@ async def get_competitor(
 ):
     """Get a specific competitor."""
     result = await db.execute(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
+        select(Competitor).where(Competitor.id == competitor_id).where(Competitor.user_id == current_user.id)
     )
     competitor = result.scalars().first()
-    
+
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
-    
+
     return competitor
 
 
@@ -112,19 +109,17 @@ async def update_competitor(
 ):
     """Update a competitor."""
     result = await db.execute(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
+        select(Competitor).where(Competitor.id == competitor_id).where(Competitor.user_id == current_user.id)
     )
     competitor = result.scalars().first()
-    
+
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
-    
+
     update_data = competitor_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(competitor, field, value)
-    
+
     competitor.updated_at = datetime.now(UTC)
     db.add(competitor)
     await db.commit()
@@ -142,29 +137,24 @@ async def delete_competitor(
 ):
     """Delete a competitor and all associated data."""
     result = await db.execute(
-        select(Competitor)
-        .where(Competitor.id == competitor_id)
-        .where(Competitor.user_id == current_user.id)
+        select(Competitor).where(Competitor.id == competitor_id).where(Competitor.user_id == current_user.id)
     )
     competitor = result.scalars().first()
-    
+
     if not competitor:
         raise HTTPException(status_code=404, detail="Competitor not found")
-    
-    cp_result = await db.execute(
-        select(CompetitorProduct).where(CompetitorProduct.competitor_id == competitor_id)
-    )
+
+    cp_result = await db.execute(select(CompetitorProduct).where(CompetitorProduct.competitor_id == competitor_id))
     competitor_products = cp_result.scalars().all()
-    
+
     for cp in competitor_products:
         hist_result = await db.execute(
-            select(CompetitorPriceHistory)
-            .where(CompetitorPriceHistory.competitor_product_id == cp.id)
+            select(CompetitorPriceHistory).where(CompetitorPriceHistory.competitor_product_id == cp.id)
         )
         histories = hist_result.scalars().all()
         for h in histories:
             await db.delete(h)
         await db.delete(cp)
-    
+
     await db.delete(competitor)
     await db.commit()

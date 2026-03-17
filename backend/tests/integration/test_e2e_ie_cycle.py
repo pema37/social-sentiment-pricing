@@ -19,11 +19,10 @@ Run: pytest backend/tests/integration/test_e2e_ie_cycle.py -v
 """
 
 import sys
-import pytest
-from datetime import datetime, timedelta, UTC
-from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
+import pytest
 
 # ──────────────────────────────────────────────────────────
 # sys.modules isolation
@@ -31,15 +30,18 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 _saved_modules = {}
 
+
 def _save_modules():
     global _saved_modules
     _saved_modules = dict(sys.modules)
+
 
 def _restore_modules():
     current = set(sys.modules.keys())
     saved = set(_saved_modules.keys())
     for mod in current - saved:
         del sys.modules[mod]
+
 
 @pytest.fixture(autouse=True)
 def isolate_modules():
@@ -51,6 +53,7 @@ def isolate_modules():
 # ──────────────────────────────────────────────────────────
 # Fake collaborators for IEOrchestrator
 # ──────────────────────────────────────────────────────────
+
 
 class FakeExperimentManager:
     """Tracks which arms were selected and assignments recorded."""
@@ -74,12 +77,14 @@ class FakeExperimentManager:
         return config
 
     def record_assignment(self, recommendation_id, category_id, arm_index, is_exploration):
-        self.assignments.append({
-            "recommendation_id": recommendation_id,
-            "category_id": category_id,
-            "arm_index": arm_index,
-            "is_exploration": is_exploration,
-        })
+        self.assignments.append(
+            {
+                "recommendation_id": recommendation_id,
+                "category_id": category_id,
+                "arm_index": arm_index,
+                "is_exploration": is_exploration,
+            }
+        )
         return f"assign-{len(self.assignments)}"
 
     def update_arm(self, category_id, arm_index, reward):
@@ -158,13 +163,16 @@ class FakeCalibrator:
 # STEP 1: IE Orchestrator generates recommendation
 # ──────────────────────────────────────────────────────────
 
+
 class TestStep1_GenerateRecommendation:
     """IE Orchestrator produces a traced recommendation."""
 
     def _make_orchestrator(self, **kwargs):
         from services.scoring.ie_orchestrator import (
-            IEOrchestrator, IEOrchestratorConfig,
+            IEOrchestrator,
+            IEOrchestratorConfig,
         )
+
         return IEOrchestrator(
             experiment_manager=kwargs.get("experiment_manager", FakeExperimentManager()),
             scoring_engine=kwargs.get("scoring_engine", FakeScoringEngine()),
@@ -175,13 +183,16 @@ class TestStep1_GenerateRecommendation:
 
     def test_generates_recommendation(self):
         from services.scoring.ie_orchestrator import IEStatus
+
         orch = self._make_orchestrator()
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.status in (IEStatus.SUCCESS, IEStatus.PARTIAL)
         assert result.suggested_price == 42.99
         assert result.ie_enabled is True
@@ -189,12 +200,14 @@ class TestStep1_GenerateRecommendation:
     def test_experiment_selected(self):
         exp_mgr = FakeExperimentManager()
         orch = self._make_orchestrator(experiment_manager=exp_mgr)
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.experiment is not None
         assert result.experiment.strategy_name.startswith("strategy_")
         assert len(exp_mgr.assignments) == 1
@@ -202,12 +215,14 @@ class TestStep1_GenerateRecommendation:
     def test_context_injected(self):
         ctx_inj = FakeContextInjector()
         orch = self._make_orchestrator(context_injector=ctx_inj)
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.category_context is not None
         assert result.category_context["category"] == "electronics"
         assert len(ctx_inj.injections) == 1
@@ -215,29 +230,34 @@ class TestStep1_GenerateRecommendation:
     def test_calibration_applied(self):
         cal = FakeCalibrator(adjustment=-0.05)
         orch = self._make_orchestrator(calibrator=cal)
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.calibration is not None
         assert result.calibrated_confidence < result.raw_confidence
         assert len(cal.calibrations) == 1
 
     def test_timings_tracked(self):
         orch = self._make_orchestrator()
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert len(result.timings) >= 3  # experiment, context, scoring
         assert result.total_duration_ms >= 0
 
     def test_fallback_when_disabled(self):
         from services.scoring.ie_orchestrator import IEOrchestrator, IEOrchestratorConfig, IEStatus
+
         orch = IEOrchestrator(
             experiment_manager=FakeExperimentManager(),
             scoring_engine=FakeScoringEngine(),
@@ -246,41 +266,49 @@ class TestStep1_GenerateRecommendation:
             config=IEOrchestratorConfig(),
             is_ie_enabled=lambda mid: False,
         )
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.status == IEStatus.FALLBACK
         assert result.ie_enabled is False
 
     def test_graceful_degradation_scoring_failure(self):
         """Scoring engine failure → FALLBACK status."""
         from services.scoring.ie_orchestrator import IEStatus
+
         broken_scorer = MagicMock()
         broken_scorer.score.side_effect = RuntimeError("boom")
         orch = self._make_orchestrator(scoring_engine=broken_scorer)
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.status == IEStatus.FALLBACK
 
     def test_graceful_degradation_experiment_failure(self):
         """Experiment failure → WARNING but still produces result."""
         from services.scoring.ie_orchestrator import IEStatus
+
         broken_exp = MagicMock()
         broken_exp.get_experiment_config.side_effect = RuntimeError("boom")
         orch = self._make_orchestrator(experiment_manager=broken_exp)
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.status in (IEStatus.SUCCESS, IEStatus.PARTIAL)
         assert any("Experiment selection failed" in w for w in result.warnings)
 
@@ -288,6 +316,7 @@ class TestStep1_GenerateRecommendation:
 # ──────────────────────────────────────────────────────────
 # STEP 2: Outcome recording + evidence chain
 # ──────────────────────────────────────────────────────────
+
 
 class TestStep2_OutcomeRecording:
     """Recommendation metadata flows into outcome record."""
@@ -303,12 +332,14 @@ class TestStep2_OutcomeRecording:
             calibrator=FakeCalibrator(),
             config=IEOrchestratorConfig(),
         )
-        ie_result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        ie_result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
 
         # Simulate what recommendation_service.py does with IE result
         factors = {}
@@ -330,10 +361,12 @@ class TestStep2_OutcomeRecording:
 
     def test_confidence_decomposition_preserved(self):
         """Confidence components from scoring engine are preserved for outcome."""
-        orch_result = FakeScoringEngine().score({
-            "current_price": 39.99,
-            "category_id": "electronics",
-        })
+        orch_result = FakeScoringEngine().score(
+            {
+                "current_price": 39.99,
+                "category_id": "electronics",
+            }
+        )
 
         decomp = orch_result["confidence_decomposition"]
         assert "elasticity" in decomp
@@ -346,14 +379,17 @@ class TestStep2_OutcomeRecording:
 # STEP 3: Measurement + Calibration + Drift (Phase 1+3)
 # ──────────────────────────────────────────────────────────
 
+
 class TestStep3_MeasurementAndCalibration:
     """After outcome data accumulates, calibration and drift detection run."""
 
     def test_calibrator_measures_quality(self):
         """Calibrator.measure produces CalibrationReport from outcomes."""
         from services.scoring.learning.calibrator import (
-            Calibrator, CalibrationRecord,
+            CalibrationRecord,
+            Calibrator,
         )
+
         records = [
             CalibrationRecord(
                 confidence_score=i / 20,
@@ -366,14 +402,19 @@ class TestStep3_MeasurementAndCalibration:
         report = cal.measure(records)
         assert report.n_records == 20
         assert report.calibration_quality in (
-            "well_calibrated", "acceptable", "miscalibrated",
+            "well_calibrated",
+            "acceptable",
+            "miscalibrated",
         )
 
     def test_calibrator_builds_map_when_miscalibrated(self):
         """If miscalibrated, build_calibration_map produces correction function."""
         from services.scoring.learning.calibrator import (
-            Calibrator, CalibrationRecord, CalibrationMap,
+            CalibrationMap,
+            CalibrationRecord,
+            Calibrator,
         )
+
         # Overconfident records: high confidence, poor outcomes
         records = [
             CalibrationRecord(
@@ -395,30 +436,37 @@ class TestStep3_MeasurementAndCalibration:
     def test_drift_detector_runs_on_accumulated_data(self):
         """Drift detector processes outcome records for degradation signals."""
         from services.scoring.learning.drift_detector import (
-            DriftDetector, DriftRecord, DriftSeverity,
+            DriftDetector,
+            DriftRecord,
+            DriftSeverity,
         )
+
         now = datetime.now(UTC)
         records = []
         # Stable baseline
         for i in range(20):
-            records.append(DriftRecord(
-                recommendation_id=f"base-{i}",
-                category="electronics",
-                timestamp=now - timedelta(days=15 + i),
-                confidence_score=0.7,
-                revenue_delta_pct=3.0,
-                action="accepted",
-            ))
+            records.append(
+                DriftRecord(
+                    recommendation_id=f"base-{i}",
+                    category="electronics",
+                    timestamp=now - timedelta(days=15 + i),
+                    confidence_score=0.7,
+                    revenue_delta_pct=3.0,
+                    action="accepted",
+                )
+            )
         # Stable recent
         for i in range(15):
-            records.append(DriftRecord(
-                recommendation_id=f"recent-{i}",
-                category="electronics",
-                timestamp=now - timedelta(days=i),
-                confidence_score=0.7,
-                revenue_delta_pct=3.0,
-                action="accepted",
-            ))
+            records.append(
+                DriftRecord(
+                    recommendation_id=f"recent-{i}",
+                    category="electronics",
+                    timestamp=now - timedelta(days=i),
+                    confidence_score=0.7,
+                    revenue_delta_pct=3.0,
+                    action="accepted",
+                )
+            )
 
         detector = DriftDetector()
         report = detector.detect(records, category="electronics")
@@ -430,43 +478,50 @@ class TestStep3_MeasurementAndCalibration:
 # STEP 4: Scout + Analyst Feedback (Phase 3 Block C)
 # ──────────────────────────────────────────────────────────
 
+
 class TestStep4_FeedbackLoops:
     """Outcome data feeds back to improve Scout and Analyst behavior."""
 
     def test_scout_feedback_identifies_data_gaps(self):
         """Scout feedback correlates failures with data quality gaps."""
         from services.scoring.learning.scout_feedback import (
-            ScoutFeedbackAnalyzer, OutcomeWithDataQuality,
+            OutcomeWithDataQuality,
+            ScoutFeedbackAnalyzer,
         )
+
         outcomes = []
         # Failures with low competitor data
         for i in range(5):
-            outcomes.append(OutcomeWithDataQuality(
-                recommendation_id=f"f-{i}",
-                category="electronics",
-                action="accepted",
-                revenue_delta_pct=-4.0,
-                data_quality_score=0.3,
-                competitor_count=0,
-                sentiment_available=True,
-                days_since_last_scrape=2.0,
-                price_data_completeness=0.4,
-                sentiment_data_completeness=0.9,
-            ))
+            outcomes.append(
+                OutcomeWithDataQuality(
+                    recommendation_id=f"f-{i}",
+                    category="electronics",
+                    action="accepted",
+                    revenue_delta_pct=-4.0,
+                    data_quality_score=0.3,
+                    competitor_count=0,
+                    sentiment_available=True,
+                    days_since_last_scrape=2.0,
+                    price_data_completeness=0.4,
+                    sentiment_data_completeness=0.9,
+                )
+            )
         # Successes with good data
         for i in range(10):
-            outcomes.append(OutcomeWithDataQuality(
-                recommendation_id=f"s-{i}",
-                category="electronics",
-                action="accepted",
-                revenue_delta_pct=5.0,
-                data_quality_score=0.8,
-                competitor_count=5,
-                sentiment_available=True,
-                days_since_last_scrape=1.0,
-                price_data_completeness=0.95,
-                sentiment_data_completeness=0.9,
-            ))
+            outcomes.append(
+                OutcomeWithDataQuality(
+                    recommendation_id=f"s-{i}",
+                    category="electronics",
+                    action="accepted",
+                    revenue_delta_pct=5.0,
+                    data_quality_score=0.8,
+                    competitor_count=5,
+                    sentiment_available=True,
+                    days_since_last_scrape=1.0,
+                    price_data_completeness=0.95,
+                    sentiment_data_completeness=0.9,
+                )
+            )
 
         report = ScoutFeedbackAnalyzer().analyze(outcomes)
         assert report.total_failures >= 5
@@ -477,22 +532,26 @@ class TestStep4_FeedbackLoops:
     def test_analyst_feedback_adjusts_weights(self):
         """Analyst feedback identifies predictive vs noisy components."""
         from services.scoring.learning.analyst_feedback import (
-            AnalystFeedbackAnalyzer, OutcomeWithComponents,
+            AnalystFeedbackAnalyzer,
+            OutcomeWithComponents,
         )
+
         outcomes = []
         for i in range(20):
             is_success = i < 10
-            outcomes.append(OutcomeWithComponents(
-                recommendation_id=f"r-{i}",
-                category="electronics",
-                action="accepted",
-                revenue_delta_pct=5.0 if is_success else -3.0,
-                confidence_score=0.7,
-                elasticity_score=0.8 if is_success else 0.2,
-                position_score=0.5,
-                urgency_score=0.3 if is_success else 0.7,
-                data_quality_score=0.6,
-            ))
+            outcomes.append(
+                OutcomeWithComponents(
+                    recommendation_id=f"r-{i}",
+                    category="electronics",
+                    action="accepted",
+                    revenue_delta_pct=5.0 if is_success else -3.0,
+                    confidence_score=0.7,
+                    elasticity_score=0.8 if is_success else 0.2,
+                    position_score=0.5,
+                    urgency_score=0.3 if is_success else 0.7,
+                    data_quality_score=0.6,
+                )
+            )
 
         report = AnalystFeedbackAnalyzer().analyze(outcomes)
         assert len(report.category_recommendations) == 1
@@ -505,14 +564,17 @@ class TestStep4_FeedbackLoops:
 # STEP 5: Context flows into next recommendation
 # ──────────────────────────────────────────────────────────
 
+
 class TestStep5_ContextInjectionLoop:
     """Historical context from Phases 1-3 enriches the next recommendation."""
 
     def test_context_enriches_next_recommendation(self):
         """Second recommendation includes category context from first cycle."""
         from services.scoring.ie_orchestrator import (
-            IEOrchestrator, IEOrchestratorConfig,
+            IEOrchestrator,
+            IEOrchestratorConfig,
         )
+
         ctx_injector = FakeContextInjector()
         orch = IEOrchestrator(
             experiment_manager=FakeExperimentManager(),
@@ -523,21 +585,25 @@ class TestStep5_ContextInjectionLoop:
         )
 
         # First recommendation
-        r1 = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        r1 = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert r1.category_context is not None
 
         # Second recommendation (simulates next cycle after learning)
-        r2 = orch.generate_recommendation({
-            "product_id": "prod-002",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 49.99,
-        })
+        r2 = orch.generate_recommendation(
+            {
+                "product_id": "prod-002",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 49.99,
+            }
+        )
         assert r2.category_context is not None
         # Context injector was called twice
         assert len(ctx_injector.injections) == 2
@@ -555,12 +621,14 @@ class TestStep5_ContextInjectionLoop:
             calibrator=cal,
             config=IEOrchestratorConfig(),
         )
-        r1 = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        r1 = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         conf_1 = r1.calibrated_confidence
 
         # Second cycle: calibrator learned overconfidence, adjusts down
@@ -572,12 +640,14 @@ class TestStep5_ContextInjectionLoop:
             calibrator=cal_adjusted,
             config=IEOrchestratorConfig(),
         )
-        r2 = orch2.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        r2 = orch2.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         conf_2 = r2.calibrated_confidence
 
         # Second recommendation has lower calibrated confidence
@@ -587,6 +657,7 @@ class TestStep5_ContextInjectionLoop:
 # ──────────────────────────────────────────────────────────
 # FULL CYCLE: End-to-End Integration
 # ──────────────────────────────────────────────────────────
+
 
 class TestFullIECycle:
     """
@@ -602,19 +673,25 @@ class TestFullIECycle:
 
     def test_complete_cycle(self):
         from services.scoring.ie_orchestrator import (
-            IEOrchestrator, IEOrchestratorConfig, IEStatus,
-        )
-        from services.scoring.learning.calibrator import (
-            Calibrator, CalibrationRecord,
-        )
-        from services.scoring.learning.drift_detector import (
-            DriftDetector, DriftRecord,
-        )
-        from services.scoring.learning.scout_feedback import (
-            ScoutFeedbackAnalyzer, OutcomeWithDataQuality,
+            IEOrchestrator,
+            IEOrchestratorConfig,
+            IEStatus,
         )
         from services.scoring.learning.analyst_feedback import (
-            AnalystFeedbackAnalyzer, OutcomeWithComponents,
+            AnalystFeedbackAnalyzer,
+            OutcomeWithComponents,
+        )
+        from services.scoring.learning.calibrator import (
+            CalibrationRecord,
+            Calibrator,
+        )
+        from services.scoring.learning.drift_detector import (
+            DriftDetector,
+            DriftRecord,
+        )
+        from services.scoring.learning.scout_feedback import (
+            OutcomeWithDataQuality,
+            ScoutFeedbackAnalyzer,
         )
 
         now = datetime.now(UTC)
@@ -635,12 +712,14 @@ class TestFullIECycle:
 
         recommendations = []
         for i in range(10):
-            r = orch.generate_recommendation({
-                "product_id": f"prod-{i:03d}",
-                "merchant_id": "merch-001",
-                "category_id": "electronics",
-                "current_price": 39.99 + i,
-            })
+            r = orch.generate_recommendation(
+                {
+                    "product_id": f"prod-{i:03d}",
+                    "merchant_id": "merch-001",
+                    "category_id": "electronics",
+                    "current_price": 39.99 + i,
+                }
+            )
             recommendations.append(r)
 
         assert len(recommendations) == 10
@@ -658,56 +737,67 @@ class TestFullIECycle:
             revenue = 5.0 if is_success else -3.0
 
             # CalibrationRecord
-            calibration_records.append(CalibrationRecord(
-                confidence_score=rec.calibrated_confidence,
-                revenue_delta_pct=revenue,
-                action="accepted",
-                category="electronics",
-            ))
+            calibration_records.append(
+                CalibrationRecord(
+                    confidence_score=rec.calibrated_confidence,
+                    revenue_delta_pct=revenue,
+                    action="accepted",
+                    category="electronics",
+                )
+            )
 
             # DriftRecord
-            drift_records.append(DriftRecord(
-                recommendation_id=rec.recommendation_id,
-                category="electronics",
-                timestamp=now - timedelta(days=i),
-                confidence_score=rec.calibrated_confidence,
-                revenue_delta_pct=revenue,
-                action="accepted",
-            ))
+            drift_records.append(
+                DriftRecord(
+                    recommendation_id=rec.recommendation_id,
+                    category="electronics",
+                    timestamp=now - timedelta(days=i),
+                    confidence_score=rec.calibrated_confidence,
+                    revenue_delta_pct=revenue,
+                    action="accepted",
+                )
+            )
 
             # ScoutFeedback
-            scout_outcomes.append(OutcomeWithDataQuality(
-                recommendation_id=rec.recommendation_id,
-                category="electronics",
-                action="accepted",
-                revenue_delta_pct=revenue,
-                data_quality_score=0.4 if not is_success else 0.8,
-                competitor_count=1 if not is_success else 5,
-                sentiment_available=True,
-                days_since_last_scrape=2.0,
-                price_data_completeness=0.5 if not is_success else 0.9,
-                sentiment_data_completeness=0.8,
-            ))
+            scout_outcomes.append(
+                OutcomeWithDataQuality(
+                    recommendation_id=rec.recommendation_id,
+                    category="electronics",
+                    action="accepted",
+                    revenue_delta_pct=revenue,
+                    data_quality_score=0.4 if not is_success else 0.8,
+                    competitor_count=1 if not is_success else 5,
+                    sentiment_available=True,
+                    days_since_last_scrape=2.0,
+                    price_data_completeness=0.5 if not is_success else 0.9,
+                    sentiment_data_completeness=0.8,
+                )
+            )
 
             # AnalystFeedback
-            analyst_outcomes.append(OutcomeWithComponents(
-                recommendation_id=rec.recommendation_id,
-                category="electronics",
-                action="accepted",
-                revenue_delta_pct=revenue,
-                confidence_score=rec.calibrated_confidence,
-                elasticity_score=0.8 if is_success else 0.3,
-                position_score=0.5,
-                urgency_score=0.3,
-                data_quality_score=0.8 if is_success else 0.4,
-            ))
+            analyst_outcomes.append(
+                OutcomeWithComponents(
+                    recommendation_id=rec.recommendation_id,
+                    category="electronics",
+                    action="accepted",
+                    revenue_delta_pct=revenue,
+                    confidence_score=rec.calibrated_confidence,
+                    elasticity_score=0.8 if is_success else 0.3,
+                    position_score=0.5,
+                    urgency_score=0.3,
+                    data_quality_score=0.8 if is_success else 0.4,
+                )
+            )
 
         # ── STEP 3: Calibration ──
         calibrator = Calibrator()
         cal_report = calibrator.measure(calibration_records, category="electronics")
         assert cal_report.n_records == 10
         assert cal_report.calibration_quality in (
-            "well_calibrated", "acceptable", "miscalibrated", "insufficient_data",
+            "well_calibrated",
+            "acceptable",
+            "miscalibrated",
+            "insufficient_data",
         )
 
         # ── STEP 4: Drift Detection ──
@@ -749,12 +839,14 @@ class TestFullIECycle:
         if cal_report.needs_calibration:
             calibrator.build_calibration_map(calibration_records, "electronics")
 
-        r_next = orch.generate_recommendation({
-            "product_id": "prod-next",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 45.00,
-        })
+        r_next = orch.generate_recommendation(
+            {
+                "product_id": "prod-next",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 45.00,
+            }
+        )
 
         assert r_next.status in (IEStatus.SUCCESS, IEStatus.PARTIAL)
         assert r_next.category_context is not None
@@ -769,12 +861,14 @@ class TestFullIECycle:
     def test_system_handles_zero_outcomes(self):
         """IE works fine with no historical outcomes (cold start)."""
         from services.scoring.ie_orchestrator import (
-            IEOrchestrator, IEOrchestratorConfig, IEStatus,
+            IEOrchestrator,
+            IEOrchestratorConfig,
+            IEStatus,
         )
+        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
         from services.scoring.learning.calibrator import Calibrator
         from services.scoring.learning.drift_detector import DriftDetector
         from services.scoring.learning.scout_feedback import ScoutFeedbackAnalyzer
-        from services.scoring.learning.analyst_feedback import AnalystFeedbackAnalyzer
 
         # Calibration with no data
         cal_report = Calibrator().measure([], category="electronics")
@@ -800,13 +894,12 @@ class TestFullIECycle:
             calibrator=FakeCalibrator(),
             config=IEOrchestratorConfig(),
         )
-        result = orch.generate_recommendation({
-            "product_id": "prod-001",
-            "merchant_id": "merch-001",
-            "category_id": "electronics",
-            "current_price": 39.99,
-        })
+        result = orch.generate_recommendation(
+            {
+                "product_id": "prod-001",
+                "merchant_id": "merch-001",
+                "category_id": "electronics",
+                "current_price": 39.99,
+            }
+        )
         assert result.status in (IEStatus.SUCCESS, IEStatus.PARTIAL)
-
-
-        

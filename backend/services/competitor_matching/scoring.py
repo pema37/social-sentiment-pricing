@@ -16,14 +16,14 @@ Each signal has a configurable weight, allowing
 fine-tuning for different use cases.
 """
 
-from decimal import Decimal
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any
 
 from .schemas import MatchedProduct
 from .utils import (
-    calculate_text_similarity,
     calculate_keyword_match,
+    calculate_text_similarity,
     get_merchant_reliability,
 )
 
@@ -32,9 +32,10 @@ from .utils import (
 class ScoringWeights:
     """
     Configurable weights for scoring signals.
-    
+
     Weights should sum to 1.0 for normalized scores.
     """
+
     title_similarity: float = 0.35
     keyword_match: float = 0.20
     price_proximity: float = 0.20
@@ -44,11 +45,11 @@ class ScoringWeights:
     def __post_init__(self):
         """Validate weights sum to ~1.0."""
         total = (
-            self.title_similarity +
-            self.keyword_match +
-            self.price_proximity +
-            self.merchant_reliability +
-            self.data_completeness
+            self.title_similarity
+            + self.keyword_match
+            + self.price_proximity
+            + self.merchant_reliability
+            + self.data_completeness
         )
         if not (0.99 <= total <= 1.01):
             raise ValueError(f"Weights must sum to 1.0, got {total}")
@@ -91,19 +92,20 @@ class ScoringWeights:
 class ScoreBreakdown:
     """
     Detailed breakdown of how a score was calculated.
-    
+
     Useful for debugging and explaining results to users.
     """
+
     final_score: float
     title_score: float = 0.0
     keyword_score: float = 0.0
     price_score: float = 0.0
     merchant_score: float = 0.0
     completeness_score: float = 0.0
-    penalties_applied: List[str] = field(default_factory=list)
-    bonuses_applied: List[str] = field(default_factory=list)
+    penalties_applied: list[str] = field(default_factory=list)
+    bonuses_applied: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "final_score": round(self.final_score, 3),
@@ -122,7 +124,7 @@ class ScoreBreakdown:
 class ConfidenceScorer:
     """
     Calculates confidence scores for matched products.
-    
+
     Usage:
         scorer = ConfidenceScorer()
         score = scorer.calculate(
@@ -135,13 +137,13 @@ class ConfidenceScorer:
 
     def __init__(
         self,
-        weights: Optional[ScoringWeights] = None,
+        weights: ScoringWeights | None = None,
         min_score: float = 0.0,
         max_score: float = 1.0,
     ):
         """
         Initialize scorer.
-        
+
         Args:
             weights: Scoring weights (uses default if None)
             min_score: Minimum possible score
@@ -155,20 +157,20 @@ class ConfidenceScorer:
         self,
         product: MatchedProduct,
         search_name: str,
-        keywords: Optional[List[str]] = None,
-        our_price: Optional[Decimal] = None,
+        keywords: list[str] | None = None,
+        our_price: Decimal | None = None,
         detailed: bool = False,
     ) -> float | ScoreBreakdown:
         """
         Calculate confidence score for a matched product.
-        
+
         Args:
             product: The matched product to score
             search_name: Original product name we searched for
             keywords: Keywords that should appear in match
             our_price: Our product's price for comparison
             detailed: If True, return ScoreBreakdown instead of float
-            
+
         Returns:
             Confidence score (0-1) or ScoreBreakdown if detailed=True
         """
@@ -196,22 +198,18 @@ class ConfidenceScorer:
 
         # Calculate weighted sum
         weighted_score = (
-            title_score * self.weights.title_similarity +
-            keyword_score * self.weights.keyword_match +
-            price_score * self.weights.price_proximity +
-            merchant_score * self.weights.merchant_reliability +
-            completeness_score * self.weights.data_completeness
+            title_score * self.weights.title_similarity
+            + keyword_score * self.weights.keyword_match
+            + price_score * self.weights.price_proximity
+            + merchant_score * self.weights.merchant_reliability
+            + completeness_score * self.weights.data_completeness
         )
 
         # Apply bonuses
-        weighted_score = self._apply_bonuses(
-            weighted_score, product, breakdown
-        )
+        weighted_score = self._apply_bonuses(weighted_score, product, breakdown)
 
         # Apply penalties
-        weighted_score = self._apply_penalties(
-            weighted_score, product, search_name, breakdown
-        )
+        weighted_score = self._apply_penalties(weighted_score, product, search_name, breakdown)
 
         # Clamp to valid range
         final_score = max(self.min_score, min(self.max_score, weighted_score))
@@ -223,20 +221,20 @@ class ConfidenceScorer:
 
     def calculate_batch(
         self,
-        products: List[MatchedProduct],
+        products: list[MatchedProduct],
         search_name: str,
-        keywords: Optional[List[str]] = None,
-        our_price: Optional[Decimal] = None,
-    ) -> List[MatchedProduct]:
+        keywords: list[str] | None = None,
+        our_price: Decimal | None = None,
+    ) -> list[MatchedProduct]:
         """
         Calculate scores for multiple products and update them in place.
-        
+
         Args:
             products: List of products to score
             search_name: Original search term
             keywords: Keywords to match
             our_price: Our price for comparison
-            
+
         Returns:
             Same list with confidence_score updated
         """
@@ -253,14 +251,10 @@ class ConfidenceScorer:
     # Individual Scoring Components
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _score_title_similarity(
-        self, 
-        product_title: str, 
-        search_name: str
-    ) -> float:
+    def _score_title_similarity(self, product_title: str, search_name: str) -> float:
         """
         Score based on title similarity.
-        
+
         Uses word overlap (Jaccard similarity).
         """
         if not product_title or not search_name:
@@ -271,7 +265,7 @@ class ConfidenceScorer:
     def _score_keyword_match(
         self,
         product_title: str,
-        keywords: Optional[List[str]],
+        keywords: list[str] | None,
     ) -> float:
         """
         Score based on keyword presence in title.
@@ -283,12 +277,12 @@ class ConfidenceScorer:
 
     def _score_price_proximity(
         self,
-        product_price: Optional[Decimal],
-        our_price: Optional[Decimal],
+        product_price: Decimal | None,
+        our_price: Decimal | None,
     ) -> float:
         """
         Score based on how close the price is to ours.
-        
+
         Products within 30% of our price score highest.
         """
         if not product_price or not our_price:
@@ -329,7 +323,7 @@ class ConfidenceScorer:
     def _score_data_completeness(self, product: MatchedProduct) -> float:
         """
         Score based on how much data we have about the product.
-        
+
         More complete data = higher confidence.
         """
         score = 0.0
@@ -373,7 +367,7 @@ class ConfidenceScorer:
         breakdown: ScoreBreakdown,
     ) -> float:
         """Apply bonus points for positive signals."""
-        
+
         # Bonus for high review count (social proof)
         if product.reviews_count and product.reviews_count > 100:
             score += 0.05
@@ -399,7 +393,7 @@ class ConfidenceScorer:
         breakdown: ScoreBreakdown,
     ) -> float:
         """Apply penalties for negative signals."""
-        
+
         # Penalty for out of stock
         if not product.in_stock:
             score -= 0.1
@@ -430,25 +424,26 @@ class ConfidenceScorer:
 # Convenience Functions
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def score_products(
-    products: List[MatchedProduct],
+    products: list[MatchedProduct],
     search_name: str,
-    keywords: Optional[List[str]] = None,
-    our_price: Optional[Decimal] = None,
-    weights: Optional[ScoringWeights] = None,
-) -> List[MatchedProduct]:
+    keywords: list[str] | None = None,
+    our_price: Decimal | None = None,
+    weights: ScoringWeights | None = None,
+) -> list[MatchedProduct]:
     """
     Score a list of products and return sorted by confidence.
-    
+
     Convenience function for common use case.
-    
+
     Args:
         products: Products to score
         search_name: What we searched for
         keywords: Keywords to match
         our_price: Our product's price
         weights: Custom scoring weights
-        
+
     Returns:
         Products sorted by confidence (highest first)
     """
@@ -460,5 +455,3 @@ def score_products(
         our_price=our_price,
     )
     return sorted(scored, key=lambda p: p.confidence_score, reverse=True)
-
-

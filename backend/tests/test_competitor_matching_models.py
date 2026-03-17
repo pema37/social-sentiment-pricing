@@ -6,28 +6,24 @@ properties, and serialization methods.
 Total: ~40 tests
 """
 
-from datetime import datetime, timezone
 from decimal import Decimal
 
-import pytest
-
 from services.competitor_matching.schemas import (
-    SearchProvider,
-    MatchStatus,
     MatchedProduct,
-    ProviderResult,
     MatchSearchRequest,
     MatchSearchResponse,
+    MatchStatus,
     MerchantInfo,
+    ProviderResult,
+    SearchProvider,
 )
-
 
 # ============================================================
 # 1. Enums
 # ============================================================
 
-class TestSearchProvider:
 
+class TestSearchProvider:
     def test_values(self):
         assert SearchProvider.SERPAPI_GOOGLE_SHOPPING == "serpapi_google_shopping"
         assert SearchProvider.GOOGLE_CUSTOM_SEARCH == "google_custom_search"
@@ -38,7 +34,6 @@ class TestSearchProvider:
 
 
 class TestMatchStatus:
-
     def test_values(self):
         assert MatchStatus.SUCCESS == "success"
         assert MatchStatus.PARTIAL == "partial"
@@ -50,8 +45,8 @@ class TestMatchStatus:
 # 2. MatchedProduct
 # ============================================================
 
-class TestMatchedProduct:
 
+class TestMatchedProduct:
     def test_defaults(self):
         p = MatchedProduct(title="Widget", url="https://example.com")
         assert p.price is None
@@ -78,8 +73,10 @@ class TestMatchedProduct:
 
     def test_to_dict(self):
         p = MatchedProduct(
-            title="Widget", url="https://example.com",
-            price=Decimal("19.99"), merchant="Amazon",
+            title="Widget",
+            url="https://example.com",
+            price=Decimal("19.99"),
+            merchant="Amazon",
             confidence_score=0.9,
             source=SearchProvider.SERPAPI_GOOGLE_SHOPPING,
         )
@@ -104,8 +101,8 @@ class TestMatchedProduct:
 # 3. ProviderResult
 # ============================================================
 
-class TestProviderResult:
 
+class TestProviderResult:
     def test_defaults(self):
         r = ProviderResult(provider=SearchProvider.DUCKDUCKGO, success=True)
         assert r.products == []
@@ -118,9 +115,7 @@ class TestProviderResult:
             MatchedProduct(title="A", url="u1"),
             MatchedProduct(title="B", url="u2"),
         ]
-        r = ProviderResult(
-            provider=SearchProvider.DUCKDUCKGO, success=True, products=products
-        )
+        r = ProviderResult(provider=SearchProvider.DUCKDUCKGO, success=True, products=products)
         assert r.product_count == 2
 
     def test_product_count_empty(self):
@@ -130,7 +125,8 @@ class TestProviderResult:
     def test_failure_with_error(self):
         r = ProviderResult(
             provider=SearchProvider.SERPAPI_GOOGLE_SHOPPING,
-            success=False, error="API key invalid",
+            success=False,
+            error="API key invalid",
         )
         assert r.success is False
         assert r.error == "API key invalid"
@@ -140,8 +136,8 @@ class TestProviderResult:
 # 4. MatchSearchRequest
 # ============================================================
 
-class TestMatchSearchRequest:
 
+class TestMatchSearchRequest:
     def test_defaults(self):
         req = MatchSearchRequest(product_name="Widget Pro")
         assert req.max_results == 10
@@ -192,8 +188,8 @@ class TestMatchSearchRequest:
 # 5. MatchSearchResponse
 # ============================================================
 
-class TestMatchSearchResponse:
 
+class TestMatchSearchResponse:
     def test_defaults(self):
         r = MatchSearchResponse(status=MatchStatus.SUCCESS)
         assert r.products == []
@@ -246,8 +242,8 @@ class TestMatchSearchResponse:
 # 6. MerchantInfo
 # ============================================================
 
-class TestMerchantInfo:
 
+class TestMerchantInfo:
     def test_defaults(self):
         m = MerchantInfo(domain="amazon.com", name="Amazon")
         assert m.is_marketplace is False
@@ -274,6 +270,3 @@ class TestMerchantInfo:
         m3 = MerchantInfo(domain="amazon.com", name="Amazon")
         s2 = {m1, m3}
         assert len(s2) == 1
-
-
-        

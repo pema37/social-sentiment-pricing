@@ -18,12 +18,11 @@ Covers:
 - request_count property
 """
 
-import sys
 import os
+import sys
 import time
-import json
 from types import ModuleType
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -33,7 +32,7 @@ import pytest
 _MOCKED = ["db.session"]
 _originals = {m: sys.modules.get(m) for m in _MOCKED}
 
-for _m in ("db.session"):
+for _m in "db.session":
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
@@ -49,14 +48,12 @@ if "services" not in sys.modules:
 # 2. Import module under test
 # ---------------------------------------------------------------------------
 from services.youcom_client import (
-    YouComClient,
-    WebResult,
+    Freshness,
     NewsResult,
     SearchResponse,
+    WebResult,
+    YouComClient,
     _TTLCache,
-    Freshness,
-    YOUCOM_SEARCH_ENDPOINT,
-    YOUCOM_CONTENTS_ENDPOINT,
 )
 
 # ---------------------------------------------------------------------------
@@ -73,6 +70,7 @@ del _m
 # ===========================================================================
 # Data Model Tests
 # ===========================================================================
+
 
 class TestWebResult:
     def test_from_api_full(self):
@@ -145,8 +143,12 @@ class TestSearchResponse:
     def test_to_context_block_structure(self):
         sr = SearchResponse(
             query="Nike prices",
-            web_results=[WebResult(url="https://x.com", title="Price Page", description="desc", snippets=["Best price $99"])],
-            news_results=[NewsResult(url="https://news.com", title="Nike News", description="Launch today", page_age="1h")],
+            web_results=[
+                WebResult(url="https://x.com", title="Price Page", description="desc", snippets=["Best price $99"])
+            ],
+            news_results=[
+                NewsResult(url="https://news.com", title="Nike News", description="Launch today", page_age="1h")
+            ],
             latency_ms=150.0,
         )
         block = sr.to_context_block()
@@ -171,6 +173,7 @@ class TestSearchResponse:
 # ===========================================================================
 # TTL Cache Tests
 # ===========================================================================
+
 
 class TestTTLCache:
     def test_set_and_get(self):
@@ -213,6 +216,7 @@ class TestTTLCache:
 # ===========================================================================
 # YouComClient Tests
 # ===========================================================================
+
 
 class TestYouComClientInit:
     def test_stores_params(self):
@@ -282,6 +286,7 @@ class TestRequestWithRetry:
         client = YouComClient(api_key="test-key", max_retries=1)
 
         import httpx
+
         mock_http = AsyncMock()
         mock_http.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
         mock_http.is_closed = False
@@ -298,13 +303,15 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_basic_search(self):
         client = YouComClient(api_key="test-key")
-        client._request_with_retry = AsyncMock(return_value={
-            "results": {
-                "web": [{"url": "https://x.com", "title": "X", "description": "D"}],
-                "news": [],
-            },
-            "metadata": {"request_uuid": "abc-123"},
-        })
+        client._request_with_retry = AsyncMock(
+            return_value={
+                "results": {
+                    "web": [{"url": "https://x.com", "title": "X", "description": "D"}],
+                    "news": [],
+                },
+                "metadata": {"request_uuid": "abc-123"},
+            }
+        )
 
         result = await client.search("test query")
         assert result.query == "test query"
@@ -346,9 +353,7 @@ class TestGetContents:
     @pytest.mark.asyncio
     async def test_returns_contents(self):
         client = YouComClient(api_key="test-key")
-        client._request_with_retry = AsyncMock(return_value={
-            "contents": "# Page Title\nSome markdown content"
-        })
+        client._request_with_retry = AsyncMock(return_value={"contents": "# Page Title\nSome markdown content"})
 
         result = await client.get_contents("https://example.com")
         assert result == "# Page Title\nSome markdown content"
@@ -441,6 +446,3 @@ class TestRequestCount:
     def test_starts_at_zero(self):
         client = YouComClient(api_key="test-key")
         assert client.request_count == 0
-
-
-        

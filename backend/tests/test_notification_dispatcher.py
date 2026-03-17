@@ -6,9 +6,8 @@ DispatchResult dataclass, dispatch routing, send_quick_alert convenience.
 """
 
 import sys
-from dataclasses import fields
 from enum import Enum
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,37 +24,49 @@ _originals = {m: sys.modules.get(m) for m in _MOCKED}
 # email_service
 _email_mod = MagicMock()
 _email_mod.EmailService = MagicMock
-_email_mod.EmailResult = type("EmailResult", (), {
-    "__init__": lambda self, success=False, message_id=None, error=None: (
-        setattr(self, "success", success) or
-        setattr(self, "message_id", message_id) or
-        setattr(self, "error", error)
-    )
-})
+_email_mod.EmailResult = type(
+    "EmailResult",
+    (),
+    {
+        "__init__": lambda self, success=False, message_id=None, error=None: (
+            setattr(self, "success", success)
+            or setattr(self, "message_id", message_id)
+            or setattr(self, "error", error)
+        )
+    },
+)
 sys.modules["services.notification.email_service"] = _email_mod
 
 # slack_service
 _slack_mod = MagicMock()
 _slack_mod.SlackService = MagicMock
-_slack_mod.SlackResult = type("SlackResult", (), {
-    "__init__": lambda self, success=False, error=None: (
-        setattr(self, "success", success) or
-        setattr(self, "error", error)
-    )
-})
+_slack_mod.SlackResult = type(
+    "SlackResult",
+    (),
+    {
+        "__init__": lambda self, success=False, error=None: (
+            setattr(self, "success", success) or setattr(self, "error", error)
+        )
+    },
+)
 sys.modules["services.notification.slack_service"] = _slack_mod
 
 # webhook_service
 _wh_mod = MagicMock()
 _wh_mod.WebhookService = MagicMock
-_wh_mod.WebhookResult = type("WebhookResult", (), {
-    "__init__": lambda self, success=False, status_code=None, error=None: (
-        setattr(self, "success", success) or
-        setattr(self, "status_code", status_code) or
-        setattr(self, "error", error)
-    )
-})
+_wh_mod.WebhookResult = type(
+    "WebhookResult",
+    (),
+    {
+        "__init__": lambda self, success=False, status_code=None, error=None: (
+            setattr(self, "success", success)
+            or setattr(self, "status_code", status_code)
+            or setattr(self, "error", error)
+        )
+    },
+)
 sys.modules["services.notification.webhook_service"] = _wh_mod
+
 
 # models.alert
 class AlertChannel(str, Enum):
@@ -63,6 +74,7 @@ class AlertChannel(str, Enum):
     SLACK = "slack"
     WEBHOOK = "webhook"
     IN_APP = "in_app"
+
 
 _alert_mod = MagicMock()
 _alert_mod.AlertChannel = AlertChannel
@@ -91,6 +103,7 @@ SVC_MOD = "services.notification.notification_dispatcher"
 
 
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_email_result(success=True, error=None):
     r = MagicMock()
@@ -122,9 +135,7 @@ def _make_dispatcher(email_ok=True, slack_ok=True, webhook_ok=True):
         return_value=_make_email_result(email_ok, None if email_ok else "email err")
     )
     d.slack_service = MagicMock()
-    d.slack_service.send_alert = AsyncMock(
-        return_value=_make_slack_result(slack_ok, None if slack_ok else "slack err")
-    )
+    d.slack_service.send_alert = AsyncMock(return_value=_make_slack_result(slack_ok, None if slack_ok else "slack err"))
     d.webhook_service = MagicMock()
     d.webhook_service.send_alert = AsyncMock(
         return_value=_make_webhook_result(webhook_ok, None if webhook_ok else "webhook err")
@@ -136,7 +147,6 @@ def _make_dispatcher(email_ok=True, slack_ok=True, webhook_ok=True):
 # DispatchResult
 # ──────────────────────────────────────────────
 class TestDispatchResult:
-
     def test_defaults(self):
         r = DispatchResult()
         assert r.channels_sent == []
@@ -180,7 +190,6 @@ class TestDispatchResult:
 # NotificationDispatcher — init
 # ──────────────────────────────────────────────
 class TestDispatcherInit:
-
     def test_creates_services(self):
         d = NotificationDispatcher()
         assert d.email_service is not None
@@ -192,13 +201,13 @@ class TestDispatcherInit:
 # dispatch — routing
 # ──────────────────────────────────────────────
 class TestDispatchRouting:
-
     @pytest.mark.asyncio
     async def test_email_channel(self):
         d = _make_dispatcher()
         result = await d.dispatch(
             channels=[AlertChannel.EMAIL],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             recipient_email="user@test.com",
         )
         assert "email" in result.channels_sent
@@ -209,7 +218,8 @@ class TestDispatchRouting:
         d = _make_dispatcher()
         result = await d.dispatch(
             channels=[AlertChannel.SLACK],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             slack_webhook_url="https://hooks.slack.com/test",
         )
         assert "slack" in result.channels_sent
@@ -220,7 +230,8 @@ class TestDispatchRouting:
         d = _make_dispatcher()
         result = await d.dispatch(
             channels=[AlertChannel.WEBHOOK],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             webhook_url="https://test.com/hook",
         )
         assert "webhook" in result.channels_sent
@@ -231,7 +242,8 @@ class TestDispatchRouting:
         d = _make_dispatcher()
         result = await d.dispatch(
             channels=[AlertChannel.IN_APP],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
         )
         assert "in_app" in result.channels_sent
 
@@ -240,7 +252,8 @@ class TestDispatchRouting:
         d = _make_dispatcher()
         result = await d.dispatch(
             channels=[AlertChannel.EMAIL, AlertChannel.SLACK, AlertChannel.WEBHOOK, AlertChannel.IN_APP],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             recipient_email="u@t.com",
             slack_webhook_url="https://slack.com",
             webhook_url="https://wh.com",
@@ -251,7 +264,9 @@ class TestDispatchRouting:
     async def test_empty_channels(self):
         d = _make_dispatcher()
         result = await d.dispatch(
-            channels=[], alert_title="T", alert_message="M",
+            channels=[],
+            alert_title="T",
+            alert_message="M",
         )
         assert result.channels_sent == []
         assert result.channels_failed == []
@@ -261,7 +276,8 @@ class TestDispatchRouting:
         d = _make_dispatcher()
         result = await d.dispatch(
             channels=[AlertChannel.IN_APP],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
         )
         assert isinstance(result, DispatchResult)
 
@@ -270,15 +286,18 @@ class TestDispatchRouting:
 # _send_email
 # ──────────────────────────────────────────────
 class TestSendEmail:
-
     @pytest.mark.asyncio
     async def test_no_recipient_fails(self):
         d = _make_dispatcher()
         result = DispatchResult()
         await d._send_email(
-            result=result, recipient_email=None,
-            subject="S", alert_title="T", alert_message="M",
-            severity="medium", alert_data=None,
+            result=result,
+            recipient_email=None,
+            subject="S",
+            alert_title="T",
+            alert_message="M",
+            severity="medium",
+            alert_data=None,
         )
         assert "email" in result.channels_failed
         assert "No recipient" in result.errors["email"]
@@ -288,9 +307,13 @@ class TestSendEmail:
         d = _make_dispatcher(email_ok=True)
         result = DispatchResult()
         await d._send_email(
-            result=result, recipient_email="u@t.com",
-            subject="S", alert_title="T", alert_message="M",
-            severity="medium", alert_data=None,
+            result=result,
+            recipient_email="u@t.com",
+            subject="S",
+            alert_title="T",
+            alert_message="M",
+            severity="medium",
+            alert_data=None,
         )
         assert "email" in result.channels_sent
 
@@ -299,9 +322,13 @@ class TestSendEmail:
         d = _make_dispatcher(email_ok=False)
         result = DispatchResult()
         await d._send_email(
-            result=result, recipient_email="u@t.com",
-            subject="S", alert_title="T", alert_message="M",
-            severity="medium", alert_data=None,
+            result=result,
+            recipient_email="u@t.com",
+            subject="S",
+            alert_title="T",
+            alert_message="M",
+            severity="medium",
+            alert_data=None,
         )
         assert "email" in result.channels_failed
         assert "email" in result.errors
@@ -312,9 +339,13 @@ class TestSendEmail:
         result = DispatchResult()
         data = {"key": "val"}
         await d._send_email(
-            result=result, recipient_email="user@test.com",
-            subject="My Subject", alert_title="My Title",
-            alert_message="Body", severity="high", alert_data=data,
+            result=result,
+            recipient_email="user@test.com",
+            subject="My Subject",
+            alert_title="My Title",
+            alert_message="Body",
+            severity="high",
+            alert_data=data,
         )
         d.email_service.send_alert_email.assert_called_once_with(
             to_email="user@test.com",
@@ -330,15 +361,17 @@ class TestSendEmail:
 # _send_slack
 # ──────────────────────────────────────────────
 class TestSendSlack:
-
     @pytest.mark.asyncio
     async def test_success(self):
         d = _make_dispatcher(slack_ok=True)
         result = DispatchResult()
         await d._send_slack(
-            result=result, webhook_url="https://slack.com",
-            alert_title="T", alert_message="M",
-            severity="medium", alert_data=None,
+            result=result,
+            webhook_url="https://slack.com",
+            alert_title="T",
+            alert_message="M",
+            severity="medium",
+            alert_data=None,
         )
         assert "slack" in result.channels_sent
 
@@ -347,9 +380,12 @@ class TestSendSlack:
         d = _make_dispatcher(slack_ok=False)
         result = DispatchResult()
         await d._send_slack(
-            result=result, webhook_url=None,
-            alert_title="T", alert_message="M",
-            severity="medium", alert_data=None,
+            result=result,
+            webhook_url=None,
+            alert_title="T",
+            alert_message="M",
+            severity="medium",
+            alert_data=None,
         )
         assert "slack" in result.channels_failed
 
@@ -358,9 +394,12 @@ class TestSendSlack:
         d = _make_dispatcher()
         result = DispatchResult()
         await d._send_slack(
-            result=result, webhook_url="https://my-hook.com",
-            alert_title="Title", alert_message="Msg",
-            severity="critical", alert_data={"a": 1},
+            result=result,
+            webhook_url="https://my-hook.com",
+            alert_title="Title",
+            alert_message="Msg",
+            severity="critical",
+            alert_data={"a": 1},
         )
         d.slack_service.send_alert.assert_called_once_with(
             webhook_url="https://my-hook.com",
@@ -375,15 +414,20 @@ class TestSendSlack:
 # _send_webhook
 # ──────────────────────────────────────────────
 class TestSendWebhook:
-
     @pytest.mark.asyncio
     async def test_no_url_fails(self):
         d = _make_dispatcher()
         result = DispatchResult()
         await d._send_webhook(
-            result=result, webhook_url=None, webhook_secret=None,
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            result=result,
+            webhook_url=None,
+            webhook_secret=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert "webhook" in result.channels_failed
         assert "No webhook URL" in result.errors["webhook"]
@@ -393,9 +437,15 @@ class TestSendWebhook:
         d = _make_dispatcher(webhook_ok=True)
         result = DispatchResult()
         await d._send_webhook(
-            result=result, webhook_url="https://wh.com", webhook_secret="s",
-            alert_id="a-1", alert_title="T", alert_message="M",
-            alert_type="type", severity="medium", alert_data=None,
+            result=result,
+            webhook_url="https://wh.com",
+            webhook_secret="s",
+            alert_id="a-1",
+            alert_title="T",
+            alert_message="M",
+            alert_type="type",
+            severity="medium",
+            alert_data=None,
         )
         assert "webhook" in result.channels_sent
 
@@ -404,9 +454,15 @@ class TestSendWebhook:
         d = _make_dispatcher(webhook_ok=False)
         result = DispatchResult()
         await d._send_webhook(
-            result=result, webhook_url="https://wh.com", webhook_secret=None,
-            alert_id=None, alert_title="T", alert_message="M",
-            alert_type=None, severity="medium", alert_data=None,
+            result=result,
+            webhook_url="https://wh.com",
+            webhook_secret=None,
+            alert_id=None,
+            alert_title="T",
+            alert_message="M",
+            alert_type=None,
+            severity="medium",
+            alert_data=None,
         )
         assert "webhook" in result.channels_failed
 
@@ -415,9 +471,15 @@ class TestSendWebhook:
         d = _make_dispatcher()
         result = DispatchResult()
         await d._send_webhook(
-            result=result, webhook_url="https://wh.com/x", webhook_secret="sec",
-            alert_id="a-1", alert_title="Title", alert_message="Msg",
-            alert_type="sentiment", severity="high", alert_data={"b": 2},
+            result=result,
+            webhook_url="https://wh.com/x",
+            webhook_secret="sec",
+            alert_id="a-1",
+            alert_title="Title",
+            alert_message="Msg",
+            alert_type="sentiment",
+            severity="high",
+            alert_data={"b": 2},
         )
         d.webhook_service.send_alert.assert_called_once_with(
             webhook_url="https://wh.com/x",
@@ -435,13 +497,13 @@ class TestSendWebhook:
 # dispatch — mixed results
 # ──────────────────────────────────────────────
 class TestDispatchMixed:
-
     @pytest.mark.asyncio
     async def test_partial_failure(self):
         d = _make_dispatcher(email_ok=True, slack_ok=False)
         result = await d.dispatch(
             channels=[AlertChannel.EMAIL, AlertChannel.SLACK],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             recipient_email="u@t.com",
         )
         assert result.success is True
@@ -454,7 +516,8 @@ class TestDispatchMixed:
         d = _make_dispatcher(email_ok=False, slack_ok=False, webhook_ok=False)
         result = await d.dispatch(
             channels=[AlertChannel.EMAIL, AlertChannel.SLACK, AlertChannel.WEBHOOK],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             recipient_email="u@t.com",
             webhook_url="https://wh.com",
         )
@@ -466,7 +529,8 @@ class TestDispatchMixed:
         d = _make_dispatcher()
         await d.dispatch(
             channels=[AlertChannel.EMAIL],
-            alert_title="My Alert", alert_message="M",
+            alert_title="My Alert",
+            alert_message="M",
             recipient_email="u@t.com",
         )
         call_kw = d.email_service.send_alert_email.call_args[1]
@@ -477,7 +541,8 @@ class TestDispatchMixed:
         d = _make_dispatcher()
         await d.dispatch(
             channels=[AlertChannel.EMAIL],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             recipient_email="u@t.com",
             email_subject="Custom Subject",
         )
@@ -488,12 +553,11 @@ class TestDispatchMixed:
     async def test_error_none_becomes_unknown(self):
         d = _make_dispatcher()
         # Make email return success=False with error=None
-        d.email_service.send_alert_email = AsyncMock(
-            return_value=MagicMock(success=False, error=None)
-        )
+        d.email_service.send_alert_email = AsyncMock(return_value=MagicMock(success=False, error=None))
         result = await d.dispatch(
             channels=[AlertChannel.EMAIL],
-            alert_title="T", alert_message="M",
+            alert_title="T",
+            alert_message="M",
             recipient_email="u@t.com",
         )
         assert result.errors["email"] == "Unknown error"
@@ -503,7 +567,6 @@ class TestDispatchMixed:
 # send_quick_alert
 # ──────────────────────────────────────────────
 class TestSendQuickAlert:
-
     @pytest.mark.asyncio
     async def test_always_includes_in_app(self):
         with patch(f"{SVC_MOD}.NotificationDispatcher") as MockDisp:
@@ -549,8 +612,10 @@ class TestSendQuickAlert:
             MockDisp.return_value = mock_d
 
             await send_quick_alert(
-                title="T", message="M",
-                webhook_url="https://wh.com", webhook_secret="sec",
+                title="T",
+                message="M",
+                webhook_url="https://wh.com",
+                webhook_secret="sec",
             )
 
             call_kw = mock_d.dispatch.call_args[1]
@@ -578,8 +643,11 @@ class TestSendQuickAlert:
             MockDisp.return_value = mock_d
 
             await send_quick_alert(
-                title="Alert", message="Body", severity="critical",
-                alert_type="sentiment_drop", data={"k": "v"},
+                title="Alert",
+                message="Body",
+                severity="critical",
+                alert_type="sentiment_drop",
+                data={"k": "v"},
             )
 
             call_kw = mock_d.dispatch.call_args[1]
@@ -599,6 +667,3 @@ class TestSendQuickAlert:
 
             result = await send_quick_alert(title="T", message="M")
             assert result is expected
-
-
-            

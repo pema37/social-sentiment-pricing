@@ -20,10 +20,10 @@ Total: ~95 tests
 """
 
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4, UUID
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 # === Import isolation ===
 for mod in [
@@ -39,8 +39,8 @@ import pytest
 
 # Import after isolation
 from services.pricing.rule_evaluator import (
-    RuleEvaluator,
     MarketSignals,
+    RuleEvaluator,
 )
 
 SERVICE_PATH = "services.pricing.rule_evaluator"
@@ -130,6 +130,7 @@ def make_product(id=None, category=None):
 # We'll import it fresh to get the actual enum
 try:
     from models.pricing_rule import RuleType as _RT
+
     # If models are real, use them
     SENTIMENT_THRESHOLD = _RT.SENTIMENT_THRESHOLD
     COMPETITOR_RELATIVE = _RT.COMPETITOR_RELATIVE
@@ -141,10 +142,12 @@ except (ImportError, AttributeError):
     class _FakeRuleType:
         def __init__(self, val):
             self.value = val
+
         def __eq__(self, other):
-            if hasattr(other, 'value'):
+            if hasattr(other, "value"):
                 return self.value == other.value
             return self.value == other
+
         def __hash__(self):
             return hash(self.value)
 
@@ -167,8 +170,8 @@ RuleType.VIRAL_DETECTION = VIRAL_DETECTION
 # 1. MarketSignals Dataclass
 # ============================================================
 
-class TestMarketSignals:
 
+class TestMarketSignals:
     def test_default_values(self):
         s = MarketSignals()
         assert s.sentiment_score is None
@@ -224,8 +227,8 @@ class TestMarketSignals:
 # 2. RuleEvaluator Init
 # ============================================================
 
-class TestRuleEvaluatorInit:
 
+class TestRuleEvaluatorInit:
     def test_stores_db(self):
         db = make_mock_db()
         evaluator = RuleEvaluator(db)
@@ -236,60 +239,44 @@ class TestRuleEvaluatorInit:
 # 3. _rule_applies_to_product
 # ============================================================
 
-class TestRuleAppliesToProduct:
 
+class TestRuleAppliesToProduct:
     def setup_method(self):
         self.evaluator = RuleEvaluator(make_mock_db())
 
     def test_applies_to_all_products(self):
         rule = make_rule(applies_to_all_products=True)
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is True
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is True
 
     def test_legacy_product_id_match(self):
         rule = make_rule(product_id=PRODUCT_ID)
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is True
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is True
 
     def test_legacy_product_id_no_match(self):
         other_id = uuid4()
         rule = make_rule(product_id=other_id)
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is False
 
     def test_applies_to_products_list_match(self):
         rule = make_rule(applies_to_products=[str(PRODUCT_ID), str(uuid4())])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is True
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is True
 
     def test_applies_to_products_list_no_match(self):
         rule = make_rule(applies_to_products=[str(uuid4())])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is False
 
     def test_applies_to_categories_match(self):
         rule = make_rule(applies_to_categories=["electronics", "gadgets"])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), "electronics"
-        ) is True
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), "electronics") is True
 
     def test_applies_to_categories_no_match(self):
         rule = make_rule(applies_to_categories=["clothing"])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), "electronics"
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), "electronics") is False
 
     def test_applies_to_categories_no_product_category(self):
         """If product has no category, category-based rules don't match."""
         rule = make_rule(applies_to_categories=["electronics"])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is False
 
     def test_no_scoping_at_all_returns_false(self):
         """Rule with no scoping doesn't match anything."""
@@ -299,9 +286,7 @@ class TestRuleAppliesToProduct:
             applies_to_products=None,
             applies_to_categories=None,
         )
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), "electronics"
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), "electronics") is False
 
     def test_priority_all_products_wins(self):
         """applies_to_all_products is checked first, short-circuits."""
@@ -309,29 +294,23 @@ class TestRuleAppliesToProduct:
             applies_to_all_products=True,
             product_id=uuid4(),  # different product
         )
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is True
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is True
 
     def test_empty_products_list(self):
         rule = make_rule(applies_to_products=[])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), None
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), None) is False
 
     def test_empty_categories_list(self):
         rule = make_rule(applies_to_categories=[])
-        assert self.evaluator._rule_applies_to_product(
-            rule, PRODUCT_ID, str(PRODUCT_ID), "electronics"
-        ) is False
+        assert self.evaluator._rule_applies_to_product(rule, PRODUCT_ID, str(PRODUCT_ID), "electronics") is False
 
 
 # ============================================================
 # 4. _eval_sentiment_threshold
 # ============================================================
 
-class TestEvalSentimentThreshold:
 
+class TestEvalSentimentThreshold:
     def setup_method(self):
         self.evaluator = RuleEvaluator(make_mock_db())
 
@@ -425,8 +404,8 @@ class TestEvalSentimentThreshold:
 # 5. _eval_competitor_relative
 # ============================================================
 
-class TestEvalCompetitorRelative:
 
+class TestEvalCompetitorRelative:
     def setup_method(self):
         self.evaluator = RuleEvaluator(make_mock_db())
 
@@ -437,9 +416,7 @@ class TestEvalCompetitorRelative:
             competitor_margin_percent=Decimal("5"),
             price_position="below",
         )
-        signals = make_signals(
-            competitor_prices={COMP_ID_A: Decimal("99.99")}
-        )
+        signals = make_signals(competitor_prices={COMP_ID_A: Decimal("99.99")})
         result = await self.evaluator._eval_competitor_relative(rule, signals)
         assert result is not None
         assert result["competitor_price"] == 99.99
@@ -449,9 +426,7 @@ class TestEvalCompetitorRelative:
     async def test_uuid_no_match_tries_name(self):
         """When UUID doesn't match, falls back to name-based matching."""
         rule = make_rule(competitor_id=COMP_ID_A)
-        signals = make_signals(
-            competitor_prices={COMP_ID_B: Decimal("89.99")}
-        )
+        signals = make_signals(competitor_prices={COMP_ID_B: Decimal("89.99")})
         # Mock name-based match to return a result
         self.evaluator._match_competitor_by_name = AsyncMock(
             return_value={
@@ -469,9 +444,7 @@ class TestEvalCompetitorRelative:
     async def test_uuid_no_match_name_no_match(self):
         """When neither UUID nor name matches, returns None."""
         rule = make_rule(competitor_id=COMP_ID_A)
-        signals = make_signals(
-            competitor_prices={COMP_ID_B: Decimal("89.99")}
-        )
+        signals = make_signals(competitor_prices={COMP_ID_B: Decimal("89.99")})
         self.evaluator._match_competitor_by_name = AsyncMock(return_value=None)
         result = await self.evaluator._eval_competitor_relative(rule, signals)
         assert result is None
@@ -508,9 +481,7 @@ class TestEvalCompetitorRelative:
             competitor_id=COMP_ID_A,
             competitor_margin_percent=Decimal("7.5"),
         )
-        signals = make_signals(
-            competitor_prices={COMP_ID_A: Decimal("100")}
-        )
+        signals = make_signals(competitor_prices={COMP_ID_A: Decimal("100")})
         result = await self.evaluator._eval_competitor_relative(rule, signals)
         assert result["margin_percent"] == 7.5
 
@@ -520,9 +491,7 @@ class TestEvalCompetitorRelative:
             competitor_id=COMP_ID_A,
             competitor_margin_percent=None,
         )
-        signals = make_signals(
-            competitor_prices={COMP_ID_A: Decimal("100")}
-        )
+        signals = make_signals(competitor_prices={COMP_ID_A: Decimal("100")})
         result = await self.evaluator._eval_competitor_relative(rule, signals)
         assert result["margin_percent"] == 0
 
@@ -531,8 +500,8 @@ class TestEvalCompetitorRelative:
 # 6. _match_competitor_by_name
 # ============================================================
 
-class TestMatchCompetitorByName:
 
+class TestMatchCompetitorByName:
     def setup_method(self):
         self.db = make_mock_db()
         self.evaluator = RuleEvaluator(self.db)
@@ -555,9 +524,7 @@ class TestMatchCompetitorByName:
         mock_result.scalar.return_value = None
         self.db.execute.return_value = mock_result
 
-        result = await self.evaluator._match_competitor_by_name(
-            COMP_ID_A, {COMP_ID_B: Decimal("99.99")}
-        )
+        result = await self.evaluator._match_competitor_by_name(COMP_ID_A, {COMP_ID_B: Decimal("99.99")})
         assert result is None
 
     @pytest.mark.asyncio
@@ -578,9 +545,7 @@ class TestMatchCompetitorByName:
 
         self.db.execute.side_effect = [mock_result_1, mock_result_2]
 
-        result = await self.evaluator._match_competitor_by_name(
-            COMP_ID_A, {COMP_ID_B: Decimal("99.99")}
-        )
+        result = await self.evaluator._match_competitor_by_name(COMP_ID_A, {COMP_ID_B: Decimal("99.99")})
         assert result is not None
         assert result["competitor_id"] == COMP_ID_B
         assert result["price"] == Decimal("99.99")
@@ -602,9 +567,7 @@ class TestMatchCompetitorByName:
 
         self.db.execute.side_effect = [mock_result_1, mock_result_2]
 
-        result = await self.evaluator._match_competitor_by_name(
-            COMP_ID_A, {COMP_ID_B: Decimal("99.99")}
-        )
+        result = await self.evaluator._match_competitor_by_name(COMP_ID_A, {COMP_ID_B: Decimal("99.99")})
         assert result is not None
 
     @pytest.mark.asyncio
@@ -622,9 +585,7 @@ class TestMatchCompetitorByName:
 
         self.db.execute.side_effect = [mock_result_1, mock_result_2]
 
-        result = await self.evaluator._match_competitor_by_name(
-            COMP_ID_A, {COMP_ID_B: Decimal("99.99")}
-        )
+        result = await self.evaluator._match_competitor_by_name(COMP_ID_A, {COMP_ID_B: Decimal("99.99")})
         assert result is not None
 
     @pytest.mark.asyncio
@@ -643,9 +604,7 @@ class TestMatchCompetitorByName:
 
         self.db.execute.side_effect = [mock_result_1, mock_result_2]
 
-        result = await self.evaluator._match_competitor_by_name(
-            COMP_ID_A, {COMP_ID_B: Decimal("99.99")}
-        )
+        result = await self.evaluator._match_competitor_by_name(COMP_ID_A, {COMP_ID_B: Decimal("99.99")})
         assert result is None
 
 
@@ -653,8 +612,8 @@ class TestMatchCompetitorByName:
 # 7. _eval_time_based
 # ============================================================
 
-class TestEvalTimeBased:
 
+class TestEvalTimeBased:
     def setup_method(self):
         self.evaluator = RuleEvaluator(make_mock_db())
 
@@ -728,8 +687,8 @@ class TestEvalTimeBased:
 # 8. _eval_volume_surge
 # ============================================================
 
-class TestEvalVolumeSurge:
 
+class TestEvalVolumeSurge:
     def setup_method(self):
         self.evaluator = RuleEvaluator(make_mock_db())
 
@@ -778,8 +737,8 @@ class TestEvalVolumeSurge:
 # 9. _eval_viral_detection
 # ============================================================
 
-class TestEvalViralDetection:
 
+class TestEvalViralDetection:
     def setup_method(self):
         self.evaluator = RuleEvaluator(make_mock_db())
 
@@ -899,6 +858,7 @@ class TestEvalViralDetection:
 # 10. _evaluate_rule (routing)
 # ============================================================
 
+
 class TestEvaluateRule:
     """Tests that _evaluate_rule routes to the correct evaluator."""
 
@@ -924,9 +884,7 @@ class TestEvaluateRule:
             rule_type=COMPETITOR_RELATIVE,
             competitor_id=COMP_ID_A,
         )
-        signals = make_signals(
-            competitor_prices={COMP_ID_A: Decimal("99")}
-        )
+        signals = make_signals(competitor_prices={COMP_ID_A: Decimal("99")})
         product = make_product()
         result = await self.evaluator._evaluate_rule(rule, product, signals)
         assert result is not None
@@ -974,6 +932,7 @@ class TestEvaluateRule:
 # 11. find_matching_rule
 # ============================================================
 
+
 class TestFindMatchingRule:
     """Tests for the main find_matching_rule pipeline."""
 
@@ -994,9 +953,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(
-            product, USER_ID, signals
-        )
+        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule
         assert details is not None
 
@@ -1006,9 +963,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals()
 
-        result_rule, details = await self.evaluator.find_matching_rule(
-            product, USER_ID, signals
-        )
+        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is None
         assert details is None
 
@@ -1020,15 +975,13 @@ class TestFindMatchingRule:
             sentiment_threshold=Decimal("0.5"),
             sentiment_direction="above",
             cooldown_hours=24,
-            last_triggered_at=datetime.now(timezone.utc) - timedelta(hours=1),  # 1h ago, cooldown 24h
+            last_triggered_at=datetime.now(UTC) - timedelta(hours=1),  # 1h ago, cooldown 24h
         )
         self.evaluator.get_active_rules = AsyncMock(return_value=[rule])
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(
-            product, USER_ID, signals
-        )
+        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is None
 
     @pytest.mark.asyncio
@@ -1039,15 +992,13 @@ class TestFindMatchingRule:
             sentiment_threshold=Decimal("0.5"),
             sentiment_direction="above",
             cooldown_hours=1,
-            last_triggered_at=datetime.now(timezone.utc) - timedelta(hours=2),  # 2h ago, cooldown 1h
+            last_triggered_at=datetime.now(UTC) - timedelta(hours=2),  # 2h ago, cooldown 1h
         )
         self.evaluator.get_active_rules = AsyncMock(return_value=[rule])
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(
-            product, USER_ID, signals
-        )
+        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule
 
     @pytest.mark.asyncio
@@ -1063,9 +1014,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(
-            product, USER_ID, signals
-        )
+        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule
 
     @pytest.mark.asyncio
@@ -1087,9 +1036,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.5"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(
-            product, USER_ID, signals
-        )
+        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule2
 
     @pytest.mark.asyncio
@@ -1099,17 +1046,15 @@ class TestFindMatchingRule:
         signals = make_signals()
 
         await self.evaluator.find_matching_rule(product, USER_ID, signals)
-        self.evaluator.get_active_rules.assert_awaited_once_with(
-            product.id, USER_ID, "electronics"
-        )
+        self.evaluator.get_active_rules.assert_awaited_once_with(product.id, USER_ID, "electronics")
 
 
 # ============================================================
 # 12. get_active_rules (DB query)
 # ============================================================
 
-class TestGetActiveRules:
 
+class TestGetActiveRules:
     def setup_method(self):
         self.db = make_mock_db()
         self.evaluator = RuleEvaluator(self.db)
@@ -1162,6 +1107,3 @@ class TestGetActiveRules:
 
         await self.evaluator.get_active_rules(PRODUCT_ID, USER_ID)
         self.db.execute.assert_awaited_once()
-
-
-        

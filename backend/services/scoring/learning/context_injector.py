@@ -27,14 +27,13 @@ Place at: backend/services/scoring/learning/context_injector.py
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional
-
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 # ──────────────────────────────────────────────────────────
 # SCORING CONTEXT: Structured data for the deterministic engine
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class ScoringContext:
@@ -63,11 +62,11 @@ class ScoringContext:
     Low rate may indicate recommendations are too aggressive."""
 
     # ── Magnitude guidance ──
-    suggested_magnitude_cap: Optional[float] = None
+    suggested_magnitude_cap: float | None = None
     """If historical data shows a sweet spot, suggest max magnitude.
     None = no suggestion (use default guardrails)."""
 
-    best_performing_magnitude: Optional[str] = None
+    best_performing_magnitude: str | None = None
     """Label of the magnitude bucket with best avg revenue lift.
     e.g., '2-5%'. Informational for agent context."""
 
@@ -81,12 +80,12 @@ class ScoringContext:
     Range [0.0, 0.2]. Higher when category has rich outcome data."""
 
     # ── Performance summary ──
-    avg_revenue_lift_pct: Optional[float] = None
+    avg_revenue_lift_pct: float | None = None
     positive_outcome_rate: float = 0.0
     n_historical_outcomes: int = 0
 
     # ── Metadata ──
-    features_computed_at: Optional[datetime] = None
+    features_computed_at: datetime | None = None
     is_stale: bool = False
     """True if features are older than 14 days."""
 
@@ -96,11 +95,11 @@ class ScoringContext:
 # ──────────────────────────────────────────────────────────
 
 # Thresholds for contextual adjustments
-_MIN_OUTCOMES_FOR_CONTEXT = 5        # Need at least 5 outcomes to inject context
-_MIN_OUTCOMES_FOR_CALIBRATION = 10   # Need 10+ for confidence calibration
-_STALE_DAYS = 14                     # Features older than this are flagged
-_HIGH_ACCEPTANCE = 0.70              # Above = "merchants trust recommendations"
-_LOW_ACCEPTANCE = 0.40               # Below = "merchants often reject/modify"
+_MIN_OUTCOMES_FOR_CONTEXT = 5  # Need at least 5 outcomes to inject context
+_MIN_OUTCOMES_FOR_CALIBRATION = 10  # Need 10+ for confidence calibration
+_STALE_DAYS = 14  # Features older than this are flagged
+_HIGH_ACCEPTANCE = 0.70  # Above = "merchants trust recommendations"
+_LOW_ACCEPTANCE = 0.40  # Below = "merchants often reject/modify"
 
 
 class ContextInjector:
@@ -127,7 +126,7 @@ class ContextInjector:
     def build(
         self,
         features,  # CategoryFeatures (duck-typed)
-        merchant_id: Optional[str] = None,
+        merchant_id: str | None = None,
     ) -> tuple[ScoringContext, str]:
         """
         Build both scoring context and agent context string.
@@ -190,7 +189,7 @@ class ContextInjector:
     def build_agent_context(
         self,
         features,  # CategoryFeatures
-        merchant_id: Optional[str] = None,
+        merchant_id: str | None = None,
     ) -> str:
         """
         Build a human-readable context string for LLM agent prompts.
@@ -207,10 +206,7 @@ class ContextInjector:
         cat = features.category.replace("_", " ").title()
 
         # ── Opening: category performance summary ──
-        parts.append(
-            f"Historical pricing intelligence for {cat} "
-            f"(based on {features.n_outcomes} measured outcomes):"
-        )
+        parts.append(f"Historical pricing intelligence for {cat} (based on {features.n_outcomes} measured outcomes):")
 
         # ── Revenue performance ──
         if features.mean_revenue_lift_pct is not None:
@@ -266,10 +262,7 @@ class ContextInjector:
                 elasticity_desc = "moderately price-sensitive"
             else:
                 elasticity_desc = "relatively price-insensitive"
-            parts.append(
-                f"Observed demand elasticity: {ped:.2f} "
-                f"(market is {elasticity_desc} in this category)."
-            )
+            parts.append(f"Observed demand elasticity: {ped:.2f} (market is {elasticity_desc} in this category).")
 
         # ── Margin impact warning ──
         if features.mean_margin_delta is not None and features.mean_margin_delta < -0.02:
@@ -331,7 +324,7 @@ class ContextInjector:
         return round(bias, 4)
 
     @staticmethod
-    def _compute_magnitude_cap(features) -> Optional[float]:
+    def _compute_magnitude_cap(features) -> float | None:
         """
         Suggest a magnitude cap based on which bucket performs best.
 
@@ -416,7 +409,7 @@ class ContextInjector:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def _format_confidence_insight(features) -> Optional[str]:
+    def _format_confidence_insight(features) -> str | None:
         """Format confidence band performance as a readable insight."""
         bands = features.confidence_band_performance
         if not bands:
@@ -442,12 +435,7 @@ class ContextInjector:
 
         if worst.avg_revenue_lift_pct < 0:
             parts.append(
-                f"Confidence band {worst.band_label} showed negative impact "
-                f"({worst.avg_revenue_lift_pct:+.1f}%)."
+                f"Confidence band {worst.band_label} showed negative impact ({worst.avg_revenue_lift_pct:+.1f}%)."
             )
 
         return " ".join(parts)
-    
-
-
-    

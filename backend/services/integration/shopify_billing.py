@@ -16,8 +16,7 @@ Ref: https://shopify.dev/docs/apps/launch/billing/subscription-billing
 """
 
 import logging
-from datetime import datetime, UTC
-from typing import Optional, Tuple
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,18 +24,17 @@ from sqlmodel import select
 
 from core.config import settings
 from core.encryption import decrypt_token
-from models.integration import Integration, EcommercePlatform, IntegrationStatus
+from models.integration import EcommercePlatform, Integration, IntegrationStatus
 from models.subscription import Subscription
 from schemas.shopify_billing import (
     SHOPIFY_PLANS,
-    ShopifyPlanConfig,
-    ShopifySubscribeResponse,
     ShopifyBillingStatusResponse,
     ShopifyCancelResponse,
+    ShopifySubscribeResponse,
 )
-from services.integration.shopify_service import ShopifyService
 from services.integration.http_client import RetryableClient
 from services.integration.retry import RetryConfig
+from services.integration.shopify_service import ShopifyService
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +168,8 @@ class ShopifyBillingService:
     # =========================================================================
 
     async def _get_shopify_integration(
-        self, user_id: Optional[UUID] = None, shop_domain: Optional[str] = None
-    ) -> Optional[Integration]:
+        self, user_id: UUID | None = None, shop_domain: str | None = None
+    ) -> Integration | None:
         """
         Find the active Shopify integration for a user or shop domain.
         Tries shop_domain first (for embedded/install flows), then user_id.
@@ -208,12 +206,9 @@ class ShopifyBillingService:
 
     def _build_return_url(self, shop_domain: str) -> str:
         """Build the billing callback URL that Shopify redirects to after approval."""
-        return (
-            f"{settings.BACKEND_URL}/api/v1/integrations/shopify/billing/callback"
-            f"?shop={shop_domain}"
-        )
+        return f"{settings.BACKEND_URL}/api/v1/integrations/shopify/billing/callback?shop={shop_domain}"
 
-    def _tier_from_plan_name(self, plan_name: str) -> Optional[str]:
+    def _tier_from_plan_name(self, plan_name: str) -> str | None:
         """Extract our tier from the Shopify plan name."""
         for tier, plan in SHOPIFY_PLANS.items():
             if plan.name == plan_name:
@@ -232,8 +227,8 @@ class ShopifyBillingService:
     async def create_subscription(
         self,
         tier: str,
-        user_id: Optional[UUID] = None,
-        shop_domain: Optional[str] = None,
+        user_id: UUID | None = None,
+        shop_domain: str | None = None,
     ) -> ShopifySubscribeResponse:
         """
         Create a Shopify recurring subscription for a merchant.
@@ -296,12 +291,13 @@ class ShopifyBillingService:
         }
 
         try:
-            async with RetryableClient(
-                shop, "shopify", RetryConfig(max_retries=2), 15.0
-            ) as rc:
+            async with RetryableClient(shop, "shopify", RetryConfig(max_retries=2), 15.0) as rc:
                 data = await self.shopify._graphql(
-                    rc, shop, access_token,
-                    CREATE_SUBSCRIPTION_MUTATION, variables,
+                    rc,
+                    shop,
+                    access_token,
+                    CREATE_SUBSCRIPTION_MUTATION,
+                    variables,
                 )
 
             result = data.get("appSubscriptionCreate", {})
@@ -338,8 +334,7 @@ class ShopifyBillingService:
             await self.session.commit()
 
             logger.info(
-                f"Created Shopify subscription for {shop}: "
-                f"tier={tier}, sub_id={shopify_sub_id}, test={self._is_test}"
+                f"Created Shopify subscription for {shop}: tier={tier}, sub_id={shopify_sub_id}, test={self._is_test}"
             )
 
             return ShopifySubscribeResponse(
@@ -355,7 +350,7 @@ class ShopifyBillingService:
             return ShopifySubscribeResponse(
                 success=False,
                 tier=tier,
-                message=f"Failed to create subscription: {str(e)}",
+                message=f"Failed to create subscription: {e!s}",
             )
 
     # =========================================================================
@@ -366,7 +361,7 @@ class ShopifyBillingService:
         self,
         charge_id: str,
         shop_domain: str,
-    ) -> Tuple[bool, Optional[str], Optional[str]]:
+    ) -> tuple[bool, str | None, str | None]:
         """
         Verify a subscription after the merchant approves the charge.
 
@@ -390,12 +385,13 @@ class ShopifyBillingService:
         gid = f"gid://shopify/AppSubscription/{charge_id}"
 
         try:
-            async with RetryableClient(
-                shop, "shopify", RetryConfig(max_retries=2), 15.0
-            ) as rc:
+            async with RetryableClient(shop, "shopify", RetryConfig(max_retries=2), 15.0) as rc:
                 data = await self.shopify._graphql(
-                    rc, shop, access_token,
-                    CHECK_SUBSCRIPTION_QUERY, {"id": gid},
+                    rc,
+                    shop,
+                    access_token,
+                    CHECK_SUBSCRIPTION_QUERY,
+                    {"id": gid},
                 )
 
             node = data.get("node", {})
@@ -407,10 +403,7 @@ class ShopifyBillingService:
             if not tier:
                 tier = (integration.settings or {}).get("pending_tier")
 
-            logger.info(
-                f"Subscription verification for {shop}: "
-                f"charge_id={charge_id}, status={status}, tier={tier}"
-            )
+            logger.info(f"Subscription verification for {shop}: charge_id={charge_id}, status={status}, tier={tier}")
 
             if status == "ACTIVE":
                 # Update local subscription
@@ -437,8 +430,8 @@ class ShopifyBillingService:
 
     async def get_subscription_status(
         self,
-        user_id: Optional[UUID] = None,
-        shop_domain: Optional[str] = None,
+        user_id: UUID | None = None,
+        shop_domain: str | None = None,
     ) -> ShopifyBillingStatusResponse:
         """
         Check the current active subscription status from Shopify.
@@ -452,18 +445,15 @@ class ShopifyBillingService:
         shop = self._get_shop_domain(integration)
 
         try:
-            async with RetryableClient(
-                shop, "shopify", RetryConfig(max_retries=2), 15.0
-            ) as rc:
+            async with RetryableClient(shop, "shopify", RetryConfig(max_retries=2), 15.0) as rc:
                 data = await self.shopify._graphql(
-                    rc, shop, access_token,
+                    rc,
+                    shop,
+                    access_token,
                     ACTIVE_SUBSCRIPTIONS_QUERY,
                 )
 
-            active_subs = (
-                data.get("currentAppInstallation", {})
-                .get("activeSubscriptions", [])
-            )
+            active_subs = data.get("currentAppInstallation", {}).get("activeSubscriptions", [])
 
             if not active_subs:
                 return ShopifyBillingStatusResponse(has_active_subscription=False)
@@ -478,10 +468,7 @@ class ShopifyBillingService:
             currency = None
             line_items = sub.get("lineItems", [])
             if line_items:
-                pricing = (
-                    line_items[0].get("plan", {})
-                    .get("pricingDetails", {})
-                )
+                pricing = line_items[0].get("plan", {}).get("pricingDetails", {})
                 if pricing.get("__typename") == "AppRecurringPricing":
                     price_info = pricing.get("price", {})
                     price = price_info.get("amount")
@@ -511,8 +498,8 @@ class ShopifyBillingService:
     async def cancel_subscription(
         self,
         prorate: bool = True,
-        user_id: Optional[UUID] = None,
-        shop_domain: Optional[str] = None,
+        user_id: UUID | None = None,
+        shop_domain: str | None = None,
     ) -> ShopifyCancelResponse:
         """
         Cancel the active Shopify subscription.
@@ -536,11 +523,11 @@ class ShopifyBillingService:
         shop = self._get_shop_domain(integration)
 
         try:
-            async with RetryableClient(
-                shop, "shopify", RetryConfig(max_retries=2), 15.0
-            ) as rc:
+            async with RetryableClient(shop, "shopify", RetryConfig(max_retries=2), 15.0) as rc:
                 data = await self.shopify._graphql(
-                    rc, shop, access_token,
+                    rc,
+                    shop,
+                    access_token,
                     CANCEL_SUBSCRIPTION_MUTATION,
                     {
                         "id": status.shopify_subscription_id,
@@ -558,9 +545,7 @@ class ShopifyBillingService:
                     message=f"Shopify error: {error_msgs}",
                 )
 
-            cancelled_status = (
-                result.get("appSubscription", {}).get("status", "").lower()
-            )
+            cancelled_status = result.get("appSubscription", {}).get("status", "").lower()
 
             # Downgrade local subscription to free
             await self._downgrade_local_subscription(integration)
@@ -577,7 +562,7 @@ class ShopifyBillingService:
             logger.exception(f"Failed to cancel subscription for {shop}: {e}")
             return ShopifyCancelResponse(
                 success=False,
-                message=f"Failed to cancel: {str(e)}",
+                message=f"Failed to cancel: {e!s}",
             )
 
     # =========================================================================
@@ -591,27 +576,22 @@ class ShopifyBillingService:
         shopify_subscription_id: str,
         plan_name: str,
         is_test: bool = False,
-        trial_days: Optional[int] = None,
-        current_period_end: Optional[str] = None,
-    ) -> Optional[Subscription]:
+        trial_days: int | None = None,
+        current_period_end: str | None = None,
+    ) -> Subscription | None:
         """
         Create or update the local Subscription record after Shopify approval.
         """
         user_id = integration.user_id
         if not user_id:
-            logger.warning(
-                f"Integration {integration.id} has no user_id — "
-                f"cannot create local subscription"
-            )
+            logger.warning(f"Integration {integration.id} has no user_id — cannot create local subscription")
             return None
 
         plan_config = SHOPIFY_PLANS.get(tier)
         price = plan_config.price_amount if plan_config else "0.00"
 
         # Find or create subscription
-        result = await self.session.execute(
-            select(Subscription).where(Subscription.user_id == user_id)
-        )
+        result = await self.session.execute(select(Subscription).where(Subscription.user_id == user_id))
         subscription = result.scalar_one_or_none()
 
         now = datetime.now(UTC)
@@ -625,9 +605,7 @@ class ShopifyBillingService:
             subscription.current_period_start = now
             if current_period_end:
                 try:
-                    subscription.current_period_end = datetime.fromisoformat(
-                        current_period_end.replace("Z", "+00:00")
-                    )
+                    subscription.current_period_end = datetime.fromisoformat(current_period_end.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
                     subscription.current_period_end = None
             subscription.cancel_at_period_end = False
@@ -645,9 +623,7 @@ class ShopifyBillingService:
             )
             if current_period_end:
                 try:
-                    subscription.current_period_end = datetime.fromisoformat(
-                        current_period_end.replace("Z", "+00:00")
-                    )
+                    subscription.current_period_end = datetime.fromisoformat(current_period_end.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
                     pass
             self.session.add(subscription)
@@ -662,24 +638,17 @@ class ShopifyBillingService:
         await self.session.commit()
 
         logger.info(
-            f"Activated local subscription for user {user_id}: "
-            f"tier={tier}, shopify_id={shopify_subscription_id}"
+            f"Activated local subscription for user {user_id}: tier={tier}, shopify_id={shopify_subscription_id}"
         )
 
         return subscription
 
-    async def _downgrade_local_subscription(
-        self, integration: Integration
-    ) -> None:
+    async def _downgrade_local_subscription(self, integration: Integration) -> None:
         """Downgrade local subscription to free after Shopify cancellation."""
         if not integration.user_id:
             return
 
-        result = await self.session.execute(
-            select(Subscription).where(
-                Subscription.user_id == integration.user_id
-            )
-        )
+        result = await self.session.execute(select(Subscription).where(Subscription.user_id == integration.user_id))
         subscription = result.scalar_one_or_none()
 
         if subscription:
@@ -693,10 +662,4 @@ class ShopifyBillingService:
             self.session.add(subscription)
             await self.session.commit()
 
-            logger.info(
-                f"Downgraded local subscription to free for user {integration.user_id}"
-            )
-
-
-
-            
+            logger.info(f"Downgraded local subscription to free for user {integration.user_id}")

@@ -6,9 +6,7 @@ bulk_update_prices, normalize_store_url. Uses a concrete subclass stub.
 """
 
 import sys
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from typing import Optional, List
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -45,9 +43,14 @@ _http_mod.RetryableClient = MagicMock()
 # Models — simple classes
 _models_mod = sys.modules["services.integration.models"]
 for _name in [
-    "OAuthResult", "ExternalProduct", "ProductSyncResult",
-    "PriceUpdateRequest", "PriceUpdateResponse", "PriceUpdateResult",
-    "WebhookRegistration", "ConnectionStatus",
+    "OAuthResult",
+    "ExternalProduct",
+    "ProductSyncResult",
+    "PriceUpdateRequest",
+    "PriceUpdateResponse",
+    "PriceUpdateResult",
+    "WebhookRegistration",
+    "ConnectionStatus",
 ]:
     setattr(_models_mod, _name, type(_name, (), {}))
 
@@ -110,7 +113,6 @@ class _StubService(EcommerceService):
 # __init__
 # ──────────────────────────────────────────────
 class TestEcommerceServiceInit:
-
     def test_default_retry_config(self):
         svc = _StubService()
         assert svc.retry_config is _default_cfg
@@ -129,7 +131,6 @@ class TestEcommerceServiceInit:
 # platform_name (abstract property)
 # ──────────────────────────────────────────────
 class TestPlatformName:
-
     def test_returns_string(self):
         svc = _StubService()
         assert svc.platform_name == "test_platform"
@@ -144,7 +145,6 @@ class TestPlatformName:
 # get_client
 # ──────────────────────────────────────────────
 class TestGetClient:
-
     def test_creates_retryable_client(self):
         svc = _StubService()
         with patch(f"{SVC_MOD}.RetryableClient") as mock_cls:
@@ -170,7 +170,6 @@ class TestGetClient:
 # normalize_store_url
 # ──────────────────────────────────────────────
 class TestNormalizeStoreUrl:
-
     def test_strips_whitespace(self):
         svc = _StubService()
         assert svc.normalize_store_url("  example.com  ") == "https://example.com"
@@ -244,7 +243,6 @@ class TestNormalizeStoreUrl:
 # bulk_update_prices (default implementation)
 # ──────────────────────────────────────────────
 class TestBulkUpdatePrices:
-
     @pytest.mark.asyncio
     async def test_calls_update_price_for_each(self):
         svc = _StubService()
@@ -320,9 +318,7 @@ class TestBulkUpdatePrices:
         with patch(f"{SVC_MOD}.rate_limit_tracker") as mock_tracker:
             mock_tracker.wait_if_needed = AsyncMock(return_value=0.0)
             with patch(f"{SVC_MOD}.asyncio.sleep", new_callable=AsyncMock):
-                results = await svc.bulk_update_prices(
-                    "store", "token", [MagicMock(), MagicMock()]
-                )
+                results = await svc.bulk_update_prices("store", "token", [MagicMock(), MagicMock()])
 
         assert results == [resp1, resp2]
 
@@ -331,7 +327,6 @@ class TestBulkUpdatePrices:
 # ABC enforcement
 # ──────────────────────────────────────────────
 class TestABCEnforcement:
-
     def test_cannot_instantiate_abc(self):
         with pytest.raises(TypeError):
             EcommerceService()
@@ -372,7 +367,6 @@ class TestABCEnforcement:
 # Abstract method signatures (via stub)
 # ──────────────────────────────────────────────
 class TestAbstractMethodSignatures:
-
     def test_generate_oauth_url_sync(self):
         svc = _StubService()
         result = svc.generate_oauth_url("store", "state", "redirect")
@@ -430,5 +424,3 @@ class TestAbstractMethodSignatures:
         svc = _StubService()
         result = await svc.health_check("store", "token")
         assert result is not None
-
-        

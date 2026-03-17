@@ -10,16 +10,15 @@ Run with: pytest backend/tests/test_user_common_schemas.py -v
 import pytest
 from pydantic import ValidationError
 
-from schemas.user import UserBase, UserCreate, UserRead, UserUpdateMe
 from schemas.common import PaginatedResponse, PaginationParams
-
+from schemas.user import UserBase, UserCreate, UserRead, UserUpdateMe
 
 # =====================================================================
 # UserBase
 # =====================================================================
 
-class TestUserBase:
 
+class TestUserBase:
     def test_valid_minimal(self):
         u = UserBase(email="test@example.com")
         assert u.email == "test@example.com"
@@ -44,8 +43,8 @@ class TestUserBase:
 # UserCreate
 # =====================================================================
 
-class TestUserCreate:
 
+class TestUserCreate:
     def test_valid_minimal(self):
         u = UserCreate(email="test@example.com", password="secret123")
         assert u.email == "test@example.com"
@@ -73,8 +72,8 @@ class TestUserCreate:
 # UserRead
 # =====================================================================
 
-class TestUserRead:
 
+class TestUserRead:
     def test_valid(self):
         u = UserRead(
             id=1,
@@ -112,8 +111,8 @@ class TestUserRead:
 # UserUpdateMe
 # =====================================================================
 
-class TestUserUpdateMe:
 
+class TestUserUpdateMe:
     def test_empty_update(self):
         u = UserUpdateMe()
         assert u.username is None
@@ -152,8 +151,8 @@ class TestUserUpdateMe:
 # PaginatedResponse
 # =====================================================================
 
-class TestPaginatedResponse:
 
+class TestPaginatedResponse:
     def test_valid_with_strings(self):
         r = PaginatedResponse[str](
             items=["a", "b", "c"],
@@ -189,13 +188,17 @@ class TestPaginatedResponse:
     def test_missing_total_raises(self):
         with pytest.raises(ValidationError):
             PaginatedResponse[str](
-                items=[], page=1, page_size=20, total_pages=0,
+                items=[],
+                page=1,
+                page_size=20,
+                total_pages=0,
             )
 
 
 # =====================================================================
 # PaginationParams
 # =====================================================================
+
 
 class TestPaginationParams:
     """PaginationParams uses FastAPI Query() defaults which only resolve
@@ -216,6 +219,3 @@ class TestPaginationParams:
     def test_offset_calculation(self):
         p = PaginationParams(page=5, page_size=10)
         assert p.offset == 40  # (5-1)*10
-
-
-        

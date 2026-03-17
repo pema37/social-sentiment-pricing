@@ -8,32 +8,30 @@ Run with: pytest backend/tests/test_alert_schemas.py -v
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
-from models.alert import AlertType, AlertSeverity, AlertChannel, AlertStatus
-
+from models.alert import AlertChannel, AlertSeverity, AlertStatus, AlertType
 from schemas.alert import (
-    AlertConfigurationCreate,
-    AlertConfigurationUpdate,
-    AlertConfigurationRead,
-    AlertCreate,
-    AlertRead,
     AlertAcknowledge,
+    AlertConfigurationCreate,
+    AlertConfigurationRead,
+    AlertConfigurationUpdate,
+    AlertCreate,
+    AlertListResponse,
+    AlertRead,
     AlertResolve,
     AlertStats,
-    AlertListResponse,
 )
-
 
 # =====================================================================
 # AlertConfigurationCreate
 # =====================================================================
 
-class TestAlertConfigurationCreate:
 
+class TestAlertConfigurationCreate:
     def test_valid_minimal(self):
         c = AlertConfigurationCreate(
             name="Sentiment Alert",
@@ -124,8 +122,8 @@ class TestAlertConfigurationCreate:
 # AlertConfigurationUpdate
 # =====================================================================
 
-class TestAlertConfigurationUpdate:
 
+class TestAlertConfigurationUpdate:
     def test_empty_update(self):
         u = AlertConfigurationUpdate()
         assert u.name is None
@@ -165,8 +163,8 @@ class TestAlertConfigurationUpdate:
 # AlertConfigurationRead
 # =====================================================================
 
-class TestAlertConfigurationRead:
 
+class TestAlertConfigurationRead:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -182,8 +180,8 @@ class TestAlertConfigurationRead:
             "channel_settings": {},
             "cooldown_minutes": 60,
             "max_per_day": 10,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
             "last_triggered_at": None,
         }
 
@@ -193,7 +191,7 @@ class TestAlertConfigurationRead:
         assert r.last_triggered_at is None
 
     def test_with_last_triggered(self, valid_data):
-        valid_data["last_triggered_at"] = datetime.now(timezone.utc)
+        valid_data["last_triggered_at"] = datetime.now(UTC)
         r = AlertConfigurationRead(**valid_data)
         assert r.last_triggered_at is not None
 
@@ -212,8 +210,8 @@ class TestAlertConfigurationRead:
 # AlertCreate
 # =====================================================================
 
-class TestAlertCreate:
 
+class TestAlertCreate:
     def test_valid_minimal(self):
         a = AlertCreate(
             alert_type=AlertType.PRICE_RECOMMENDATION,
@@ -276,8 +274,8 @@ class TestAlertCreate:
 # AlertRead
 # =====================================================================
 
-class TestAlertRead:
 
+class TestAlertRead:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -295,8 +293,8 @@ class TestAlertRead:
             "status": AlertStatus.SENT,
             "channels_sent": ["email", "in_app"],
             "channels_failed": [],
-            "created_at": datetime.now(timezone.utc),
-            "sent_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "sent_at": datetime.now(UTC),
             "acknowledged_at": None,
             "acknowledged_by": None,
             "resolved_at": None,
@@ -328,8 +326,8 @@ class TestAlertRead:
 # AlertAcknowledge / AlertResolve
 # =====================================================================
 
-class TestAlertAcknowledgeResolve:
 
+class TestAlertAcknowledgeResolve:
     def test_acknowledge_empty(self):
         a = AlertAcknowledge()
         assert a is not None
@@ -347,8 +345,8 @@ class TestAlertAcknowledgeResolve:
 # AlertStats
 # =====================================================================
 
-class TestAlertStats:
 
+class TestAlertStats:
     def test_valid(self):
         s = AlertStats(
             total_unread=15,
@@ -368,8 +366,8 @@ class TestAlertStats:
 # AlertListResponse
 # =====================================================================
 
-class TestAlertListResponse:
 
+class TestAlertListResponse:
     def test_valid(self):
         alert_data = {
             "id": uuid.uuid4(),
@@ -386,9 +384,9 @@ class TestAlertListResponse:
             "status": AlertStatus.ACKNOWLEDGED,
             "channels_sent": ["in_app"],
             "channels_failed": [],
-            "created_at": datetime.now(timezone.utc),
-            "sent_at": datetime.now(timezone.utc),
-            "acknowledged_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "sent_at": datetime.now(UTC),
+            "acknowledged_at": datetime.now(UTC),
             "acknowledged_by": uuid.uuid4(),
             "resolved_at": None,
         }
@@ -411,6 +409,3 @@ class TestAlertListResponse:
             has_more=False,
         )
         assert len(r.alerts) == 0
-
-
-        

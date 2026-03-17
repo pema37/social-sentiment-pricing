@@ -6,13 +6,14 @@ Uses slowapi with Redis backend for distributed rate limiting.
 FIX (2026-01-24): Added explicit type annotations for Limiter to fix Pylance warnings.
 """
 
-from typing import Callable, TypeVar, Any, cast
+from collections.abc import Callable
+from typing import Any, TypeVar, cast
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from core.config import settings
 
@@ -37,12 +38,13 @@ def _create_limiter() -> Limiter:
     Actually tests Redis connection before using it.
     """
     redis_url = settings.REDIS_URL
-    
+
     # Check if Redis URL is configured and not localhost (won't work in production)
     if redis_url and "localhost" not in redis_url and "127.0.0.1" not in redis_url:
         try:
             # Test the connection before committing to Redis
             import redis
+
             r = redis.from_url(redis_url, socket_connect_timeout=2)
             r.ping()
             print("Rate limiter initialized with Redis backend")
@@ -54,7 +56,7 @@ def _create_limiter() -> Limiter:
             )
         except Exception as e:
             print(f"Redis connection failed, falling back to memory: {e}")
-    
+
     # Fallback to in-memory storage
     print("Rate limiter initialized with in-memory backend")
     return Limiter(
@@ -72,17 +74,19 @@ limiter: Limiter = _create_limiter()
 def rate_limit(limit_string: str) -> Callable[[F], F]:
     """
     Typed rate limit decorator.
-    
+
     Wraps slowapi's limiter.limit() with proper type hints.
-    
+
     Usage:
         @rate_limit(WRITE_RATE_LIMIT)
         async def my_endpoint(request: Request, ...):
             ...
     """
+
     def decorator(func: F) -> F:
         # Apply slowapi's limiter and cast to preserve the function type
-        return cast(F, limiter.limit(limit_string)(func))
+        return cast("F", limiter.limit(limit_string)(func))
+
     return decorator
 
 
@@ -105,16 +109,15 @@ REGISTER_RATE_LIMIT: str = "3/minute"
 PASSWORD_RESET_RATE_LIMIT: str = "3/minute"
 
 # Write operations - moderate limits
-WRITE_RATE_LIMIT: str = "30/minute"      # POST, PUT, PATCH, DELETE
-BULK_RATE_LIMIT: str = "10/minute"       # Bulk operations, imports, syncs
+WRITE_RATE_LIMIT: str = "30/minute"  # POST, PUT, PATCH, DELETE
+BULK_RATE_LIMIT: str = "10/minute"  # Bulk operations, imports, syncs
 
-# Read operations - lighter limits  
-READ_RATE_LIMIT: str = "100/minute"      # GET requests (default)
+# Read operations - lighter limits
+READ_RATE_LIMIT: str = "100/minute"  # GET requests (default)
 
 # Expensive operations - strict limits
-ANALYSIS_RATE_LIMIT: str = "20/minute"   # Sentiment analysis, AI calls
-EXPORT_RATE_LIMIT: str = "5/minute"      # CSV exports, reports
+ANALYSIS_RATE_LIMIT: str = "20/minute"  # Sentiment analysis, AI calls
+EXPORT_RATE_LIMIT: str = "5/minute"  # CSV exports, reports
 
 # Webhooks - allow more (external services)
 WEBHOOK_RATE_LIMIT: str = "200/minute"
-

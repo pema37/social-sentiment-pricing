@@ -24,6 +24,7 @@ USER_AGENT = "ActualPrice-Scanner/1.0 (+https://getactualprice.com)"
 
 # ── Data classes ──────────────────────────────────────────────────────
 
+
 @dataclass
 class ScannedProduct:
     title: str
@@ -46,6 +47,7 @@ class ScanResult:
 
 # ── URL normalisation ─────────────────────────────────────────────────
 
+
 def _normalise_url(raw: str) -> str:
     """Ensure the URL has a scheme and strip trailing slashes."""
     raw = raw.strip().rstrip("/")
@@ -65,6 +67,7 @@ def _extract_store_name(url: str) -> str:
 
 
 # ── Platform detection ────────────────────────────────────────────────
+
 
 async def _detect_platform(client: httpx.AsyncClient, base_url: str) -> str:
     """Try Shopify first (more common), then WooCommerce."""
@@ -95,6 +98,7 @@ async def _detect_platform(client: httpx.AsyncClient, base_url: str) -> str:
 
 
 # ── Shopify scanner ───────────────────────────────────────────────────
+
 
 async def _scan_shopify(client: httpx.AsyncClient, base_url: str) -> list[ScannedProduct]:
     """Fetch products from Shopify's public /products.json endpoint."""
@@ -150,6 +154,7 @@ async def _scan_shopify(client: httpx.AsyncClient, base_url: str) -> list[Scanne
 
 # ── WooCommerce scanner ───────────────────────────────────────────────
 
+
 async def _scan_woocommerce(client: httpx.AsyncClient, base_url: str) -> list[ScannedProduct]:
     """Fetch products from WooCommerce's public Store API."""
     url = f"{base_url}/wp-json/wc/store/products?per_page={MAX_PRODUCTS}"
@@ -190,9 +195,7 @@ async def _scan_woocommerce(client: httpx.AsyncClient, base_url: str) -> list[Sc
                 title=p.get("name", "Untitled"),
                 price=price,
                 compare_at_price=compare_at,
-                product_type=", ".join(
-                    c.get("name", "") for c in p.get("categories", [])
-                ),
+                product_type=", ".join(c.get("name", "") for c in p.get("categories", [])),
                 vendor="",
                 image_url=image_url,
                 url=permalink,
@@ -203,6 +206,7 @@ async def _scan_woocommerce(client: httpx.AsyncClient, base_url: str) -> list[Sc
 
 
 # ── Public API ────────────────────────────────────────────────────────
+
 
 async def scan_store(raw_url: str) -> ScanResult:
     """
@@ -259,10 +263,7 @@ async def scan_store(raw_url: str) -> ScanResult:
         result.error = f"Store returned an error (HTTP {e.response.status_code})."
         logger.warning("HTTP error scanning %s: %s", base_url, e)
     except Exception as e:
-        result.error = f"Could not scan the store: {str(e)}"
+        result.error = f"Could not scan the store: {e!s}"
         logger.exception("Unexpected error scanning %s", base_url)
 
     return result
-
-
-

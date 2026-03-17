@@ -7,10 +7,10 @@ Covers:
 - BaseCollector: abstract methods enforced, concrete subclass works
 """
 
-import sys
 import os
+import sys
+from datetime import UTC, datetime
 from types import ModuleType
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -37,7 +37,7 @@ for _pkg, _subdir in [
         _mod.__package__ = _pkg
         sys.modules[_pkg] = _mod
 
-from services.ingestion.base import SocialSource, CollectedMention, BaseCollector
+from services.ingestion.base import BaseCollector, CollectedMention, SocialSource
 
 for _m in _MOCKED:
     if _originals[_m] is None:
@@ -50,6 +50,7 @@ del _m
 # ===========================================================================
 # Tests
 # ===========================================================================
+
 
 class TestSocialSource:
     def test_values(self):
@@ -93,7 +94,7 @@ class TestCollectedMention:
         assert m.raw_data is None
 
     def test_full_construction(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         m = CollectedMention(
             source=SocialSource.TIKTOK,
             source_id="tk_99",
@@ -136,11 +137,14 @@ class TestBaseCollector:
 
     def test_missing_method_raises(self):
         with pytest.raises(TypeError):
+
             class Incomplete(BaseCollector):
                 @property
                 def source(self):
                     return SocialSource.TWITTER
+
                 # Missing collect and health_check
+
             Incomplete()
 
     @pytest.mark.asyncio
@@ -151,12 +155,14 @@ class TestBaseCollector:
                 return SocialSource.REDDIT
 
             async def collect(self, keywords, limit=100):
-                return [CollectedMention(
-                    source=self.source,
-                    source_id="1",
-                    content="test",
-                    author="bot",
-                )]
+                return [
+                    CollectedMention(
+                        source=self.source,
+                        source_id="1",
+                        content="test",
+                        author="bot",
+                    )
+                ]
 
             async def health_check(self):
                 return True
@@ -181,6 +187,3 @@ class TestBaseCollector:
 
         fc = FakeCollector()
         assert await fc.health_check() is False
-
-
-        

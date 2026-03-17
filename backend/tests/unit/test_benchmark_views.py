@@ -22,7 +22,6 @@ Run: pytest backend/tests/unit/test_benchmark_views.py -v
 
 import sys
 import types
-from datetime import datetime, UTC
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -56,6 +55,7 @@ OutcomeLabel = _outcome_mod.OutcomeLabel
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+
 
 def _view_row_benchmarks(
     category="Electronics",
@@ -114,6 +114,7 @@ def _view_row_data_gap(
         "scout_priority": scout_priority,
     }
 
+
 def _make_db_for_view(mappings_first=None, mappings_all=None, scalars_all=None):
     """
     Build a mock AsyncSession that handles the source's query patterns.
@@ -169,11 +170,13 @@ def _make_db_view_raises():
     mock_mappings.first.return_value = None
     fallback_result.mappings.return_value = mock_mappings
 
-    db.execute = AsyncMock(side_effect=[
-        Exception("relation mv_category_benchmarks does not exist"),
-        fallback_result,
-        fallback_result,
-    ])
+    db.execute = AsyncMock(
+        side_effect=[
+            Exception("relation mv_category_benchmarks does not exist"),
+            fallback_result,
+            fallback_result,
+        ]
+    )
 
     return db
 
@@ -205,8 +208,8 @@ def _make_outcome(
 # 1. CATEGORY BENCHMARKS (materialized view)
 # ══════════════════════════════════════════════════════════════════
 
-class TestCategoryBenchmarksView:
 
+class TestCategoryBenchmarksView:
     @pytest.mark.asyncio
     async def test_returns_benchmarks_from_view(self):
         row = _view_row_benchmarks(merchant_count=8)
@@ -274,8 +277,8 @@ class TestCategoryBenchmarksView:
 # 2. CATEGORY BENCHMARKS FALLBACK
 # ══════════════════════════════════════════════════════════════════
 
-class TestCategoryBenchmarksFallback:
 
+class TestCategoryBenchmarksFallback:
     @pytest.mark.asyncio
     async def test_falls_back_when_view_missing(self):
         db = _make_db_view_raises()
@@ -292,10 +295,12 @@ class TestCategoryBenchmarksFallback:
         users = [uuid4() for _ in range(6)]  # 6 distinct merchants > k=5
         outcomes = []
         for i, uid in enumerate(users):
-            outcomes.append(_make_outcome(
-                user_id=uid,
-                outcome_label=OutcomeLabel.POSITIVE if i < 4 else OutcomeLabel.NEGATIVE,
-            ))
+            outcomes.append(
+                _make_outcome(
+                    user_id=uid,
+                    outcome_label=OutcomeLabel.POSITIVE if i < 4 else OutcomeLabel.NEGATIVE,
+                )
+            )
 
         db = AsyncMock()
         mock_result = MagicMock()
@@ -317,8 +322,8 @@ class TestCategoryBenchmarksFallback:
 # 3. AVAILABLE CATEGORIES
 # ══════════════════════════════════════════════════════════════════
 
-class TestAvailableCategories:
 
+class TestAvailableCategories:
     @pytest.mark.asyncio
     async def test_returns_from_view(self):
         rows = [
@@ -347,8 +352,8 @@ class TestAvailableCategories:
 # 4. DATA GAP FAILURE RATES
 # ══════════════════════════════════════════════════════════════════
 
-class TestDataGapFailureRates:
 
+class TestDataGapFailureRates:
     @pytest.mark.asyncio
     async def test_cross_merchant_uses_view(self):
         rows = [
@@ -384,16 +389,18 @@ class TestDataGapFailureRates:
 # 5. SCOUT PRIORITY QUEUE
 # ══════════════════════════════════════════════════════════════════
 
-class TestScoutPriorityQueue:
 
+class TestScoutPriorityQueue:
     @pytest.mark.asyncio
     async def test_high_gap_gets_1h_interval(self):
-        rows = [_view_row_data_gap(
-            category="Electronics",
-            failure_gap=25.0,
-            low_data_outcomes=5,
-            scout_priority="high",
-        )]
+        rows = [
+            _view_row_data_gap(
+                category="Electronics",
+                failure_gap=25.0,
+                low_data_outcomes=5,
+                scout_priority="high",
+            )
+        ]
         db = _make_db_for_view(mappings_all=rows)
 
         svc = OutcomeBenchmarkService(db)
@@ -404,12 +411,14 @@ class TestScoutPriorityQueue:
 
     @pytest.mark.asyncio
     async def test_medium_gap_gets_2h_interval(self):
-        rows = [_view_row_data_gap(
-            category="Clothing",
-            failure_gap=15.0,
-            low_data_outcomes=5,
-            scout_priority="medium",
-        )]
+        rows = [
+            _view_row_data_gap(
+                category="Clothing",
+                failure_gap=15.0,
+                low_data_outcomes=5,
+                scout_priority="medium",
+            )
+        ]
         db = _make_db_for_view(mappings_all=rows)
 
         svc = OutcomeBenchmarkService(db)
@@ -420,12 +429,14 @@ class TestScoutPriorityQueue:
 
     @pytest.mark.asyncio
     async def test_low_gap_gets_4h_interval(self):
-        rows = [_view_row_data_gap(
-            category="Books",
-            failure_gap=5.0,
-            low_data_outcomes=5,
-            scout_priority="low",
-        )]
+        rows = [
+            _view_row_data_gap(
+                category="Books",
+                failure_gap=5.0,
+                low_data_outcomes=5,
+                scout_priority="low",
+            )
+        ]
         db = _make_db_for_view(mappings_all=rows)
 
         svc = OutcomeBenchmarkService(db)
@@ -437,11 +448,13 @@ class TestScoutPriorityQueue:
     @pytest.mark.asyncio
     async def test_filters_low_evidence_categories(self):
         """Categories with low_data_outcomes < 2 are excluded."""
-        rows = [_view_row_data_gap(
-            category="Niche",
-            failure_gap=50.0,
-            low_data_outcomes=1  # Below threshold
-        )]
+        rows = [
+            _view_row_data_gap(
+                category="Niche",
+                failure_gap=50.0,
+                low_data_outcomes=1,  # Below threshold
+            )
+        ]
         db = _make_db_for_view(mappings_all=rows)
 
         svc = OutcomeBenchmarkService(db)
@@ -454,8 +467,8 @@ class TestScoutPriorityQueue:
 # 6. STRATEGIST CONTEXT
 # ══════════════════════════════════════════════════════════════════
 
-class TestStrategistContext:
 
+class TestStrategistContext:
     @pytest.mark.asyncio
     async def test_generates_prompt_string(self):
         row = _view_row_benchmarks(
@@ -497,7 +510,9 @@ class TestStrategistContext:
     @pytest.mark.asyncio
     async def test_includes_optimal_range(self):
         row = _view_row_benchmarks(
-            change_p25=-3.0, change_median=-5.0, change_p75=-8.0,
+            change_p25=-3.0,
+            change_median=-5.0,
+            change_p75=-8.0,
             positive_sample_size=30,
         )
         db = _make_db_for_view(mappings_first=row)
@@ -512,8 +527,8 @@ class TestStrategistContext:
 # 7. VIEW REFRESH
 # ══════════════════════════════════════════════════════════════════
 
-class TestRefreshViews:
 
+class TestRefreshViews:
     @pytest.mark.asyncio
     async def test_refreshes_all_three_views(self):
         db = AsyncMock()
@@ -536,7 +551,7 @@ class TestRefreshViews:
         async def _execute_side_effect(stmt, *args, **kwargs):
             nonlocal call_count
             call_count += 1
-            stmt_str = str(stmt) if hasattr(stmt, 'text') else str(stmt)
+            stmt_str = str(stmt) if hasattr(stmt, "text") else str(stmt)
             if "CONCURRENTLY" in stmt_str:
                 raise Exception("Cannot refresh concurrently")
             return MagicMock()
@@ -571,8 +586,8 @@ class TestRefreshViews:
 # 8. STATIC HELPERS
 # ══════════════════════════════════════════════════════════════════
 
-class TestStaticHelpers:
 
+class TestStaticHelpers:
     def test_optimal_range_with_enough_data(self):
         outcomes = []
         for pct in [-2, -3, -4, -5, -6, -7, -8, -9, -10]:
@@ -628,5 +643,3 @@ class TestStaticHelpers:
 
 for _key, _orig in _saved.items():
     sys.modules[_key] = _orig
-
-

@@ -6,10 +6,7 @@ Public endpoints that let judges trigger and observe the autonomous
 pricing pipeline. No auth required for demo routes.
 """
 
-import asyncio
-import json
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -34,8 +31,10 @@ _trigger = AutonomousTrigger()
 # Request/Response Schemas
 # ---------------------------------------------------------------------------
 
+
 class PipelineTriggerRequest(BaseModel):
     """Request to trigger the autonomous pipeline."""
+
     product_id: str = Field(default="demo-product-001", description="Product to analyze")
     current_price: float = Field(default=99.99, description="Current product price in USD")
     product_category: str = Field(default="electronics", description="Product category")
@@ -45,6 +44,7 @@ class PipelineTriggerRequest(BaseModel):
 
 class PipelineResponse(BaseModel):
     """Full pipeline execution result."""
+
     success: bool
     decision: PricingDecision
     pipeline_duration_ms: int
@@ -53,6 +53,7 @@ class PipelineResponse(BaseModel):
 
 class MonitoringStartRequest(BaseModel):
     """Request to start autonomous monitoring."""
+
     product_id: str = Field(default="demo-product-001")
     current_price: float = Field(default=99.99)
     check_interval_seconds: int = Field(default=300, ge=60, le=3600)
@@ -61,6 +62,7 @@ class MonitoringStartRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.post("/trigger", response_model=PipelineResponse)
 async def trigger_pipeline(request: PipelineTriggerRequest):
@@ -73,6 +75,7 @@ async def trigger_pipeline(request: PipelineTriggerRequest):
     This is the core demonstration for VETROX AGENTIC 3.0 Track 3 "The Hand."
     """
     import time
+
     start = time.monotonic()
 
     try:
@@ -173,6 +176,7 @@ async def autonomous_health():
     """
     try:
         from google import genai
+
         test_client = genai.Client()
         # Quick model check
         response = test_client.models.generate_content(
@@ -182,7 +186,7 @@ async def autonomous_health():
         )
         gemini_status = "connected" if response.text else "error"
     except Exception as e:
-        gemini_status = f"error: {str(e)}"
+        gemini_status = f"error: {e!s}"
 
     return {
         "status": "healthy" if gemini_status == "connected" else "degraded",
@@ -196,6 +200,3 @@ async def autonomous_health():
         "pipeline": "autonomous",
         "track": "VETROX AGENTIC 3.0 - The Hand",
     }
-
-
-

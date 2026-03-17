@@ -15,43 +15,42 @@ Features:
 
 Usage:
     from services.competitor_matching import CompetitorMatchingService
-    
+
     service = CompetitorMatchingService()
-    
+
     result = await service.find_competitors(
         product_name="iPhone 15 Pro 256GB",
         keywords=["apple", "smartphone"],
         our_price=Decimal("999.99"),
         max_results=10,
     )
-    
+
     for product in result.products:
         print(f"{product.merchant}: {product.price_display} ({product.confidence_percent}%)")
 """
 
-import logging
-import hashlib
 import asyncio
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Optional, List, Dict, Any, Set
+import hashlib
+import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
 
-from .schemas import (
-    SearchProvider,
-    MatchStatus,
-    MatchedProduct,
-    ProviderResult,
-    MatchSearchRequest,
-    MatchSearchResponse,
-)
 from .providers import (
+    BaseSearchProvider,
     provider_registry,
     setup_providers,
-    BaseSearchProvider,
 )
-from .scoring import ConfidenceScorer, ScoringWeights, score_products
-
+from .schemas import (
+    MatchedProduct,
+    MatchSearchRequest,
+    MatchSearchResponse,
+    MatchStatus,
+    ProviderResult,
+    SearchProvider,
+)
+from .scoring import ConfidenceScorer, ScoringWeights
 
 logger = logging.getLogger(__name__)
 
@@ -59,19 +58,20 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CacheEntry:
     """Cache entry with timestamp."""
+
     response: MatchSearchResponse
     created_at: datetime
-    
+
     def is_expired(self, ttl_hours: int) -> bool:
         """Check if cache entry is expired."""
-        age = datetime.now(timezone.utc) - self.created_at
+        age = datetime.now(UTC) - self.created_at
         return age.total_seconds() > (ttl_hours * 3600)
 
 
 class CompetitorMatchingService:
     """
     Main service for finding competitor product URLs.
-    
+
     Orchestrates multiple search providers and provides:
     - Unified interface for all providers
     - Automatic fallback when providers fail
@@ -84,12 +84,12 @@ class CompetitorMatchingService:
         self,
         cache_ttl_hours: int = 24,
         max_cache_size: int = 1000,
-        scorer_weights: Optional[ScoringWeights] = None,
+        scorer_weights: ScoringWeights | None = None,
         min_confidence: float = 0.2,
     ):
         """
         Initialize the matching service.
-        
+
         Args:
             cache_ttl_hours: How long to cache results
             max_cache_size: Maximum cache entries
@@ -99,13 +99,13 @@ class CompetitorMatchingService:
         self.cache_ttl_hours = cache_ttl_hours
         self.max_cache_size = max_cache_size
         self.min_confidence = min_confidence
-        
+
         # Initialize scorer
         self.scorer = ConfidenceScorer(weights=scorer_weights)
-        
+
         # Result cache
-        self._cache: Dict[str, CacheEntry] = {}
-        
+        self._cache: dict[str, CacheEntry] = {}
+
         # Ensure providers are set up
         if provider_registry.available_count == 0:
             setup_providers()
@@ -117,21 +117,21 @@ class CompetitorMatchingService:
     async def find_competitors(
         self,
         product_name: str,
-        keywords: Optional[List[str]] = None,
-        our_price: Optional[Decimal] = None,
-        our_sku: Optional[str] = None,
+        keywords: list[str] | None = None,
+        our_price: Decimal | None = None,
+        our_sku: str | None = None,
         max_results: int = 10,
-        exclude_domains: Optional[List[str]] = None,
-        preferred_merchants: Optional[List[str]] = None,
-        providers: Optional[List[SearchProvider]] = None,
+        exclude_domains: list[str] | None = None,
+        preferred_merchants: list[str] | None = None,
+        providers: list[SearchProvider] | None = None,
         use_cache: bool = True,
-        min_confidence: Optional[float] = None,
+        min_confidence: float | None = None,
     ) -> MatchSearchResponse:
         """
         Find competitor products matching the given product.
-        
+
         This is the main entry point for competitor matching.
-        
+
         Args:
             product_name: Product name to search for
             keywords: Additional keywords (brand, model, etc.)
@@ -143,11 +143,12 @@ class CompetitorMatchingService:
             providers: Specific providers to use (None = all available)
             use_cache: Whether to use/update cache
             min_confidence: Override default minimum confidence
-            
+
         Returns:
             MatchSearchResponse with found products
         """
         import time
+
         start_time = time.time()
 
         # Build request
@@ -176,7 +177,7 @@ class CompetitorMatchingService:
 
         # Get providers to use
         providers_to_use = self._select_providers(providers)
-        
+
         if not providers_to_use:
             return MatchSearchResponse(
                 status=MatchStatus.FAILED,
@@ -185,10 +186,7 @@ class CompetitorMatchingService:
                 search_time_ms=int((time.time() - start_time) * 1000),
             )
 
-        logger.info(
-            f"Searching for competitors: '{product_name}' "
-            f"using {len(providers_to_use)} provider(s)"
-        )
+        logger.info(f"Searching for competitors: '{product_name}' using {len(providers_to_use)} provider(s)")
 
         # Search with all selected providers
         provider_results = await self._search_all_providers(
@@ -227,10 +225,7 @@ class CompetitorMatchingService:
         if use_cache and response.success:
             self._add_to_cache(cache_key, response)
 
-        logger.info(
-            f"Found {response.total_found} competitors for '{product_name}' "
-            f"in {response.search_time_ms}ms"
-        )
+        logger.info(f"Found {response.total_found} competitors for '{product_name}' in {response.search_time_ms}ms")
 
         return response
 
@@ -238,25 +233,25 @@ class CompetitorMatchingService:
         self,
         product_id: str,
         product_name: str,
-        product_keywords: Optional[List[str]] = None,
-        product_price: Optional[Decimal] = None,
+        product_keywords: list[str] | None = None,
+        product_price: Decimal | None = None,
         **kwargs,
     ) -> MatchSearchResponse:
         """
         Convenience method for finding competitors for a database product.
-        
+
         Args:
             product_id: Product ID (for logging)
             product_name: Product name
             product_keywords: Product keywords
             product_price: Product's current price
             **kwargs: Additional arguments passed to find_competitors
-            
+
         Returns:
             MatchSearchResponse
         """
         logger.info(f"Finding competitors for product {product_id}: {product_name}")
-        
+
         return await self.find_competitors(
             product_name=product_name,
             keywords=product_keywords,
@@ -264,29 +259,31 @@ class CompetitorMatchingService:
             **kwargs,
         )
 
-    def get_available_providers(self) -> List[Dict[str, Any]]:
+    def get_available_providers(self) -> list[dict[str, Any]]:
         """
         Get information about available providers.
-        
+
         Returns:
             List of provider info dicts
         """
         providers = []
-        
+
         for provider in provider_registry.get_all():
-            providers.append({
-                "name": provider.provider_name.value,
-                "available": provider.is_available(),
-                "requires_api_key": provider.requires_api_key,
-                "cost_per_request": provider.cost_per_request,
-            })
-        
+            providers.append(
+                {
+                    "name": provider.provider_name.value,
+                    "available": provider.is_available(),
+                    "requires_api_key": provider.requires_api_key,
+                    "cost_per_request": provider.cost_per_request,
+                }
+            )
+
         return providers
 
     def clear_cache(self) -> int:
         """
         Clear the result cache.
-        
+
         Returns:
             Number of entries cleared
         """
@@ -301,8 +298,8 @@ class CompetitorMatchingService:
 
     def _select_providers(
         self,
-        requested: Optional[List[SearchProvider]] = None,
-    ) -> List[BaseSearchProvider]:
+        requested: list[SearchProvider] | None = None,
+    ) -> list[BaseSearchProvider]:
         """Select providers to use for search."""
         if requested:
             # Use specific requested providers
@@ -319,23 +316,20 @@ class CompetitorMatchingService:
     async def _search_all_providers(
         self,
         request: MatchSearchRequest,
-        providers: List[BaseSearchProvider],
-    ) -> List[ProviderResult]:
+        providers: list[BaseSearchProvider],
+    ) -> list[ProviderResult]:
         """
         Search with all providers concurrently.
-        
+
         Args:
             request: Search request
             providers: Providers to use
-            
+
         Returns:
             List of ProviderResult from each provider
         """
         # Create tasks for concurrent execution
-        tasks = [
-            provider.search(request)
-            for provider in providers
-        ]
+        tasks = [provider.search(request) for provider in providers]
 
         # Execute concurrently
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -345,14 +339,14 @@ class CompetitorMatchingService:
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 # Provider raised an exception
-                logger.error(
-                    f"Provider {providers[i].provider_name.value} failed: {result}"
+                logger.error(f"Provider {providers[i].provider_name.value} failed: {result}")
+                provider_results.append(
+                    ProviderResult(
+                        provider=providers[i].provider_name,
+                        success=False,
+                        error=str(result),
+                    )
                 )
-                provider_results.append(ProviderResult(
-                    provider=providers[i].provider_name,
-                    success=False,
-                    error=str(result),
-                ))
             else:
                 provider_results.append(result)
 
@@ -364,23 +358,23 @@ class CompetitorMatchingService:
 
     def _aggregate_results(
         self,
-        provider_results: List[ProviderResult],
+        provider_results: list[ProviderResult],
         request: MatchSearchRequest,
     ) -> MatchSearchResponse:
         """
         Aggregate results from multiple providers.
-        
+
         Handles deduplication, status determination, and error collection.
         """
-        all_products: List[MatchedProduct] = []
-        providers_used: List[SearchProvider] = []
-        providers_failed: List[str] = []
-        seen_urls: Set[str] = set()
+        all_products: list[MatchedProduct] = []
+        providers_used: list[SearchProvider] = []
+        providers_failed: list[str] = []
+        seen_urls: set[str] = set()
 
         for result in provider_results:
             if result.success:
                 providers_used.append(result.provider)
-                
+
                 # Add products, deduplicating by URL
                 for product in result.products:
                     url_normalized = self._normalize_url(product.url)
@@ -388,9 +382,7 @@ class CompetitorMatchingService:
                         seen_urls.add(url_normalized)
                         all_products.append(product)
             else:
-                providers_failed.append(
-                    f"{result.provider.value}: {result.error}"
-                )
+                providers_failed.append(f"{result.provider.value}: {result.error}")
 
         # Determine overall status
         if not providers_used:
@@ -403,11 +395,9 @@ class CompetitorMatchingService:
         # Filter out excluded domains
         if request.exclude_domains:
             all_products = [
-                p for p in all_products
-                if not any(
-                    excluded in p.merchant_domain
-                    for excluded in request.exclude_domains
-                )
+                p
+                for p in all_products
+                if not any(excluded in p.merchant_domain for excluded in request.exclude_domains)
             ]
 
         return MatchSearchResponse(
@@ -421,9 +411,9 @@ class CompetitorMatchingService:
 
     def _score_and_filter(
         self,
-        products: List[MatchedProduct],
+        products: list[MatchedProduct],
         request: MatchSearchRequest,
-    ) -> List[MatchedProduct]:
+    ) -> list[MatchedProduct]:
         """Score products and filter by minimum confidence."""
         # Score all products
         scored = self.scorer.calculate_batch(
@@ -434,10 +424,7 @@ class CompetitorMatchingService:
         )
 
         # Filter by minimum confidence
-        filtered = [
-            p for p in scored
-            if p.confidence_score >= request.min_confidence
-        ]
+        filtered = [p for p in scored if p.confidence_score >= request.min_confidence]
 
         # Sort by confidence (highest first)
         return sorted(
@@ -448,23 +435,23 @@ class CompetitorMatchingService:
 
     def _apply_merchant_preferences(
         self,
-        products: List[MatchedProduct],
-        preferred: List[str],
-    ) -> List[MatchedProduct]:
+        products: list[MatchedProduct],
+        preferred: list[str],
+    ) -> list[MatchedProduct]:
         """
         Sort products to prioritize preferred merchants.
-        
+
         Preferred merchants appear first, then sorted by confidence.
         """
+
         def sort_key(product: MatchedProduct) -> tuple:
             # Check if merchant is preferred
             merchant_priority = len(preferred)  # Default: lowest priority
             for i, pref in enumerate(preferred):
-                if (pref.lower() in product.merchant.lower() or
-                    pref.lower() in product.merchant_domain):
+                if pref.lower() in product.merchant.lower() or pref.lower() in product.merchant_domain:
                     merchant_priority = i
                     break
-            
+
             # Sort by: merchant priority (asc), confidence (desc)
             return (merchant_priority, -product.confidence_score)
 
@@ -474,27 +461,27 @@ class CompetitorMatchingService:
         """Normalize URL for deduplication."""
         if not url:
             return ""
-        
+
         # Lowercase
         normalized = url.lower()
-        
+
         # Remove trailing slash
-        normalized = normalized.rstrip('/')
-        
+        normalized = normalized.rstrip("/")
+
         # Remove common tracking parameters
-        tracking_params = ['utm_', 'ref=', 'tag=', 'source=']
+        tracking_params = ["utm_", "ref=", "tag=", "source="]
         for param in tracking_params:
             if param in normalized:
                 # Simple removal - in production, use proper URL parsing
                 idx = normalized.find(param)
                 if idx > 0:
                     # Find the & or end
-                    end_idx = normalized.find('&', idx)
+                    end_idx = normalized.find("&", idx)
                     if end_idx > 0:
-                        normalized = normalized[:idx] + normalized[end_idx+1:]
+                        normalized = normalized[:idx] + normalized[end_idx + 1 :]
                     else:
                         # Remove from ? or &
-                        sep_idx = max(normalized.rfind('?', 0, idx), normalized.rfind('&', 0, idx))
+                        sep_idx = max(normalized.rfind("?", 0, idx), normalized.rfind("&", 0, idx))
                         if sep_idx > 0:
                             normalized = normalized[:sep_idx]
 
@@ -514,17 +501,17 @@ class CompetitorMatchingService:
         key_string = "|".join(key_parts)
         return hashlib.md5(key_string.encode()).hexdigest()
 
-    def _get_from_cache(self, key: str) -> Optional[MatchSearchResponse]:
+    def _get_from_cache(self, key: str) -> MatchSearchResponse | None:
         """Get result from cache if not expired."""
         entry = self._cache.get(key)
-        
+
         if entry is None:
             return None
-        
+
         if entry.is_expired(self.cache_ttl_hours):
             del self._cache[key]
             return None
-        
+
         return entry.response
 
     def _add_to_cache(self, key: str, response: MatchSearchResponse) -> None:
@@ -532,23 +519,23 @@ class CompetitorMatchingService:
         # Evict old entries if cache is full
         if len(self._cache) >= self.max_cache_size:
             self._evict_oldest_entries(count=self.max_cache_size // 10)
-        
+
         self._cache[key] = CacheEntry(
             response=response,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
     def _evict_oldest_entries(self, count: int) -> None:
         """Evict oldest cache entries."""
         if not self._cache:
             return
-        
+
         # Sort by creation time
         sorted_keys = sorted(
             self._cache.keys(),
             key=lambda k: self._cache[k].created_at,
         )
-        
+
         # Remove oldest
         for key in sorted_keys[:count]:
             del self._cache[key]
@@ -560,6 +547,3 @@ class CompetitorMatchingService:
 
 # Singleton instance with default configuration
 competitor_matching_service = CompetitorMatchingService()
-
-
-

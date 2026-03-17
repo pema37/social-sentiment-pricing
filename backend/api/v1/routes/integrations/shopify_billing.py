@@ -15,7 +15,6 @@ Flow:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -24,20 +23,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT, READ_RATE_LIMIT
+from core.rate_limit import READ_RATE_LIMIT, WRITE_RATE_LIMIT, limiter
 from db.session import get_session
 from models.user import User
 from schemas.shopify_billing import (
     SHOPIFY_PLANS,
-    ShopifySubscribeRequest,
-    ShopifySubscribeResponse,
-    ShopifyPlanChangeRequest,
+    ShopifyBillingCallbackResponse,
+    ShopifyBillingStatusResponse,
     ShopifyCancelRequest,
     ShopifyCancelResponse,
-    ShopifyBillingStatusResponse,
-    ShopifyBillingCallbackResponse,
+    ShopifyPlanChangeRequest,
     ShopifyPlanInfo,
     ShopifyPlansListResponse,
+    ShopifySubscribeRequest,
+    ShopifySubscribeResponse,
 )
 from services.integration.shopify_billing import ShopifyBillingService
 
@@ -50,12 +49,12 @@ router = APIRouter(prefix="/shopify/billing", tags=["shopify-billing"])
 # Verify Request Schema (inline — only used by this route)
 # =============================================================================
 
+
 class ShopifyVerifyRequest(BaseModel):
     """Request to verify a charge after Shopify approval redirect."""
-    charge_id: str = Field(
-        ..., description="Numeric charge ID from Shopify callback URL"
-    )
-    shop_domain: Optional[str] = Field(
+
+    charge_id: str = Field(..., description="Numeric charge ID from Shopify callback URL")
+    shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected if not provided)",
     )
@@ -64,6 +63,7 @@ class ShopifyVerifyRequest(BaseModel):
 # =============================================================================
 # PUBLIC ENDPOINTS (no auth required)
 # =============================================================================
+
 
 @router.get("/plans", response_model=ShopifyPlansListResponse)
 async def list_shopify_plans():
@@ -90,6 +90,7 @@ async def list_shopify_plans():
 # =============================================================================
 # AUTHENTICATED ENDPOINTS
 # =============================================================================
+
 
 @router.post("/subscribe", response_model=ShopifySubscribeResponse)
 @limiter.limit(WRITE_RATE_LIMIT)
@@ -187,10 +188,7 @@ async def shopify_billing_callback(
     For embedded apps, Shopify redirects to the app URL (frontend) instead
     of this endpoint. This is a fallback that forwards to the frontend.
     """
-    redirect_url = (
-        f"{settings.FRONTEND_URL}/settings/billing"
-        f"?charge_id={charge_id}"
-    )
+    redirect_url = f"{settings.FRONTEND_URL}/settings/billing?charge_id={charge_id}"
     if shop:
         redirect_url += f"&shop={shop}"
 
@@ -276,5 +274,3 @@ async def cancel_shopify_subscription(
         )
 
     return result
-
-

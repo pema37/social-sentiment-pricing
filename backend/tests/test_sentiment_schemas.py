@@ -9,32 +9,31 @@ Run with: pytest backend/tests/test_sentiment_schemas.py -v
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
 from schemas.sentiment import (
+    AIStatusResponse,
     SentimentAnalyzeRequest,
+    SentimentAnalyzeResponse,
     SentimentBulkItem,
     SentimentBulkRequest,
-    SentimentScores,
     SentimentRead,
-    SentimentAnalyzeResponse,
-    SentimentSummary,
     SentimentResponse,
+    SentimentScores,
+    SentimentSummary,
     SocialMentionResponse,
-    AIStatusResponse,
 )
-
 
 # =====================================================================
 # SentimentAnalyzeRequest
 # =====================================================================
 
-class TestSentimentAnalyzeRequest:
 
+class TestSentimentAnalyzeRequest:
     def test_valid_minimal(self):
         r = SentimentAnalyzeRequest(text="Great product!")
         assert r.text == "Great product!"
@@ -73,8 +72,8 @@ class TestSentimentAnalyzeRequest:
 # SentimentBulkItem / SentimentBulkRequest
 # =====================================================================
 
-class TestSentimentBulkItem:
 
+class TestSentimentBulkItem:
     def test_valid_minimal(self):
         item = SentimentBulkItem(text="Good stuff")
         assert item.text == "Good stuff"
@@ -95,7 +94,6 @@ class TestSentimentBulkItem:
 
 
 class TestSentimentBulkRequest:
-
     def test_valid(self):
         r = SentimentBulkRequest(
             items=[
@@ -119,8 +117,8 @@ class TestSentimentBulkRequest:
 # SentimentScores
 # =====================================================================
 
-class TestSentimentScores:
 
+class TestSentimentScores:
     def test_valid(self):
         s = SentimentScores(
             compound=Decimal("0.75"),
@@ -209,8 +207,8 @@ class TestSentimentScores:
 # SentimentRead
 # =====================================================================
 
-class TestSentimentRead:
 
+class TestSentimentRead:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -224,7 +222,7 @@ class TestSentimentRead:
             "neutral_score": Decimal("0.08"),
             "author": "user123",
             "url": "https://reddit.com/r/test/123",
-            "analyzed_at": datetime.now(timezone.utc),
+            "analyzed_at": datetime.now(UTC),
         }
 
     def test_valid(self, valid_data):
@@ -258,8 +256,8 @@ class TestSentimentRead:
 # SentimentAnalyzeResponse
 # =====================================================================
 
-class TestSentimentAnalyzeResponse:
 
+class TestSentimentAnalyzeResponse:
     def test_valid(self):
         r = SentimentAnalyzeResponse(
             text="Great product",
@@ -300,8 +298,8 @@ class TestSentimentAnalyzeResponse:
 # SentimentSummary
 # =====================================================================
 
-class TestSentimentSummary:
 
+class TestSentimentSummary:
     def test_valid_minimal(self):
         s = SentimentSummary(product_id=uuid.uuid4())
         assert s.total_mentions == 0
@@ -322,8 +320,8 @@ class TestSentimentSummary:
             neutral_count=20,
             label_distribution={"positive": 60, "negative": 15, "neutral": 20},
             trend="improving",
-            period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            period_end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            period_start=datetime(2026, 1, 1, tzinfo=UTC),
+            period_end=datetime(2026, 2, 1, tzinfo=UTC),
         )
         assert s.total_mentions == 100
         assert s.trend == "improving"
@@ -337,8 +335,8 @@ class TestSentimentSummary:
 # SentimentResponse
 # =====================================================================
 
-class TestSentimentResponse:
 
+class TestSentimentResponse:
     def test_valid_minimal(self):
         r = SentimentResponse(
             sentiment_score=0.5,
@@ -410,8 +408,8 @@ class TestSentimentResponse:
 # SocialMentionResponse
 # =====================================================================
 
-class TestSocialMentionResponse:
 
+class TestSocialMentionResponse:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -419,7 +417,7 @@ class TestSocialMentionResponse:
             "product_id": uuid.uuid4(),
             "source": "reddit",
             "content": "This product is great!",
-            "collected_at": datetime.now(timezone.utc),
+            "collected_at": datetime.now(UTC),
         }
 
     def test_valid_minimal(self, valid_data):
@@ -437,7 +435,7 @@ class TestSocialMentionResponse:
             "author_followers": 5000,
             "engagement_count": 250,
             "url": "https://reddit.com/r/test/abc123",
-            "published_at": datetime.now(timezone.utc),
+            "published_at": datetime.now(UTC),
             "processed": True,
         }
         r = SocialMentionResponse(**data)
@@ -459,8 +457,8 @@ class TestSocialMentionResponse:
 # AIStatusResponse
 # =====================================================================
 
-class TestAIStatusResponse:
 
+class TestAIStatusResponse:
     def test_valid_unavailable(self):
         r = AIStatusResponse(openai_available=False)
         assert r.openai_available is False
@@ -480,6 +478,3 @@ class TestAIStatusResponse:
     def test_missing_openai_available_raises(self):
         with pytest.raises(ValidationError):
             AIStatusResponse()
-
-
-            

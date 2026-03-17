@@ -10,61 +10,51 @@ Provides endpoints for:
 - Weighted sentiment calculation
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
 
-from db.session import get_db
+from fastapi import APIRouter, Depends, HTTPException
+
 from core.deps import get_current_user
 from models.user import User
 from schemas.trust_scoring import (
+    AdjustedSentimentStats,
     # Author scoring
     AuthorScoreRequest,
     AuthorScoreResponse,
     BatchAuthorScoreRequest,
     BatchAuthorScoreResponse,
-    ComponentScores,
-    # Content analysis
-    ContentAnalysisRequest,
-    ContentAnalysisResponse,
     BatchContentAnalysisRequest,
     BatchContentAnalysisResponse,
-    SpamIndicators,
     # Campaign detection
     CampaignDetectionRequest,
     CampaignDetectionResponse,
     CampaignSignalResponse,
-    # Weighted sentiment
-    WeightedSentimentRequest,
-    WeightedSentimentResponse,
-    RawSentimentStats,
-    AdjustedSentimentStats,
+    ComponentScores,
+    # Content analysis
+    ContentAnalysisRequest,
+    ContentAnalysisResponse,
     QualityMetrics,
     # Quick checks
     QuickSpamCheckRequest,
     QuickSpamCheckResponse,
     QuickTrustCheckRequest,
     QuickTrustCheckResponse,
-    # Stats
-    TrustScoringStatsResponse,
+    RawSentimentStats,
+    RiskFlagEnum,
+    SpamIndicators,
     # Enums
     TrustLevelEnum,
-    RiskFlagEnum,
+    # Stats
+    TrustScoringStatsResponse,
+    # Weighted sentiment
+    WeightedSentimentRequest,
+    WeightedSentimentResponse,
 )
 from services.trust_scoring import (
-    get_trust_scoring_service,
-    TrustScoringService,
     AuthorProfile,
-    calculate_spam_score,
-    is_bot_username,
-)
-
-from services.trust_scoring import (
-    get_trust_scoring_service,
     TrustScoringService,
-    AuthorProfile,
     calculate_spam_score,
+    get_trust_scoring_service,
     is_bot_username,
 )
 
@@ -75,6 +65,7 @@ router = APIRouter(prefix="/trust", tags=["Trust Scoring"])
 # Dependencies
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def get_service() -> TrustScoringService:
     """Get trust scoring service instance."""
     return get_trust_scoring_service()
@@ -83,6 +74,7 @@ def get_service() -> TrustScoringService:
 # ─────────────────────────────────────────────────────────────────────────────
 # Author Scoring Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/author/score",
@@ -107,9 +99,9 @@ async def score_author(
             created_at=request.account_created_at,
             is_verified=request.is_verified,
         )
-        
+
         score = service.author_scorer.score_author(profile)
-        
+
         return AuthorScoreResponse(
             author_id=score.author_id,
             source=score.source,
@@ -128,7 +120,7 @@ async def score_author(
             calculated_at=score.calculated_at,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error scoring author: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error scoring author: {e!s}")
 
 
 @router.post(
@@ -145,7 +137,7 @@ async def score_authors_batch(
     """Score multiple authors at once."""
     scores = []
     total_trust = 0.0
-    
+
     for author_req in request.authors:
         try:
             profile = AuthorProfile(
@@ -158,31 +150,33 @@ async def score_authors_batch(
                 created_at=author_req.account_created_at,
                 is_verified=author_req.is_verified,
             )
-            
+
             score = service.author_scorer.score_author(profile)
             total_trust += score.trust_score
-            
-            scores.append(AuthorScoreResponse(
-                author_id=score.author_id,
-                source=score.source,
-                trust_score=score.trust_score,
-                trust_level=TrustLevelEnum(score.trust_level.value),
-                risk_flags=[RiskFlagEnum(f.value) for f in score.risk_flags],
-                risk_score=score.risk_score,
-                component_scores=ComponentScores(
-                    account_age=score.account_age_score,
-                    followers=score.follower_score,
-                    engagement=score.engagement_score,
-                    history=score.history_score,
-                    verification_bonus=score.verification_bonus,
-                ),
-                confidence=score.confidence,
-                calculated_at=score.calculated_at,
-            ))
-        except Exception as e:
+
+            scores.append(
+                AuthorScoreResponse(
+                    author_id=score.author_id,
+                    source=score.source,
+                    trust_score=score.trust_score,
+                    trust_level=TrustLevelEnum(score.trust_level.value),
+                    risk_flags=[RiskFlagEnum(f.value) for f in score.risk_flags],
+                    risk_score=score.risk_score,
+                    component_scores=ComponentScores(
+                        account_age=score.account_age_score,
+                        followers=score.follower_score,
+                        engagement=score.engagement_score,
+                        history=score.history_score,
+                        verification_bonus=score.verification_bonus,
+                    ),
+                    confidence=score.confidence,
+                    calculated_at=score.calculated_at,
+                )
+            )
+        except Exception:
             # Log error but continue with other authors
             continue
-    
+
     return BatchAuthorScoreResponse(
         scores=scores,
         total=len(scores),
@@ -193,6 +187,7 @@ async def score_authors_batch(
 # ─────────────────────────────────────────────────────────────────────────────
 # Content Analysis Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/content/analyze",
@@ -212,9 +207,9 @@ async def analyze_content(
             text=request.text,
             author_username=request.author_username,
         )
-        
+
         spam_score = calculate_spam_score(request.text, request.author_username)
-        
+
         return ContentAnalysisResponse(
             content_id=analysis.content_id,
             word_count=analysis.word_count,
@@ -233,7 +228,7 @@ async def analyze_content(
             is_spam=spam_score >= 0.5,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error analyzing content: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing content: {e!s}")
 
 
 @router.post(
@@ -251,7 +246,7 @@ async def analyze_content_batch(
     analyses = []
     spam_count = 0
     duplicate_count = 0
-    
+
     for content_req in request.contents:
         try:
             analysis = service.content_analyzer.analyze(
@@ -259,35 +254,37 @@ async def analyze_content_batch(
                 text=content_req.text,
                 author_username=content_req.author_username,
             )
-            
+
             spam_score = calculate_spam_score(content_req.text, content_req.author_username)
             is_spam = spam_score >= 0.5
-            
+
             if is_spam:
                 spam_count += 1
             if analysis.is_duplicate:
                 duplicate_count += 1
-            
-            analyses.append(ContentAnalysisResponse(
-                content_id=analysis.content_id,
-                word_count=analysis.word_count,
-                is_duplicate=analysis.is_duplicate,
-                duplicate_count=analysis.duplicate_count,
-                content_quality_score=analysis.content_quality_score,
-                originality_score=analysis.originality_score,
-                risk_flags=[RiskFlagEnum(f.value) for f in analysis.risk_flags],
-                spam_indicators=SpamIndicators(
-                    excessive_hashtags=analysis.has_excessive_hashtags,
-                    excessive_links=analysis.has_excessive_links,
-                    keyword_stuffing=analysis.has_keyword_stuffing,
-                    all_caps=analysis.has_all_caps,
-                    spam_phrases=analysis.has_spam_phrases,
-                ),
-                is_spam=is_spam,
-            ))
+
+            analyses.append(
+                ContentAnalysisResponse(
+                    content_id=analysis.content_id,
+                    word_count=analysis.word_count,
+                    is_duplicate=analysis.is_duplicate,
+                    duplicate_count=analysis.duplicate_count,
+                    content_quality_score=analysis.content_quality_score,
+                    originality_score=analysis.originality_score,
+                    risk_flags=[RiskFlagEnum(f.value) for f in analysis.risk_flags],
+                    spam_indicators=SpamIndicators(
+                        excessive_hashtags=analysis.has_excessive_hashtags,
+                        excessive_links=analysis.has_excessive_links,
+                        keyword_stuffing=analysis.has_keyword_stuffing,
+                        all_caps=analysis.has_all_caps,
+                        spam_phrases=analysis.has_spam_phrases,
+                    ),
+                    is_spam=is_spam,
+                )
+            )
         except Exception:
             continue
-    
+
     return BatchContentAnalysisResponse(
         analyses=analyses,
         total=len(analyses),
@@ -299,6 +296,7 @@ async def analyze_content_batch(
 # ─────────────────────────────────────────────────────────────────────────────
 # Campaign Detection Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/campaign/detect",
@@ -325,13 +323,13 @@ async def detect_campaign(
             }
             for m in request.mentions
         ]
-        
+
         result = service.detect_campaign(
             mentions=mentions,
             product_id=request.product_id,
             time_window_hours=request.time_window_hours,
         )
-        
+
         return CampaignDetectionResponse(
             product_id=result.product_id,
             time_window_hours=result.time_window_hours,
@@ -356,12 +354,13 @@ async def detect_campaign(
             analyzed_at=result.analyzed_at,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error detecting campaign: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error detecting campaign: {e!s}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Weighted Sentiment Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/sentiment/weighted",
@@ -388,26 +387,28 @@ async def calculate_weighted_sentiment(
                 "source": m.source,
                 "username": m.author_id,  # Default to author_id
             }
-            
+
             # Add author metadata if provided
             if request.author_metadata and m.author_id in request.author_metadata:
                 metadata = request.author_metadata[m.author_id]
-                mention_dict.update({
-                    "username": metadata.get("username", m.author_id),
-                    "follower_count": metadata.get("follower_count"),
-                    "account_created_at": metadata.get("account_created_at"),
-                    "is_verified": metadata.get("is_verified", False),
-                })
-            
+                mention_dict.update(
+                    {
+                        "username": metadata.get("username", m.author_id),
+                        "follower_count": metadata.get("follower_count"),
+                        "account_created_at": metadata.get("account_created_at"),
+                        "is_verified": metadata.get("is_verified", False),
+                    }
+                )
+
             mentions.append(mention_dict)
-        
+
         result = service.calculate_trust_adjusted_sentiment(
             mentions=mentions,
             product_id=request.product_id,
             period_hours=request.period_hours,
             check_campaign=request.check_campaign,
         )
-        
+
         return WeightedSentimentResponse(
             product_id=result.product_id,
             period_hours=result.period_hours,
@@ -428,12 +429,13 @@ async def calculate_weighted_sentiment(
             campaign_detected=result.filtered_count > result.raw_mention_count * 0.3,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error calculating sentiment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error calculating sentiment: {e!s}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Quick Check Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/check/spam",
@@ -447,19 +449,19 @@ async def quick_spam_check(
 ):
     """Quick spam check for content."""
     spam_score = calculate_spam_score(request.text, request.username)
-    
+
     reasons = []
     if spam_score >= 0.5:
         # Determine reasons
         from services.trust_scoring.utils import (
-            has_spam_phrases,
+            get_content_metrics,
             has_excessive_caps,
             has_keyword_stuffing,
-            get_content_metrics,
+            has_spam_phrases,
         )
-        
+
         metrics = get_content_metrics(request.text)
-        
+
         if has_spam_phrases(request.text):
             reasons.append("Contains spam phrases")
         if metrics["hashtag_count"] > 5:
@@ -472,7 +474,7 @@ async def quick_spam_check(
             reasons.append("Keyword stuffing")
         if request.username and is_bot_username(request.username):
             reasons.append("Bot-like username")
-    
+
     return QuickSpamCheckResponse(
         is_spam=spam_score >= 0.5,
         spam_score=spam_score,
@@ -493,11 +495,11 @@ async def quick_trust_check(
 ):
     """Quick trust check for an author."""
     from datetime import timedelta
-    
+
     created_at = None
     if request.account_age_days is not None:
-        created_at = datetime.now(timezone.utc) - timedelta(days=request.account_age_days)
-    
+        created_at = datetime.now(UTC) - timedelta(days=request.account_age_days)
+
     score = service.score_author(
         author_id=request.author_id,
         username=request.username,
@@ -505,7 +507,7 @@ async def quick_trust_check(
         follower_count=request.follower_count,
         created_at=created_at,
     )
-    
+
     return QuickTrustCheckResponse(
         is_trustworthy=score.trust_score >= 0.4,
         trust_score=score.trust_score,
@@ -517,6 +519,7 @@ async def quick_trust_check(
 # ─────────────────────────────────────────────────────────────────────────────
 # Statistics & Management
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/stats",
@@ -530,7 +533,7 @@ async def get_stats(
 ):
     """Get service statistics."""
     stats = service.get_stats()
-    
+
     return TrustScoringStatsResponse(
         content_analyzer=stats["content_analyzer"],
         config=stats["config"],
@@ -554,7 +557,3 @@ async def clear_caches(
     """Clear all caches."""
     service.clear_caches()
     return {"success": True, "message": "All caches cleared"}
-
-
-
-

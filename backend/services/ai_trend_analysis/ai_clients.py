@@ -7,11 +7,12 @@ Supports:
 - Gemini 3 Flash/Pro (NEW - multimodal, streaming, thought signatures, thinking levels)
 """
 
-import json
 import base64
-from typing import Optional, AsyncGenerator, Literal
+import json
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 from core.config import settings
 from core.logging import get_logger
@@ -28,6 +29,7 @@ DEFAULT_MODEL = GEMINI3_FLASH  # Fast streaming for demos
 
 class ThoughtType(str, Enum):
     """Types of AI reasoning steps (thought signatures)."""
+
     OBSERVATION = "observation"
     ANALYSIS = "analysis"
     HYPOTHESIS = "hypothesis"
@@ -38,8 +40,9 @@ class ThoughtType(str, Enum):
 @dataclass
 class StreamChunk:
     """A chunk of streamed AI response."""
+
     text: str
-    thought_type: Optional[ThoughtType] = None
+    thought_type: ThoughtType | None = None
     is_final: bool = False
     is_thought: bool = False  # True if this came from Gemini 3 thinking
 
@@ -47,11 +50,12 @@ class StreamChunk:
 @dataclass
 class ImageAnalysisResult:
     """Result from analyzing a product screenshot."""
-    product_name: Optional[str] = None
-    price: Optional[str] = None
-    currency: Optional[str] = None
+
+    product_name: str | None = None
+    price: str | None = None
+    currency: str | None = None
     features: list[str] = None
-    reviews_summary: Optional[str] = None
+    reviews_summary: str | None = None
     promo_signals: list[str] = None
     confidence: float = 0.0
     raw_text: str = ""
@@ -68,8 +72,8 @@ class AIClients:
 
     def __init__(self):
         self._openai_client = None
-        self._gemini_client = None    # Old SDK (deprecated)
-        self._gemini3_client = None   # New SDK
+        self._gemini_client = None  # Old SDK (deprecated)
+        self._gemini3_client = None  # New SDK
 
     # ------------------------------------------------------------------
     # Client properties (lazy-loaded)
@@ -81,6 +85,7 @@ class AIClients:
         if self._openai_client is None:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
                 logger.info("OpenAI client initialized")
             except Exception as e:
@@ -93,6 +98,7 @@ class AIClients:
         if self._gemini_client is None:
             try:
                 import google.generativeai as genai
+
                 genai.configure(api_key=settings.GEMINI_API_KEY)
                 self._gemini_client = genai.GenerativeModel("gemini-1.5-flash")
                 logger.info("Gemini client initialized (legacy SDK)")
@@ -106,6 +112,7 @@ class AIClients:
         if self._gemini3_client is None:
             try:
                 from google import genai
+
                 self._gemini3_client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 logger.info("Gemini 3 client initialized (new SDK)")
             except Exception as e:
@@ -130,6 +137,7 @@ class AIClients:
         """
         try:
             from google.genai import types
+
             return types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(
                     thinking_level=thinking_level,
@@ -215,7 +223,7 @@ class AIClients:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_thought_from_chunk(chunk) -> Optional[bool]:
+    def _extract_thought_from_chunk(chunk) -> bool | None:
         """
         Try to extract native Gemini 3 thought indicator from a chunk.
 
@@ -232,7 +240,7 @@ class AIClients:
             return None
 
     @staticmethod
-    def _detect_thought_type(text: str) -> Optional[ThoughtType]:
+    def _detect_thought_type(text: str) -> ThoughtType | None:
         """
         Keyword-based fallback for thought type detection.
 
@@ -264,7 +272,7 @@ class AIClients:
         prompt: str,
         model: str = DEFAULT_MODEL,
         thinking_level: str = "low",
-    ) -> AsyncGenerator[StreamChunk, None]:
+    ) -> AsyncGenerator[StreamChunk]:
         """
         Stream response from Gemini 3 with thought signatures.
 
@@ -311,7 +319,7 @@ class AIClients:
 
         except Exception as e:
             logger.error(f"Gemini 3 streaming failed: {e}")
-            yield StreamChunk(text=f"Error: {str(e)}", is_final=True)
+            yield StreamChunk(text=f"Error: {e!s}", is_final=True)
 
     # ------------------------------------------------------------------
     # GEMINI 3 IMAGE ANALYSIS (streaming)
@@ -321,10 +329,10 @@ class AIClients:
         self,
         image_data: bytes,
         image_type: Literal["png", "jpeg", "webp", "gif"] = "png",
-        analysis_prompt: Optional[str] = None,
+        analysis_prompt: str | None = None,
         model: str = DEFAULT_MODEL,
         thinking_level: str = "low",
-    ) -> AsyncGenerator[StreamChunk, None]:
+    ) -> AsyncGenerator[StreamChunk]:
         """
         Analyze a product screenshot with streaming response.
 
@@ -400,7 +408,7 @@ Be specific and structured in your analysis. Start each section with the thought
 
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
-            yield StreamChunk(text=f"Error analyzing image: {str(e)}", is_final=True)
+            yield StreamChunk(text=f"Error analyzing image: {e!s}", is_final=True)
 
     # ------------------------------------------------------------------
     # GEMINI 3 IMAGE ANALYSIS (structured, non-streaming)
@@ -501,6 +509,3 @@ Respond with ONLY the JSON, no other text."""
 
 # Singleton instance
 ai_clients = AIClients()
-
-
-

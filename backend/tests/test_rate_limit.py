@@ -6,8 +6,8 @@ Pure async logic, no DB dependencies.
 """
 
 import asyncio
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, AsyncMock, MagicMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -22,7 +22,6 @@ from services.integration.rate_limit import (
 # RateLimitState — init / defaults
 # ──────────────────────────────────────────────
 class TestRateLimitStateInit:
-
     def test_defaults(self):
         s = RateLimitState()
         assert s.remaining is None
@@ -56,45 +55,34 @@ class TestRateLimitStateInit:
 # RateLimitState — update_from_shopify_headers
 # ──────────────────────────────────────────────
 class TestUpdateFromShopifyHeaders:
-
     def test_parses_call_limit_header(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "10/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "10/40"})
         assert s.remaining == 30  # 40 - 10
         assert s.limit == 40
         assert s.is_limited is False
 
     def test_near_limit_marks_limited(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "38/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "38/40"})
         assert s.remaining == 2  # 40 - 38
         assert s.is_limited is True  # remaining <= 2
 
     def test_at_limit_marks_limited(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "39/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "39/40"})
         assert s.remaining == 1
         assert s.is_limited is True
 
     def test_exact_threshold_marks_limited(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "38/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "38/40"})
         assert s.remaining == 2
         assert s.is_limited is True  # <= 2
 
     def test_above_threshold_not_limited(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "37/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "37/40"})
         assert s.remaining == 3
         assert s.is_limited is False
 
@@ -102,9 +90,7 @@ class TestUpdateFromShopifyHeaders:
         s = RateLimitState()
         assert s.last_request_at is None
 
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "5/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "5/40"})
         assert s.last_request_at is not None
         assert isinstance(s.last_request_at, datetime)
 
@@ -117,39 +103,29 @@ class TestUpdateFromShopifyHeaders:
 
     def test_header_without_slash_ignored(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "noslash"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "noslash"})
         assert s.remaining is None
         assert s.limit is None
 
     def test_zero_current_calls(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "0/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "0/40"})
         assert s.remaining == 40
         assert s.limit == 40
         assert s.is_limited is False
 
     def test_full_limit_hit(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "40/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "40/40"})
         assert s.remaining == 0
         assert s.is_limited is True
 
     def test_updates_overwrite_previous(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "38/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "38/40"})
         assert s.is_limited is True
 
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "5/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "5/40"})
         assert s.remaining == 35
         assert s.is_limited is False
 
@@ -158,7 +134,6 @@ class TestUpdateFromShopifyHeaders:
 # RateLimitState — update_from_woocommerce_headers
 # ──────────────────────────────────────────────
 class TestUpdateFromWooCommerceHeaders:
-
     def test_sets_last_request_at(self):
         s = RateLimitState()
         s.update_from_woocommerce_headers({})
@@ -176,7 +151,6 @@ class TestUpdateFromWooCommerceHeaders:
 # RateLimitState — mark_rate_limited
 # ──────────────────────────────────────────────
 class TestMarkRateLimited:
-
     def test_sets_is_limited(self):
         s = RateLimitState()
         s.mark_rate_limited()
@@ -210,7 +184,6 @@ class TestMarkRateLimited:
 # RateLimitState — should_wait
 # ──────────────────────────────────────────────
 class TestShouldWait:
-
     def test_not_limited_returns_false(self):
         s = RateLimitState()
         assert s.should_wait() is False
@@ -246,7 +219,6 @@ class TestShouldWait:
 # RateLimitState — get_wait_time
 # ──────────────────────────────────────────────
 class TestGetWaitTime:
-
     def test_not_limited_returns_zero(self):
         s = RateLimitState()
         assert s.get_wait_time() == 0.0
@@ -282,7 +254,6 @@ class TestGetWaitTime:
 # RateLimitTracker — init
 # ──────────────────────────────────────────────
 class TestRateLimitTrackerInit:
-
     def test_empty_states(self):
         t = RateLimitTracker()
         assert t._states == {}
@@ -296,7 +267,6 @@ class TestRateLimitTrackerInit:
 # RateLimitTracker — get_state
 # ──────────────────────────────────────────────
 class TestGetState:
-
     @pytest.mark.asyncio
     async def test_creates_new_state(self):
         t = RateLimitTracker()
@@ -322,7 +292,6 @@ class TestGetState:
 # RateLimitTracker — update_from_response
 # ──────────────────────────────────────────────
 class TestUpdateFromResponse:
-
     @pytest.mark.asyncio
     async def test_shopify_update(self):
         t = RateLimitTracker()
@@ -373,7 +342,6 @@ class TestUpdateFromResponse:
 # RateLimitTracker — mark_rate_limited
 # ──────────────────────────────────────────────
 class TestTrackerMarkRateLimited:
-
     @pytest.mark.asyncio
     async def test_marks_store_limited(self):
         t = RateLimitTracker()
@@ -400,7 +368,6 @@ class TestTrackerMarkRateLimited:
 # RateLimitTracker — wait_if_needed
 # ──────────────────────────────────────────────
 class TestWaitIfNeeded:
-
     @pytest.mark.asyncio
     async def test_no_wait_when_not_limited(self):
         t = RateLimitTracker()
@@ -446,7 +413,6 @@ class TestWaitIfNeeded:
 # RateLimitTracker — clear
 # ──────────────────────────────────────────────
 class TestClear:
-
     @pytest.mark.asyncio
     async def test_clears_state(self):
         t = RateLimitTracker()
@@ -476,7 +442,6 @@ class TestClear:
 # Global instance
 # ──────────────────────────────────────────────
 class TestGlobalInstance:
-
     def test_exists(self):
         assert rate_limit_tracker is not None
 
@@ -488,21 +453,16 @@ class TestGlobalInstance:
 # Edge cases
 # ──────────────────────────────────────────────
 class TestEdgeCases:
-
     def test_shopify_header_large_numbers(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "999/1000"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "999/1000"})
         assert s.remaining == 1
         assert s.limit == 1000
         assert s.is_limited is True
 
     def test_shopify_header_single_call(self):
         s = RateLimitState()
-        s.update_from_shopify_headers({
-            "X-Shopify-Shop-Api-Call-Limit": "1/40"
-        })
+        s.update_from_shopify_headers({"X-Shopify-Shop-Api-Call-Limit": "1/40"})
         assert s.remaining == 39
 
     @pytest.mark.asyncio
@@ -564,6 +524,3 @@ class TestEdgeCases:
         # 4. Clear
         await t.clear("shop-1")
         assert "shop-1" not in t._states
-
-
-        

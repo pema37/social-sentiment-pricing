@@ -21,10 +21,10 @@ Place this file at: backend/alembic/versions/ie001_feedback_loop_add_intelligenc
 Then run: alembic upgrade head
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
+from alembic import op
 
 # revision identifiers
 revision = "ie001_feedback_loop"
@@ -293,6 +293,3 @@ def downgrade() -> None:
     op.drop_column("recommendation_outcomes", "revenue_14d_after")
     op.drop_column("recommendation_outcomes", "revenue_7d_after")
     op.drop_column("recommendation_outcomes", "measurement_status")
-
-
-    

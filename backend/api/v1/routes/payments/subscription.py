@@ -9,26 +9,24 @@ Following single responsibility principle - routes only handle:
 - HTTP error mapping
 """
 
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.session import get_session
 from core.deps import get_current_user
+from db.session import get_session
 from models.user import User
-from services.payment import SubscriptionService, PLANS
 from schemas.payment import (
-    PlanInfo,
-    SubscriptionInfo,
-    SubscribeRequest,
-    PaymentRequest,
-    PaymentInfo,
     ConfirmPaymentRequest,
     ConfirmPaymentResponse,
+    PaymentInfo,
+    PaymentRequest,
+    PlanInfo,
+    SubscribeRequest,
+    SubscriptionInfo,
 )
-
+from services.payment import PLANS, SubscriptionService
 
 router = APIRouter(tags=["subscriptions"])
 
@@ -36,6 +34,7 @@ router = APIRouter(tags=["subscriptions"])
 # =============================================================================
 # DEPENDENCY
 # =============================================================================
+
 
 def get_subscription_service(
     session: AsyncSession = Depends(get_session),
@@ -48,7 +47,8 @@ def get_subscription_service(
 # PLAN ENDPOINTS
 # =============================================================================
 
-@router.get("/plans", response_model=List[PlanInfo])
+
+@router.get("/plans", response_model=list[PlanInfo])
 async def get_plans():
     """Get all available subscription plans."""
     return PLANS
@@ -58,6 +58,7 @@ async def get_plans():
 # SUBSCRIPTION ENDPOINTS
 # =============================================================================
 
+
 @router.get("/subscription", response_model=SubscriptionInfo)
 async def get_subscription(
     current_user: User = Depends(get_current_user),
@@ -66,6 +67,7 @@ async def get_subscription(
     """Get current user's subscription."""
     return await service.get_user_subscription(current_user)
 
+
 @router.post("/downgrade-to-free", response_model=SubscriptionInfo)
 async def downgrade_to_free(
     current_user: User = Depends(get_current_user),
@@ -73,11 +75,12 @@ async def downgrade_to_free(
 ):
     """
     Downgrade the current user's subscription to the free tier.
-    
+
     This cancels any active paid subscription and moves them to free.
     No payment required.
     """
     return await service.downgrade_to_free(current_user)
+
 
 @router.post("/subscribe", response_model=PaymentRequest)
 async def subscribe(
@@ -87,7 +90,7 @@ async def subscribe(
 ):
     """
     Create a subscription payment request.
-    
+
     Returns payment details for the user to complete via MNEE.
     The recipient_address will be network-specific:
     - For 'ethereum': Returns Ethereum wallet (0x...)
@@ -112,6 +115,7 @@ async def subscribe(
 # PAYMENT ENDPOINTS
 # =============================================================================
 
+
 @router.get("/{payment_id}", response_model=PaymentInfo)
 async def get_payment(
     payment_id: str,
@@ -126,15 +130,15 @@ async def get_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid payment ID format",
         )
-    
+
     payment = await service.get_payment(payment_uuid, current_user)
-    
+
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
-    
+
     return payment
 
 
@@ -156,24 +160,24 @@ async def confirm_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid payment ID format",
         )
-    
+
     result = await service.confirm_payment(
         payment_id=payment_uuid,
         user=current_user,
         transaction_hash=data.transaction_hash,
         network=data.network,
     )
-    
+
     if not result.success and "not found" in result.message.lower():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=result.message,
         )
-    
+
     return result
 
 
-@router.get("/history", response_model=List[PaymentInfo])
+@router.get("/history", response_model=list[PaymentInfo])
 async def get_payment_history(
     current_user: User = Depends(get_current_user),
     service: SubscriptionService = Depends(get_subscription_service),
@@ -186,6 +190,3 @@ async def get_payment_history(
         limit=min(limit, 100),  # Cap at 100
         offset=offset,
     )
-
-
-

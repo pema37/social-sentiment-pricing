@@ -7,7 +7,7 @@ Address validation, balance, transactions, amount utilities, factory.
 
 import sys
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,10 +25,12 @@ class MneeValidationError(Exception):
         super().__init__(message)
         self.field = field
 
+
 class MneeConfigError(Exception):
     def __init__(self, message="", missing_key=None):
         super().__init__(message)
         self.missing_key = missing_key
+
 
 _exc_mod = MagicMock()
 _exc_mod.MneeValidationError = MneeValidationError
@@ -38,24 +40,26 @@ sys.modules["services.payment.exceptions"] = _exc_mod
 # mnee_client
 _client_mod = MagicMock()
 
+
 class FakeMneeEnvironment:
     SANDBOX = MagicMock()
     SANDBOX.value = "sandbox"
     PRODUCTION = MagicMock()
     PRODUCTION.value = "production"
 
+
 _client_mod.MneeEnvironment = FakeMneeEnvironment
 _client_mod.MneeClient = MagicMock
 sys.modules["services.payment.mnee_client"] = _client_mod
 
-from services.payment.mnee_service import (
-    MneeService,
-    get_mnee_service,
-    close_mnee_service,
-)
-
 # Force-patch exception classes into loaded module so raise works
 import services.payment.mnee_service as _svc_mod
+from services.payment.mnee_service import (
+    MneeService,
+    close_mnee_service,
+    get_mnee_service,
+)
+
 _svc_mod.MneeValidationError = MneeValidationError
 _svc_mod.MneeConfigError = MneeConfigError
 
@@ -72,21 +76,26 @@ SVC_MOD = "services.payment.mnee_service"
 
 # ── Helpers ───────────────────────────────────────────────────────
 
+
 def _make_service():
     client = MagicMock()
     client.environment = MagicMock()
     client.environment.value = "sandbox"
     client.close = AsyncMock()
     client.get_config = AsyncMock(return_value={"decimals": 5, "fees": [{"fee": 1000}]})
-    client.get_balances = AsyncMock(return_value=[
-        {"address": "1ValidAddr", "amt": 3422000, "precised": 34.22}
-    ])
+    client.get_balances = AsyncMock(return_value=[{"address": "1ValidAddr", "amt": 3422000, "precised": 34.22}])
     client.get_transaction = AsyncMock(return_value={"txid": "abc"})
     client.get_transactions = AsyncMock(return_value=[])
-    client.get_ticket = AsyncMock(return_value={
-        "id": "t1", "status": "confirmed", "tx_id": "abc",
-        "errors": None, "createdAt": "2025-01-01", "updatedAt": "2025-01-02",
-    })
+    client.get_ticket = AsyncMock(
+        return_value={
+            "id": "t1",
+            "status": "confirmed",
+            "tx_id": "abc",
+            "errors": None,
+            "createdAt": "2025-01-01",
+            "updatedAt": "2025-01-02",
+        }
+    )
     svc = MneeService(client=client)
     return svc
 
@@ -100,7 +109,6 @@ SHORT_ADDR = "1A1zP1eP5QGefi2DMPTL"  # too short
 # __init__ and properties
 # ──────────────────────────────────────────────
 class TestInit:
-
     def test_stores_client(self):
         client = MagicMock()
         svc = MneeService(client=client)
@@ -122,7 +130,6 @@ class TestInit:
 # close
 # ──────────────────────────────────────────────
 class TestClose:
-
     @pytest.mark.asyncio
     async def test_closes_client(self):
         svc = _make_service()
@@ -134,7 +141,6 @@ class TestClose:
 # get_config / get_fee_structure
 # ──────────────────────────────────────────────
 class TestConfig:
-
     @pytest.mark.asyncio
     async def test_get_config(self):
         svc = _make_service()
@@ -160,7 +166,6 @@ class TestConfig:
 # validate_bsv_address (static)
 # ──────────────────────────────────────────────
 class TestValidateBsvAddress:
-
     def test_valid_p2pkh(self):
         assert MneeService.validate_bsv_address(VALID_ADDR) is True
 
@@ -212,7 +217,6 @@ class TestValidateBsvAddress:
 # require_valid_address
 # ──────────────────────────────────────────────
 class TestRequireValidAddress:
-
     def test_valid_returns_stripped(self):
         svc = _make_service()
         result = svc.require_valid_address(f"  {VALID_ADDR}  ")
@@ -249,7 +253,6 @@ class TestRequireValidAddress:
 # Balance operations
 # ──────────────────────────────────────────────
 class TestBalance:
-
     @pytest.mark.asyncio
     async def test_get_balance(self):
         svc = _make_service()
@@ -288,7 +291,6 @@ class TestBalance:
 # Transaction operations
 # ──────────────────────────────────────────────
 class TestTransactions:
-
     @pytest.mark.asyncio
     async def test_get_transaction(self):
         svc = _make_service()
@@ -326,7 +328,6 @@ class TestTransactions:
 # Amount utilities
 # ──────────────────────────────────────────────
 class TestAmountUtilities:
-
     def test_format_amount_normal(self):
         assert MneeService.format_amount(3422000) == "34.22"
 
@@ -369,9 +370,9 @@ class TestAmountUtilities:
 # get_mnee_service / close_mnee_service
 # ──────────────────────────────────────────────
 class TestFactory:
-
     def setup_method(self):
         import services.payment.mnee_service as mod
+
         mod._service_instance = None
 
     def test_get_mnee_service_no_api_key_raises(self):
@@ -401,6 +402,7 @@ class TestFactory:
     @pytest.mark.asyncio
     async def test_close_mnee_service(self):
         import services.payment.mnee_service as mod
+
         mock_svc = MagicMock()
         mock_svc.close = AsyncMock()
         mod._service_instance = mock_svc
@@ -411,9 +413,6 @@ class TestFactory:
     @pytest.mark.asyncio
     async def test_close_mnee_service_noop(self):
         import services.payment.mnee_service as mod
+
         mod._service_instance = None
         await close_mnee_service()  # No error
-
-
-
-        

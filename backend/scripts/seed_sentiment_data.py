@@ -9,30 +9,29 @@ for demos and testing. It creates:
 
 Usage:
     python backend/scripts/seed_sentiment_data.py [--user-email EMAIL] [--days DAYS] [--mentions-per-day N]
-    
+
 Example:
     python backend/scripts/seed_sentiment_data.py --user-email demo@example.com --days 30 --mentions-per-day 15
 """
 
 import argparse
-import random
-import uuid
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-from typing import Optional
-import sys
 import os
+import random
+import sys
+import uuid
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlmodel import Session, select
-from db.session import engine
-from models.user import User
-from models.product import Product
-from models.social_mention import SocialMention
-from models.sentiment import Sentiment
 
+from db.session import engine
+from models.product import Product
+from models.sentiment import Sentiment
+from models.social_mention import SocialMention
+from models.user import User
 
 # =============================================================================
 # MOCK DATA TEMPLATES
@@ -216,26 +215,50 @@ TEMPLATES_BY_SOURCE = {
 
 # Author name generators
 REDDIT_AUTHORS = [
-    "ThrowawayUser{n}", "ProductEnthusiast{n}", "BargainHunter{n}",
-    "TechReviewer{n}", "RandomBuyer{n}", "CasualConsumer{n}",
-    "DealSeeker{n}", "QualityMatters{n}", "ValueShopper{n}",
-    "SmartPurchaser{n}", "ReviewKing{n}", "HonestOpinion{n}",
+    "ThrowawayUser{n}",
+    "ProductEnthusiast{n}",
+    "BargainHunter{n}",
+    "TechReviewer{n}",
+    "RandomBuyer{n}",
+    "CasualConsumer{n}",
+    "DealSeeker{n}",
+    "QualityMatters{n}",
+    "ValueShopper{n}",
+    "SmartPurchaser{n}",
+    "ReviewKing{n}",
+    "HonestOpinion{n}",
 ]
 
 TWITTER_AUTHORS = [
-    "@user{n}", "@shopper{n}", "@reviewer{n}", "@deals{n}",
-    "@lifestyle{n}", "@trending{n}", "@vibes{n}", "@thoughts{n}",
+    "@user{n}",
+    "@shopper{n}",
+    "@reviewer{n}",
+    "@deals{n}",
+    "@lifestyle{n}",
+    "@trending{n}",
+    "@vibes{n}",
+    "@thoughts{n}",
 ]
 
 TIKTOK_AUTHORS = [
-    "@tiktokuser{n}", "@reviewqueen{n}", "@haultime{n}",
-    "@producttest{n}", "@dailyfinds{n}", "@shopwithme{n}",
+    "@tiktokuser{n}",
+    "@reviewqueen{n}",
+    "@haultime{n}",
+    "@producttest{n}",
+    "@dailyfinds{n}",
+    "@shopwithme{n}",
 ]
 
 NEWS_AUTHORS = [
-    "MarketWatch Staff", "Consumer Reports", "Reuters",
-    "Industry Insider", "Tech Analysis Weekly", "Market Pulse",
-    "Consumer Trends Daily", "Retail Observer", "Business Wire",
+    "MarketWatch Staff",
+    "Consumer Reports",
+    "Reuters",
+    "Industry Insider",
+    "Tech Analysis Weekly",
+    "Market Pulse",
+    "Consumer Trends Daily",
+    "Retail Observer",
+    "Business Wire",
 ]
 
 
@@ -243,10 +266,11 @@ NEWS_AUTHORS = [
 # SENTIMENT SCORE GENERATION
 # =============================================================================
 
+
 def generate_sentiment_scores(sentiment_type: str) -> dict:
     """
     Generate realistic VADER-style sentiment scores.
-    
+
     Returns dict with: compound, positive, negative, neutral scores
     All scores are Decimal with 3 decimal places.
     """
@@ -262,10 +286,10 @@ def generate_sentiment_scores(sentiment_type: str) -> dict:
         compound = Decimal(str(round(random.uniform(-0.25, 0.25), 3)))
         positive = Decimal(str(round(random.uniform(0.1, 0.35), 3)))
         negative = Decimal(str(round(random.uniform(0.1, 0.35), 3)))
-    
+
     # Neutral score fills the remainder (roughly)
     neutral = Decimal(str(round(max(0, 1 - float(positive) - float(negative)), 3)))
-    
+
     return {
         "compound_score": compound,
         "positive_score": positive,
@@ -289,33 +313,38 @@ def pick_sentiment_type() -> str:
 # MENTION GENERATION
 # =============================================================================
 
-def generate_author(source: str) -> tuple[str, Optional[int]]:
+
+def generate_author(source: str) -> tuple[str, int | None]:
     """Generate author name and follower count for a source."""
     n = random.randint(100, 99999)
-    
+
     if source == "reddit":
         author = random.choice(REDDIT_AUTHORS).format(n=n)
         followers = None  # Reddit doesn't show followers prominently
     elif source == "twitter":
         author = random.choice(TWITTER_AUTHORS).format(n=n)
-        followers = random.choice([
-            random.randint(50, 500),      # Small account
-            random.randint(500, 5000),    # Medium account
-            random.randint(5000, 50000),  # Large account
-            random.randint(50000, 500000), # Very large
-        ])
+        followers = random.choice(
+            [
+                random.randint(50, 500),  # Small account
+                random.randint(500, 5000),  # Medium account
+                random.randint(5000, 50000),  # Large account
+                random.randint(50000, 500000),  # Very large
+            ]
+        )
     elif source == "tiktok":
         author = random.choice(TIKTOK_AUTHORS).format(n=n)
-        followers = random.choice([
-            random.randint(100, 1000),
-            random.randint(1000, 10000),
-            random.randint(10000, 100000),
-            random.randint(100000, 1000000),
-        ])
+        followers = random.choice(
+            [
+                random.randint(100, 1000),
+                random.randint(1000, 10000),
+                random.randint(10000, 100000),
+                random.randint(100000, 1000000),
+            ]
+        )
     else:  # news
         author = random.choice(NEWS_AUTHORS)
         followers = None
-    
+
     return author, followers
 
 
@@ -327,28 +356,34 @@ def generate_engagement(source: str, sentiment_type: str) -> int:
         multiplier = random.uniform(1.0, 1.5)
     elif sentiment_type == "positive":
         multiplier = random.uniform(0.8, 1.3)
-    
+
     if source == "reddit":
-        base = random.choice([
-            random.randint(1, 50),
-            random.randint(50, 500),
-            random.randint(500, 5000),
-        ])
+        base = random.choice(
+            [
+                random.randint(1, 50),
+                random.randint(50, 500),
+                random.randint(500, 5000),
+            ]
+        )
     elif source == "twitter":
-        base = random.choice([
-            random.randint(0, 20),
-            random.randint(20, 200),
-            random.randint(200, 2000),
-        ])
+        base = random.choice(
+            [
+                random.randint(0, 20),
+                random.randint(20, 200),
+                random.randint(200, 2000),
+            ]
+        )
     elif source == "tiktok":
-        base = random.choice([
-            random.randint(100, 1000),
-            random.randint(1000, 10000),
-            random.randint(10000, 100000),
-        ])
+        base = random.choice(
+            [
+                random.randint(100, 1000),
+                random.randint(1000, 10000),
+                random.randint(10000, 100000),
+            ]
+        )
     else:  # news
         base = random.randint(0, 100)
-    
+
     return int(base * multiplier)
 
 
@@ -373,20 +408,20 @@ def create_mention_and_sentiment(
     published_at: datetime,
 ) -> tuple[SocialMention, Sentiment]:
     """Create a social mention and its corresponding sentiment record."""
-    
+
     source = random.choice(SOURCES)
     sentiment_type = pick_sentiment_type()
-    
+
     # Get content template
     templates = TEMPLATES_BY_SOURCE[source][sentiment_type]
     content = random.choice(templates).format(product=product.name)
-    
+
     # Generate metadata
     author, author_followers = generate_author(source)
     engagement = generate_engagement(source, sentiment_type)
     source_id = str(random.randint(1000000000, 9999999999))
     url = generate_url(source, source_id)
-    
+
     # Create social mention
     mention = SocialMention(
         id=uuid.uuid4(),
@@ -404,10 +439,10 @@ def create_mention_and_sentiment(
         processed=True,  # Mark as processed since we're also creating sentiment
         collected_at=published_at + timedelta(minutes=random.randint(5, 60)),
     )
-    
+
     # Generate sentiment scores
     scores = generate_sentiment_scores(sentiment_type)
-    
+
     # Create sentiment record
     sentiment = Sentiment(
         id=uuid.uuid4(),
@@ -422,7 +457,7 @@ def create_mention_and_sentiment(
         url=url,
         analyzed_at=mention.collected_at + timedelta(seconds=random.randint(1, 30)),
     )
-    
+
     return mention, sentiment
 
 
@@ -430,21 +465,22 @@ def create_mention_and_sentiment(
 # MAIN SEEDING LOGIC
 # =============================================================================
 
+
 def seed_sentiment_data(
-    user_email: Optional[str] = None,
+    user_email: str | None = None,
     days: int = 30,
     mentions_per_day: int = 10,
     dry_run: bool = False,
 ) -> dict:
     """
     Seed the database with mock sentiment data.
-    
+
     Args:
         user_email: Email of user whose products to seed. If None, seeds all users.
         days: Number of days of historical data to generate.
         mentions_per_day: Average mentions per product per day.
         dry_run: If True, don't commit to database.
-    
+
     Returns:
         Dict with counts of created records.
     """
@@ -455,7 +491,7 @@ def seed_sentiment_data(
         "sentiments_created": 0,
         "errors": [],
     }
-    
+
     with Session(engine) as session:
         # Get users
         if user_email:
@@ -466,51 +502,46 @@ def seed_sentiment_data(
             users = [user]
         else:
             users = session.exec(select(User)).all()
-        
+
         if not users:
             stats["errors"].append("No users found in database")
             return stats
-        
+
         print(f"Processing {len(users)} user(s)...")
-        
+
         for user in users:
             stats["users_processed"] += 1
-            
+
             # Get user's products
-            products = session.exec(
-                select(Product).where(Product.user_id == user.id)
-            ).all()
-            
+            products = session.exec(select(Product).where(Product.user_id == user.id)).all()
+
             if not products:
                 print(f"  No products for user {user.email}, skipping...")
                 continue
-            
+
             print(f"  User {user.email}: {len(products)} product(s)")
-            
+
             for product in products:
                 stats["products_processed"] += 1
                 print(f"    Seeding data for: {product.name}")
-                
+
                 # Generate mentions for each day
-                now = datetime.now(timezone.utc)
-                
+                now = datetime.now(UTC)
+
                 for day_offset in range(days, 0, -1):
                     # Calculate base date for this day
                     base_date = now - timedelta(days=day_offset)
-                    
+
                     # Vary mentions per day (±50%)
-                    day_mentions = random.randint(
-                        max(1, mentions_per_day // 2),
-                        int(mentions_per_day * 1.5)
-                    )
-                    
+                    day_mentions = random.randint(max(1, mentions_per_day // 2), int(mentions_per_day * 1.5))
+
                     for _ in range(day_mentions):
                         # Random time during the day
                         published_at = base_date + timedelta(
                             hours=random.randint(0, 23),
                             minutes=random.randint(0, 59),
                         )
-                        
+
                         try:
                             mention, sentiment = create_mention_and_sentiment(
                                 session=session,
@@ -518,22 +549,22 @@ def seed_sentiment_data(
                                 product=product,
                                 published_at=published_at,
                             )
-                            
+
                             if not dry_run:
                                 session.add(mention)
                                 session.add(sentiment)
-                            
+
                             stats["mentions_created"] += 1
                             stats["sentiments_created"] += 1
-                            
+
                         except Exception as e:
                             stats["errors"].append(f"Error creating mention: {e}")
-                
+
                 # Commit per product to avoid huge transactions
                 if not dry_run:
                     session.commit()
                     print(f"      ✓ Committed data for {product.name}")
-        
+
         print("\n" + "=" * 50)
         print("SEEDING COMPLETE")
         print("=" * 50)
@@ -541,15 +572,15 @@ def seed_sentiment_data(
         print(f"Products processed:  {stats['products_processed']}")
         print(f"Mentions created:    {stats['mentions_created']}")
         print(f"Sentiments created:  {stats['sentiments_created']}")
-        
+
         if stats["errors"]:
             print(f"\nErrors ({len(stats['errors'])}):")
             for err in stats["errors"][:10]:
                 print(f"  - {err}")
-        
+
         if dry_run:
             print("\n⚠️  DRY RUN - No data was committed to database")
-    
+
     return stats
 
 
@@ -557,10 +588,9 @@ def seed_sentiment_data(
 # CLI ENTRY POINT
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Seed mock sentiment data for SSP demos and testing"
-    )
+    parser = argparse.ArgumentParser(description="Seed mock sentiment data for SSP demos and testing")
     parser.add_argument(
         "--user-email",
         type=str,
@@ -584,9 +614,9 @@ def main():
         action="store_true",
         help="Preview what would be created without committing",
     )
-    
+
     args = parser.parse_args()
-    
+
     print("=" * 50)
     print("SSP SENTIMENT DATA SEEDER")
     print("=" * 50)
@@ -595,7 +625,7 @@ def main():
     print(f"Mentions/day:     {args.mentions_per_day}")
     print(f"Dry run:          {args.dry_run}")
     print("=" * 50 + "\n")
-    
+
     seed_sentiment_data(
         user_email=args.user_email,
         days=args.days,
@@ -606,8 +636,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-    

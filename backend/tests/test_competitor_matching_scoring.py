@@ -32,11 +32,11 @@ for mod in [
 
 import pytest
 
-from services.competitor_matching.schemas import MatchedProduct, SearchProvider
+from services.competitor_matching.schemas import MatchedProduct
 from services.competitor_matching.scoring import (
-    ScoringWeights,
-    ScoreBreakdown,
     ConfidenceScorer,
+    ScoreBreakdown,
+    ScoringWeights,
     score_products,
 )
 
@@ -46,6 +46,7 @@ SCORING_PATH = "services.competitor_matching.scoring"
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def make_product(
     title="Apple iPhone 15 Pro 256GB Black",
@@ -60,10 +61,15 @@ def make_product(
     confidence_score=0.0,
 ):
     return MatchedProduct(
-        title=title, url=url, price=price,
-        merchant=merchant, merchant_domain=merchant_domain,
-        image_url=image_url, rating=rating,
-        reviews_count=reviews_count, in_stock=in_stock,
+        title=title,
+        url=url,
+        price=price,
+        merchant=merchant,
+        merchant_domain=merchant_domain,
+        image_url=image_url,
+        rating=rating,
+        reviews_count=reviews_count,
+        in_stock=in_stock,
         confidence_score=confidence_score,
     )
 
@@ -72,29 +78,27 @@ def make_product(
 # 1. ScoringWeights
 # ============================================================
 
-class TestScoringWeights:
 
+class TestScoringWeights:
     def test_defaults_sum_to_one(self):
         w = ScoringWeights()
-        total = (
-            w.title_similarity + w.keyword_match + w.price_proximity
-            + w.merchant_reliability + w.data_completeness
-        )
+        total = w.title_similarity + w.keyword_match + w.price_proximity + w.merchant_reliability + w.data_completeness
         assert 0.99 <= total <= 1.01
 
     def test_invalid_weights_raises(self):
         with pytest.raises(ValueError, match="Weights must sum to 1.0"):
-            ScoringWeights(title_similarity=0.5, keyword_match=0.5,
-                           price_proximity=0.5, merchant_reliability=0.5,
-                           data_completeness=0.5)
+            ScoringWeights(
+                title_similarity=0.5,
+                keyword_match=0.5,
+                price_proximity=0.5,
+                merchant_reliability=0.5,
+                data_completeness=0.5,
+            )
 
     def test_for_exact_match(self):
         w = ScoringWeights.for_exact_match()
         assert w.title_similarity == 0.45
-        total = (
-            w.title_similarity + w.keyword_match + w.price_proximity
-            + w.merchant_reliability + w.data_completeness
-        )
+        total = w.title_similarity + w.keyword_match + w.price_proximity + w.merchant_reliability + w.data_completeness
         assert 0.99 <= total <= 1.01
 
     def test_for_price_comparison(self):
@@ -110,13 +114,15 @@ class TestScoringWeights:
 # 2. ScoreBreakdown
 # ============================================================
 
-class TestScoreBreakdown:
 
+class TestScoreBreakdown:
     def test_to_dict(self):
         b = ScoreBreakdown(
             final_score=0.756,
-            title_score=0.8, keyword_score=0.6,
-            price_score=0.9, merchant_score=0.7,
+            title_score=0.8,
+            keyword_score=0.6,
+            price_score=0.9,
+            merchant_score=0.7,
             completeness_score=0.5,
             penalties_applied=["short_title"],
             bonuses_applied=["high_rating"],
@@ -137,8 +143,8 @@ class TestScoreBreakdown:
 # 3. ConfidenceScorer Init
 # ============================================================
 
-class TestConfidenceScorerInit:
 
+class TestConfidenceScorerInit:
     def test_default_weights(self):
         scorer = ConfidenceScorer()
         assert isinstance(scorer.weights, ScoringWeights)
@@ -158,8 +164,8 @@ class TestConfidenceScorerInit:
 # 4. _score_title_similarity
 # ============================================================
 
-class TestScoreTitleSimilarity:
 
+class TestScoreTitleSimilarity:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -185,8 +191,8 @@ class TestScoreTitleSimilarity:
 # 5. _score_keyword_match
 # ============================================================
 
-class TestScoreKeywordMatch:
 
+class TestScoreKeywordMatch:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -208,8 +214,8 @@ class TestScoreKeywordMatch:
 # 6. _score_price_proximity
 # ============================================================
 
-class TestScorePriceProximity:
 
+class TestScorePriceProximity:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -250,8 +256,8 @@ class TestScorePriceProximity:
 # 7. _score_merchant_reliability
 # ============================================================
 
-class TestScoreMerchantReliability:
 
+class TestScoreMerchantReliability:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -266,8 +272,8 @@ class TestScoreMerchantReliability:
 # 8. _score_data_completeness
 # ============================================================
 
-class TestScoreDataCompleteness:
 
+class TestScoreDataCompleteness:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -278,8 +284,11 @@ class TestScoreDataCompleteness:
 
     def test_minimal_data(self):
         p = make_product(
-            price=None, image_url=None, merchant="",
-            rating=None, reviews_count=None,
+            price=None,
+            image_url=None,
+            merchant="",
+            rating=None,
+            reviews_count=None,
         )
         result = self.scorer._score_data_completeness(p)
         assert result == 0.0
@@ -300,8 +309,8 @@ class TestScoreDataCompleteness:
 # 9. Bonuses
 # ============================================================
 
-class TestApplyBonuses:
 
+class TestApplyBonuses:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -337,8 +346,8 @@ class TestApplyBonuses:
 # 10. Penalties
 # ============================================================
 
-class TestApplyPenalties:
 
+class TestApplyPenalties:
     def setup_method(self):
         self.scorer = ConfidenceScorer()
 
@@ -378,8 +387,8 @@ class TestApplyPenalties:
 # 11. calculate (full orchestration)
 # ============================================================
 
-class TestCalculate:
 
+class TestCalculate:
     @patch(f"{SCORING_PATH}.get_merchant_reliability", return_value=0.9)
     @patch(f"{SCORING_PATH}.calculate_keyword_match", return_value=0.8)
     @patch(f"{SCORING_PATH}.calculate_text_similarity", return_value=0.7)
@@ -415,8 +424,12 @@ class TestCalculate:
     def test_clamped_to_min(self, mock_ts, mock_km, mock_mr):
         scorer = ConfidenceScorer(min_score=0.1)
         p = make_product(
-            price=None, in_stock=False, reviews_count=None,
-            rating=None, image_url=None, merchant="",
+            price=None,
+            in_stock=False,
+            reviews_count=None,
+            rating=None,
+            image_url=None,
+            merchant="",
             title="Shop",
         )
         result = scorer.calculate(p, "iPhone")
@@ -427,8 +440,8 @@ class TestCalculate:
 # 12. calculate_batch
 # ============================================================
 
-class TestCalculateBatch:
 
+class TestCalculateBatch:
     @patch(f"{SCORING_PATH}.get_merchant_reliability", return_value=0.8)
     @patch(f"{SCORING_PATH}.calculate_keyword_match", return_value=0.7)
     @patch(f"{SCORING_PATH}.calculate_text_similarity", return_value=0.6)
@@ -453,8 +466,8 @@ class TestCalculateBatch:
 # 13. score_products (convenience)
 # ============================================================
 
-class TestScoreProducts:
 
+class TestScoreProducts:
     @patch(f"{SCORING_PATH}.get_merchant_reliability", return_value=0.8)
     @patch(f"{SCORING_PATH}.calculate_keyword_match", return_value=0.7)
     @patch(f"{SCORING_PATH}.calculate_text_similarity")
@@ -476,6 +489,3 @@ class TestScoreProducts:
         w = ScoringWeights.for_price_comparison()
         result = score_products(products, "test", weights=w)
         assert len(result) == 1
-
-
-        

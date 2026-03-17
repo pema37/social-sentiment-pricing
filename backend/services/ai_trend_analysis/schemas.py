@@ -5,14 +5,14 @@ These models define the structure of trend analysis results.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 
 
 class TrendDirection(str, Enum):
     """Direction of a detected trend."""
+
     RISING = "rising"
     FALLING = "falling"
     STABLE = "stable"
@@ -21,6 +21,7 @@ class TrendDirection(str, Enum):
 
 class TrendCategory(str, Enum):
     """Category of detected trend."""
+
     VIRAL_POSITIVE = "viral_positive"
     VIRAL_NEGATIVE = "viral_negative"
     COMPETITOR_LAUNCH = "competitor_launch"
@@ -33,6 +34,7 @@ class TrendCategory(str, Enum):
 
 class OpportunityType(str, Enum):
     """Type of pricing opportunity."""
+
     PRICE_INCREASE = "price_increase"
     PRICE_DECREASE = "price_decrease"
     HOLD = "hold"
@@ -42,6 +44,7 @@ class OpportunityType(str, Enum):
 
 class RiskLevel(str, Enum):
     """Risk severity level."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -50,6 +53,7 @@ class RiskLevel(str, Enum):
 
 class ConfidenceLevel(str, Enum):
     """Confidence level of AI prediction."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -59,6 +63,7 @@ class ConfidenceLevel(str, Enum):
 @dataclass
 class TrendSignal:
     """A single trend signal detected from data."""
+
     signal_type: str
     value: float
     timestamp: datetime
@@ -69,6 +74,7 @@ class TrendSignal:
 @dataclass
 class TrendPrediction:
     """AI-generated prediction for a trend."""
+
     direction: TrendDirection
     category: TrendCategory
     confidence: ConfidenceLevel
@@ -77,12 +83,13 @@ class TrendPrediction:
     timeframe_days: int  # Days until expected change
     reasoning: str
     supporting_signals: list[TrendSignal] = field(default_factory=list)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
 class PricingOpportunity:
     """A detected pricing opportunity."""
+
     opportunity_type: OpportunityType
     product_id: str
     product_name: str
@@ -99,6 +106,7 @@ class PricingOpportunity:
 @dataclass
 class RiskAlert:
     """A detected risk that requires attention."""
+
     risk_level: RiskLevel
     risk_type: str
     title: str
@@ -106,12 +114,13 @@ class RiskAlert:
     affected_products: list[str]
     recommended_actions: list[str]
     detected_at: datetime
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
 
 
 @dataclass
 class AIInsight:
     """AI-generated insight about market conditions."""
+
     title: str
     summary: str
     detailed_analysis: str
@@ -124,35 +133,36 @@ class AIInsight:
 @dataclass
 class TrendAnalysisResult:
     """Complete result of AI trend analysis."""
+
     user_id: str
     analysis_id: str
     generated_at: datetime
-    
+
     # Overall market assessment
     market_sentiment: TrendDirection
     market_sentiment_score: float  # -100 to +100
-    
+
     # Predictions
     predictions: list[TrendPrediction]
-    
+
     # Opportunities
     opportunities: list[PricingOpportunity]
-    
+
     # Risks
     risks: list[RiskAlert]
-    
+
     # AI Insights
     insights: list[AIInsight]
-    
+
     # Summary
     executive_summary: str
     recommended_actions: list[str]
-    
+
     # Metadata
     products_analyzed: int
     mentions_analyzed: int
     time_range_days: int
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary for API response."""
         return {
@@ -230,7 +240,3 @@ class TrendAnalysisResult:
             "mentions_analyzed": self.mentions_analyzed,
             "time_range_days": self.time_range_days,
         }
-
-
-
-        

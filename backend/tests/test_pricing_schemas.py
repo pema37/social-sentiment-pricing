@@ -10,44 +10,42 @@ Run with: pytest backend/tests/test_pricing_schemas.py -v
 """
 
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
-from models.pricing_rule import RuleType, RuleAction
 from models.price_recommendation import RecommendationStatus
+from models.pricing_rule import RuleAction, RuleType
 from models.recommendation_outcome import OutcomeLabel
-
 from schemas.pricing import (
-    PricingRuleCreate,
-    PricingRuleUpdate,
-    PricingRuleResponse,
-    PriceRecommendationResponse,
-    RecommendationApprove,
-    RecommendationReject,
-    RecommendationListParams,
-    PricingSettingsUpdate,
-    PricingSettingsResponse,
+    AccuracyStatsResponse,
     MockSignals,
+    OutcomeRecordRequest,
+    OutcomeResponse,
+    PriceRecommendationResponse,
+    PricingRuleCreate,
+    PricingRuleResponse,
+    PricingRuleUpdate,
+    PricingSettingsResponse,
+    PricingSettingsUpdate,
+    RecommendationApprove,
+    RecommendationListParams,
+    RecommendationReject,
+    RulePerformanceResponse,
     RuleTestRequest,
     RuleTestResponse,
     SimulationRequest,
     SimulationResponse,
-    OutcomeRecordRequest,
-    OutcomeResponse,
-    RulePerformanceResponse,
-    AccuracyStatsResponse,
 )
-
 
 # =====================================================================
 # PricingRuleCreate
 # =====================================================================
 
-class TestPricingRuleCreate:
 
+class TestPricingRuleCreate:
     def test_valid_minimal(self):
         r = PricingRuleCreate(
             name="Sentiment Drop",
@@ -216,8 +214,8 @@ class TestPricingRuleCreate:
 # PricingRuleUpdate
 # =====================================================================
 
-class TestPricingRuleUpdate:
 
+class TestPricingRuleUpdate:
     def test_empty_update(self):
         u = PricingRuleUpdate()
         assert u.name is None
@@ -254,8 +252,8 @@ class TestPricingRuleUpdate:
 # PricingRuleResponse
 # =====================================================================
 
-class TestPricingRuleResponse:
 
+class TestPricingRuleResponse:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -290,7 +288,7 @@ class TestPricingRuleResponse:
             "max_change_percent": Decimal("15.0"),
             "cooldown_hours": 24,
             "last_triggered_at": None,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "updated_at": None,
         }
 
@@ -314,8 +312,8 @@ class TestPricingRuleResponse:
 # PriceRecommendationResponse
 # =====================================================================
 
-class TestPriceRecommendationResponse:
 
+class TestPriceRecommendationResponse:
     @pytest.fixture
     def valid_data(self):
         return {
@@ -331,13 +329,13 @@ class TestPriceRecommendationResponse:
             "factors": {"sentiment": 0.6, "competitor": -0.15},
             "status": RecommendationStatus.PENDING,
             "requires_approval": True,
-            "valid_until": datetime.now(timezone.utc) + timedelta(hours=24),
+            "valid_until": datetime.now(UTC) + timedelta(hours=24),
             "reviewed_by": None,
             "reviewed_at": None,
             "rejection_reason": None,
             "applied_at": None,
             "applied_to_platform": None,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
 
     def test_valid(self, valid_data):
@@ -354,13 +352,13 @@ class TestPriceRecommendationResponse:
             triggered_rule_id=None,
             status=RecommendationStatus.PENDING,
             requires_approval=True,
-            valid_until=datetime.now(timezone.utc),
+            valid_until=datetime.now(UTC),
             reviewed_by=None,
             reviewed_at=None,
             rejection_reason=None,
             applied_at=None,
             applied_to_platform=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         assert r.current_price == Decimal("0")
         assert r.recommended_price == Decimal("0")
@@ -378,13 +376,13 @@ class TestPriceRecommendationResponse:
                 triggered_rule_id=None,
                 status=status,
                 requires_approval=True,
-                valid_until=datetime.now(timezone.utc),
+                valid_until=datetime.now(UTC),
                 reviewed_by=None,
                 reviewed_at=None,
                 rejection_reason=None,
                 applied_at=None,
                 applied_to_platform=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             assert r.status == status
 
@@ -393,8 +391,8 @@ class TestPriceRecommendationResponse:
 # RecommendationApprove / Reject / ListParams
 # =====================================================================
 
-class TestRecommendationApproveReject:
 
+class TestRecommendationApproveReject:
     def test_approve_empty(self):
         a = RecommendationApprove()
         assert a is not None
@@ -413,7 +411,6 @@ class TestRecommendationApproveReject:
 
 
 class TestRecommendationListParams:
-
     def test_defaults(self):
         p = RecommendationListParams()
         assert p.status is None
@@ -440,8 +437,8 @@ class TestRecommendationListParams:
 # PricingSettingsUpdate / Response
 # =====================================================================
 
-class TestPricingSettingsUpdate:
 
+class TestPricingSettingsUpdate:
     def test_empty_update(self):
         u = PricingSettingsUpdate()
         assert u.auto_approve_enabled is None
@@ -457,7 +454,6 @@ class TestPricingSettingsUpdate:
 
 
 class TestPricingSettingsResponse:
-
     @pytest.fixture
     def valid_data(self):
         return {
@@ -478,7 +474,7 @@ class TestPricingSettingsResponse:
             "notify_on_pending": True,
             "notification_email": "test@example.com",
             "notification_slack_webhook": None,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "updated_at": None,
         }
 
@@ -497,8 +493,8 @@ class TestPricingSettingsResponse:
 # MockSignals / RuleTest
 # =====================================================================
 
-class TestMockSignals:
 
+class TestMockSignals:
     def test_empty(self):
         m = MockSignals()
         assert m.sentiment_score is None
@@ -516,20 +512,16 @@ class TestMockSignals:
 
 
 class TestRuleTestRequest:
-
     def test_empty(self):
         r = RuleTestRequest()
         assert r.mock_signals is None
 
     def test_with_signals(self):
-        r = RuleTestRequest(
-            mock_signals=MockSignals(sentiment_score=Decimal("0.8"))
-        )
+        r = RuleTestRequest(mock_signals=MockSignals(sentiment_score=Decimal("0.8")))
         assert r.mock_signals.sentiment_score == Decimal("0.8")
 
 
 class TestRuleTestResponse:
-
     def test_valid(self):
         r = RuleTestResponse(
             rule_id=uuid.uuid4(),
@@ -557,8 +549,8 @@ class TestRuleTestResponse:
 # Simulation
 # =====================================================================
 
-class TestSimulationRequest:
 
+class TestSimulationRequest:
     def test_valid(self):
         r = SimulationRequest(product_id=uuid.uuid4())
         assert r.mock_signals is None
@@ -572,7 +564,6 @@ class TestSimulationRequest:
 
 
 class TestSimulationResponse:
-
     def test_valid(self):
         r = SimulationResponse(
             product_id=uuid.uuid4(),
@@ -591,8 +582,8 @@ class TestSimulationResponse:
 # OutcomeRecordRequest
 # =====================================================================
 
-class TestOutcomeRecordRequest:
 
+class TestOutcomeRecordRequest:
     def test_valid(self):
         r = OutcomeRecordRequest(
             sales_count_before=10,
@@ -667,8 +658,8 @@ class TestOutcomeRecordRequest:
 # OutcomeResponse
 # =====================================================================
 
-class TestOutcomeResponse:
 
+class TestOutcomeResponse:
     def test_valid(self):
         r = OutcomeResponse(
             id=uuid.uuid4(),
@@ -693,10 +684,10 @@ class TestOutcomeResponse:
             outcome_score=Decimal("0.85"),
             outcome_label=OutcomeLabel.POSITIVE,
             original_confidence=Decimal("0.8"),
-            price_applied_at=datetime.now(timezone.utc),
+            price_applied_at=datetime.now(UTC),
             measurement_window_hours=48,
-            measured_at=datetime.now(timezone.utc),
-            created_at=datetime.now(timezone.utc),
+            measured_at=datetime.now(UTC),
+            created_at=datetime.now(UTC),
         )
         assert r.outcome_label == OutcomeLabel.POSITIVE
 
@@ -725,10 +716,10 @@ class TestOutcomeResponse:
                 outcome_score=Decimal("0"),
                 outcome_label=label,
                 original_confidence=Decimal("0.5"),
-                price_applied_at=datetime.now(timezone.utc),
+                price_applied_at=datetime.now(UTC),
                 measurement_window_hours=48,
-                measured_at=datetime.now(timezone.utc),
-                created_at=datetime.now(timezone.utc),
+                measured_at=datetime.now(UTC),
+                created_at=datetime.now(UTC),
             )
             assert r.outcome_label == label
 
@@ -737,8 +728,8 @@ class TestOutcomeResponse:
 # RulePerformanceResponse / AccuracyStatsResponse
 # =====================================================================
 
-class TestRulePerformanceResponse:
 
+class TestRulePerformanceResponse:
     def test_valid(self):
         r = RulePerformanceResponse(
             rule_id=uuid.uuid4(),
@@ -759,7 +750,6 @@ class TestRulePerformanceResponse:
 
 
 class TestAccuracyStatsResponse:
-
     def test_valid(self):
         r = AccuracyStatsResponse(
             period_days=30,
@@ -778,6 +768,3 @@ class TestAccuracyStatsResponse:
         )
         assert r.period_days == 30
         assert r.positive_count == 30
-
-
-        

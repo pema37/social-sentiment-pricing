@@ -5,11 +5,10 @@ SubscriptionService — plans, subscription queries, payment creation,
 blockchain verification, subscription activation.
 """
 
-import sys
 import json
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime
 
 import pytest
 
@@ -33,36 +32,43 @@ for _m in _MOCKED:
 # Force fresh import of service under test
 sys.modules.pop("services.payment.subscription_service", None)
 
+
 # PlanInfo — simple stand-in
 class _FakePlanInfo:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+
 class _FakeSubscriptionInfo:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
+
 
 class _FakePaymentRequest:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+
 class _FakePaymentInfo:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
+
 
 class _FakeConfirmResponse:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+
 class _FakeVerification:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
+
 
 _schema_mod = sys.modules["schemas.payment"]
 _schema_mod.PlanInfo = _FakePlanInfo
@@ -91,9 +97,9 @@ _base_mod = sys.modules["services.payment.base"]
 _base_mod.PaymentServiceFactory = MagicMock()
 
 from services.payment.subscription_service import (
-    SubscriptionService,
     PLANS,
     VALID_TIERS,
+    SubscriptionService,
 )
 
 # Restore
@@ -108,6 +114,7 @@ SVC_MOD = "services.payment.subscription_service"
 
 
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_service():
     session = AsyncMock()
@@ -126,7 +133,6 @@ def _make_user(user_id=None):
 # PLANS / VALID_TIERS
 # ──────────────────────────────────────────────
 class TestPlanConstants:
-
     def test_four_plans(self):
         assert len(PLANS) == 4
 
@@ -156,7 +162,6 @@ class TestPlanConstants:
 # __init__
 # ──────────────────────────────────────────────
 class TestInit:
-
     def test_stores_session(self):
         svc = _make_service()
         assert svc.session is not None
@@ -170,7 +175,6 @@ class TestInit:
 # get_all_plans / get_plan / get_product_limit
 # ──────────────────────────────────────────────
 class TestPlanQueries:
-
     def test_get_all_plans(self):
         svc = _make_service()
         plans = svc.get_all_plans()
@@ -211,7 +215,6 @@ class TestPlanQueries:
 # _get_recipient_for_network
 # ──────────────────────────────────────────────
 class TestGetRecipientForNetwork:
-
     def test_bsv_returns_bsv_address(self):
         svc = _make_service()
         svc.recipient_address = "$pema12@handcash.io"
@@ -235,7 +238,6 @@ class TestGetRecipientForNetwork:
 # create_subscription_payment
 # ──────────────────────────────────────────────
 class TestCreateSubscriptionPayment:
-
     @pytest.mark.asyncio
     async def test_invalid_tier_raises(self):
         svc = _make_service()
@@ -252,9 +254,7 @@ class TestCreateSubscriptionPayment:
     async def test_invalid_network_raises(self):
         svc = _make_service()
         with pytest.raises(ValueError, match="Invalid network"):
-            await svc.create_subscription_payment(
-                _make_user(), "starter", network="bitcoin"
-            )
+            await svc.create_subscription_payment(_make_user(), "starter", network="bitcoin")
 
     @pytest.mark.asyncio
     async def test_returns_tuple(self):
@@ -268,9 +268,7 @@ class TestCreateSubscriptionPayment:
 
             with patch(f"{SVC_MOD}.PaymentRequest") as MockReq:
                 MockReq.return_value = MagicMock()
-                result = await svc.create_subscription_payment(
-                    _make_user(), "starter", network="ethereum"
-                )
+                result = await svc.create_subscription_payment(_make_user(), "starter", network="ethereum")
 
         assert isinstance(result, tuple)
         assert len(result) == 2
@@ -287,9 +285,7 @@ class TestCreateSubscriptionPayment:
 
             with patch(f"{SVC_MOD}.PaymentRequest") as MockReq:
                 MockReq.return_value = MagicMock()
-                _, payment = await svc.create_subscription_payment(
-                    _make_user(), "starter", billing_cycle="yearly"
-                )
+                _, payment = await svc.create_subscription_payment(_make_user(), "starter", billing_cycle="yearly")
 
         # starter yearly = 290 (stored as float by Pydantic)
         pay_call = MockPayment.call_args[1]
@@ -307,9 +303,7 @@ class TestCreateSubscriptionPayment:
 
             with patch(f"{SVC_MOD}.PaymentRequest") as MockReq:
                 MockReq.return_value = MagicMock()
-                await svc.create_subscription_payment(
-                    _make_user(), "starter", billing_cycle="monthly"
-                )
+                await svc.create_subscription_payment(_make_user(), "starter", billing_cycle="monthly")
 
         # starter monthly = 29 (stored as float by Pydantic)
         pay_call = MockPayment.call_args[1]
@@ -320,7 +314,6 @@ class TestCreateSubscriptionPayment:
 # confirm_payment
 # ──────────────────────────────────────────────
 class TestConfirmPayment:
-
     @pytest.mark.asyncio
     async def test_payment_not_found(self):
         svc = _make_service()
@@ -354,7 +347,6 @@ class TestConfirmPayment:
 # _get_payment_metadata
 # ──────────────────────────────────────────────
 class TestGetPaymentMetadata:
-
     def test_from_get_metadata(self):
         svc = _make_service()
         payment = MagicMock()
@@ -390,5 +382,3 @@ class TestGetPaymentMetadata:
         payment.metadata_json = json.dumps({"billing_cycle": "yearly"})
         result = svc._get_payment_metadata(payment)
         assert result["billing_cycle"] == "yearly"
-
-        

@@ -25,14 +25,14 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional, Sequence
-
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 # ──────────────────────────────────────────────────────────
 # INPUT: Outcome records with data quality signals
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class OutcomeWithDataQuality:
@@ -49,11 +49,11 @@ class OutcomeWithDataQuality:
 
     recommendation_id: str
     category: str
-    product_id: Optional[str] = None
+    product_id: str | None = None
 
     # ── Outcome ──
-    action: str = "unknown"                # accepted, modified, rejected, ignored
-    revenue_delta_pct: Optional[float] = None
+    action: str = "unknown"  # accepted, modified, rejected, ignored
+    revenue_delta_pct: float | None = None
 
     # ── Data quality signals at recommendation time ──
     data_quality_score: float = 0.5
@@ -66,7 +66,7 @@ class OutcomeWithDataQuality:
     sentiment_available: bool = True
     """Whether sentiment data was available for this product/category."""
 
-    days_since_last_scrape: Optional[float] = None
+    days_since_last_scrape: float | None = None
     """Days since the most recent competitor price scrape."""
 
     price_data_completeness: float = 1.0
@@ -108,6 +108,7 @@ class OutcomeWithDataQuality:
 # ──────────────────────────────────────────────────────────
 # OUTPUT: Scraping priority adjustments
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class ScrapingPriorityAdjustment:
@@ -181,11 +182,11 @@ class ScoutFeedbackReport:
 # ──────────────────────────────────────────────────────────
 
 # Thresholds
-_MIN_FAILURES_FOR_SIGNAL = 3        # Need at least 3 failures to detect pattern
-_LOW_DQ_THRESHOLD = 0.5             # data_quality_score below this is "low"
-_LOW_COMPETITOR_THRESHOLD = 2       # Fewer than 2 competitors is a gap
-_STALE_DATA_THRESHOLD_DAYS = 7.0    # Data older than 7 days is stale
-_LOW_COMPLETENESS_THRESHOLD = 0.7   # Below 70% completeness is a gap
+_MIN_FAILURES_FOR_SIGNAL = 3  # Need at least 3 failures to detect pattern
+_LOW_DQ_THRESHOLD = 0.5  # data_quality_score below this is "low"
+_LOW_COMPETITOR_THRESHOLD = 2  # Fewer than 2 competitors is a gap
+_STALE_DATA_THRESHOLD_DAYS = 7.0  # Data older than 7 days is stale
+_LOW_COMPLETENESS_THRESHOLD = 0.7  # Below 70% completeness is a gap
 
 
 class ScoutFeedbackAnalyzer:
@@ -253,10 +254,7 @@ class ScoutFeedbackAnalyzer:
                 "failures": n_fail,
                 "failure_rate": round(n_fail / n, 4) if n > 0 else 0,
                 "failures_with_data_gaps": len(failures_with_gaps),
-                "gap_correlation_rate": (
-                    round(len(failures_with_gaps) / n_fail, 4)
-                    if n_fail > 0 else 0
-                ),
+                "gap_correlation_rate": (round(len(failures_with_gaps) / n_fail, 4) if n_fail > 0 else 0),
             }
 
             if len(failures) < _MIN_FAILURES_FOR_SIGNAL:
@@ -303,16 +301,10 @@ class ScoutFeedbackAnalyzer:
         adjustments = []
 
         # Failures with low competitor count
-        low_comp_failures = [
-            r for r in failures
-            if r.competitor_count < _LOW_COMPETITOR_THRESHOLD
-        ]
+        low_comp_failures = [r for r in failures if r.competitor_count < _LOW_COMPETITOR_THRESHOLD]
 
         # Failures with low price completeness
-        low_price_failures = [
-            r for r in failures
-            if r.price_data_completeness < _LOW_COMPLETENESS_THRESHOLD
-        ]
+        low_price_failures = [r for r in failures if r.price_data_completeness < _LOW_COMPLETENESS_THRESHOLD]
 
         # Compare: do failures have lower competitor counts than successes?
         successes = [r for r in all_records if r.was_successful]
@@ -328,42 +320,44 @@ class ScoutFeedbackAnalyzer:
                 avg_loss = _avg_loss(low_comp_failures)
                 boost = min(1.0, severity * 0.5 + abs(avg_loss) / 20)
 
-                adjustments.append(ScrapingPriorityAdjustment(
-                    category=category,
-                    adjustment_type="competitor_price",
-                    priority_boost=round(boost, 4),
-                    reason=(
-                        f"{len(low_comp_failures)} failures had <{_LOW_COMPETITOR_THRESHOLD} "
-                        f"competitors (avg {avg_comp_fail:.1f} vs {avg_comp_success:.1f} for successes)"
-                    ),
-                    failure_count=len(low_comp_failures),
-                    gap_severity=round(severity, 4),
-                    avg_revenue_loss_pct=round(avg_loss, 4),
-                    confidence=round(confidence, 4),
-                ))
+                adjustments.append(
+                    ScrapingPriorityAdjustment(
+                        category=category,
+                        adjustment_type="competitor_price",
+                        priority_boost=round(boost, 4),
+                        reason=(
+                            f"{len(low_comp_failures)} failures had <{_LOW_COMPETITOR_THRESHOLD} "
+                            f"competitors (avg {avg_comp_fail:.1f} vs {avg_comp_success:.1f} for successes)"
+                        ),
+                        failure_count=len(low_comp_failures),
+                        gap_severity=round(severity, 4),
+                        avg_revenue_loss_pct=round(avg_loss, 4),
+                        confidence=round(confidence, 4),
+                    )
+                )
 
         if len(low_price_failures) >= _MIN_FAILURES_FOR_SIGNAL:
-            avg_completeness = statistics.mean(
-                r.price_data_completeness for r in low_price_failures
-            )
+            avg_completeness = statistics.mean(r.price_data_completeness for r in low_price_failures)
             severity = 1.0 - avg_completeness
             confidence = min(1.0, len(low_price_failures) / 10)
             avg_loss = _avg_loss(low_price_failures)
             boost = min(1.0, severity * 0.6 + abs(avg_loss) / 25)
 
-            adjustments.append(ScrapingPriorityAdjustment(
-                category=category,
-                adjustment_type="competitor_price",
-                priority_boost=round(boost, 4),
-                reason=(
-                    f"{len(low_price_failures)} failures had "
-                    f"price completeness={avg_completeness:.0%} (below {_LOW_COMPLETENESS_THRESHOLD:.0%})"
-                ),
-                failure_count=len(low_price_failures),
-                gap_severity=round(severity, 4),
-                avg_revenue_loss_pct=round(avg_loss, 4),
-                confidence=round(confidence, 4),
-            ))
+            adjustments.append(
+                ScrapingPriorityAdjustment(
+                    category=category,
+                    adjustment_type="competitor_price",
+                    priority_boost=round(boost, 4),
+                    reason=(
+                        f"{len(low_price_failures)} failures had "
+                        f"price completeness={avg_completeness:.0%} (below {_LOW_COMPLETENESS_THRESHOLD:.0%})"
+                    ),
+                    failure_count=len(low_price_failures),
+                    gap_severity=round(severity, 4),
+                    avg_revenue_loss_pct=round(avg_loss, 4),
+                    confidence=round(confidence, 4),
+                )
+            )
 
         return adjustments
 
@@ -379,15 +373,10 @@ class ScoutFeedbackAnalyzer:
         adjustments = []
 
         # Failures with no sentiment
-        no_sentiment_failures = [
-            r for r in failures if not r.sentiment_available
-        ]
+        no_sentiment_failures = [r for r in failures if not r.sentiment_available]
 
         # Failures with low sentiment completeness
-        low_sent_failures = [
-            r for r in failures
-            if r.sentiment_data_completeness < _LOW_COMPLETENESS_THRESHOLD
-        ]
+        low_sent_failures = [r for r in failures if r.sentiment_data_completeness < _LOW_COMPLETENESS_THRESHOLD]
 
         if len(no_sentiment_failures) >= _MIN_FAILURES_FOR_SIGNAL:
             severity = len(no_sentiment_failures) / len(failures)
@@ -395,41 +384,38 @@ class ScoutFeedbackAnalyzer:
             avg_loss = _avg_loss(no_sentiment_failures)
             boost = min(1.0, severity * 0.4 + abs(avg_loss) / 20)
 
-            adjustments.append(ScrapingPriorityAdjustment(
-                category=category,
-                adjustment_type="sentiment",
-                priority_boost=round(boost, 4),
-                reason=(
-                    f"{len(no_sentiment_failures)} failures had no sentiment data available"
-                ),
-                failure_count=len(no_sentiment_failures),
-                gap_severity=round(severity, 4),
-                avg_revenue_loss_pct=round(avg_loss, 4),
-                confidence=round(confidence, 4),
-            ))
+            adjustments.append(
+                ScrapingPriorityAdjustment(
+                    category=category,
+                    adjustment_type="sentiment",
+                    priority_boost=round(boost, 4),
+                    reason=(f"{len(no_sentiment_failures)} failures had no sentiment data available"),
+                    failure_count=len(no_sentiment_failures),
+                    gap_severity=round(severity, 4),
+                    avg_revenue_loss_pct=round(avg_loss, 4),
+                    confidence=round(confidence, 4),
+                )
+            )
 
         if len(low_sent_failures) >= _MIN_FAILURES_FOR_SIGNAL:
-            avg_comp = statistics.mean(
-                r.sentiment_data_completeness for r in low_sent_failures
-            )
+            avg_comp = statistics.mean(r.sentiment_data_completeness for r in low_sent_failures)
             severity = 1.0 - avg_comp
             confidence = min(1.0, len(low_sent_failures) / 8)
             avg_loss = _avg_loss(low_sent_failures)
             boost = min(1.0, severity * 0.4 + abs(avg_loss) / 25)
 
-            adjustments.append(ScrapingPriorityAdjustment(
-                category=category,
-                adjustment_type="sentiment",
-                priority_boost=round(boost, 4),
-                reason=(
-                    f"{len(low_sent_failures)} failures had "
-                    f"sentiment completeness={avg_comp:.0%}"
-                ),
-                failure_count=len(low_sent_failures),
-                gap_severity=round(severity, 4),
-                avg_revenue_loss_pct=round(avg_loss, 4),
-                confidence=round(confidence, 4),
-            ))
+            adjustments.append(
+                ScrapingPriorityAdjustment(
+                    category=category,
+                    adjustment_type="sentiment",
+                    priority_boost=round(boost, 4),
+                    reason=(f"{len(low_sent_failures)} failures had sentiment completeness={avg_comp:.0%}"),
+                    failure_count=len(low_sent_failures),
+                    gap_severity=round(severity, 4),
+                    avg_revenue_loss_pct=round(avg_loss, 4),
+                    confidence=round(confidence, 4),
+                )
+            )
 
         return adjustments
 
@@ -445,23 +431,21 @@ class ScoutFeedbackAnalyzer:
         adjustments = []
 
         stale_failures = [
-            r for r in failures
-            if r.days_since_last_scrape is not None
-            and r.days_since_last_scrape > _STALE_DATA_THRESHOLD_DAYS
+            r
+            for r in failures
+            if r.days_since_last_scrape is not None and r.days_since_last_scrape > _STALE_DATA_THRESHOLD_DAYS
         ]
 
         if len(stale_failures) >= _MIN_FAILURES_FOR_SIGNAL:
-            avg_staleness = statistics.mean(
-                r.days_since_last_scrape for r in stale_failures
-            )
+            avg_staleness = statistics.mean(r.days_since_last_scrape for r in stale_failures)
             # Compare with successes
             successes_with_freshness = [
-                r for r in all_records
-                if r.was_successful and r.days_since_last_scrape is not None
+                r for r in all_records if r.was_successful and r.days_since_last_scrape is not None
             ]
             avg_success_freshness = (
                 statistics.mean(r.days_since_last_scrape for r in successes_with_freshness)
-                if successes_with_freshness else _STALE_DATA_THRESHOLD_DAYS
+                if successes_with_freshness
+                else _STALE_DATA_THRESHOLD_DAYS
             )
 
             freshness_gap = avg_staleness - avg_success_freshness
@@ -470,19 +454,21 @@ class ScoutFeedbackAnalyzer:
             avg_loss = _avg_loss(stale_failures)
             boost = min(1.0, severity * 0.5 + abs(avg_loss) / 20)
 
-            adjustments.append(ScrapingPriorityAdjustment(
-                category=category,
-                adjustment_type="freshness",
-                priority_boost=round(max(0.0, boost), 4),
-                reason=(
-                    f"{len(stale_failures)} failures had stale data "
-                    f"(avg {avg_staleness:.1f}d vs {avg_success_freshness:.1f}d for successes)"
-                ),
-                failure_count=len(stale_failures),
-                gap_severity=round(max(0.0, severity), 4),
-                avg_revenue_loss_pct=round(avg_loss, 4),
-                confidence=round(confidence, 4),
-            ))
+            adjustments.append(
+                ScrapingPriorityAdjustment(
+                    category=category,
+                    adjustment_type="freshness",
+                    priority_boost=round(max(0.0, boost), 4),
+                    reason=(
+                        f"{len(stale_failures)} failures had stale data "
+                        f"(avg {avg_staleness:.1f}d vs {avg_success_freshness:.1f}d for successes)"
+                    ),
+                    failure_count=len(stale_failures),
+                    gap_severity=round(max(0.0, severity), 4),
+                    avg_revenue_loss_pct=round(avg_loss, 4),
+                    confidence=round(confidence, 4),
+                )
+            )
 
         return adjustments
 
@@ -491,15 +477,10 @@ class ScoutFeedbackAnalyzer:
 # HELPERS
 # ──────────────────────────────────────────────────────────
 
+
 def _avg_loss(records: list[OutcomeWithDataQuality]) -> float:
     """Average revenue loss across failures (returns negative or zero)."""
-    losses = [
-        r.revenue_delta_pct for r in records
-        if r.revenue_delta_pct is not None
-    ]
+    losses = [r.revenue_delta_pct for r in records if r.revenue_delta_pct is not None]
     if not losses:
         return 0.0
     return statistics.mean(losses)
-
-
-

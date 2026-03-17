@@ -11,14 +11,15 @@ Provides request/response models for:
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Enums
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TrustLevelEnum(str, Enum):
     VERIFIED = "verified"
@@ -48,9 +49,12 @@ class RiskFlagEnum(str, Enum):
 # Author Scoring
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class AuthorScoreRequest(BaseModel):
     """Request to score an author's trustworthiness."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "author_id": "user_12345",
                 "username": "techreviewer",
@@ -60,20 +64,21 @@ class AuthorScoreRequest(BaseModel):
                 "account_created_at": "2021-03-15T10:30:00Z",
                 "is_verified": False,
             }
-        })
+        }
+    )
     author_id: str = Field(..., description="Unique author identifier")
     username: str = Field(..., description="Author's username")
     source: str = Field(..., description="Platform source (twitter, reddit, etc.)")
-    follower_count: Optional[int] = Field(None, ge=0, description="Number of followers")
-    following_count: Optional[int] = Field(None, ge=0, description="Number following")
-    post_count: Optional[int] = Field(None, ge=0, description="Total posts by author")
-    account_created_at: Optional[datetime] = Field(None, description="Account creation date")
+    follower_count: int | None = Field(None, ge=0, description="Number of followers")
+    following_count: int | None = Field(None, ge=0, description="Number following")
+    post_count: int | None = Field(None, ge=0, description="Total posts by author")
+    account_created_at: datetime | None = Field(None, description="Account creation date")
     is_verified: bool = Field(False, description="Whether account is verified")
 
 
 class ComponentScores(BaseModel):
     """Breakdown of trust score components."""
-    
+
     account_age: float = Field(..., ge=0, le=1)
     followers: float = Field(..., ge=0, le=1)
     engagement: float = Field(..., ge=0, le=1)
@@ -83,7 +88,9 @@ class ComponentScores(BaseModel):
 
 class AuthorScoreResponse(BaseModel):
     """Response with author trust assessment."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "author_id": "user_12345",
                 "source": "twitter",
@@ -101,28 +108,29 @@ class AuthorScoreResponse(BaseModel):
                 "confidence": 0.75,
                 "calculated_at": "2026-01-16T12:00:00Z",
             }
-        })
+        }
+    )
     author_id: str
     source: str
     trust_score: float = Field(..., ge=0, le=1, description="Overall trust score")
     trust_level: TrustLevelEnum
-    risk_flags: List[RiskFlagEnum] = Field(default_factory=list)
+    risk_flags: list[RiskFlagEnum] = Field(default_factory=list)
     risk_score: float = Field(..., ge=0, le=1, description="Risk assessment score")
     component_scores: ComponentScores
     confidence: float = Field(..., ge=0, le=1, description="Confidence in assessment")
     calculated_at: datetime
-    
+
 
 class BatchAuthorScoreRequest(BaseModel):
     """Request to score multiple authors."""
-    
-    authors: List[AuthorScoreRequest] = Field(..., max_length=100)
+
+    authors: list[AuthorScoreRequest] = Field(..., max_length=100)
 
 
 class BatchAuthorScoreResponse(BaseModel):
     """Response with multiple author scores."""
-    
-    scores: List[AuthorScoreResponse]
+
+    scores: list[AuthorScoreResponse]
     total: int
     avg_trust_score: float
 
@@ -131,23 +139,27 @@ class BatchAuthorScoreResponse(BaseModel):
 # Content Analysis
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ContentAnalysisRequest(BaseModel):
     """Request to analyze content for spam/manipulation."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "content_id": "post_abc123",
                 "text": "Just tried this product and it's amazing! Highly recommend to everyone.",
                 "author_username": "happycustomer",
             }
-        })
+        }
+    )
     content_id: str = Field(..., description="Unique content identifier")
     text: str = Field(..., min_length=1, max_length=10000, description="Content text")
-    author_username: Optional[str] = Field(None, description="Author's username")
+    author_username: str | None = Field(None, description="Author's username")
 
 
 class SpamIndicators(BaseModel):
     """Spam detection indicators."""
-    
+
     excessive_hashtags: bool
     excessive_links: bool
     keyword_stuffing: bool
@@ -157,7 +169,9 @@ class SpamIndicators(BaseModel):
 
 class ContentAnalysisResponse(BaseModel):
     """Response with content analysis results."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "content_id": "post_abc123",
                 "word_count": 12,
@@ -175,28 +189,29 @@ class ContentAnalysisResponse(BaseModel):
                 },
                 "is_spam": False,
             }
-        })
+        }
+    )
     content_id: str
     word_count: int
     is_duplicate: bool
     duplicate_count: int
     content_quality_score: float = Field(..., ge=0, le=1)
     originality_score: float = Field(..., ge=0, le=1)
-    risk_flags: List[RiskFlagEnum]
+    risk_flags: list[RiskFlagEnum]
     spam_indicators: SpamIndicators
     is_spam: bool = Field(..., description="Whether content is likely spam")
 
 
 class BatchContentAnalysisRequest(BaseModel):
     """Request to analyze multiple content pieces."""
-    
-    contents: List[ContentAnalysisRequest] = Field(..., max_length=100)
+
+    contents: list[ContentAnalysisRequest] = Field(..., max_length=100)
 
 
 class BatchContentAnalysisResponse(BaseModel):
     """Response with multiple content analyses."""
-    
-    analyses: List[ContentAnalysisResponse]
+
+    analyses: list[ContentAnalysisResponse]
     total: int
     spam_count: int
     duplicate_count: int
@@ -206,21 +221,24 @@ class BatchContentAnalysisResponse(BaseModel):
 # Campaign Detection
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class MentionInput(BaseModel):
     """Input mention for campaign detection."""
-    
+
     mention_id: str
     author_id: str
     content: str
     published_at: datetime
-    sentiment_score: Optional[float] = Field(None, ge=-1, le=1)
+    sentiment_score: float | None = Field(None, ge=-1, le=1)
     source: str = "unknown"
 
 
 class CampaignDetectionRequest(BaseModel):
     """Request to detect coordinated campaigns."""
-    model_config = ConfigDict(json_schema_extra = {
-        "example": {
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
                 "mentions": [
                     {
                         "mention_id": "m1",
@@ -234,15 +252,16 @@ class CampaignDetectionRequest(BaseModel):
                 "product_id": "prod_123",
                 "time_window_hours": 24,
             }
-        })
-    mentions: List[MentionInput] = Field(..., min_length=5, max_length=1000)
-    product_id: Optional[str] = None
+        }
+    )
+    mentions: list[MentionInput] = Field(..., min_length=5, max_length=1000)
+    product_id: str | None = None
     time_window_hours: int = Field(24, ge=1, le=168)
 
 
 class CampaignSignalResponse(BaseModel):
     """A detected campaign signal."""
-    
+
     signal_type: str
     strength: float = Field(..., ge=0, le=1)
     description: str
@@ -250,7 +269,9 @@ class CampaignSignalResponse(BaseModel):
 
 class CampaignDetectionResponse(BaseModel):
     """Response with campaign detection results."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "product_id": "prod_123",
                 "time_window_hours": 24,
@@ -276,24 +297,29 @@ class CampaignDetectionResponse(BaseModel):
                 "suspicious_content_count": 12,
                 "analyzed_at": "2026-01-16T12:00:00Z",
             }
-        })
-    product_id: Optional[str]
+        }
+    )
+    product_id: str | None
     time_window_hours: int
     is_campaign_detected: bool
     campaign_confidence: float = Field(..., ge=0, le=1)
-    signals: List[CampaignSignalResponse]
-    metrics: Dict[str, Any]
+    signals: list[CampaignSignalResponse]
+    metrics: dict[str, Any]
     suspicious_author_count: int
     suspicious_content_count: int
     analyzed_at: datetime
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Weighted Sentiment
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class WeightedSentimentRequest(BaseModel):
     """Request for trust-adjusted sentiment calculation."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "mentions": [
                     {
@@ -317,36 +343,36 @@ class WeightedSentimentRequest(BaseModel):
                 "period_hours": 24,
                 "check_campaign": True,
             }
-        })
-    mentions: List[MentionInput] = Field(..., min_length=1, max_length=1000)
-    product_id: Optional[str] = None
+        }
+    )
+    mentions: list[MentionInput] = Field(..., min_length=1, max_length=1000)
+    product_id: str | None = None
     period_hours: int = Field(24, ge=1, le=168)
     check_campaign: bool = Field(True, description="Whether to check for campaigns")
-    
+
     # Optional author metadata (for better scoring)
-    author_metadata: Optional[Dict[str, Dict[str, Any]]] = Field(
-        None,
-        description="Map of author_id to metadata (follower_count, account_created_at, etc.)"
+    author_metadata: dict[str, dict[str, Any]] | None = Field(
+        None, description="Map of author_id to metadata (follower_count, account_created_at, etc.)"
     )
 
 
 class RawSentimentStats(BaseModel):
     """Raw sentiment statistics."""
-    
+
     sentiment: float
     mention_count: int
 
 
 class AdjustedSentimentStats(BaseModel):
     """Adjusted sentiment statistics."""
-    
+
     sentiment: float
     effective_mentions: float
 
 
 class QualityMetrics(BaseModel):
     """Quality metrics for sentiment analysis."""
-    
+
     high_trust_ratio: float
     filtered_count: int
     confidence: float
@@ -354,7 +380,9 @@ class QualityMetrics(BaseModel):
 
 class WeightedSentimentResponse(BaseModel):
     """Response with trust-adjusted sentiment."""
-    model_config = ConfigDict(json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "product_id": "prod_123",
                 "period_hours": 24,
@@ -381,67 +409,64 @@ class WeightedSentimentResponse(BaseModel):
                 },
                 "campaign_detected": False,
             }
-        })
+        }
+    )
     product_id: str
     period_hours: int
     raw: RawSentimentStats
     adjusted: AdjustedSentimentStats
     quality: QualityMetrics
-    trust_breakdown: Dict[str, int]
+    trust_breakdown: dict[str, int]
     campaign_detected: bool = False
-        
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Quick Check Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class QuickSpamCheckRequest(BaseModel):
     """Quick spam check request."""
-    
+
     text: str = Field(..., min_length=1, max_length=5000)
-    username: Optional[str] = None
+    username: str | None = None
 
 
 class QuickSpamCheckResponse(BaseModel):
     """Quick spam check response."""
-    
+
     is_spam: bool
     spam_score: float = Field(..., ge=0, le=1)
-    reasons: List[str]
+    reasons: list[str]
 
 
 class QuickTrustCheckRequest(BaseModel):
     """Quick author trust check request."""
-    
+
     author_id: str
     username: str
     source: str
-    follower_count: Optional[int] = None
-    account_age_days: Optional[int] = None
+    follower_count: int | None = None
+    account_age_days: int | None = None
 
 
 class QuickTrustCheckResponse(BaseModel):
     """Quick author trust check response."""
-    
+
     is_trustworthy: bool
     trust_score: float = Field(..., ge=0, le=1)
     trust_level: TrustLevelEnum
-    risk_flags: List[str]
+    risk_flags: list[str]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Statistics
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TrustScoringStatsResponse(BaseModel):
     """Trust scoring service statistics."""
-    
-    content_analyzer: Dict[str, int]
-    config: Dict[str, Any]
-    cache_stats: Dict[str, int]
 
-
-
-
-    
+    content_analyzer: dict[str, int]
+    config: dict[str, Any]
+    cache_stats: dict[str, int]

@@ -8,21 +8,21 @@ handles billing natively — no blockchain verification needed.
 Ref: https://shopify.dev/docs/api/admin-graphql/latest/mutations/appSubscriptionCreate
 """
 
-from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # =============================================================================
 # SHOPIFY PLAN DEFINITIONS
 # =============================================================================
+
 
 class ShopifyPlanConfig(BaseModel):
     """
     Internal plan configuration mapping our tiers to Shopify billing params.
     Not exposed via API — used by ShopifyBillingService.
     """
+
     tier: str
     name: str
     price_amount: str  # Decimal string: "49.00"
@@ -30,7 +30,7 @@ class ShopifyPlanConfig(BaseModel):
     interval: Literal["EVERY_30_DAYS", "ANNUAL"] = "EVERY_30_DAYS"
     trial_days: int = 14
     product_limit: int = 50
-    features: List[str] = []
+    features: list[str] = []
 
 
 # Shopify-specific pricing tiers (replaces MNEE tiers for Shopify merchants)
@@ -86,12 +86,14 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
 # API REQUEST SCHEMAS
 # =============================================================================
 
+
 class ShopifySubscribeRequest(BaseModel):
     """Request to create a Shopify billing subscription."""
+
     tier: Literal["starter", "professional", "enterprise"] = Field(
         ..., description="Plan tier: starter ($49), professional ($149), enterprise ($499)"
     )
-    shop_domain: Optional[str] = Field(
+    shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",
     )
@@ -99,10 +101,9 @@ class ShopifySubscribeRequest(BaseModel):
 
 class ShopifyPlanChangeRequest(BaseModel):
     """Request to upgrade or downgrade a Shopify plan."""
-    new_tier: Literal["starter", "professional", "enterprise"] = Field(
-        ..., description="New plan tier to switch to"
-    )
-    shop_domain: Optional[str] = Field(
+
+    new_tier: Literal["starter", "professional", "enterprise"] = Field(..., description="New plan tier to switch to")
+    shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",
     )
@@ -110,11 +111,12 @@ class ShopifyPlanChangeRequest(BaseModel):
 
 class ShopifyCancelRequest(BaseModel):
     """Request to cancel a Shopify subscription."""
+
     prorate: bool = Field(
         default=True,
         description="Issue prorated credit for unused portion of billing cycle",
     )
-    shop_domain: Optional[str] = Field(
+    shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",
     )
@@ -124,57 +126,61 @@ class ShopifyCancelRequest(BaseModel):
 # API RESPONSE SCHEMAS
 # =============================================================================
 
+
 class ShopifySubscribeResponse(BaseModel):
     """Response after creating a Shopify billing subscription."""
+
     success: bool
-    confirmation_url: Optional[str] = None
-    shopify_subscription_id: Optional[str] = None
+    confirmation_url: str | None = None
+    shopify_subscription_id: str | None = None
     tier: str
     message: str
 
 
 class ShopifyBillingCallbackResponse(BaseModel):
     """Response after Shopify billing callback (merchant approved/declined)."""
+
     success: bool
     status: str  # "active", "declined", "expired", "pending"
-    tier: Optional[str] = None
+    tier: str | None = None
     message: str
 
 
 class ShopifyBillingStatusResponse(BaseModel):
     """Current Shopify billing status for a merchant."""
+
     has_active_subscription: bool
-    tier: Optional[str] = None
-    plan_name: Optional[str] = None
-    status: Optional[str] = None
-    shopify_subscription_id: Optional[str] = None
-    trial_days: Optional[int] = None
-    current_period_end: Optional[str] = None
+    tier: str | None = None
+    plan_name: str | None = None
+    status: str | None = None
+    shopify_subscription_id: str | None = None
+    trial_days: int | None = None
+    current_period_end: str | None = None
     test: bool = False
-    price: Optional[str] = None
-    currency: Optional[str] = None
+    price: str | None = None
+    currency: str | None = None
 
 
 class ShopifyCancelResponse(BaseModel):
     """Response after cancelling a Shopify subscription."""
+
     success: bool
     message: str
-    status: Optional[str] = None
+    status: str | None = None
 
 
 class ShopifyPlanInfo(BaseModel):
     """Plan info for frontend display."""
+
     tier: str
     name: str
     price_monthly: float
     trial_days: int
     product_limit: int
-    features: List[str]
+    features: list[str]
 
 
 class ShopifyPlansListResponse(BaseModel):
     """All available Shopify plans."""
-    plans: List[ShopifyPlanInfo]
 
-
-    
+    plans: list[ShopifyPlanInfo]

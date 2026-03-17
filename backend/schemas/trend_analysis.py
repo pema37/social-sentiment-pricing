@@ -6,14 +6,13 @@ Pydantic schemas for the trend analysis API endpoints.
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # ============================================
 # ENUMS
 # ============================================
+
 
 class TrendDirection(str, Enum):
     RISING = "rising"
@@ -59,70 +58,47 @@ class ConfidenceLevel(str, Enum):
 # REQUEST SCHEMAS
 # ============================================
 
+
 class TrendAnalysisRequest(BaseModel):
     """Request to run AI trend analysis."""
-    
-    days: int = Field(
-        default=30,
-        ge=7,
-        le=90,
-        description="Number of days to analyze (7-90)"
-    )
-    product_ids: Optional[list[str]] = Field(
-        default=None,
-        description="Specific product IDs to analyze (None = all products)"
+
+    days: int = Field(default=30, ge=7, le=90, description="Number of days to analyze (7-90)")
+    product_ids: list[str] | None = Field(
+        default=None, description="Specific product IDs to analyze (None = all products)"
     )
     use_model: str = Field(
-        default="openai",
-        pattern="^(openai|gemini)$",
-        description="AI model to use: 'openai' or 'gemini'"
+        default="openai", pattern="^(openai|gemini)$", description="AI model to use: 'openai' or 'gemini'"
     )
 
 
 class ProductOpportunityRequest(BaseModel):
     """Request to analyze a specific product for opportunities."""
-    
+
     product_id: str = Field(..., description="Product ID to analyze")
-    use_model: str = Field(
-        default="openai",
-        pattern="^(openai|gemini)$",
-        description="AI model to use"
-    )
+    use_model: str = Field(default="openai", pattern="^(openai|gemini)$", description="AI model to use")
 
 
 class RiskDetectionRequest(BaseModel):
     """Request to detect risks."""
-    
-    use_model: str = Field(
-        default="openai",
-        pattern="^(openai|gemini)$",
-        description="AI model to use"
-    )
+
+    use_model: str = Field(default="openai", pattern="^(openai|gemini)$", description="AI model to use")
 
 
 class InsightGenerationRequest(BaseModel):
     """Request to generate market insight."""
-    
-    days: int = Field(
-        default=30,
-        ge=7,
-        le=90,
-        description="Number of days to analyze"
-    )
-    use_model: str = Field(
-        default="openai",
-        pattern="^(openai|gemini)$",
-        description="AI model to use"
-    )
+
+    days: int = Field(default=30, ge=7, le=90, description="Number of days to analyze")
+    use_model: str = Field(default="openai", pattern="^(openai|gemini)$", description="AI model to use")
 
 
 # ============================================
 # RESPONSE SCHEMAS
 # ============================================
 
+
 class TrendSignalResponse(BaseModel):
     """A single trend signal."""
-    
+
     signal_type: str
     value: float
     timestamp: datetime
@@ -132,7 +108,7 @@ class TrendSignalResponse(BaseModel):
 
 class TrendPredictionResponse(BaseModel):
     """A trend prediction."""
-    
+
     direction: TrendDirection
     category: TrendCategory
     confidence: ConfidenceLevel
@@ -145,7 +121,7 @@ class TrendPredictionResponse(BaseModel):
 
 class PricingOpportunityResponse(BaseModel):
     """A pricing opportunity."""
-    
+
     opportunity_type: OpportunityType
     product_id: str
     product_name: str
@@ -161,7 +137,7 @@ class PricingOpportunityResponse(BaseModel):
 
 class RiskAlertResponse(BaseModel):
     """A risk alert."""
-    
+
     risk_level: RiskLevel
     risk_type: str
     title: str
@@ -169,12 +145,12 @@ class RiskAlertResponse(BaseModel):
     affected_products: list[str] = []
     recommended_actions: list[str] = []
     detected_at: datetime
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
 
 
 class AIInsightResponse(BaseModel):
     """An AI-generated insight."""
-    
+
     title: str
     summary: str
     detailed_analysis: str
@@ -186,24 +162,25 @@ class AIInsightResponse(BaseModel):
 
 class TrendAnalysisResponse(BaseModel):
     """Complete trend analysis result."""
+
     model_config = ConfigDict(from_attributes=True)
     analysis_id: str
     generated_at: datetime
-    
+
     # Market overview
     market_sentiment: TrendDirection
     market_sentiment_score: float = Field(ge=-100, le=100)
-    
+
     # Analysis results
     predictions: list[TrendPredictionResponse] = []
     opportunities: list[PricingOpportunityResponse] = []
     risks: list[RiskAlertResponse] = []
     insights: list[AIInsightResponse] = []
-    
+
     # Summary
     executive_summary: str
     recommended_actions: list[str] = []
-    
+
     # Metadata
     products_analyzed: int
     mentions_analyzed: int
@@ -212,7 +189,7 @@ class TrendAnalysisResponse(BaseModel):
 
 class RiskDetectionResponse(BaseModel):
     """Risk detection result."""
-    
+
     risks: list[RiskAlertResponse] = []
     overall_risk_level: RiskLevel
     summary: str
@@ -221,31 +198,27 @@ class RiskDetectionResponse(BaseModel):
 
 class QuickStatsResponse(BaseModel):
     """Quick stats for the trends dashboard."""
-    
+
     # Sentiment
     current_sentiment: float
     sentiment_trend: TrendDirection
     sentiment_change_7d: float
-    
+
     # Volume
     mentions_today: int
     mentions_7d: int
     volume_change_percent: float
-    
+
     # Opportunities
     active_opportunities: int
     potential_revenue_impact: str
-    
+
     # Risks
     active_risks: int
     highest_risk_level: RiskLevel
-    
+
     # Products
     trending_up: list[str]
     trending_down: list[str]
-    
+
     last_updated: datetime
-
-
-
-    

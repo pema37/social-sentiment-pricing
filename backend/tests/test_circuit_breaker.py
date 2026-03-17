@@ -6,21 +6,21 @@ Pure async logic, no DB dependencies.
 """
 
 import asyncio
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, AsyncMock, MagicMock
-
-import pytest
 
 # Force fresh import — test_woocommerce_service replaces CircuitOpenError with a fake
 import sys
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 sys.modules.pop("services.integration.circuit_breaker", None)
 
 from services.integration.circuit_breaker import (
-    CircuitState,
-    CircuitBreakerConfig,
-    CircuitOpenError,
     CircuitBreaker,
+    CircuitBreakerConfig,
     CircuitBreakerRegistry,
+    CircuitOpenError,
+    CircuitState,
     circuit_breaker_registry,
 )
 
@@ -29,7 +29,6 @@ from services.integration.circuit_breaker import (
 # CircuitState enum
 # ──────────────────────────────────────────────
 class TestCircuitState:
-
     def test_closed_value(self):
         assert CircuitState.CLOSED.value == "closed"
 
@@ -51,7 +50,6 @@ class TestCircuitState:
 # CircuitBreakerConfig
 # ──────────────────────────────────────────────
 class TestCircuitBreakerConfig:
-
     def test_defaults(self):
         cfg = CircuitBreakerConfig()
         assert cfg.failure_threshold == 5
@@ -89,7 +87,6 @@ class TestCircuitBreakerConfig:
 # CircuitOpenError
 # ──────────────────────────────────────────────
 class TestCircuitOpenError:
-
     def test_is_exception(self):
         assert issubclass(CircuitOpenError, Exception)
 
@@ -110,7 +107,6 @@ class TestCircuitOpenError:
 # CircuitBreaker — init and properties
 # ──────────────────────────────────────────────
 class TestCircuitBreakerInit:
-
     def test_name_stored(self):
         cb = CircuitBreaker("test-store")
         assert cb.name == "test-store"
@@ -158,7 +154,6 @@ class TestCircuitBreakerInit:
 # CircuitBreaker — state transitions
 # ──────────────────────────────────────────────
 class TestCircuitBreakerStateTransitions:
-
     @pytest.mark.asyncio
     async def test_closed_to_open_after_threshold(self):
         cfg = CircuitBreakerConfig(failure_threshold=3)
@@ -241,7 +236,6 @@ class TestCircuitBreakerStateTransitions:
 # CircuitBreaker — record_success
 # ──────────────────────────────────────────────
 class TestRecordSuccess:
-
     @pytest.mark.asyncio
     async def test_closed_resets_failure_count(self):
         cb = CircuitBreaker("test")
@@ -285,7 +279,6 @@ class TestRecordSuccess:
 # CircuitBreaker — record_failure
 # ──────────────────────────────────────────────
 class TestRecordFailure:
-
     @pytest.mark.asyncio
     async def test_increments_failure_count(self):
         cb = CircuitBreaker("test")
@@ -374,7 +367,6 @@ class TestRecordFailure:
 # CircuitBreaker — async context manager
 # ──────────────────────────────────────────────
 class TestAsyncContextManager:
-
     @pytest.mark.asyncio
     async def test_success_path(self):
         cb = CircuitBreaker("test")
@@ -487,7 +479,6 @@ class TestAsyncContextManager:
 # CircuitBreaker — _check_state
 # ──────────────────────────────────────────────
 class TestCheckState:
-
     @pytest.mark.asyncio
     async def test_closed_no_transition(self):
         cb = CircuitBreaker("test")
@@ -535,7 +526,6 @@ class TestCheckState:
 # CircuitBreaker — get_status
 # ──────────────────────────────────────────────
 class TestGetStatus:
-
     def test_initial_status(self):
         cb = CircuitBreaker("my-store")
         status = cb.get_status()
@@ -587,16 +577,13 @@ class TestGetStatus:
         cb = CircuitBreaker("test")
         status = cb.get_status()
         assert isinstance(status, dict)
-        assert set(status.keys()) == {
-            "name", "state", "failure_count", "success_count", "last_failure"
-        }
+        assert set(status.keys()) == {"name", "state", "failure_count", "success_count", "last_failure"}
 
 
 # ──────────────────────────────────────────────
 # CircuitBreakerRegistry
 # ──────────────────────────────────────────────
 class TestCircuitBreakerRegistry:
-
     @pytest.mark.asyncio
     async def test_get_creates_new_breaker(self):
         reg = CircuitBreakerRegistry()
@@ -686,7 +673,6 @@ class TestCircuitBreakerRegistry:
 # Global instance
 # ──────────────────────────────────────────────
 class TestGlobalRegistry:
-
     def test_global_instance_exists(self):
         assert circuit_breaker_registry is not None
 
@@ -698,7 +684,6 @@ class TestGlobalRegistry:
 # Edge cases & concurrency
 # ──────────────────────────────────────────────
 class TestEdgeCases:
-
     @pytest.mark.asyncio
     async def test_rapid_failures_exact_threshold(self):
         cfg = CircuitBreakerConfig(failure_threshold=3)
@@ -813,5 +798,3 @@ class TestEdgeCases:
 
         await cb.record_failure()
         assert cb.state == CircuitState.OPEN
-
-        

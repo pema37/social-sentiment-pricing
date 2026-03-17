@@ -26,11 +26,10 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-import pytest
 
 from services.pricing.recommendation_helpers import (
-    PriceCalculator,
     BoundaryEnforcer,
+    PriceCalculator,
     ReasoningGenerator,
 )
 from services.pricing.rule_evaluator import MarketSignals
@@ -38,19 +37,24 @@ from services.pricing.rule_evaluator import MarketSignals
 # Get RuleAction from models (may be mocked)
 try:
     from models.pricing_rule import RuleAction as _RA
+
     INCREASE_PERCENT = _RA.INCREASE_PERCENT
     DECREASE_PERCENT = _RA.DECREASE_PERCENT
     SET_ABSOLUTE = _RA.SET_ABSOLUTE
     MATCH_COMPETITOR = _RA.MATCH_COMPETITOR
     UNDERCUT_COMPETITOR = _RA.UNDERCUT_COMPETITOR
 except (ImportError, AttributeError):
+
     class _Fake:
         def __init__(self, v):
             self.value = v
+
         def __eq__(self, o):
-            return self.value == getattr(o, 'value', o)
+            return self.value == getattr(o, "value", o)
+
         def __hash__(self):
             return hash(self.value)
+
     INCREASE_PERCENT = _Fake("increase_percent")
     DECREASE_PERCENT = _Fake("decrease_percent")
     SET_ABSOLUTE = _Fake("set_absolute")
@@ -108,8 +112,8 @@ def make_signals(**kwargs):
 # 1. PriceCalculator — calculate_new_price
 # ============================================================
 
-class TestCalculateNewPrice:
 
+class TestCalculateNewPrice:
     def test_increase_percent(self):
         product = make_product(current_price=Decimal("100"))
         rule = make_rule(action=INCREASE_PERCENT, action_value=Decimal("10"))
@@ -203,8 +207,8 @@ class TestCalculateNewPrice:
 # 2. PriceCalculator — _match_competitor
 # ============================================================
 
-class TestMatchCompetitor:
 
+class TestMatchCompetitor:
     def test_direct_match(self):
         rule = make_rule(competitor_id=COMP_ID)
         signals = make_signals(competitor_prices={COMP_ID: Decimal("55.50")})
@@ -234,8 +238,8 @@ class TestMatchCompetitor:
 # 3. PriceCalculator — _undercut_competitor
 # ============================================================
 
-class TestUndercutCompetitor:
 
+class TestUndercutCompetitor:
     def test_undercut_by_margin(self):
         rule = make_rule(
             competitor_id=COMP_ID,
@@ -275,8 +279,8 @@ class TestUndercutCompetitor:
 # 4. BoundaryEnforcer — apply_boundaries
 # ============================================================
 
-class TestApplyBoundaries:
 
+class TestApplyBoundaries:
     def test_no_boundaries_returns_price(self):
         product = make_product(
             current_price=Decimal("100"),
@@ -348,8 +352,8 @@ class TestApplyBoundaries:
 # 5. BoundaryEnforcer — _apply_max_change
 # ============================================================
 
-class TestApplyMaxChange:
 
+class TestApplyMaxChange:
     def test_within_range_unchanged(self):
         product = make_product(current_price=Decimal("100"))
         rule = make_rule(max_change_percent=Decimal("10"))
@@ -385,43 +389,31 @@ class TestApplyMaxChange:
 # 6. BoundaryEnforcer — calculate_change_percent
 # ============================================================
 
-class TestCalculateChangePercent:
 
+class TestCalculateChangePercent:
     def test_positive_change(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("100"), Decimal("110")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("100"), Decimal("110"))
         assert result == Decimal("10.00")
 
     def test_negative_change(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("100"), Decimal("90")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("100"), Decimal("90"))
         assert result == Decimal("-10.00")
 
     def test_no_change(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("100"), Decimal("100")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("100"), Decimal("100"))
         assert result == Decimal("0.00")
 
     def test_fractional_change(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("99.99"), Decimal("102.49")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("99.99"), Decimal("102.49"))
         assert isinstance(result, Decimal)
         assert result == result.quantize(Decimal("0.01"))
 
     def test_large_increase(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("50"), Decimal("100")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("50"), Decimal("100"))
         assert result == Decimal("100.00")
 
     def test_small_decrease(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("100"), Decimal("99.50")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("100"), Decimal("99.50"))
         assert result == Decimal("-0.50")
 
 
@@ -429,15 +421,19 @@ class TestCalculateChangePercent:
 # 7. ReasoningGenerator — generate
 # ============================================================
 
-class TestReasoningGenerate:
 
+class TestReasoningGenerate:
     def test_increase_wording(self):
         product = make_product(name="Widget", current_price=Decimal("100"))
         rule = make_rule()
-        match_details = {"rule_type": "sentiment_threshold", "sentiment_score": 0.8, "threshold": 0.5, "direction": "above"}
+        match_details = {
+            "rule_type": "sentiment_threshold",
+            "sentiment_score": 0.8,
+            "threshold": 0.5,
+            "direction": "above",
+        }
         result = ReasoningGenerator.generate(
-            product, rule, match_details,
-            Decimal("110"), Decimal("10.00"), make_signals()
+            product, rule, match_details, Decimal("110"), Decimal("10.00"), make_signals()
         )
         assert "increase" in result
         assert "Widget" in result
@@ -447,10 +443,14 @@ class TestReasoningGenerate:
     def test_decrease_wording(self):
         product = make_product(name="Gadget", current_price=Decimal("100"))
         rule = make_rule()
-        match_details = {"rule_type": "sentiment_threshold", "sentiment_score": -0.5, "threshold": -0.3, "direction": "below"}
+        match_details = {
+            "rule_type": "sentiment_threshold",
+            "sentiment_score": -0.5,
+            "threshold": -0.3,
+            "direction": "below",
+        }
         result = ReasoningGenerator.generate(
-            product, rule, match_details,
-            Decimal("90"), Decimal("-10.00"), make_signals()
+            product, rule, match_details, Decimal("90"), Decimal("-10.00"), make_signals()
         )
         assert "decrease" in result
 
@@ -459,8 +459,7 @@ class TestReasoningGenerate:
         rule = make_rule()
         match_details = {"rule_type": "volume_surge"}
         result = ReasoningGenerator.generate(
-            product, rule, match_details,
-            Decimal("105"), Decimal("5.00"), make_signals()
+            product, rule, match_details, Decimal("105"), Decimal("5.00"), make_signals()
         )
         assert "5" in result
 
@@ -469,8 +468,8 @@ class TestReasoningGenerate:
 # 8. ReasoningGenerator — _get_rule_type_detail
 # ============================================================
 
-class TestGetRuleTypeDetail:
 
+class TestGetRuleTypeDetail:
     def test_sentiment_detail(self):
         details = {
             "rule_type": "sentiment_threshold",
@@ -478,9 +477,7 @@ class TestGetRuleTypeDetail:
             "threshold": 0.5,
             "direction": "above",
         }
-        result = ReasoningGenerator._get_rule_type_detail(
-            "sentiment_threshold", details, make_rule()
-        )
+        result = ReasoningGenerator._get_rule_type_detail("sentiment_threshold", details, make_rule())
         assert "0.85" in result
         assert "above" in result
 
@@ -491,9 +488,7 @@ class TestGetRuleTypeDetail:
             "threshold": -0.3,
             "direction": "below",
         }
-        result = ReasoningGenerator._get_rule_type_detail(
-            "sentiment_threshold", details, make_rule()
-        )
+        result = ReasoningGenerator._get_rule_type_detail("sentiment_threshold", details, make_rule())
         assert "below" in result
 
     def test_competitor_detail(self):
@@ -501,9 +496,7 @@ class TestGetRuleTypeDetail:
             "rule_type": "competitor_relative",
             "competitor_price": 89.99,
         }
-        result = ReasoningGenerator._get_rule_type_detail(
-            "competitor_relative", details, make_rule()
-        )
+        result = ReasoningGenerator._get_rule_type_detail("competitor_relative", details, make_rule())
         assert "89.99" in result
 
     def test_time_based_detail(self):
@@ -511,9 +504,7 @@ class TestGetRuleTypeDetail:
             "rule_type": "time_based",
             "allowed_days": ["Monday", "Friday"],
         }
-        result = ReasoningGenerator._get_rule_type_detail(
-            "time_based", details, make_rule()
-        )
+        result = ReasoningGenerator._get_rule_type_detail("time_based", details, make_rule())
         assert "Monday" in result
         assert "Friday" in result
 
@@ -523,9 +514,7 @@ class TestGetRuleTypeDetail:
             "mention_count": 500,
             "threshold": 200,
         }
-        result = ReasoningGenerator._get_rule_type_detail(
-            "volume_surge", details, make_rule()
-        )
+        result = ReasoningGenerator._get_rule_type_detail("volume_surge", details, make_rule())
         assert "500" in result
 
     def test_viral_detail(self):
@@ -533,16 +522,12 @@ class TestGetRuleTypeDetail:
             "rule_type": "viral_detection",
             "reach": 50000,
         }
-        result = ReasoningGenerator._get_rule_type_detail(
-            "viral_detection", details, make_rule()
-        )
+        result = ReasoningGenerator._get_rule_type_detail("viral_detection", details, make_rule())
         assert "50,000" in result
 
     def test_unknown_rule_type_fallback(self):
         rule = make_rule(name="Custom Rule")
-        result = ReasoningGenerator._get_rule_type_detail(
-            "unknown_type", {}, rule
-        )
+        result = ReasoningGenerator._get_rule_type_detail("unknown_type", {}, rule)
         assert "Custom Rule" in result
 
     def test_returns_string(self):
@@ -558,8 +543,8 @@ class TestGetRuleTypeDetail:
 # 9. Edge Cases
 # ============================================================
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     def test_very_small_price(self):
         product = make_product(current_price=Decimal("0.01"))
         rule = make_rule(action=INCREASE_PERCENT, action_value=Decimal("10"))
@@ -580,20 +565,18 @@ class TestEdgeCases:
         assert result == Decimal("100.01")  # ROUND_HALF_UP
 
     def test_change_percent_precision(self):
-        result = BoundaryEnforcer.calculate_change_percent(
-            Decimal("3"), Decimal("4")
-        )
+        result = BoundaryEnforcer.calculate_change_percent(Decimal("3"), Decimal("4"))
         assert result == Decimal("33.33")
 
     def test_reasoning_with_zero_change(self):
         product = make_product(name="X", current_price=Decimal("100"))
         rule = make_rule()
         result = ReasoningGenerator.generate(
-            product, rule, {"rule_type": "time_based", "allowed_days": []},
-            Decimal("100"), Decimal("0.00"), make_signals()
+            product,
+            rule,
+            {"rule_type": "time_based", "allowed_days": []},
+            Decimal("100"),
+            Decimal("0.00"),
+            make_signals(),
         )
         assert isinstance(result, str)
-
-
-
-        

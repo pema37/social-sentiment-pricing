@@ -6,15 +6,18 @@ to avoid Python 3.13 MagicMock comparison dunder restrictions.
 """
 
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Import isolation ──────────────────────────────────────────────
 _MOCKED_MODULES = [
     "db.session",
-    "models.product", "models.competitor", "models.sentiment",
-    "models.price_recommendation", "models.price_history",
+    "models.product",
+    "models.competitor",
+    "models.sentiment",
+    "models.price_recommendation",
+    "models.price_history",
     "models.alert",
     "schemas.analytics",
 ]
@@ -28,27 +31,39 @@ for mod in _MOCKED_MODULES:
 # Fake schema classes — pass-through constructors
 class _FakeDashboardOverview:
     def __init__(self, **kw):
-        for k, v in kw.items(): setattr(self, k, v)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 class _FakeProductSummary:
     def __init__(self, **kw):
-        for k, v in kw.items(): setattr(self, k, v)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 class _FakeRecommendationStats:
     def __init__(self, **kw):
-        for k, v in kw.items(): setattr(self, k, v)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 class _FakeAlertAnalytics:
     def __init__(self, **kw):
-        for k, v in kw.items(): setattr(self, k, v)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 class _FakeSentimentAnalytics:
     def __init__(self, **kw):
-        for k, v in kw.items(): setattr(self, k, v)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 class _FakeSentimentDataPoint:
     def __init__(self, **kw):
-        for k, v in kw.items(): setattr(self, k, v)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
 
 # Save original attributes before overwriting
 _SENTINEL = object()
@@ -71,6 +86,7 @@ _schema_mod.RecommendationStats = _FakeRecommendationStats
 _schema_mod.AlertAnalytics = _FakeAlertAnalytics
 _schema_mod.SentimentAnalytics = _FakeSentimentAnalytics
 _schema_mod.SentimentDataPoint = _FakeSentimentDataPoint
+
 
 class _FakeRecStatus:
     PENDING = "pending"
@@ -114,36 +130,65 @@ SVC_MOD = "services.analytics.analytics_service"
 # Python 3.13 MagicMock blocks comparison dunders, so we use a
 # plain class that supports all comparison operators.
 
+
 class _Col:
     """Fake SQLAlchemy column — supports comparisons, calls, .desc(), attribute access."""
-    def __ge__(self, other): return _Col()
-    def __le__(self, other): return _Col()
-    def __gt__(self, other): return _Col()
-    def __lt__(self, other): return _Col()
-    def __eq__(self, other): return _Col()
-    def __ne__(self, other): return _Col()
-    def __hash__(self):      return id(self)
-    def __call__(self, *a, **kw): return _Col()
-    def desc(self):          return _Col()
-    def label(self, name):   return _Col()
-    def __getattr__(self, name): return _Col()
-    def __bool__(self):      return True
+
+    def __ge__(self, other):
+        return _Col()
+
+    def __le__(self, other):
+        return _Col()
+
+    def __gt__(self, other):
+        return _Col()
+
+    def __lt__(self, other):
+        return _Col()
+
+    def __eq__(self, other):
+        return _Col()
+
+    def __ne__(self, other):
+        return _Col()
+
+    def __hash__(self):
+        return id(self)
+
+    def __call__(self, *a, **kw):
+        return _Col()
+
+    def desc(self):
+        return _Col()
+
+    def label(self, name):
+        return _Col()
+
+    def __getattr__(self, name):
+        return _Col()
+
+    def __bool__(self):
+        return True
 
 
 class _Model:
     """Fake SQLAlchemy model — all attribute access returns _Col, also callable."""
+
     def __getattr__(self, name):
         return _Col()
+
     def __call__(self, *a, **kw):
         return _Col()
 
 
 # ── Helpers ──────────────────────────────────────────────────────
 
+
 def _scalar_one_result(value):
     r = MagicMock()
     r.scalar_one = MagicMock(return_value=value)
     return r
+
 
 def _scalars_all_result(items):
     r = MagicMock()
@@ -152,6 +197,7 @@ def _scalars_all_result(items):
     r.scalars = MagicMock(return_value=scalars)
     return r
 
+
 def _scalars_first_result(item):
     r = MagicMock()
     scalars = MagicMock()
@@ -159,13 +205,16 @@ def _scalars_first_result(item):
     r.scalars = MagicMock(return_value=scalars)
     return r
 
+
 def _rows_result(rows):
     r = MagicMock()
     r.all = MagicMock(return_value=rows)
     return r
 
+
 def _make_session():
     return AsyncMock()
+
 
 def _make_product(**overrides):
     p = MagicMock()
@@ -178,6 +227,7 @@ def _make_product(**overrides):
     p.updated_at = overrides.get("updated_at", datetime.now(UTC))
     return p
 
+
 def _make_alert(**overrides):
     a = MagicMock()
     a.alert_type = MagicMock()
@@ -185,6 +235,7 @@ def _make_alert(**overrides):
     a.severity = MagicMock()
     a.severity.value = overrides.get("severity", "high")
     return a
+
 
 def _chainable_select(*args, **kwargs):
     q = MagicMock()
@@ -212,6 +263,7 @@ def _patch_sql(fn):
     @patch(f"{SVC_MOD}.select", _chainable_select)
     async def wrapper(*args, **kwargs):
         return await fn(*args, **kwargs)
+
     wrapper.__name__ = fn.__name__
     wrapper.__qualname__ = fn.__qualname__
     return wrapper
@@ -221,7 +273,6 @@ def _patch_sql(fn):
 # Constructor
 # ──────────────────────────────────────────────
 class TestAnalyticsServiceInit:
-
     def test_stores_session_and_user_id(self):
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-123")
@@ -233,25 +284,26 @@ class TestAnalyticsServiceInit:
 # get_dashboard_overview
 # ──────────────────────────────────────────────
 class TestGetDashboardOverview:
-
     @pytest.mark.asyncio
     @_patch_sql
     async def test_returns_dashboard_overview(self):
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            _scalar_one_result(10),    # total_products
-            _scalar_one_result(3),     # auto_pricing
-            _scalar_one_result(5),     # competitors
-            _scalar_one_result(2),     # unread_alerts
-            _scalar_one_result(7),     # alerts_today
-            _scalar_one_result(4),     # pending_recs
-            _scalar_one_result(6),     # applied_7d
-            _scalar_one_result(0.65),  # sentiment_24h
-            _scalar_one_result(0.55),  # sentiment_48h
-            _scalar_one_result(120),   # mentions_24h
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalar_one_result(10),  # total_products
+                _scalar_one_result(3),  # auto_pricing
+                _scalar_one_result(5),  # competitors
+                _scalar_one_result(2),  # unread_alerts
+                _scalar_one_result(7),  # alerts_today
+                _scalar_one_result(4),  # pending_recs
+                _scalar_one_result(6),  # applied_7d
+                _scalar_one_result(0.65),  # sentiment_24h
+                _scalar_one_result(0.55),  # sentiment_48h
+                _scalar_one_result(120),  # mentions_24h
+            ]
+        )
 
         result = await svc.get_dashboard_overview()
         assert result.total_products == 10
@@ -269,12 +321,14 @@ class TestGetDashboardOverview:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            *[_scalar_one_result(0) for _ in range(7)],
-            _scalar_one_result(0.80),
-            _scalar_one_result(0.50),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                *[_scalar_one_result(0) for _ in range(7)],
+                _scalar_one_result(0.80),
+                _scalar_one_result(0.50),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_dashboard_overview()
         assert result.sentiment_trend == "improving"
@@ -285,12 +339,14 @@ class TestGetDashboardOverview:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            *[_scalar_one_result(0) for _ in range(7)],
-            _scalar_one_result(0.30),
-            _scalar_one_result(0.80),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                *[_scalar_one_result(0) for _ in range(7)],
+                _scalar_one_result(0.30),
+                _scalar_one_result(0.80),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_dashboard_overview()
         assert result.sentiment_trend == "declining"
@@ -301,12 +357,14 @@ class TestGetDashboardOverview:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            *[_scalar_one_result(0) for _ in range(7)],
-            _scalar_one_result(0.60),
-            _scalar_one_result(0.58),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                *[_scalar_one_result(0) for _ in range(7)],
+                _scalar_one_result(0.60),
+                _scalar_one_result(0.58),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_dashboard_overview()
         assert result.sentiment_trend == "stable"
@@ -317,12 +375,14 @@ class TestGetDashboardOverview:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            *[_scalar_one_result(0) for _ in range(7)],
-            _scalar_one_result(None),
-            _scalar_one_result(None),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                *[_scalar_one_result(0) for _ in range(7)],
+                _scalar_one_result(None),
+                _scalar_one_result(None),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_dashboard_overview()
         assert result.sentiment_trend == "stable"
@@ -333,7 +393,6 @@ class TestGetDashboardOverview:
 # get_product_summaries
 # ──────────────────────────────────────────────
 class TestGetProductSummaries:
-
     @pytest.mark.asyncio
     @_patch_sql
     async def test_returns_product_list(self):
@@ -344,12 +403,14 @@ class TestGetProductSummaries:
         sentiment = MagicMock()
         sentiment.compound_score = 0.85
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([product]),
-            _scalars_first_result(sentiment),
-            _scalar_one_result(5),
-            _scalar_one_result(1),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([product]),
+                _scalars_first_result(sentiment),
+                _scalar_one_result(5),
+                _scalar_one_result(1),
+            ]
+        )
 
         result = await svc.get_product_summaries(limit=10)
         assert len(result) == 1
@@ -367,12 +428,14 @@ class TestGetProductSummaries:
             base_price=Decimal("20.00"),
         )
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([product]),
-            _scalars_first_result(None),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([product]),
+                _scalars_first_result(None),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_product_summaries()
         assert result[0].price_change_percent == 50.0
@@ -385,12 +448,14 @@ class TestGetProductSummaries:
 
         product = _make_product(base_price=Decimal("0"))
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([product]),
-            _scalars_first_result(None),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([product]),
+                _scalars_first_result(None),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_product_summaries()
         assert result[0].price_change_percent == 0.0
@@ -403,12 +468,14 @@ class TestGetProductSummaries:
 
         product = _make_product(base_price=None)
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([product]),
-            _scalars_first_result(None),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([product]),
+                _scalars_first_result(None),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_product_summaries()
         assert result[0].price_change_percent == 0.0
@@ -421,12 +488,14 @@ class TestGetProductSummaries:
 
         product = _make_product()
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([product]),
-            _scalars_first_result(None),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([product]),
+                _scalars_first_result(None),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_product_summaries()
         assert result[0].sentiment_score is None
@@ -451,11 +520,17 @@ class TestGetProductSummaries:
         p1 = _make_product(id="p1", name="Product A")
         p2 = _make_product(id="p2", name="Product B")
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([p1, p2]),
-            _scalars_first_result(None), _scalar_one_result(3), _scalar_one_result(0),
-            _scalars_first_result(None), _scalar_one_result(1), _scalar_one_result(2),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([p1, p2]),
+                _scalars_first_result(None),
+                _scalar_one_result(3),
+                _scalar_one_result(0),
+                _scalars_first_result(None),
+                _scalar_one_result(1),
+                _scalar_one_result(2),
+            ]
+        )
 
         result = await svc.get_product_summaries()
         assert len(result) == 2
@@ -470,12 +545,14 @@ class TestGetProductSummaries:
 
         product = _make_product()
 
-        session.execute = AsyncMock(side_effect=[
-            _scalars_all_result([product]),
-            _scalars_first_result(None),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalars_all_result([product]),
+                _scalars_first_result(None),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+            ]
+        )
 
         result = await svc.get_product_summaries()
         assert result[0].has_pending_recommendation is False
@@ -485,21 +562,22 @@ class TestGetProductSummaries:
 # get_recommendation_stats
 # ──────────────────────────────────────────────
 class TestGetRecommendationStats:
-
     @pytest.mark.asyncio
     @_patch_sql
     async def test_basic_stats(self):
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            _scalar_one_result(100),
-            _scalar_one_result(60),
-            _scalar_one_result(20),
-            _scalar_one_result(10),
-            _scalar_one_result(10),
-            _scalar_one_result(0.85),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalar_one_result(100),
+                _scalar_one_result(60),
+                _scalar_one_result(20),
+                _scalar_one_result(10),
+                _scalar_one_result(10),
+                _scalar_one_result(0.85),
+            ]
+        )
 
         result = await svc.get_recommendation_stats(days=30)
         assert result.total_generated == 100
@@ -514,14 +592,16 @@ class TestGetRecommendationStats:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            _scalar_one_result(100),
-            _scalar_one_result(75),
-            _scalar_one_result(25),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-            _scalar_one_result(0.90),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalar_one_result(100),
+                _scalar_one_result(75),
+                _scalar_one_result(25),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+                _scalar_one_result(0.90),
+            ]
+        )
 
         result = await svc.get_recommendation_stats()
         assert result.approval_rate == 75.0
@@ -532,14 +612,16 @@ class TestGetRecommendationStats:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            _scalar_one_result(5),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-            _scalar_one_result(0),
-            _scalar_one_result(5),
-            _scalar_one_result(None),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                _scalar_one_result(5),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+                _scalar_one_result(0),
+                _scalar_one_result(5),
+                _scalar_one_result(None),
+            ]
+        )
 
         result = await svc.get_recommendation_stats()
         assert result.approval_rate == 0.0
@@ -550,10 +632,12 @@ class TestGetRecommendationStats:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            *[_scalar_one_result(0) for _ in range(5)],
-            _scalar_one_result(None),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                *[_scalar_one_result(0) for _ in range(5)],
+                _scalar_one_result(None),
+            ]
+        )
 
         result = await svc.get_recommendation_stats()
         assert result.avg_confidence is None
@@ -564,10 +648,12 @@ class TestGetRecommendationStats:
         session = _make_session()
         svc = AnalyticsService(session=session, user_id="user-1")
 
-        session.execute = AsyncMock(side_effect=[
-            *[_scalar_one_result(0) for _ in range(5)],
-            _scalar_one_result(None),
-        ])
+        session.execute = AsyncMock(
+            side_effect=[
+                *[_scalar_one_result(0) for _ in range(5)],
+                _scalar_one_result(None),
+            ]
+        )
 
         result = await svc.get_recommendation_stats()
         assert result.avg_price_change_percent is None
@@ -577,7 +663,6 @@ class TestGetRecommendationStats:
 # get_alert_analytics
 # ──────────────────────────────────────────────
 class TestGetAlertAnalytics:
-
     @pytest.mark.asyncio
     @_patch_sql
     async def test_empty_alerts(self):
@@ -626,7 +711,6 @@ class TestGetAlertAnalytics:
 # get_sentiment_trend
 # ──────────────────────────────────────────────
 class TestGetSentimentTrend:
-
     @pytest.mark.asyncio
     @_patch_sql
     async def test_empty_timeline(self):
@@ -774,7 +858,6 @@ class TestGetSentimentTrend:
 # _get_average_sentiment
 # ──────────────────────────────────────────────
 class TestGetAverageSentiment:
-
     @pytest.mark.asyncio
     @_patch_sql
     async def test_returns_float(self):
@@ -818,4 +901,3 @@ class TestGetAverageSentiment:
 
         result = await svc._get_average_sentiment()
         assert result == 0.123
-        

@@ -6,17 +6,16 @@ POST /api/v1/audit/retrospective/email — Generate audit PDF and send via email
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.session import get_session
 from core.deps import get_current_user
 from core.logging import get_logger
+from db.session import get_session
 from models.user import User
 from schemas.retrospective_audit import AuditRequest
-from services.retrospective_audit_service import RetrospectiveAuditService
 from services.audit_pdf_generator import generate_audit_pdf
 from services.notification.audit_email_service import AuditEmailService
+from services.retrospective_audit_service import RetrospectiveAuditService
 
 logger = get_logger(__name__)
 
@@ -25,19 +24,19 @@ router = APIRouter(prefix="/audit", tags=["Retrospective Audit"])
 
 class AuditEmailRequest(BaseModel):
     """Request to email an audit PDF."""
+
     to_email: EmailStr
     lookback_days: int = Field(default=90, ge=7, le=365)
-    store_name: Optional[str] = Field(default=None, max_length=255)
-    personal_note: Optional[str] = Field(
-        default=None, max_length=1000,
-        description="Optional personal message included in the email body"
+    store_name: str | None = Field(default=None, max_length=255)
+    personal_note: str | None = Field(
+        default=None, max_length=1000, description="Optional personal message included in the email body"
     )
 
 
 class AuditEmailResponse(BaseModel):
     success: bool
     message: str
-    message_id: Optional[str] = None
+    message_id: str | None = None
 
 
 @router.post("/retrospective/email", response_model=AuditEmailResponse)
@@ -59,10 +58,7 @@ async def email_audit_pdf(
     audit = await service.generate_audit(audit_request)
 
     if audit.summary.total_products_analyzed == 0:
-        raise HTTPException(
-            status_code=422,
-            detail="No products with competitor data to audit."
-        )
+        raise HTTPException(status_code=422, detail="No products with competitor data to audit.")
 
     # Build PDF
     pdf_bytes = generate_audit_pdf(audit)
@@ -73,7 +69,7 @@ async def email_audit_pdf(
 
     # Send email
     email_service = AuditEmailService()
-    sender_name = getattr(current_user, 'full_name', None) or "ActualPrice"
+    sender_name = getattr(current_user, "full_name", None) or "ActualPrice"
 
     result = await email_service.send_audit_pdf(
         to_email=request.to_email,
@@ -86,10 +82,7 @@ async def email_audit_pdf(
     )
 
     if result.success:
-        logger.info(
-            f"Audit email sent to {request.to_email} by user {current_user.id}, "
-            f"impact={headline}"
-        )
+        logger.info(f"Audit email sent to {request.to_email} by user {current_user.id}, impact={headline}")
         return AuditEmailResponse(
             success=True,
             message=f"Audit sent to {request.to_email}",
@@ -97,11 +90,4 @@ async def email_audit_pdf(
         )
     else:
         logger.error(f"Audit email failed: {result.error}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to send email: {result.error}"
-        )
-    
-
-
-    
+        raise HTTPException(status_code=502, detail=f"Failed to send email: {result.error}")

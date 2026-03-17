@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class StrategyType(str, Enum):
     """Strategy type identifiers."""
+
     CONSERVATIVE = "conservative"
     ELASTICITY_OPTIMAL = "elasticity_optimal"
     COMPETITIVE = "competitive"
@@ -41,17 +41,17 @@ class GuardrailOverride:
     needing to specify everything.
     """
 
-    max_change_pct: Optional[float] = None
+    max_change_pct: float | None = None
     """Maximum allowed price change per recommendation (absolute).
     e.g., 0.05 = ±5%."""
 
-    min_margin: Optional[float] = None
+    min_margin: float | None = None
     """Minimum margin floor. Recommendations below this are blocked."""
 
-    max_daily_changes: Optional[int] = None
+    max_daily_changes: int | None = None
     """Max price changes per product per day."""
 
-    cooldown_hours: Optional[int] = None
+    cooldown_hours: int | None = None
     """Minimum hours between price changes for same product."""
 
 
@@ -67,10 +67,10 @@ class WeightOverride:
     position higher; ELASTICITY_OPTIMAL weights elasticity higher.
     """
 
-    elasticity_weight: Optional[float] = None
-    position_weight: Optional[float] = None
-    urgency_weight: Optional[float] = None
-    data_quality_weight: Optional[float] = None
+    elasticity_weight: float | None = None
+    position_weight: float | None = None
+    urgency_weight: float | None = None
+    data_quality_weight: float | None = None
 
     def to_dict(self) -> dict[str, float]:
         """Return only non-None overrides as a dict."""
@@ -88,10 +88,16 @@ class WeightOverride:
     @property
     def is_valid(self) -> bool:
         """Check that overrides sum to 1.0 if all four are specified."""
-        vals = [v for v in [
-            self.elasticity_weight, self.position_weight,
-            self.urgency_weight, self.data_quality_weight,
-        ] if v is not None]
+        vals = [
+            v
+            for v in [
+                self.elasticity_weight,
+                self.position_weight,
+                self.urgency_weight,
+                self.data_quality_weight,
+            ]
+            if v is not None
+        ]
 
         if len(vals) == 4:
             return abs(sum(vals) - 1.0) < 0.01
@@ -272,6 +278,7 @@ PREMIUM = PricingStrategy(
 # STRATEGY REGISTRY
 # ──────────────────────────────────────────────────────────
 
+
 class StrategyRegistry:
     """
     Registry of available pricing strategies.
@@ -325,8 +332,8 @@ class StrategyRegistry:
         name: str,
         description: str,
         magnitude_multiplier: float = 1.0,
-        max_change_pct: Optional[float] = None,
-        min_margin: Optional[float] = None,
+        max_change_pct: float | None = None,
+        min_margin: float | None = None,
         register: bool = True,
     ) -> PricingStrategy:
         """
@@ -347,6 +354,3 @@ class StrategyRegistry:
         if register:
             self.register(strategy)
         return strategy
-    
-
-    

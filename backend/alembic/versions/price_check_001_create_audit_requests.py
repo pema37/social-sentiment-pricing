@@ -5,9 +5,10 @@ Revises: prospect_analytics_001
 Create Date: 2026-03-04
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "price_check_001"
 down_revision = "prospect_analytics_001"
@@ -40,5 +41,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("audit_requests")
-
-    

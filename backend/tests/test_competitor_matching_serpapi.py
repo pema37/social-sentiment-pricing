@@ -13,7 +13,7 @@ Total: ~28 tests
 """
 
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 for mod in ["db.session"]:
     if mod not in sys.modules:
@@ -21,16 +21,15 @@ for mod in ["db.session"]:
 
 import pytest
 
-from services.competitor_matching.schemas import SearchProvider, ProviderResult
 from services.competitor_matching.providers.serpapi import SerpAPIProvider
-
+from services.competitor_matching.schemas import SearchProvider
 
 # ============================================================
 # 1. Provider Properties
 # ============================================================
 
-class TestSerpAPIProperties:
 
+class TestSerpAPIProperties:
     def test_provider_name(self):
         p = SerpAPIProvider(api_key="key")
         assert p.provider_name == SearchProvider.SERPAPI_GOOGLE_SHOPPING
@@ -58,8 +57,8 @@ class TestSerpAPIProperties:
 # 2. is_available
 # ============================================================
 
-class TestIsAvailable:
 
+class TestIsAvailable:
     def test_available_with_key(self):
         p = SerpAPIProvider(api_key="test-key")
         assert p.is_available() is True
@@ -74,8 +73,8 @@ class TestIsAvailable:
 # 3. _extract_currency
 # ============================================================
 
-class TestExtractCurrency:
 
+class TestExtractCurrency:
     def setup_method(self):
         self.p = SerpAPIProvider(api_key="key")
 
@@ -106,8 +105,8 @@ class TestExtractCurrency:
 # 4. _parse_item
 # ============================================================
 
-class TestParseItem:
 
+class TestParseItem:
     def setup_method(self):
         self.p = SerpAPIProvider(api_key="key")
 
@@ -177,8 +176,8 @@ class TestParseItem:
 # 5. _parse_results
 # ============================================================
 
-class TestParseResults:
 
+class TestParseResults:
     def setup_method(self):
         self.p = SerpAPIProvider(api_key="key")
 
@@ -186,17 +185,21 @@ class TestParseResults:
         assert self.p._parse_results({}) == []
 
     def test_shopping_results(self):
-        data = {"shopping_results": [
-            {"title": "A", "link": "https://amazon.com/a"},
-            {"title": "B", "link": "https://amazon.com/b"},
-        ]}
+        data = {
+            "shopping_results": [
+                {"title": "A", "link": "https://amazon.com/a"},
+                {"title": "B", "link": "https://amazon.com/b"},
+            ]
+        }
         products = self.p._parse_results(data)
         assert len(products) == 2
 
     def test_inline_shopping_results(self):
-        data = {"inline_shopping_results": [
-            {"title": "C", "link": "https://amazon.com/c"},
-        ]}
+        data = {
+            "inline_shopping_results": [
+                {"title": "C", "link": "https://amazon.com/c"},
+            ]
+        }
         products = self.p._parse_results(data)
         assert len(products) == 1
 
@@ -213,8 +216,8 @@ class TestParseResults:
 # 6. get_usage_stats
 # ============================================================
 
-class TestGetUsageStats:
 
+class TestGetUsageStats:
     def test_initial_stats(self):
         p = SerpAPIProvider(api_key="key")
         stats = p.get_usage_stats()
@@ -228,5 +231,3 @@ class TestGetUsageStats:
         stats = p.get_usage_stats()
         assert stats["requests_made"] == 100
         assert stats["estimated_cost"] == pytest.approx(1.0)
-
-        

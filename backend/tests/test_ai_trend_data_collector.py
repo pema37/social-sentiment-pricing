@@ -16,7 +16,7 @@ Covers all methods in DataCollector:
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -28,8 +28,8 @@ for mod in ["db.session"]:
 
 from services.ai_trend_analysis.data_collector import DataCollector
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_mock_db():
     """Create a mock AsyncSession with chainable execute/scalars/all."""
@@ -47,7 +47,7 @@ def _make_sentiment(score=0.5, magnitude=0.3, product_id="prod-1", analyzed_at=N
     s.product_id = product_id
     s.score = score
     s.magnitude = magnitude
-    s.analyzed_at = analyzed_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
+    s.analyzed_at = analyzed_at or datetime(2026, 2, 1, tzinfo=UTC)
     return s
 
 
@@ -63,7 +63,7 @@ def _make_mention(
     m.platform = platform
     m.content = content
     m.sentiment_score = sentiment_score
-    m.collected_at = collected_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
+    m.collected_at = collected_at or datetime(2026, 2, 1, tzinfo=UTC)
     return m
 
 
@@ -72,7 +72,7 @@ def _make_competitor(product_id="prod-1", name="Amazon", price=49.99, updated_at
     c.product_id = product_id
     c.competitor_name = name
     c.price = price
-    c.updated_at = updated_at or datetime(2026, 2, 1, tzinfo=timezone.utc)
+    c.updated_at = updated_at or datetime(2026, 2, 1, tzinfo=UTC)
     return c
 
 
@@ -89,6 +89,7 @@ def _make_product(name="Widget", base_price=29.99, user_id="user-1", category="E
 # ==================================================================
 # get_products
 # ==================================================================
+
 
 class TestGetProducts:
     @pytest.mark.asyncio
@@ -130,6 +131,7 @@ class TestGetProducts:
 # ==================================================================
 # get_sentiment_history
 # ==================================================================
+
 
 class TestGetSentimentHistory:
     @pytest.mark.asyncio
@@ -186,15 +188,14 @@ class TestGetSentimentHistory:
         db, _, scalars = _make_mock_db()
         scalars.all.return_value = []
         collector = DataCollector(db)
-        await collector.get_sentiment_history(
-            user_id="user-1", days=30, product_ids=["prod-1"]
-        )
+        await collector.get_sentiment_history(user_id="user-1", days=30, product_ids=["prod-1"])
         db.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_product_id_converted_to_string(self):
         db, _, scalars = _make_mock_db()
         import uuid
+
         pid = uuid.uuid4()
         s = _make_sentiment(product_id=pid)
         scalars.all.return_value = [s]
@@ -206,6 +207,7 @@ class TestGetSentimentHistory:
 # ==================================================================
 # get_product_sentiment
 # ==================================================================
+
 
 class TestGetProductSentiment:
     @pytest.mark.asyncio
@@ -332,6 +334,7 @@ class TestGetProductSentiment:
 # get_mentions_summary
 # ==================================================================
 
+
 class TestGetMentionsSummary:
     @pytest.mark.asyncio
     async def test_returns_empty_list(self):
@@ -386,15 +389,14 @@ class TestGetMentionsSummary:
         db, _, scalars = _make_mock_db()
         scalars.all.return_value = []
         collector = DataCollector(db)
-        await collector.get_mentions_summary(
-            user_id="user-1", days=30, product_ids=["prod-1"]
-        )
+        await collector.get_mentions_summary(user_id="user-1", days=30, product_ids=["prod-1"])
         db.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_product_id_converted_to_string(self):
         db, _, scalars = _make_mock_db()
         import uuid
+
         pid = uuid.uuid4()
         m = _make_mention(product_id=pid)
         scalars.all.return_value = [m]
@@ -406,6 +408,7 @@ class TestGetMentionsSummary:
 # ==================================================================
 # get_product_mentions
 # ==================================================================
+
 
 class TestGetProductMentions:
     @pytest.mark.asyncio
@@ -439,6 +442,7 @@ class TestGetProductMentions:
 # get_negative_mentions
 # ==================================================================
 
+
 class TestGetNegativeMentions:
     @pytest.mark.asyncio
     async def test_returns_empty_list(self):
@@ -469,6 +473,7 @@ class TestGetNegativeMentions:
 # ==================================================================
 # get_competitor_data
 # ==================================================================
+
 
 class TestGetCompetitorData:
     @pytest.mark.asyncio
@@ -515,15 +520,14 @@ class TestGetCompetitorData:
         db, _, scalars = _make_mock_db()
         scalars.all.return_value = []
         collector = DataCollector(db)
-        await collector.get_competitor_data(
-            user_id="user-1", product_ids=["prod-1"]
-        )
+        await collector.get_competitor_data(user_id="user-1", product_ids=["prod-1"])
         db.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_product_id_converted_to_string(self):
         db, _, scalars = _make_mock_db()
         import uuid
+
         pid = uuid.uuid4()
         c = _make_competitor(product_id=pid)
         scalars.all.return_value = [c]
@@ -535,6 +539,7 @@ class TestGetCompetitorData:
 # ==================================================================
 # get_product_competitors
 # ==================================================================
+
 
 class TestGetProductCompetitors:
     @pytest.mark.asyncio
@@ -567,6 +572,7 @@ class TestGetProductCompetitors:
 # ==================================================================
 # get_current_alerts
 # ==================================================================
+
 
 class TestGetCurrentAlerts:
     @pytest.mark.asyncio
@@ -603,6 +609,7 @@ class TestGetCurrentAlerts:
 # Placeholder methods
 # ==================================================================
 
+
 class TestPlaceholderMethods:
     @pytest.mark.asyncio
     async def test_get_sentiment_drops_returns_empty(self):
@@ -617,6 +624,3 @@ class TestPlaceholderMethods:
         collector = DataCollector(db)
         result = await collector.get_recent_competitor_activities(user_id="user-1")
         assert result == []
-
-
-        

@@ -12,31 +12,31 @@ Place at: backend/tests/unit/test_agent_contracts.py
 Run: pytest tests/unit/test_agent_contracts.py -v
 """
 
-import pytest
 from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
+
 from schemas.agent_contracts import (
-    ScoutOutput,
-    CompetitorPrice,
-    SentimentSnapshot,
-    PriceHistoryPoint,
     AnalystOutput,
-    ElasticityEstimate,
+    CompetitorPrice,
     ConfidenceDecomposition,
-    StrategistOutput,
+    DataSource,
+    ElasticityEstimate,
     GuardrailCheck,
     PipelineResult,
     PriceDirection,
+    ScoutOutput,
+    SentimentSnapshot,
+    StrategistOutput,
     UrgencyLevel,
-    DataSource,
 )
-
 
 # ══════════════════════════════════════════════════════════════════
 # FIXTURES
 # ══════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def product_id():
@@ -180,8 +180,8 @@ def strategist_output(product_id, now):
 # SCOUT OUTPUT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestScoutOutput:
 
+class TestScoutOutput:
     def test_basic_construction(self, scout_output):
         assert scout_output.competitor_count == 2
         assert scout_output.our_price == Decimal("32.00")
@@ -278,8 +278,8 @@ class TestScoutOutput:
 # ANALYST OUTPUT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestAnalystOutput:
 
+class TestAnalystOutput:
     def test_basic_construction(self, analyst_output):
         assert analyst_output.urgency_level == UrgencyLevel.MEDIUM
         assert analyst_output.urgency_score == 0.55
@@ -346,8 +346,8 @@ class TestAnalystOutput:
 # STRATEGIST OUTPUT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestStrategistOutput:
 
+class TestStrategistOutput:
     def test_basic_construction(self, strategist_output):
         assert strategist_output.recommended_price == Decimal("29.49")
         assert strategist_output.change_direction == PriceDirection.DECREASE
@@ -375,7 +375,10 @@ class TestStrategistOutput:
             change_direction=PriceDirection.INCREASE,
             confidence_score=0.8,
             confidence_decomposition=ConfidenceDecomposition(
-                elasticity=0.8, position=0.8, urgency=0.8, data_quality=0.8,
+                elasticity=0.8,
+                position=0.8,
+                urgency=0.8,
+                data_quality=0.8,
             ),
             reasoning="Test increase",
             factors={},
@@ -395,7 +398,10 @@ class TestStrategistOutput:
                 change_direction=PriceDirection.INCREASE,
                 confidence_score=0.8,
                 confidence_decomposition=ConfidenceDecomposition(
-                    elasticity=0.8, position=0.8, urgency=0.8, data_quality=0.8,
+                    elasticity=0.8,
+                    position=0.8,
+                    urgency=0.8,
+                    data_quality=0.8,
                 ),
                 reasoning="Should fail",
                 factors={},
@@ -414,7 +420,10 @@ class TestStrategistOutput:
                 change_direction=PriceDirection.DECREASE,
                 confidence_score=0.8,
                 confidence_decomposition=ConfidenceDecomposition(
-                    elasticity=0.8, position=0.8, urgency=0.8, data_quality=0.8,
+                    elasticity=0.8,
+                    position=0.8,
+                    urgency=0.8,
+                    data_quality=0.8,
                 ),
                 reasoning="Should fail",
                 factors={},
@@ -432,7 +441,10 @@ class TestStrategistOutput:
             change_direction=PriceDirection.HOLD,
             confidence_score=0.5,
             confidence_decomposition=ConfidenceDecomposition(
-                elasticity=0.5, position=0.5, urgency=0.5, data_quality=0.5,
+                elasticity=0.5,
+                position=0.5,
+                urgency=0.5,
+                data_quality=0.5,
             ),
             reasoning="Essentially holding",
             factors={},
@@ -452,7 +464,10 @@ class TestStrategistOutput:
                 change_direction=PriceDirection.HOLD,
                 confidence_score=0.8,
                 confidence_decomposition=ConfidenceDecomposition(
-                    elasticity=0.8, position=0.8, urgency=0.8, data_quality=0.8,
+                    elasticity=0.8,
+                    position=0.8,
+                    urgency=0.8,
+                    data_quality=0.8,
                 ),
                 reasoning="Should fail",
                 factors={},
@@ -487,7 +502,10 @@ class TestStrategistOutput:
             change_direction=PriceDirection.DECREASE,
             confidence_score=0.6,
             confidence_decomposition=ConfidenceDecomposition(
-                elasticity=0.6, position=0.6, urgency=0.6, data_quality=0.6,
+                elasticity=0.6,
+                position=0.6,
+                urgency=0.6,
+                data_quality=0.6,
             ),
             reasoning="Clamped from -15% to -10%",
             factors={},
@@ -512,8 +530,8 @@ class TestStrategistOutput:
 # PIPELINE RESULT TESTS
 # ══════════════════════════════════════════════════════════════════
 
-class TestPipelineResult:
 
+class TestPipelineResult:
     def test_end_to_end(self, scout_output, analyst_output, strategist_output, product_id, now):
         result = PipelineResult(
             product_id=product_id,
@@ -578,8 +596,8 @@ class TestPipelineResult:
 # EDGE CASES & BOUNDARY VALUES
 # ══════════════════════════════════════════════════════════════════
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     def test_sentiment_score_bounds(self):
         """Sentiment score must be -1.0 to 1.0."""
         with pytest.raises(Exception):
@@ -604,7 +622,10 @@ class TestEdgeCases:
                 change_direction=PriceDirection.DECREASE,
                 confidence_score=1.5,
                 confidence_decomposition=ConfidenceDecomposition(
-                    elasticity=0.5, position=0.5, urgency=0.5, data_quality=0.5,
+                    elasticity=0.5,
+                    position=0.5,
+                    urgency=0.5,
+                    data_quality=0.5,
                 ),
                 reasoning="Test",
                 factors={},
@@ -618,7 +639,10 @@ class TestEdgeCases:
                 scout_scouted_at=now,
                 elasticity=ElasticityEstimate(point_estimate=-1.0),
                 confidence=ConfidenceDecomposition(
-                    elasticity=0.5, position=0.5, urgency=0.5, data_quality=0.5,
+                    elasticity=0.5,
+                    position=0.5,
+                    urgency=0.5,
+                    data_quality=0.5,
                 ),
                 urgency_level=UrgencyLevel.HIGH,
                 urgency_score=1.5,
@@ -641,7 +665,10 @@ class TestEdgeCases:
             change_direction=PriceDirection.INCREASE,
             confidence_score=0.5,
             confidence_decomposition=ConfidenceDecomposition(
-                elasticity=0.5, position=0.5, urgency=0.5, data_quality=0.5,
+                elasticity=0.5,
+                position=0.5,
+                urgency=0.5,
+                data_quality=0.5,
             ),
             reasoning="Introducing price for free product",
             factors={},
@@ -656,7 +683,10 @@ class TestEdgeCases:
                 scout_scouted_at=now,
                 elasticity=ElasticityEstimate(point_estimate=-1.0),
                 confidence=ConfidenceDecomposition(
-                    elasticity=0.5, position=0.5, urgency=0.5, data_quality=0.5,
+                    elasticity=0.5,
+                    position=0.5,
+                    urgency=0.5,
+                    data_quality=0.5,
                 ),
                 urgency_level=level,
                 urgency_score=0.5,
@@ -677,6 +707,3 @@ class TestEdgeCases:
             data_sources=list(DataSource),
         )
         assert len(scout.data_sources) == len(DataSource)
-
-
-        

@@ -6,18 +6,18 @@ All three agent outputs in one object, plus metadata.
 """
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from .scout import ScoutOutput
 from .analyst import AnalystOutput
+from .scout import ScoutOutput
 from .strategist import StrategistOutput
 
 
 class PipelineResult(BaseModel):
     """Complete trace of a recommendation pipeline run."""
+
     product_id: UUID
     scout: ScoutOutput
     analyst: AnalystOutput
@@ -26,7 +26,7 @@ class PipelineResult(BaseModel):
     pipeline_completed_at: datetime
     total_time_ms: int
     success: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
     def store_evidence(self) -> dict:
         """
@@ -47,6 +47,3 @@ class PipelineResult(BaseModel):
             "analyst": self.analyst.to_evidence(),
             "strategist": self.strategist.to_evidence(),
         }
-    
-
-    

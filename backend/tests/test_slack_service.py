@@ -6,7 +6,7 @@ SlackService with webhook — SlackResult dataclass, send_alert, payload builder
 
 import sys
 from dataclasses import fields
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -38,7 +38,6 @@ SVC_MOD = "services.notification.slack_service"
 # SlackResult dataclass
 # ──────────────────────────────────────────────
 class TestSlackResult:
-
     def test_success(self):
         r = SlackResult(success=True)
         assert r.success is True
@@ -61,7 +60,6 @@ class TestSlackResult:
 # SlackService — init
 # ──────────────────────────────────────────────
 class TestSlackServiceInit:
-
     def test_reads_default_webhook_url(self):
         with patch(f"{SVC_MOD}.settings") as mock_s:
             mock_s.SLACK_WEBHOOK_URL = "https://hooks.slack.com/test"
@@ -79,7 +77,6 @@ class TestSlackServiceInit:
 # SlackService — send_alert
 # ──────────────────────────────────────────────
 class TestSendAlert:
-
     def _make_service(self, webhook_url="https://hooks.slack.com/test"):
         with patch(f"{SVC_MOD}.settings") as mock_s:
             mock_s.SLACK_WEBHOOK_URL = webhook_url
@@ -89,7 +86,9 @@ class TestSendAlert:
     async def test_no_url_returns_failure(self):
         svc = self._make_service(webhook_url="")
         result = await svc.send_alert(
-            alert_title="T", alert_message="M", webhook_url=None,
+            alert_title="T",
+            alert_message="M",
+            webhook_url=None,
         )
         assert result.success is False
         assert "No Slack webhook URL" in result.error
@@ -115,7 +114,8 @@ class TestSendAlert:
             mock_client_cls.return_value = mock_client
 
             await svc.send_alert(
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
                 webhook_url="https://custom.com/hook",
             )
 
@@ -185,6 +185,7 @@ class TestSendAlert:
     @pytest.mark.asyncio
     async def test_timeout_returns_failure(self):
         import httpx
+
         svc = self._make_service()
 
         with patch(f"{SVC_MOD}.httpx.AsyncClient") as mock_client_cls:
@@ -252,7 +253,8 @@ class TestSendAlert:
             mock_client_cls.return_value = mock_client
 
             await svc.send_alert(
-                alert_title="T", alert_message="M",
+                alert_title="T",
+                alert_message="M",
                 alert_data={"product": "Widget"},
             )
 
@@ -266,7 +268,6 @@ class TestSendAlert:
 # SlackService — _build_payload
 # ──────────────────────────────────────────────
 class TestBuildPayload:
-
     def _make_service(self):
         with patch(f"{SVC_MOD}.settings") as mock_s:
             mock_s.SLACK_WEBHOOK_URL = "https://test.com"
@@ -405,6 +406,3 @@ class TestBuildPayload:
         # Empty dict is truthy in Python... wait, no it's falsy
         types = [b["type"] for b in result["blocks"]]
         assert types == ["header", "section", "context", "divider"]
-
-
-        

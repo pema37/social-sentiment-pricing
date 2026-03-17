@@ -23,8 +23,8 @@ for mod in ["db.session", "google.genai"]:
 
 from services.ai_trend_analysis.analyzer import AITrendAnalyzer
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_analyzer():
     """Create analyzer with fully mocked dependencies."""
@@ -37,10 +37,16 @@ def _make_analyzer():
     analyzer.collector.get_sentiment_history = AsyncMock(return_value=[])
     analyzer.collector.get_mentions_summary = AsyncMock(return_value=[])
     analyzer.collector.get_competitor_data = AsyncMock(return_value=[])
-    analyzer.collector.get_product_sentiment = AsyncMock(return_value={
-        "current": 0.5, "avg_7d": 0.5, "avg_30d": 0.5,
-        "trend": "stable", "avg_volume": 5, "volume_change": 0,
-    })
+    analyzer.collector.get_product_sentiment = AsyncMock(
+        return_value={
+            "current": 0.5,
+            "avg_7d": 0.5,
+            "avg_30d": 0.5,
+            "trend": "stable",
+            "avg_volume": 5,
+            "volume_change": 0,
+        }
+    )
     analyzer.collector.get_product_mentions = AsyncMock(return_value=[])
     analyzer.collector.get_product_competitors = AsyncMock(return_value=[])
     analyzer.collector.get_negative_mentions = AsyncMock(return_value=[])
@@ -104,6 +110,7 @@ def _make_product(name="Widget", base_price=29.99):
 # __init__
 # ==================================================================
 
+
 class TestInit:
     def test_creates_dependencies(self):
         db = AsyncMock()
@@ -119,6 +126,7 @@ class TestInit:
 # analyze
 # ==================================================================
 
+
 class TestAnalyze:
     @pytest.mark.asyncio
     async def test_no_products_returns_empty_result(self):
@@ -129,7 +137,13 @@ class TestAnalyze:
 
         analyzer.parser.parse_analysis_response.assert_called_once()
         call_kwargs = analyzer.parser.parse_analysis_response.call_args
-        ai_response = call_kwargs[1]["ai_response"] if "ai_response" in (call_kwargs[1] or {}) else call_kwargs[0][1] if len(call_kwargs[0]) > 1 else call_kwargs[1].get("ai_response")
+        ai_response = (
+            call_kwargs[1]["ai_response"]
+            if "ai_response" in (call_kwargs[1] or {})
+            else call_kwargs[0][1]
+            if len(call_kwargs[0]) > 1
+            else call_kwargs[1].get("ai_response")
+        )
         # Verify it was called with empty products
         assert result is not None
 
@@ -150,7 +164,21 @@ class TestAnalyze:
         analyzer.collector.get_products.return_value = products
 
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
-            mock_ai.call = AsyncMock(return_value=({"market_sentiment": "stable", "market_sentiment_score": 0, "predictions": [], "opportunities": [], "risks": [], "executive_summary": "", "recommended_actions": [], "key_insights": []}, "openai"))
+            mock_ai.call = AsyncMock(
+                return_value=(
+                    {
+                        "market_sentiment": "stable",
+                        "market_sentiment_score": 0,
+                        "predictions": [],
+                        "opportunities": [],
+                        "risks": [],
+                        "executive_summary": "",
+                        "recommended_actions": [],
+                        "key_insights": [],
+                    },
+                    "openai",
+                )
+            )
             await analyzer.analyze(user_id="user-1", days=14, product_ids=["prod-1"])
 
         analyzer.collector.get_products.assert_awaited_once_with("user-1", ["prod-1"])
@@ -238,6 +266,7 @@ class TestAnalyze:
 # get_product_opportunity
 # ==================================================================
 
+
 class TestGetProductOpportunity:
     @pytest.mark.asyncio
     async def test_product_not_found_raises(self):
@@ -245,9 +274,7 @@ class TestGetProductOpportunity:
         analyzer.collector.get_products.return_value = []
 
         with pytest.raises(ValueError, match="Product prod-999 not found"):
-            await analyzer.get_product_opportunity(
-                user_id="user-1", product_id="prod-999"
-            )
+            await analyzer.get_product_opportunity(user_id="user-1", product_id="prod-999")
 
     @pytest.mark.asyncio
     async def test_collects_product_specific_data(self):
@@ -257,9 +284,7 @@ class TestGetProductOpportunity:
 
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
             mock_ai.call = AsyncMock(return_value=({}, "openai"))
-            await analyzer.get_product_opportunity(
-                user_id="user-1", product_id="prod-1"
-            )
+            await analyzer.get_product_opportunity(user_id="user-1", product_id="prod-1")
 
         analyzer.collector.get_products.assert_awaited_once_with("user-1", ["prod-1"])
         analyzer.collector.get_product_sentiment.assert_awaited_once_with("prod-1", days=30)
@@ -276,14 +301,10 @@ class TestGetProductOpportunity:
 
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
             mock_ai.call = AsyncMock(return_value=({"recommendation": "increase"}, "openai"))
-            result = await analyzer.get_product_opportunity(
-                user_id="user-1", product_id="prod-1"
-            )
+            result = await analyzer.get_product_opportunity(user_id="user-1", product_id="prod-1")
 
         mock_ai.call.assert_awaited_once()
-        analyzer.parser.parse_opportunity_response.assert_called_once_with(
-            product, {"recommendation": "increase"}
-        )
+        analyzer.parser.parse_opportunity_response.assert_called_once_with(product, {"recommendation": "increase"})
         assert result is expected_opp
 
     @pytest.mark.asyncio
@@ -295,9 +316,7 @@ class TestGetProductOpportunity:
 
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
             mock_ai.call = AsyncMock(return_value=({}, "openai"))
-            await analyzer.get_product_opportunity(
-                user_id="user-1", product_id="prod-1"
-            )
+            await analyzer.get_product_opportunity(user_id="user-1", product_id="prod-1")
 
         # Should pass p1 (first product) to parser
         call_args = analyzer.parser.parse_opportunity_response.call_args
@@ -317,14 +336,13 @@ class TestGetProductOpportunity:
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
             mock_ai.call = AsyncMock(return_value=({}, "openai"))
             # Should not raise even without base_price
-            await analyzer.get_product_opportunity(
-                user_id="user-1", product_id="prod-1"
-            )
+            await analyzer.get_product_opportunity(user_id="user-1", product_id="prod-1")
 
 
 # ==================================================================
 # detect_risks
 # ==================================================================
+
 
 class TestDetectRisks:
     @pytest.mark.asyncio
@@ -415,6 +433,7 @@ class TestDetectRisks:
 # ==================================================================
 # generate_insight
 # ==================================================================
+
 
 class TestGenerateInsight:
     @pytest.mark.asyncio
@@ -523,6 +542,3 @@ class TestGenerateInsight:
         await analyzer.generate_insight(user_id="user-1")
         call_args = analyzer.collector.get_sentiment_history.call_args
         assert call_args[0][1] == 30
-
-
-        

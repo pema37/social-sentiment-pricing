@@ -4,14 +4,14 @@ Global exception handlers with alerting for critical errors.
 """
 
 import traceback
-from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from core.logging import get_logger, get_correlation_id
-from core.alerting import alert_error, alert_critical, AlertSeverity
-from core.sentry import capture_exception
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from core.alerting import alert_critical, alert_error
 from core.config import settings
+from core.logging import get_correlation_id, get_logger
+from core.sentry import capture_exception
 
 logger = get_logger(__name__)
 
@@ -26,7 +26,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             detail=exc.detail,
             path=request.url.path,
         )
-    
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -43,7 +43,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     Logs error, captures in Sentry, and sends alerts for critical errors.
     """
     correlation_id = get_correlation_id()
-    
+
     # Log the full error
     logger.error(
         "Unhandled exception",
@@ -53,10 +53,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         method=request.method,
         traceback=traceback.format_exc(),
     )
-    
+
     # Capture in Sentry
     capture_exception(exc, path=request.url.path, correlation_id=correlation_id)
-    
+
     # Send alert for production errors
     if settings.ENVIRONMENT == "production":
         await alert_error(
@@ -68,7 +68,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
                 "Correlation ID": correlation_id,
             },
         )
-    
+
     return JSONResponse(
         status_code=500,
         content={
@@ -81,15 +81,15 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 async def database_exception_handler(request: Request, exc: Exception):
     """Handle database exceptions with critical alerting."""
     correlation_id = get_correlation_id()
-    
+
     logger.critical(
         "Database error",
         error=str(exc),
         path=request.url.path,
     )
-    
+
     capture_exception(exc, path=request.url.path, correlation_id=correlation_id)
-    
+
     # Database errors are critical
     if settings.ENVIRONMENT == "production":
         await alert_critical(
@@ -100,7 +100,7 @@ async def database_exception_handler(request: Request, exc: Exception):
                 "Correlation ID": correlation_id,
             },
         )
-    
+
     return JSONResponse(
         status_code=503,
         content={

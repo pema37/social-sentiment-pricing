@@ -1,21 +1,21 @@
 # backend/models/competitor.py
 
 import uuid as uuid_lib
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, JSON, Text, ForeignKey
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlmodel import Field, SQLModel
 
 
 class Competitor(SQLModel, table=True):
     """
     Represents a competitor company whose prices we track.
-    
+
     Each competitor can have multiple products that map to your products.
     The scraping_config stores selectors and patterns for price extraction.
     """
+
     __tablename__ = "competitors"
 
     id: uuid_lib.UUID = Field(
@@ -35,15 +35,15 @@ class Competitor(SQLModel, table=True):
 
     # Competitor info
     name: str = Field(max_length=255, index=True)
-    website: Optional[str] = Field(default=None, max_length=500)
-    description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    website: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, sa_column=Column(Text))
 
     # Scraping configuration (CSS selectors, XPath, API endpoints, etc.)
     scraping_config: dict = Field(default={}, sa_column=Column(JSON))
 
     # Tracking status
     is_active: bool = Field(default=True, index=True)
-    last_scraped_at: Optional[datetime] = Field(
+    last_scraped_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True)),
     )
@@ -51,15 +51,14 @@ class Competitor(SQLModel, table=True):
 
     # Error tracking
     consecutive_failures: int = Field(default=0)
-    last_error: Optional[str] = Field(default=None, sa_column=Column(Text))
+    last_error: str | None = Field(default=None, sa_column=Column(Text))
 
     # Timestamps
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-

@@ -14,15 +14,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-
 
 # ──────────────────────────────────────────────────────────
 # ENUMS
 # ──────────────────────────────────────────────────────────
 
+
 class ConflictType(str, Enum):
     """Types of signal conflicts the fusion layer detects."""
+
     NONE = "none"
     ELASTICITY_VS_URGENCY = "elasticity_vs_urgency"
     POSITION_VS_SENTIMENT = "position_vs_sentiment"
@@ -33,6 +33,7 @@ class ConflictType(str, Enum):
 
 class GuardrailType(str, Enum):
     """Types of guardrails that can fire."""
+
     MARGIN_FLOOR = "margin_floor"
     MAX_CHANGE = "max_change"
     VELOCITY_CAP = "velocity_cap"
@@ -42,6 +43,7 @@ class GuardrailType(str, Enum):
 # ──────────────────────────────────────────────────────────
 # CONFIGURATION
 # ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class GuardrailConfig:
@@ -53,26 +55,28 @@ class GuardrailConfig:
     """
 
     # Margin floor: new_price >= cost * (1 + min_margin_pct)
-    min_margin_pct: float = 0.15          # 15% minimum margin
+    min_margin_pct: float = 0.15  # 15% minimum margin
 
     # Max single change: |change_pct| <= max_change_pct
-    max_change_pct: float = 0.10          # 10% max single price change
+    max_change_pct: float = 0.10  # 10% max single price change
 
     # Velocity cap: total change in window <= velocity_cap_pct
-    velocity_cap_pct: float = 0.20        # 20% max total change
-    velocity_window_days: int = 30        # Over 30 days
+    velocity_cap_pct: float = 0.20  # 20% max total change
+    velocity_window_days: int = 30  # Over 30 days
 
     # Rate limit: max 1 change per rate_limit_hours
-    rate_limit_hours: float = 24.0        # 1 change per 24h
+    rate_limit_hours: float = 24.0  # 1 change per 24h
 
 
 # ──────────────────────────────────────────────────────────
 # PRODUCT CONTEXT
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class PriceChange:
     """A historical price change for velocity/rate limit checks."""
+
     old_price: float
     new_price: float
     changed_at: datetime
@@ -93,28 +97,30 @@ class ProductContext:
     """
 
     current_price: float
-    cost: Optional[float] = None           # Product cost (for margin floor)
+    cost: float | None = None  # Product cost (for margin floor)
     category: str = "unknown"
 
     # Recent price change history (for velocity cap and rate limit)
     recent_changes: list[PriceChange] = field(default_factory=list)
 
     # Merchant preference (learned from modification patterns)
-    merchant_bias: float = 0.0             # -1 to 1. Negative = conservative, positive = aggressive
-    auto_apply_enabled: bool = False       # If True, higher confidence required
+    merchant_bias: float = 0.0  # -1 to 1. Negative = conservative, positive = aggressive
+    auto_apply_enabled: bool = False  # If True, higher confidence required
 
 
 # ──────────────────────────────────────────────────────────
 # RESULT TYPES
 # ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class GuardrailResult:
     """Record of a guardrail check."""
+
     guardrail_type: GuardrailType
     passed: bool
-    original_value: Optional[str] = None   # What the value was before clamping
-    clamped_value: Optional[str] = None    # What it was clamped to
+    original_value: str | None = None  # What the value was before clamping
+    clamped_value: str | None = None  # What it was clamped to
     reason: str = ""
 
 
@@ -136,21 +142,21 @@ class FusionResult:
 
     # The recommendation
     recommended_price: float
-    change_pct: float                    # Signed: positive = increase
-    direction: str                       # "increase", "decrease", "hold"
+    change_pct: float  # Signed: positive = increase
+    direction: str  # "increase", "decrease", "hold"
 
     # Pre-guardrail values (for traceability)
-    raw_price: float                     # Price before guardrail clamping
-    raw_change_pct: float                # Change % before guardrail clamping
-    raw_direction: str                   # Direction before conflict resolution
+    raw_price: float  # Price before guardrail clamping
+    raw_change_pct: float  # Change % before guardrail clamping
+    raw_direction: str  # Direction before conflict resolution
 
     # Confidence
-    confidence: float                    # Overall 0-1
+    confidence: float  # Overall 0-1
     confidence_components: dict[str, float]  # Per-component for decomposition
 
     # Conflict resolution
     conflicts_detected: list[ConflictType]
-    conflict_resolutions: list[str]      # Human-readable resolution descriptions
+    conflict_resolutions: list[str]  # Human-readable resolution descriptions
 
     # Guardrails
     guardrails: list[GuardrailResult]
@@ -158,7 +164,7 @@ class FusionResult:
 
     # Reasoning (deterministic, human-readable)
     reasoning: str
-    reasoning_steps: list[str]           # Ordered logic chain
+    reasoning_steps: list[str]  # Ordered logic chain
 
     # Flags
     needs_manual_review: bool = False
@@ -176,10 +182,10 @@ ELASTICITY_MAGNITUDE: dict[str, tuple[float, float]] = {
     # |PED| range → (base_increase_pct, base_decrease_pct)
     # Increase and decrease are different because consumer psychology
     # is asymmetric: price increases hurt more than decreases please.
-    "highly_elastic": (0.02, 0.04),    # |PED| > 2.0: tiny increase, small decrease
-    "elastic": (0.03, 0.05),           # |PED| 1.0-2.0: small changes
-    "unit_elastic": (0.04, 0.06),      # |PED| ~ 1.0: moderate changes
-    "inelastic": (0.06, 0.08),         # |PED| 0.5-1.0: larger changes OK
+    "highly_elastic": (0.02, 0.04),  # |PED| > 2.0: tiny increase, small decrease
+    "elastic": (0.03, 0.05),  # |PED| 1.0-2.0: small changes
+    "unit_elastic": (0.04, 0.06),  # |PED| ~ 1.0: moderate changes
+    "inelastic": (0.06, 0.08),  # |PED| 0.5-1.0: larger changes OK
     "highly_inelastic": (0.08, 0.10),  # |PED| < 0.5: big changes tolerated
 }
 
@@ -196,11 +202,8 @@ URGENCY_MULTIPLIER: dict[str, float] = {
 # If we're already overpriced, reduce the increase magnitude.
 # If we're underpriced, amplify the increase magnitude.
 POSITION_DIRECTION_BIAS: dict[str, dict[str, float]] = {
-    "underpriced": {"increase": 1.3, "decrease": 0.5},    # Encourage increase
+    "underpriced": {"increase": 1.3, "decrease": 0.5},  # Encourage increase
     "fairly_priced": {"increase": 1.0, "decrease": 1.0},  # Neutral
-    "overpriced": {"increase": 0.5, "decrease": 1.3},     # Encourage decrease
-    "no_data": {"increase": 0.8, "decrease": 0.8},        # Conservative
+    "overpriced": {"increase": 0.5, "decrease": 1.3},  # Encourage decrease
+    "no_data": {"increase": 0.8, "decrease": 0.8},  # Conservative
 }
-
-
-

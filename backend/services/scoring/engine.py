@@ -36,35 +36,33 @@ Place at: backend/services/scoring/engine.py
 from __future__ import annotations
 
 import time
-from datetime import datetime, UTC
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional, Sequence
-from uuid import UUID
 
 from .category_priors import CategoryPriorStore
-from .elasticity_calculator import (
-    ElasticityCalculator,
-    ElasticityResult,
-    PriceChangeEvent,
-)
 from .competitive_position import (
     CompetitivePositionCalculator,
     CompetitorPricePoint,
     PositionResult,
 )
-from .urgency_scorer import (
-    UrgencyScorer,
-    UrgencySignals,
-    UrgencyResult,
+from .elasticity_calculator import (
+    ElasticityCalculator,
+    ElasticityResult,
+    PriceChangeEvent,
 )
 from .fusion_types import (
     FusionResult,
     GuardrailConfig,
-    ProductContext,
     PriceChange,
+    ProductContext,
 )
 from .score_fusion import ScoreFusion
-
+from .urgency_scorer import (
+    UrgencyResult,
+    UrgencyScorer,
+    UrgencySignals,
+)
 
 # ──────────────────────────────────────────────────────────
 # TYPE ALIASES (for bridge layer)
@@ -87,8 +85,12 @@ class ScoringEngineResult:
     """
 
     __slots__ = (
-        "elasticity", "position", "urgency", "fusion",
-        "analyst_fields", "processing_time_ms",
+        "analyst_fields",
+        "elasticity",
+        "fusion",
+        "position",
+        "processing_time_ms",
+        "urgency",
     )
 
     def __init__(
@@ -112,6 +114,7 @@ class ScoringEngineResult:
 # ENGINE
 # ──────────────────────────────────────────────────────────
 
+
 class ScoringEngine:
     """
     Orchestrates the deterministic scoring pipeline.
@@ -125,8 +128,8 @@ class ScoringEngine:
 
     def __init__(
         self,
-        guardrail_config: Optional[GuardrailConfig] = None,
-        prior_store: Optional[CategoryPriorStore] = None,
+        guardrail_config: GuardrailConfig | None = None,
+        prior_store: CategoryPriorStore | None = None,
     ):
         self._prior_store = prior_store or CategoryPriorStore()
         self._elasticity_calc = ElasticityCalculator(self._prior_store)
@@ -139,9 +142,9 @@ class ScoringEngine:
         scout_output: object,
         signals: object = None,
         product_category: str = "unknown",
-        product_cost: Optional[float] = None,
-        price_change_history: Optional[Sequence[PriceChangeEvent]] = None,
-        recent_price_changes: Optional[Sequence[PriceChange]] = None,
+        product_cost: float | None = None,
+        price_change_history: Sequence[PriceChangeEvent] | None = None,
+        recent_price_changes: Sequence[PriceChange] | None = None,
         merchant_bias: float = 0.0,
     ) -> ScoringEngineResult:
         """
@@ -167,7 +170,8 @@ class ScoringEngine:
 
         # ── Step 1: Elasticity ──
         elasticity_result = self._compute_elasticity(
-            product_category, price_change_history,
+            product_category,
+            price_change_history,
         )
 
         # ── Step 2: Competitive Position ──
@@ -175,7 +179,9 @@ class ScoringEngine:
 
         # ── Step 3: Urgency ──
         urgency_result = self._compute_urgency(
-            scout_output, signals, position_result,
+            scout_output,
+            signals,
+            position_result,
         )
 
         # ── Step 4: Score Fusion ──
@@ -199,8 +205,11 @@ class ScoringEngine:
 
         # ── Step 5: Build AnalystOutput fields ──
         analyst_fields = self._build_analyst_fields(
-            scout_output, elasticity_result, position_result,
-            urgency_result, fusion_result,
+            scout_output,
+            elasticity_result,
+            position_result,
+            urgency_result,
+            fusion_result,
         )
 
         elapsed_ms = (time.monotonic_ns() // 1_000_000) - start_ms
@@ -221,7 +230,7 @@ class ScoringEngine:
     def _compute_elasticity(
         self,
         category: str,
-        events: Optional[Sequence[PriceChangeEvent]],
+        events: Sequence[PriceChangeEvent] | None,
     ) -> ElasticityResult:
         """Run the Bayesian elasticity calculator."""
         return self._elasticity_calc.compute(
@@ -241,17 +250,15 @@ class ScoringEngine:
 
         comp_points = []
         for c in competitors_raw:
-            comp_points.append(CompetitorPricePoint(
-                price=float(getattr(c, "price", 0)),
-                scraped_at=getattr(c, "scraped_at", datetime.now(UTC)),
-                competitor_name=getattr(c, "competitor_name", ""),
-                is_on_sale=getattr(c, "is_on_sale", False),
-                sale_price=(
-                    float(c.sale_price)
-                    if getattr(c, "sale_price", None) is not None
-                    else None
-                ),
-            ))
+            comp_points.append(
+                CompetitorPricePoint(
+                    price=float(getattr(c, "price", 0)),
+                    scraped_at=getattr(c, "scraped_at", datetime.now(UTC)),
+                    competitor_name=getattr(c, "competitor_name", ""),
+                    is_on_sale=getattr(c, "is_on_sale", False),
+                    sale_price=(float(c.sale_price) if getattr(c, "sale_price", None) is not None else None),
+                )
+            )
 
         return self._position_calc.compute(
             our_price=our_price,
@@ -272,7 +279,9 @@ class ScoringEngine:
         and the scorer redistributes weights automatically.
         """
         urgency_signals = self._build_urgency_signals(
-            scout, signals, position,
+            scout,
+            signals,
+            position,
         )
         return self._urgency_scorer.compute(urgency_signals)
 
@@ -289,7 +298,7 @@ class ScoringEngine:
         return float(price) if price else 0.0
 
     @staticmethod
-    def _get_sentiment_score(scout: object) -> Optional[float]:
+    def _get_sentiment_score(scout: object) -> float | None:
         """Extract sentiment score from ScoutOutput.sentiment."""
         sentiment = getattr(scout, "sentiment", None)
         if sentiment is None:
@@ -321,9 +330,7 @@ class ScoringEngine:
             sentiment_score = float(getattr(sentiment, "overall_score", 0))
             crisis_detected = getattr(sentiment, "crisis_detected", False)
             crisis_severity = (
-                float(sentiment.crisis_severity)
-                if getattr(sentiment, "crisis_severity", None) is not None
-                else None
+                float(sentiment.crisis_severity) if getattr(sentiment, "crisis_severity", None) is not None else None
             )
 
         if signals is not None:
@@ -444,7 +451,6 @@ class ScoringEngine:
 
         return {
             "analyzed_at": now,
-
             # Elasticity
             "elasticity": {
                 "point_estimate": elasticity.estimate,
@@ -454,7 +460,6 @@ class ScoringEngine:
                 "prior_source": elasticity.prior_source,
                 "sample_size": elasticity.n_observations,
             },
-
             # Confidence decomposition
             "confidence": {
                 "elasticity": elasticity.confidence,
@@ -462,30 +467,22 @@ class ScoringEngine:
                 "urgency": urgency.confidence,
                 "data_quality": fusion.confidence_components.get("data_quality", 0.5),
             },
-
             # Urgency
             "urgency_level": urgency_level_value,
             "urgency_score": urgency.score,
             "urgency_reasons": urgency.reasons,
-
             # Sentiment
             "sentiment_score": sentiment_score,
             "sentiment_impact": sentiment_impact,
-
             # Position
             "competitive_position_index": position.position_index,
             "market_pressure": position.market_pressure,
-
             # Direction
             "recommended_direction": direction_value,
             "direction_reasoning": fusion.reasoning,
-
             # Data quality
-            "data_completeness": float(
-                getattr(scout, "data_completeness", 0.0)
-            ),
+            "data_completeness": float(getattr(scout, "data_completeness", 0.0)),
             "competitor_count": position.competitor_count,
-
             # Metadata
             "analyst_version": "2.0-scoring-engine",
             "processing_time_ms": None,  # Set by caller from engine_result.processing_time_ms
@@ -500,6 +497,3 @@ class ScoringEngine:
     def prior_store(self) -> CategoryPriorStore:
         """Expose prior store for Tier 2 batch update jobs."""
         return self._prior_store
-    
-
-    

@@ -11,32 +11,30 @@ Wires services to HTTP surface:
   - OutcomeBenchmarkService    → category benchmarks, data gap failure rates
 """
 
-from datetime import datetime, timedelta, UTC
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from db.session import get_session
 from core.deps import get_current_user
-from core.rate_limit import limiter, WRITE_RATE_LIMIT
-from models.user import User
+from core.rate_limit import WRITE_RATE_LIMIT, limiter
+from db.session import get_session
 from models.price_recommendation import PriceRecommendation
-from models.pricing_rule import PricingRule
-from models.recommendation_outcome import RecommendationOutcome, OutcomeLabel
-from services.pricing.outcome_service import OutcomeService
-from services.pricing.outcome_calibration import OutcomeCalibrationService
-from services.pricing.outcome_benchmarks import OutcomeBenchmarkService
+from models.recommendation_outcome import OutcomeLabel, RecommendationOutcome
+from models.user import User
 from schemas.common import PaginatedResponse, PaginationParams
 from schemas.pricing import (
+    AccuracyStatsResponse,
     OutcomeRecordRequest,
     OutcomeResponse,
     RulePerformanceResponse,
-    AccuracyStatsResponse,
 )
+from services.pricing.outcome_benchmarks import OutcomeBenchmarkService
+from services.pricing.outcome_calibration import OutcomeCalibrationService
+from services.pricing.outcome_service import OutcomeService
 
 router = APIRouter()
 
@@ -77,9 +75,9 @@ async def record_outcome(
 @router.get("/", response_model=PaginatedResponse[OutcomeResponse])
 async def list_outcomes(
     request: Request,
-    product_id: Optional[UUID] = Query(default=None),
-    rule_id: Optional[UUID] = Query(default=None),
-    outcome_label: Optional[OutcomeLabel] = Query(default=None),
+    product_id: UUID | None = Query(default=None),
+    rule_id: UUID | None = Query(default=None),
+    outcome_label: OutcomeLabel | None = Query(default=None),
     days: int = Query(default=30, le=365),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_session),
@@ -168,7 +166,7 @@ async def get_rule_performance(
 @router.get("/calibration")
 async def get_confidence_calibration(
     request: Request,
-    product_category: Optional[str] = Query(default=None),
+    product_category: str | None = Query(default=None),
     days: int = Query(default=90, ge=1, le=365),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -189,7 +187,7 @@ async def get_confidence_calibration(
 @router.get("/elasticity-accuracy")
 async def get_elasticity_accuracy(
     request: Request,
-    product_category: Optional[str] = Query(default=None),
+    product_category: str | None = Query(default=None),
     days: int = Query(default=90, ge=1, le=365),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -211,7 +209,7 @@ async def get_elasticity_accuracy(
 @router.get("/merchant-patterns")
 async def get_merchant_patterns(
     request: Request,
-    product_category: Optional[str] = Query(default=None),
+    product_category: str | None = Query(default=None),
     days: int = Query(default=90, ge=1, le=365),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -259,7 +257,7 @@ async def get_category_benchmarks(
         raise HTTPException(
             status_code=404,
             detail="Insufficient data for category benchmarks. "
-                   "Requires 5+ merchants with outcome data in this category.",
+            "Requires 5+ merchants with outcome data in this category.",
         )
 
     return result
@@ -306,5 +304,3 @@ async def get_outcome_detail(
     if outcome is None:
         raise HTTPException(status_code=404, detail="Outcome not found")
     return outcome
-
-

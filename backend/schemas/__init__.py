@@ -4,119 +4,117 @@
 Pydantic Schemas for API validation.
 """
 
-from schemas.user import (
-    UserCreate,
-    UserRead,
-    UserUpdateMe,
+# Phase 6: Alert Schemas
+from schemas.alert import (
+    AlertAcknowledge,
+    AlertConfigurationCreate,
+    AlertConfigurationRead,
+    AlertConfigurationUpdate,
+    AlertCreate,
+    AlertListResponse,
+    AlertRead,
+    AlertResolve,
+    AlertStats,
 )
 from schemas.auth import (
-    TokenResponse,
+    ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
-    UserResponse,
-    ForgotPasswordRequest,
     ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
 )
-from schemas.product import (
-    ProductCreate,
-    ProductUpdate,
-    ProductRead,
-    PriceSuggestion,
-)
-from schemas.sentiment import (
-    SentimentAnalyzeRequest,
-    SentimentBulkRequest,
-    SentimentScores,
-    SentimentRead,
-    SentimentAnalyzeResponse,
-    SentimentSummary,
-)
-from schemas.health import HealthResponse
 
 # Phase 2: Competitor Schemas
 from schemas.competitor import (
-    CompetitorCreate,
-    CompetitorUpdate,
-    CompetitorResponse,
-    CompetitorListResponse,
-    CompetitorProductCreate,
-    CompetitorProductUpdate,
-    CompetitorProductResponse,
-    CompetitorProductWithDetails,
-    CompetitorProductListResponse,
-    CompetitorPriceHistoryResponse,
-    CompetitorPriceHistoryListResponse,
-    CompetitorPriceComparison,
     CompetitorAlert,
+    CompetitorCreate,
+    CompetitorListResponse,
+    CompetitorPriceComparison,
+    CompetitorPriceHistoryListResponse,
+    CompetitorPriceHistoryResponse,
+    CompetitorProductCreate,
+    CompetitorProductListResponse,
+    CompetitorProductResponse,
+    CompetitorProductUpdate,
+    CompetitorProductWithDetails,
+    CompetitorResponse,
     CompetitorTrendAnalysis,
-)
-
-# Phase 6: Alert Schemas
-from schemas.alert import (
-    AlertConfigurationCreate,
-    AlertConfigurationUpdate,
-    AlertConfigurationRead,
-    AlertCreate,
-    AlertRead,
-    AlertAcknowledge,
-    AlertResolve,
-    AlertStats,
-    AlertListResponse,
+    CompetitorUpdate,
 )
 
 # Competitor Matching Schemas
 from schemas.competitor_matching import (
-    CompetitorSearchRequest,
-    ProductMatchRequest,
+    AutoLinkResultSchema,
     BulkMatchRequest,
-    MatchedProductSchema,
+    BulkMatchResponse,
+    BulkMatchResultSchema,
+    CacheClearResponse,
+    CompetitorSearchRequest,
     CompetitorSearchResponse,
+    MatchedProductSchema,
+    MatchingErrorResponse,
+    ProductMatchRequest,
     ProviderInfoSchema,
     ProvidersListResponse,
-    BulkMatchResultSchema,
-    BulkMatchResponse,
-    AutoLinkResultSchema,
-    CacheClearResponse,
-    MatchingErrorResponse,
+)
+from schemas.health import HealthResponse
+from schemas.product import (
+    PriceSuggestion,
+    ProductCreate,
+    ProductRead,
+    ProductUpdate,
+)
+from schemas.sentiment import (
+    SentimentAnalyzeRequest,
+    SentimentAnalyzeResponse,
+    SentimentBulkRequest,
+    SentimentRead,
+    SentimentScores,
+    SentimentSummary,
 )
 
 # NEW: Trust Scoring / Bot Detection Schemas
 from schemas.trust_scoring import (
+    AdjustedSentimentStats,
     # Author scoring
     AuthorScoreRequest,
     AuthorScoreResponse,
     BatchAuthorScoreRequest,
     BatchAuthorScoreResponse,
-    ComponentScores,
-    # Content analysis
-    ContentAnalysisRequest,
-    ContentAnalysisResponse,
     BatchContentAnalysisRequest,
     BatchContentAnalysisResponse,
-    SpamIndicators,
     # Campaign detection
     CampaignDetectionRequest,
     CampaignDetectionResponse,
     CampaignSignalResponse,
+    ComponentScores,
+    # Content analysis
+    ContentAnalysisRequest,
+    ContentAnalysisResponse,
     MentionInput,
-    # Weighted sentiment
-    WeightedSentimentRequest,
-    WeightedSentimentResponse,
-    RawSentimentStats,
-    AdjustedSentimentStats,
     QualityMetrics,
     # Quick checks
     QuickSpamCheckRequest,
     QuickSpamCheckResponse,
     QuickTrustCheckRequest,
     QuickTrustCheckResponse,
-    # Stats
-    TrustScoringStatsResponse,
+    RawSentimentStats,
+    RiskFlagEnum,
+    SpamIndicators,
     # Enums
     TrustLevelEnum,
-    RiskFlagEnum,
+    # Stats
+    TrustScoringStatsResponse,
+    # Weighted sentiment
+    WeightedSentimentRequest,
+    WeightedSentimentResponse,
 )
-
+from schemas.user import (
+    UserCreate,
+    UserRead,
+    UserUpdateMe,
+)
 
 __all__ = [
     # User
@@ -210,6 +208,3 @@ __all__ = [
     "TrustLevelEnum",
     "RiskFlagEnum",
 ]
-
-
-

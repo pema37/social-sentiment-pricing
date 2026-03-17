@@ -3,17 +3,17 @@
 Health check endpoints for monitoring and orchestration.
 """
 
-from datetime import datetime, UTC
-from typing import Dict, Any
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.session import get_session
 from core.config import settings
 from core.logging import get_logger
+from db.session import get_session
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/health", tags=["Health"])
 START_TIME = datetime.now(UTC)
 
 
-async def check_database(session: AsyncSession) -> Dict[str, Any]:
+async def check_database(session: AsyncSession) -> dict[str, Any]:
     """Check database connectivity."""
     try:
         start = datetime.now(UTC)
@@ -40,10 +40,11 @@ async def check_database(session: AsyncSession) -> Dict[str, Any]:
         }
 
 
-def check_redis_sync() -> Dict[str, Any]:
+def check_redis_sync() -> dict[str, Any]:
     """Check Redis connectivity (sync version)."""
     try:
         import redis
+
         start = datetime.now(UTC)
         r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
         r.ping()
@@ -93,9 +94,9 @@ async def readiness_probe(session: AsyncSession = Depends(get_session)):
     """Kubernetes readiness probe."""
     db_check = await check_database(session)
     redis_check = check_redis_sync()
-    
+
     db_healthy = db_check.get("status") == "healthy"
-    
+
     response_data = {
         "status": "ready" if db_healthy else "not_ready",
         "timestamp": datetime.now(UTC).isoformat(),
@@ -104,10 +105,10 @@ async def readiness_probe(session: AsyncSession = Depends(get_session)):
             "redis": redis_check,
         },
     }
-    
+
     if not db_healthy:
         return JSONResponse(content=response_data, status_code=503)
-    
+
     return response_data
 
 
@@ -116,19 +117,19 @@ async def detailed_health_check(session: AsyncSession = Depends(get_session)):
     """Detailed health check."""
     db_check = await check_database(session)
     redis_check = check_redis_sync()
-    
+
     db_healthy = db_check.get("status") == "healthy"
     redis_healthy = redis_check.get("status") == "healthy"
-    
+
     if db_healthy and redis_healthy:
         overall = "healthy"
     elif db_healthy:
         overall = "degraded"
     else:
         overall = "unhealthy"
-    
+
     uptime_seconds = (datetime.now(UTC) - START_TIME).total_seconds()
-    
+
     return {
         "status": overall,
         "timestamp": datetime.now(UTC).isoformat(),
@@ -146,23 +147,24 @@ async def detailed_health_check(session: AsyncSession = Depends(get_session)):
         },
     }
 
+
 @router.post("/test-alert")
 async def test_alert(severity: str = "info"):
     """Test alerting system (dev only)."""
     if settings.ENVIRONMENT == "production":
         return {"error": "Not available in production"}
-    
-    from core.alerting import send_alert, AlertSeverity
-    
+
+    from core.alerting import AlertSeverity, send_alert
+
     sev_map = {
         "info": AlertSeverity.INFO,
         "warning": AlertSeverity.WARNING,
         "error": AlertSeverity.ERROR,
         "critical": AlertSeverity.CRITICAL,
     }
-    
+
     sev = sev_map.get(severity, AlertSeverity.INFO)
-    
+
     results = await send_alert(
         title="Test Alert",
         message="This is a test alert from SSP health check endpoint.",
@@ -172,7 +174,7 @@ async def test_alert(severity: str = "info"):
             "Severity": severity,
         },
     )
-    
+
     return {
         "status": "sent",
         "results": results,

@@ -29,15 +29,18 @@ logger = logging.getLogger(__name__)
 
 # ── Intermediate data containers ──────────────────────────────────────
 
+
 @dataclass
 class CompetitorData:
     """Raw competitor comparison data from the Scout agent."""
+
     matches: list[CompetitorMatch] = field(default_factory=list)
 
 
 @dataclass
 class SentimentData:
     """Raw sentiment data from the Analyst agent."""
+
     total_mentions: int = 0
     positive_count: int = 0
     negative_count: int = 0
@@ -51,11 +54,13 @@ class SentimentData:
 @dataclass
 class RecommendationData:
     """Raw recommendation data from the Strategist agent."""
+
     opportunities: list[PriceCheckOpportunity] = field(default_factory=list)
     overall_confidence: float = 50.0
 
 
 # ── Price position calculation ────────────────────────────────────────
+
 
 def _calc_price_position(
     products: list[ScannedProduct],
@@ -95,6 +100,7 @@ def _calc_price_position(
 
 # ── Revenue impact estimation ─────────────────────────────────────────
 
+
 def _estimate_monthly_impact(opportunities: list[PriceCheckOpportunity]) -> float:
     """
     Estimate monthly revenue impact from repricing opportunities.
@@ -118,6 +124,7 @@ def _estimate_monthly_impact(opportunities: list[PriceCheckOpportunity]) -> floa
 
 # ── Sentiment summary builder ─────────────────────────────────────────
 
+
 def _build_sentiment_summary(data: SentimentData) -> SentimentSummary:
     """Convert raw sentiment data into the schema-friendly summary."""
     total = data.total_mentions or 1
@@ -135,6 +142,7 @@ def _build_sentiment_summary(data: SentimentData) -> SentimentSummary:
 
 
 # ── Main report assembly ─────────────────────────────────────────────
+
 
 def generate_report(
     store_name: str,
@@ -187,6 +195,3 @@ def generate_report(
     )
 
     return report
-
-
-

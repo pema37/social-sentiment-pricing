@@ -7,10 +7,10 @@ message formatting, config matching, cooldown/limits, dispatch paths.
 """
 
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
-from uuid import uuid4, UUID
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -95,14 +95,29 @@ del _m
 
 SVC_MOD = "services.notification.alert_generator"
 
+
 class _ColumnMock:
-    def __lt__(self, other): return MagicMock()
-    def __le__(self, other): return MagicMock()
-    def __gt__(self, other): return MagicMock()
-    def __ge__(self, other): return MagicMock()
-    def __eq__(self, other): return MagicMock()
-    def __ne__(self, other): return MagicMock()
-    def __hash__(self): return id(self)
+    def __lt__(self, other):
+        return MagicMock()
+
+    def __le__(self, other):
+        return MagicMock()
+
+    def __gt__(self, other):
+        return MagicMock()
+
+    def __ge__(self, other):
+        return MagicMock()
+
+    def __eq__(self, other):
+        return MagicMock()
+
+    def __ne__(self, other):
+        return MagicMock()
+
+    def __hash__(self):
+        return id(self)
+
 
 class _FakeAlert:
     id = _ColumnMock()
@@ -112,22 +127,27 @@ class _FakeAlert:
     alert_type = _ColumnMock()
     severity = _ColumnMock()
     status = _ColumnMock()
+
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _make_generator(use_celery=False):
     """Create AlertGenerator with mocked session and dispatcher."""
     session = MagicMock()
     gen = AlertGenerator(session=session, use_celery=use_celery)
     gen.dispatcher = MagicMock()
-    gen.dispatcher.dispatch = AsyncMock(return_value=_FakeDispatchResult(
-        success=True, channels_sent=["email"], channels_failed=[],
-    ))
+    gen.dispatcher.dispatch = AsyncMock(
+        return_value=_FakeDispatchResult(
+            success=True,
+            channels_sent=["email"],
+            channels_failed=[],
+        )
+    )
     return gen
 
 
@@ -142,7 +162,6 @@ def _stub_create_and_dispatch(gen, return_alert=None):
 # __init__
 # ──────────────────────────────────────────────
 class TestInit:
-
     def test_stores_session(self):
         session = MagicMock()
         gen = AlertGenerator(session=session)
@@ -165,15 +184,18 @@ class TestInit:
 # generate_sentiment_alert — severity thresholds
 # ──────────────────────────────────────────────
 class TestSentimentSeverity:
-
     @pytest.mark.asyncio
     async def test_critical_at_0_5_drop(self):
         gen = _make_generator()
         alert = _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="Widget",
-            sentiment_score=-0.3, previous_score=0.2, mention_count=100,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="Widget",
+            sentiment_score=-0.3,
+            previous_score=0.2,
+            mention_count=100,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -185,8 +207,12 @@ class TestSentimentSeverity:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            sentiment_score=0.0, previous_score=0.35, mention_count=50,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            sentiment_score=0.0,
+            previous_score=0.35,
+            mention_count=50,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -198,8 +224,12 @@ class TestSentimentSeverity:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            sentiment_score=0.0, previous_score=0.2, mention_count=50,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            sentiment_score=0.0,
+            previous_score=0.2,
+            mention_count=50,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -211,8 +241,12 @@ class TestSentimentSeverity:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            sentiment_score=0.1, previous_score=0.2, mention_count=50,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            sentiment_score=0.1,
+            previous_score=0.2,
+            mention_count=50,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -220,15 +254,18 @@ class TestSentimentSeverity:
 
 
 class TestSentimentAlertContent:
-
     @pytest.mark.asyncio
     async def test_drop_type(self):
         gen = _make_generator()
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="Widget",
-            sentiment_score=-0.1, previous_score=0.5, mention_count=100,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="Widget",
+            sentiment_score=-0.1,
+            previous_score=0.5,
+            mention_count=100,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -240,8 +277,12 @@ class TestSentimentAlertContent:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="Widget",
-            sentiment_score=0.8, previous_score=0.1, mention_count=100,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="Widget",
+            sentiment_score=0.8,
+            previous_score=0.1,
+            mention_count=100,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -253,8 +294,12 @@ class TestSentimentAlertContent:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="SuperWidget",
-            sentiment_score=-0.5, previous_score=0.1, mention_count=10,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="SuperWidget",
+            sentiment_score=-0.5,
+            previous_score=0.1,
+            mention_count=10,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -266,8 +311,12 @@ class TestSentimentAlertContent:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            sentiment_score=-0.45, previous_score=0.12, mention_count=847,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            sentiment_score=-0.45,
+            previous_score=0.12,
+            mention_count=847,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -281,8 +330,12 @@ class TestSentimentAlertContent:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            sentiment_score=0.5, previous_score=0.3, mention_count=10,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            sentiment_score=0.5,
+            previous_score=0.3,
+            mention_count=10,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -297,16 +350,20 @@ class TestSentimentAlertContent:
 # generate_price_recommendation_alert
 # ──────────────────────────────────────────────
 class TestPriceRecommendationAlert:
-
     @pytest.mark.asyncio
     async def test_high_confidence_large_change(self):
         gen = _make_generator()
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_recommendation_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_price=100, recommended_price=115,
-            confidence=0.85, recommendation_id=uuid4(), reasoning="test",
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_price=100,
+            recommended_price=115,
+            confidence=0.85,
+            recommendation_id=uuid4(),
+            reasoning="test",
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -318,9 +375,14 @@ class TestPriceRecommendationAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_recommendation_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_price=100, recommended_price=105,
-            confidence=0.65, recommendation_id=uuid4(), reasoning="test",
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_price=100,
+            recommended_price=105,
+            confidence=0.65,
+            recommendation_id=uuid4(),
+            reasoning="test",
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -332,9 +394,14 @@ class TestPriceRecommendationAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_recommendation_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_price=100, recommended_price=105,
-            confidence=0.4, recommendation_id=uuid4(), reasoning="test",
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_price=100,
+            recommended_price=105,
+            confidence=0.4,
+            recommendation_id=uuid4(),
+            reasoning="test",
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -346,9 +413,14 @@ class TestPriceRecommendationAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_recommendation_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_price=100, recommended_price=120,
-            confidence=0.9, recommendation_id=uuid4(), reasoning="r",
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_price=100,
+            recommended_price=120,
+            confidence=0.9,
+            recommendation_id=uuid4(),
+            reasoning="r",
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -360,9 +432,14 @@ class TestPriceRecommendationAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_recommendation_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_price=100, recommended_price=85,
-            confidence=0.9, recommendation_id=uuid4(), reasoning="r",
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_price=100,
+            recommended_price=85,
+            confidence=0.9,
+            recommendation_id=uuid4(),
+            reasoning="r",
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -374,9 +451,14 @@ class TestPriceRecommendationAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_recommendation_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_price=100, recommended_price=110,
-            confidence=0.7, recommendation_id=uuid4(), reasoning="r",
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_price=100,
+            recommended_price=110,
+            confidence=0.7,
+            recommendation_id=uuid4(),
+            reasoning="r",
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -387,15 +469,18 @@ class TestPriceRecommendationAlert:
 # generate_price_applied_alert
 # ──────────────────────────────────────────────
 class TestPriceAppliedAlert:
-
     @pytest.mark.asyncio
     async def test_auto_applied_medium_severity(self):
         gen = _make_generator()
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=110, auto_applied=True,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=110,
+            auto_applied=True,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -407,8 +492,12 @@ class TestPriceAppliedAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=110, auto_applied=False,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=110,
+            auto_applied=False,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -420,8 +509,11 @@ class TestPriceAppliedAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=120,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=120,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -433,8 +525,11 @@ class TestPriceAppliedAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=80,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=80,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -446,8 +541,11 @@ class TestPriceAppliedAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=110,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=110,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -459,8 +557,12 @@ class TestPriceAppliedAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=110, auto_applied=True,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=110,
+            auto_applied=True,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -472,8 +574,12 @@ class TestPriceAppliedAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_price_applied_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            old_price=100, new_price=110, auto_applied=False,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=110,
+            auto_applied=False,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -484,16 +590,19 @@ class TestPriceAppliedAlert:
 # generate_competitor_alert
 # ──────────────────────────────────────────────
 class TestCompetitorAlert:
-
     @pytest.mark.asyncio
     async def test_large_change_high(self):
         gen = _make_generator()
         _stub_create_and_dispatch(gen)
 
         await gen.generate_competitor_alert(
-            user_id=uuid4(), competitor_id=uuid4(), competitor_name="Rival",
-            product_id=uuid4(), product_name="W",
-            old_price=100, new_price=125,
+            user_id=uuid4(),
+            competitor_id=uuid4(),
+            competitor_name="Rival",
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=125,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -505,9 +614,13 @@ class TestCompetitorAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_competitor_alert(
-            user_id=uuid4(), competitor_id=uuid4(), competitor_name="Rival",
-            product_id=uuid4(), product_name="W",
-            old_price=100, new_price=112,
+            user_id=uuid4(),
+            competitor_id=uuid4(),
+            competitor_name="Rival",
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=112,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -519,9 +632,13 @@ class TestCompetitorAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_competitor_alert(
-            user_id=uuid4(), competitor_id=uuid4(), competitor_name="Rival",
-            product_id=uuid4(), product_name="W",
-            old_price=100, new_price=105,
+            user_id=uuid4(),
+            competitor_id=uuid4(),
+            competitor_name="Rival",
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=105,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -533,9 +650,13 @@ class TestCompetitorAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_competitor_alert(
-            user_id=uuid4(), competitor_id=uuid4(), competitor_name="BigCorp",
-            product_id=uuid4(), product_name="W",
-            old_price=100, new_price=80,
+            user_id=uuid4(),
+            competitor_id=uuid4(),
+            competitor_name="BigCorp",
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=80,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -547,9 +668,13 @@ class TestCompetitorAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_competitor_alert(
-            user_id=uuid4(), competitor_id=uuid4(), competitor_name="R",
-            product_id=uuid4(), product_name="W",
-            old_price=100, new_price=80,
+            user_id=uuid4(),
+            competitor_id=uuid4(),
+            competitor_name="R",
+            product_id=uuid4(),
+            product_name="W",
+            old_price=100,
+            new_price=80,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -560,15 +685,18 @@ class TestCompetitorAlert:
 # generate_volume_surge_alert
 # ──────────────────────────────────────────────
 class TestVolumeSurgeAlert:
-
     @pytest.mark.asyncio
     async def test_high_surge(self):
         gen = _make_generator()
         _stub_create_and_dispatch(gen)
 
         await gen.generate_volume_surge_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_volume=500, average_volume=100, surge_multiplier=5.0,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_volume=500,
+            average_volume=100,
+            surge_multiplier=5.0,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -580,8 +708,12 @@ class TestVolumeSurgeAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_volume_surge_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_volume=300, average_volume=100, surge_multiplier=3.0,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_volume=300,
+            average_volume=100,
+            surge_multiplier=3.0,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -593,8 +725,12 @@ class TestVolumeSurgeAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_volume_surge_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_volume=200, average_volume=100, surge_multiplier=2.0,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_volume=200,
+            average_volume=100,
+            surge_multiplier=2.0,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -606,8 +742,12 @@ class TestVolumeSurgeAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_volume_surge_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_volume=500, average_volume=100, surge_multiplier=5.0,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_volume=500,
+            average_volume=100,
+            surge_multiplier=5.0,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -619,8 +759,12 @@ class TestVolumeSurgeAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_volume_surge_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            current_volume=500, average_volume=100, surge_multiplier=5.0,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            current_volume=500,
+            average_volume=100,
+            surge_multiplier=5.0,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -632,15 +776,18 @@ class TestVolumeSurgeAlert:
 # generate_trend_alert
 # ──────────────────────────────────────────────
 class TestTrendAlert:
-
     @pytest.mark.asyncio
     async def test_high_impact(self):
         gen = _make_generator()
         _stub_create_and_dispatch(gen)
 
         await gen.generate_trend_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            trend_type="viral_content", description="desc", impact_score=0.8,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            trend_type="viral_content",
+            description="desc",
+            impact_score=0.8,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -652,8 +799,12 @@ class TestTrendAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_trend_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            trend_type="seasonal", description="desc", impact_score=0.5,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            trend_type="seasonal",
+            description="desc",
+            impact_score=0.5,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -665,8 +816,12 @@ class TestTrendAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_trend_alert(
-            user_id=uuid4(), product_id=uuid4(), product_name="W",
-            trend_type="minor", description="desc", impact_score=0.2,
+            user_id=uuid4(),
+            product_id=uuid4(),
+            product_name="W",
+            trend_type="minor",
+            description="desc",
+            impact_score=0.2,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -678,8 +833,12 @@ class TestTrendAlert:
         _stub_create_and_dispatch(gen)
 
         await gen.generate_trend_alert(
-            user_id=uuid4(), product_id=None, product_name="W",
-            trend_type="viral_content", description="d", impact_score=0.5,
+            user_id=uuid4(),
+            product_id=None,
+            product_name="W",
+            trend_type="viral_content",
+            description="d",
+            impact_score=0.5,
         )
 
         call_kw = gen._create_and_dispatch.call_args[1]
@@ -690,7 +849,6 @@ class TestTrendAlert:
 # _create_and_dispatch
 # ──────────────────────────────────────────────
 class TestCreateAndDispatch:
-
     @pytest.mark.asyncio
     async def test_creates_alert_in_db(self):
         gen = _make_generator()
@@ -701,8 +859,11 @@ class TestCreateAndDispatch:
             MockAlert.return_value = mock_alert
 
             result = await gen._create_and_dispatch(
-                user_id=uuid4(), alert_type=AlertType.VOLUME_SURGE,
-                severity=AlertSeverity.HIGH, title="T", message="M",
+                user_id=uuid4(),
+                alert_type=AlertType.VOLUME_SURGE,
+                severity=AlertSeverity.HIGH,
+                title="T",
+                message="M",
                 alert_data={},
             )
 
@@ -719,8 +880,11 @@ class TestCreateAndDispatch:
             MockAlert.return_value = mock_alert
 
             result = await gen._create_and_dispatch(
-                user_id=uuid4(), alert_type=AlertType.VOLUME_SURGE,
-                severity=AlertSeverity.HIGH, title="T", message="M",
+                user_id=uuid4(),
+                alert_type=AlertType.VOLUME_SURGE,
+                severity=AlertSeverity.HIGH,
+                title="T",
+                message="M",
                 alert_data={},
             )
 
@@ -737,8 +901,11 @@ class TestCreateAndDispatch:
         gen._check_limits = AsyncMock(return_value=False)
 
         result = await gen._create_and_dispatch(
-            user_id=uuid4(), alert_type=AlertType.VOLUME_SURGE,
-            severity=AlertSeverity.HIGH, title="T", message="M",
+            user_id=uuid4(),
+            alert_type=AlertType.VOLUME_SURGE,
+            severity=AlertSeverity.HIGH,
+            title="T",
+            message="M",
             alert_data={},
         )
 
@@ -760,8 +927,11 @@ class TestCreateAndDispatch:
             MockAlert.return_value = mock_alert
 
             await gen._create_and_dispatch(
-                user_id=uuid4(), alert_type=AlertType.VOLUME_SURGE,
-                severity=AlertSeverity.HIGH, title="T", message="M",
+                user_id=uuid4(),
+                alert_type=AlertType.VOLUME_SURGE,
+                severity=AlertSeverity.HIGH,
+                title="T",
+                message="M",
                 alert_data={},
             )
 
@@ -782,8 +952,11 @@ class TestCreateAndDispatch:
             MockAlert.return_value = MagicMock(id=uuid4())
 
             await gen._create_and_dispatch(
-                user_id=uuid4(), alert_type=AlertType.VOLUME_SURGE,
-                severity=AlertSeverity.HIGH, title="T", message="M",
+                user_id=uuid4(),
+                alert_type=AlertType.VOLUME_SURGE,
+                severity=AlertSeverity.HIGH,
+                title="T",
+                message="M",
                 alert_data={},
             )
 
@@ -799,8 +972,11 @@ class TestCreateAndDispatch:
             MockAlert.return_value = MagicMock(id=uuid4())
 
             await gen._create_and_dispatch(
-                user_id=uuid4(), alert_type=AlertType.VOLUME_SURGE,
-                severity=AlertSeverity.HIGH, title="T", message="M",
+                user_id=uuid4(),
+                alert_type=AlertType.VOLUME_SURGE,
+                severity=AlertSeverity.HIGH,
+                title="T",
+                message="M",
                 alert_data={},
             )
 
@@ -814,7 +990,6 @@ class TestCreateAndDispatch:
 @patch(f"{SVC_MOD}.select", MagicMock())
 @patch(f"{SVC_MOD}.func", MagicMock())
 class TestCheckLimits:
-
     @pytest.mark.asyncio
     async def test_no_cooldown_passes(self):
         gen = _make_generator()
@@ -833,7 +1008,7 @@ class TestCheckLimits:
     async def test_in_cooldown_fails(self):
         gen = _make_generator()
         config = MagicMock()
-        config.last_triggered_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        config.last_triggered_at = datetime.now(UTC) - timedelta(minutes=5)
         config.cooldown_minutes = 30
         config.max_per_day = 100
         config.id = uuid4()
@@ -845,7 +1020,7 @@ class TestCheckLimits:
     async def test_past_cooldown_passes(self):
         gen = _make_generator()
         config = MagicMock()
-        config.last_triggered_at = datetime.now(timezone.utc) - timedelta(minutes=60)
+        config.last_triggered_at = datetime.now(UTC) - timedelta(minutes=60)
         config.cooldown_minutes = 30
         config.max_per_day = 100
         config.id = uuid4()
@@ -888,7 +1063,6 @@ class TestCheckLimits:
 # _dispatch_alert — celery vs sync
 # ──────────────────────────────────────────────
 class TestDispatchAlert:
-
     @pytest.mark.asyncio
     async def test_celery_path(self):
         gen = _make_generator(use_celery=True)
@@ -900,11 +1074,9 @@ class TestDispatchAlert:
 
         with patch(f"{SVC_MOD}.dispatch_alert_task", create=True) as mock_task:
             # Simulate import inside method
-            with patch.dict("sys.modules", {
-                "workers.tasks.notification_tasks": MagicMock(
-                    dispatch_alert_task=mock_task
-                )
-            }):
+            with patch.dict(
+                "sys.modules", {"workers.tasks.notification_tasks": MagicMock(dispatch_alert_task=mock_task)}
+            ):
                 await gen._dispatch_alert(alert, config)
 
                 mock_task.delay.assert_called_once_with(str(alert.id))
@@ -934,7 +1106,3 @@ class TestDispatchAlert:
         await gen._dispatch_alert(alert, config)
 
         gen._dispatch_alert_sync.assert_called_once_with(alert, config)
-
-
-
-        

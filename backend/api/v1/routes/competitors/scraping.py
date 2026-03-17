@@ -2,7 +2,7 @@
 """Price scraping and history endpoints."""
 
 import uuid as uuid_lib
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -10,16 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from api.v1.routes.auth import get_current_user
+from core.rate_limit import BULK_RATE_LIMIT, limiter
 from db.session import get_session
-from core.rate_limit import limiter, BULK_RATE_LIMIT
-from models.user import User
-from models.product import Product
 from models.competitor import Competitor
-from models.competitor_product import CompetitorProduct
 from models.competitor_price_history import CompetitorPriceHistory
+from models.competitor_product import CompetitorProduct
+from models.product import Product
+from models.user import User
 from schemas.competitor import (
-    CompetitorPriceHistoryResponse,
     CompetitorPriceHistoryListResponse,
+    CompetitorPriceHistoryResponse,
 )
 from services.competitor_scraper import competitor_scraper
 
@@ -42,33 +42,28 @@ async def scrape_competitor_price(
         .where(Product.user_id == current_user.id)
     )
     cp = result.scalars().first()
-    
+
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
-    
-    comp_result = await db.execute(
-        select(Competitor).where(Competitor.id == cp.competitor_id)
-    )
+
+    comp_result = await db.execute(select(Competitor).where(Competitor.id == cp.competitor_id))
     competitor = comp_result.scalars().first()
-    
+
     scrape_result = await competitor_scraper.scrape_price(cp, competitor)
-    
+
     if not scrape_result.success:
         competitor.consecutive_failures += 1
         competitor.last_error = scrape_result.error
         db.add(competitor)
         await db.commit()
-        raise HTTPException(
-            status_code=502,
-            detail=f"Scrape failed: {scrape_result.error}"
-        )
-    
+        raise HTTPException(status_code=502, detail=f"Scrape failed: {scrape_result.error}")
+
     competitor.consecutive_failures = 0
     competitor.last_error = None
     competitor.last_scraped_at = datetime.now(UTC)
-    
+
     history = competitor_scraper.create_price_history_record(cp, scrape_result)
-    
+
     if history:
         db.add(history)
         cp.current_price = scrape_result.price
@@ -76,14 +71,14 @@ async def scrape_competitor_price(
         cp.price_available = scrape_result.is_available
         cp.updated_at = datetime.now(UTC)
         db.add(cp)
-    
+
     db.add(competitor)
     await db.commit()
-    
+
     if history:
         await db.refresh(history)
         return history
-    
+
     return CompetitorPriceHistoryResponse(
         id=uuid_lib.uuid4(),
         competitor_product_id=cp.id,
@@ -116,12 +111,12 @@ async def get_price_history(
         .where(Product.user_id == current_user.id)
     )
     cp = result.scalars().first()
-    
+
     if not cp:
         raise HTTPException(status_code=404, detail="Competitor product not found")
-    
+
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    
+
     hist_result = await db.execute(
         select(CompetitorPriceHistory)
         .where(CompetitorPriceHistory.competitor_product_id == competitor_product_id)
@@ -129,7 +124,7 @@ async def get_price_history(
         .order_by(CompetitorPriceHistory.observed_at.desc())
     )
     history = hist_result.scalars().all()
-    
+
     return CompetitorPriceHistoryListResponse(
         items=history,
         total=len(history),
