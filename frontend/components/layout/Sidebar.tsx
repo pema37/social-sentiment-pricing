@@ -87,11 +87,23 @@ export function Sidebar({ onLogout, onLinkClick }: SidebarProps) {
   const pathname = usePathname();
   const { isEmbedded } = useShopifyEmbedded();
 
-  const handleNavClickCapture = (event: React.MouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement;
+  const closeOnAnchorInteraction = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return;
     if (target.closest('a[href]')) {
       onLinkClick?.();
     }
+  };
+
+  const handleNavClickCapture = (event: React.MouseEvent<HTMLElement>) => {
+    closeOnAnchorInteraction(event.target);
+  };
+
+  const handleNavPointerDownCapture = (event: React.PointerEvent<HTMLElement>) => {
+    closeOnAnchorInteraction(event.target);
+  };
+
+  const handleNavTouchStartCapture = (event: React.TouchEvent<HTMLElement>) => {
+    closeOnAnchorInteraction(event.target);
   };
 
   // Filter items based on embedded context
@@ -164,7 +176,12 @@ export function Sidebar({ onLogout, onLinkClick }: SidebarProps) {
       </div>
 
       {/* Navigation Links - scrollable */}
-      <nav className="flex-1 mt-6 px-3 overflow-y-auto" onClickCapture={handleNavClickCapture}>
+      <nav
+        className="flex-1 mt-6 px-3 overflow-y-auto"
+        onClickCapture={handleNavClickCapture}
+        onPointerDownCapture={handleNavPointerDownCapture}
+        onTouchStartCapture={handleNavTouchStartCapture}
+      >
         <ul className="space-y-1">
           {/* Main Navigation */}
           {filterItems(navItems).map(renderNavItem)}
