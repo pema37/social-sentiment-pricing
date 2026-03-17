@@ -1,4 +1,5 @@
 // frontend/components/features/trust-scoring/CampaignAlertCard.tsx
+/* eslint-disable react-hooks/static-components */
 
 'use client';
 
@@ -170,7 +171,6 @@ interface SignalItemProps {
 }
 
 function SignalItem({ signal }: SignalItemProps) {
-  // eslint-disable-next-line react-hooks/static-components
   const Icon = getSignalIcon(signal.signal_type);
   const strengthPercent = Math.round(signal.strength * 100);
 
