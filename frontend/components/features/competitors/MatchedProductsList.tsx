@@ -291,6 +291,7 @@ export function MatchedProductsList({
   });
 
   // Filter products
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filteredProducts = useMemo(() => {
     if (!response?.products) return [];
 

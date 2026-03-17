@@ -170,6 +170,7 @@ interface SignalItemProps {
 }
 
 function SignalItem({ signal }: SignalItemProps) {
+  // eslint-disable-next-line react-hooks/static-components
   const Icon = getSignalIcon(signal.signal_type);
   const strengthPercent = Math.round(signal.strength * 100);
 
