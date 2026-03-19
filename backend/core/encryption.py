@@ -1,29 +1,26 @@
 # backend/core/encryption.py
-
 """
 Token encryption utilities using Fernet symmetric encryption.
 """
-
-from cryptography.fernet import Fernet
-
+from cryptography.fernet import Fernet, InvalidToken
 from core.config import settings
 
+_SENTINEL_VALUES = {b"pending", "pending", b"", ""}
 
 def get_fernet() -> Fernet:
-    """Get Fernet instance with encryption key"""
-    # Key should be 32 url-safe base64-encoded bytes
-    # Generate with: Fernet.generate_key()
-    key = settings.ENCRYPTION_KEY.encode()
-    return Fernet(key)
-
+    if not settings.ENCRYPTION_KEY:
+        raise RuntimeError("ENCRYPTION_KEY not configured")
+    return Fernet(settings.ENCRYPTION_KEY.encode())
 
 def encrypt_token(token: str) -> bytes:
-    """Encrypt a token string"""
-    f = get_fernet()
-    return f.encrypt(token.encode())
+    return get_fernet().encrypt(token.encode())
 
-
-def decrypt_token(encrypted: bytes) -> str:
-    """Decrypt a token"""
-    f = get_fernet()
-    return f.decrypt(encrypted).decode()
+def decrypt_token(encrypted) -> str:
+    if encrypted in _SENTINEL_VALUES or encrypted is None:
+        raise ValueError("Token not set — reconnect required")
+    if isinstance(encrypted, str):
+        encrypted = encrypted.encode()
+    try:
+        return get_fernet().decrypt(encrypted).decode()
+    except InvalidToken:
+        raise ValueError("Token decryption failed — reconnect required")

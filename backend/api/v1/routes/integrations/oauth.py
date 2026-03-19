@@ -15,6 +15,11 @@ FIXED (2026-03-13): init_oauth now allows reconnect from ERROR state.
 Previously only DISCONNECTED was allowed past the "already connected" guard.
 A revoked token leaves status=ERROR in the DB (via the health check fix),
 so the reconnect CTA must be able to re-initiate OAuth from ERROR state.
+
+FIXED (2026-03-17): init_oauth reconnect path now clears stale token.
+Previously access_token_encrypted was not cleared on reconnect, leaving
+the old invalid token in DB. If callback failed, stale token persisted
+and decrypt_token would fail with "invalid credentials" on next read.
 """
 
 import logging
@@ -113,6 +118,7 @@ async def init_oauth(
         existing.status = IntegrationStatus.DISCONNECTED
         existing.error_message = None
         existing.store_url = data.store_url
+        existing.access_token_encrypted = b"pending"  # FIXED (2026-03-17): clear stale token
         db.add(existing)
     else:
         integration = Integration(
