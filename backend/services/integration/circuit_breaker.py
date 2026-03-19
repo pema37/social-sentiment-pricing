@@ -78,13 +78,12 @@ class CircuitBreaker:
     async def _check_state(self):
         """Check and potentially transition state"""
         async with self._lock:
-            if self._state == CircuitState.OPEN:
-                if self._last_failure_time:
-                    elapsed = (datetime.now(UTC) - self._last_failure_time).total_seconds()
-                    if elapsed >= self.config.timeout:
-                        logger.info(f"Circuit {self.name}: OPEN -> HALF_OPEN")
-                        self._state = CircuitState.HALF_OPEN
-                        self._success_count = 0
+            if self._state == CircuitState.OPEN and self._last_failure_time:
+                elapsed = (datetime.now(UTC) - self._last_failure_time).total_seconds()
+                if elapsed >= self.config.timeout:
+                    logger.info(f"Circuit {self.name}: OPEN -> HALF_OPEN")
+                    self._state = CircuitState.HALF_OPEN
+                    self._success_count = 0
 
     async def record_success(self):
         """Record a successful call"""

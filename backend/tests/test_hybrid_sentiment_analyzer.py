@@ -160,7 +160,7 @@ class TestHybridSentimentAnalyzerInit:
 
         with patch.dict(sys.modules, {"vaderSentiment.vaderSentiment": None}):
             # Force ImportError
-            with patch(f"{SERVICE_PATH}.HybridSentimentAnalyzer.__init__", return_value=None) as mock_init:
+            with patch(f"{SERVICE_PATH}.HybridSentimentAnalyzer.__init__", return_value=None):
                 svc = HybridSentimentAnalyzer.__new__(HybridSentimentAnalyzer)
                 svc.vader = None
                 svc.gemini_client = None

@@ -36,9 +36,9 @@ Place at: backend/services/scoring/engine.py
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from .category_priors import CategoryPriorStore
 from .competitive_position import (
@@ -63,6 +63,9 @@ from .urgency_scorer import (
     UrgencyScorer,
     UrgencySignals,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # ──────────────────────────────────────────────────────────
 # TYPE ALIASES (for bridge layer)

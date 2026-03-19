@@ -171,11 +171,11 @@ class EmailService:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
              background-color: #f3f4f6; margin: 0; padding: 20px;">
-    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; 
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden;">
-        
+
         <!-- Header -->
         <div style="background-color: {color}; padding: 16px 24px;">
             <h1 style="color: white; margin: 0; font-size: 18px; font-weight: 600;">
@@ -185,16 +185,16 @@ class EmailService:
                 {severity.upper()} PRIORITY
             </span>
         </div>
-        
+
         <!-- Body -->
         <div style="padding: 24px;">
             <p style="color: #374151; line-height: 1.6; margin: 0 0 16px 0; white-space: pre-wrap;">
                 {alert_message}
             </p>
-            
+
             {data_section}
         </div>
-        
+
         <!-- Footer -->
         <div style="background-color: #f9fafb; padding: 16px 24px; border-top: 1px solid #e5e7eb;">
             <p style="color: #6b7280; font-size: 12px; margin: 0;">

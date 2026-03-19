@@ -6,7 +6,7 @@ Handles authentication, retries, and error handling.
 """
 
 import logging
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -16,7 +16,7 @@ from .exceptions import MneeApiError, MneeConfigError, MneeNetworkError
 logger = logging.getLogger(__name__)
 
 
-class MneeEnvironment(str, Enum):
+class MneeEnvironment(StrEnum):
     """MNEE API environments."""
 
     SANDBOX = "sandbox"
@@ -232,7 +232,7 @@ class MneeClient:
         self,
         addresses: list[str],
         limit: int = 100,
-        from_score: int = None,
+        from_score: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Get transactions for addresses.

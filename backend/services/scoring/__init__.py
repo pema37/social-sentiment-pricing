@@ -106,43 +106,43 @@ from .urgency_scorer import (
 )
 
 __all__ = [
-    # Engine
-    "ScoringEngine",
-    "ScoringEngineResult",
+    # Magnitude tables
+    "ELASTICITY_MAGNITUDE",
+    "POSITION_DIRECTION_BIAS",
+    "URGENCY_MULTIPLIER",
+    "CalibrationAdjustment",
+    "CategoryPrior",
+    # Priors
+    "CategoryPriorStore",
+    "CompetitivePositionCalculator",
+    "CompetitorPricePoint",
+    "ComponentTiming",
+    "ConflictType",
     # Calculators
     "ElasticityCalculator",
     "ElasticityResult",
-    "PriceChangeEvent",
-    "CompetitivePositionCalculator",
-    "CompetitorPricePoint",
-    "PositionResult",
-    "UrgencyScorer",
-    "UrgencySignals",
-    "UrgencyResult",
-    # Fusion
-    "ScoreFusion",
-    "ConflictType",
-    "GuardrailType",
-    "GuardrailConfig",
-    "ProductContext",
-    "PriceChange",
-    "GuardrailResult",
+    "ExperimentContext",
     "FusionResult",
+    "GuardrailConfig",
     "GuardrailEnforcer",
-    # Magnitude tables
-    "ELASTICITY_MAGNITUDE",
-    "URGENCY_MULTIPLIER",
-    "POSITION_DIRECTION_BIAS",
-    # Priors
-    "CategoryPriorStore",
-    "CategoryPrior",
+    "GuardrailResult",
+    "GuardrailType",
     # Phase 5: IE Orchestrator
     "IEOrchestrator",
     "IEOrchestratorConfig",
     "IERecommendation",
     "IEStatus",
-    "ExperimentContext",
-    "CalibrationAdjustment",
-    "ComponentTiming",
+    "PositionResult",
+    "PriceChange",
+    "PriceChangeEvent",
+    "ProductContext",
+    # Fusion
+    "ScoreFusion",
+    # Engine
+    "ScoringEngine",
+    "ScoringEngineResult",
+    "UrgencyResult",
+    "UrgencyScorer",
+    "UrgencySignals",
     "create_ie_orchestrator",
 ]

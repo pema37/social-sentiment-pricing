@@ -155,7 +155,7 @@ async def verify_shopify_charge(
             message="No shop domain found. Please provide shop_domain.",
         )
 
-    is_active, tier, gid = await service.verify_subscription(
+    is_active, tier, _gid = await service.verify_subscription(
         charge_id=data.charge_id,
         shop_domain=shop_domain,
     )
@@ -179,7 +179,7 @@ async def verify_shopify_charge(
 @router.get("/callback")
 async def shopify_billing_callback(
     charge_id: str,
-    shop: str = None,
+    shop: str | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     """
@@ -199,7 +199,7 @@ async def shopify_billing_callback(
 @limiter.limit(READ_RATE_LIMIT)
 async def get_shopify_billing_status(
     request: Request,
-    shop_domain: str = None,
+    shop_domain: str | None = None,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):

@@ -42,7 +42,7 @@ class AnalyticsService:
 
         result = await self.session.execute(
             select(func.count(Product.id)).where(
-                and_(Product.user_id == self.user_id, Product.auto_pricing_enabled == True)
+                and_(Product.user_id == self.user_id, Product.auto_pricing_enabled)
             )
         )
         auto_pricing_count = result.scalar_one()

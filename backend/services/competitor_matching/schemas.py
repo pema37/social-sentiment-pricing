@@ -10,11 +10,11 @@ making them easy to serialize, test, and reuse.
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class SearchProvider(str, Enum):
+class SearchProvider(StrEnum):
     """Available search providers."""
 
     SERPAPI_GOOGLE_SHOPPING = "serpapi_google_shopping"
@@ -24,7 +24,7 @@ class SearchProvider(str, Enum):
     RAINFOREST = "rainforest"  # Future
 
 
-class MatchStatus(str, Enum):
+class MatchStatus(StrEnum):
     """Status of a match operation."""
 
     SUCCESS = "success"

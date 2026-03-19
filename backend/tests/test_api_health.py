@@ -36,7 +36,7 @@ def _clean_polluted_modules():
     """Remove stub modules left by other test files so real app can import."""
     import sys as _sys
 
-    polluted = [
+    [
         k
         for k in _sys.modules
         if isinstance(_sys.modules[k], type(_sys)) is False

@@ -119,7 +119,7 @@ class RetrospectiveAuditService:
         """
         # Subquery: product IDs that have at least one competitor product
         competitor_product_ids = (
-            select(CompetitorProduct.product_id).where(CompetitorProduct.is_active == True).distinct()
+            select(CompetitorProduct.product_id).where(CompetitorProduct.is_active).distinct()
         )
 
         query = (
@@ -127,7 +127,7 @@ class RetrospectiveAuditService:
             .where(
                 and_(
                     Product.user_id == self.user_id,
-                    Product.is_active == True,
+                    Product.is_active,
                     Product.id.in_(competitor_product_ids),
                 )
             )
@@ -158,7 +158,7 @@ class RetrospectiveAuditService:
             select(CompetitorProduct).where(
                 and_(
                     CompetitorProduct.product_id == product.id,
-                    CompetitorProduct.is_active == True,
+                    CompetitorProduct.is_active,
                 )
             )
         )
@@ -335,7 +335,7 @@ class RetrospectiveAuditService:
                     CompetitorPriceHistory.competitor_product_id.in_(competitor_product_ids),
                     CompetitorPriceHistory.observed_at >= period_start,
                     CompetitorPriceHistory.observed_at <= period_end,
-                    CompetitorPriceHistory.is_available == True,
+                    CompetitorPriceHistory.is_available,
                 )
             )
             .group_by("obs_date")

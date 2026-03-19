@@ -252,7 +252,7 @@ class ProductService:
             select(CompetitorProduct, Competitor)
             .join(Competitor, CompetitorProduct.competitor_id == Competitor.id)
             .where(CompetitorProduct.product_id == product_id)
-            .where(CompetitorProduct.is_active == True)
+            .where(CompetitorProduct.is_active)
         )
         result = await self.session.execute(stmt)
         rows = result.all()

@@ -224,7 +224,7 @@ class PipelineAdapter:
         signal_agreement_score = components.get("signal_agreement", {}).get("score", 0.5)
         market_stability_score = components.get("market_stability", {}).get("score", 0.5)
         rule_confidence_score = components.get("rule_confidence", {}).get("score", 0.5)
-        historical_score = components.get("historical_accuracy", {}).get("score", 0.5)
+        components.get("historical_accuracy", {}).get("score", 0.5)
 
         confidence = ConfidenceDecomposition(
             elasticity=signal_agreement_score,  # Best proxy: signal agreement

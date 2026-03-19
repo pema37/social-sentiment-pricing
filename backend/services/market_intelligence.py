@@ -14,7 +14,7 @@ import json
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from core.config import settings
 from core.logging import get_logger
@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class AgentRole(str, Enum):
+class AgentRole(StrEnum):
     """Agent roles in the pipeline."""
 
     SCOUT = "scout"
@@ -36,7 +36,7 @@ class AgentRole(str, Enum):
     STRATEGIST = "strategist"
 
 
-class ThoughtType(str, Enum):
+class ThoughtType(StrEnum):
     """Types of agent thoughts (matches visual-pricing pattern)."""
 
     OBSERVATION = "observation"

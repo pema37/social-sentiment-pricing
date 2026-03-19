@@ -39,21 +39,21 @@ from .schemas import (
 from .service import MarketTrendsAnalyzer, market_trends_analyzer
 
 __all__ = [
-    # Router
-    "router",
-    # Service
-    "market_trends_analyzer",
+    # Pydantic models
+    "MarketDataInput",
+    "MarketDataPoint",
     "MarketTrendsAnalyzer",
     # Enums
     "TrendAgent",
+    "TrendAnalysisResponse",
     "TrendDirection",
-    "TrendTimeframe",
+    "TrendForecast",
+    "TrendHealthResponse",
     # Data classes
     "TrendMessage",
-    "MarketDataPoint",
-    "TrendForecast",
-    # Pydantic models
-    "MarketDataInput",
-    "TrendAnalysisResponse",
-    "TrendHealthResponse",
+    "TrendTimeframe",
+    # Service
+    "market_trends_analyzer",
+    # Router
+    "router",
 ]

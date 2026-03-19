@@ -11,6 +11,7 @@ The final event has agent="complete" and data=full PriceCheckReport.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -242,15 +243,13 @@ async def price_check_stream(
         )
 
     # Store lead on scan start (best-effort)
-    try:
+    with contextlib.suppress(Exception):
         await _store_lead(
             email=email.strip(),
             store_url=store_url.strip(),
             category=category.strip() if category else None,
             ip_hash=client_ip,
         )
-    except Exception:
-        pass
 
     # Stream the pipeline
     async def event_stream():
@@ -266,14 +265,12 @@ async def price_check_stream(
 
                 # On completion, backfill full report data
                 if event.get("agent") == "complete" and event.get("status") == "done" and event.get("data"):
-                    try:
+                    with contextlib.suppress(Exception):
                         await _update_lead_report(
                             email=email.strip(),
                             store_url=store_url.strip(),
                             report=event["data"],
                         )
-                    except Exception:
-                        pass
 
                 yield f"data: {json.dumps(event)}\n\n"
 

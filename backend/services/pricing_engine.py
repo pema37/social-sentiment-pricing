@@ -398,7 +398,7 @@ class PricingEngine:
         prices = [cp.competitor_price for cp in competitor_prices]
         avg_price = sum(prices) / len(prices)
 
-        sorted_all = sorted(prices + [current_price])
+        sorted_all = sorted([*prices, current_price])
         rank = sorted_all.index(current_price) + 1
         total = len(sorted_all)
 

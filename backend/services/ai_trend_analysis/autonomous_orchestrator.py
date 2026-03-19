@@ -12,10 +12,9 @@ import asyncio
 import json
 import logging
 import os
-import time
-from datetime import datetime, timezone
-from enum import Enum
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from google import genai
 from google.genai import types
@@ -37,7 +36,8 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # Structured Schemas for Agent-to-Agent Communication
 # ---------------------------------------------------------------------------
 
-class AgentPhase(str, Enum):
+
+class AgentPhase(StrEnum):
     SCOUT = "scout"
     ANALYST = "analyst"
     STRATEGIST = "strategist"
@@ -46,6 +46,7 @@ class AgentPhase(str, Enum):
 
 class MarketSignal(BaseModel):
     """Scout Agent output — structured market intelligence."""
+
     competitor_name: str = Field(description="Name of the competitor detected")
     competitor_price: float = Field(description="Current competitor price in USD")
     price_change_pct: float = Field(description="Percentage change from last known price")
@@ -54,11 +55,12 @@ class MarketSignal(BaseModel):
     source: str = Field(description="Data source: google_search, api, scraper")
     confidence: float = Field(ge=0.0, le=1.0, description="Signal confidence score")
     raw_data: dict = Field(default_factory=dict, description="Raw scraped/fetched data")
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class MarketAssessment(BaseModel):
     """Analyst Agent output — risk and opportunity assessment."""
+
     sentiment_score: float = Field(ge=-1.0, le=1.0, description="Aggregated sentiment (-1 bearish to 1 bullish)")
     sentiment_label: str = Field(description="human-readable: bearish, neutral, bullish")
     demand_elasticity: float = Field(description="Price sensitivity coefficient")
@@ -72,6 +74,7 @@ class MarketAssessment(BaseModel):
 
 class PricingDecision(BaseModel):
     """Strategist Agent output — the final autonomous pricing action."""
+
     recommended_price: float = Field(description="Optimal price in USD")
     current_price: float = Field(description="Current price before change")
     change_pct: float = Field(description="Price change percentage")
@@ -80,18 +83,19 @@ class PricingDecision(BaseModel):
     action: str = Field(description="execute, hold, escalate")
     risk_acknowledgment: str = Field(description="Known risks of this decision")
     expected_revenue_impact: str = Field(description="Projected impact on revenue")
-    tx_hash: Optional[str] = Field(default=None, description="BNB Chain transaction hash if executed")
-    executed_at: Optional[str] = Field(default=None, description="ISO timestamp of on-chain execution")
+    tx_hash: str | None = Field(default=None, description="BNB Chain transaction hash if executed")
+    executed_at: str | None = Field(default=None, description="ISO timestamp of on-chain execution")
 
 
 class AgentStreamEvent(BaseModel):
     """SSE event for real-time agent reasoning display."""
+
     agent: str
     phase: str
     content: str
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     is_complete: bool = False
-    data: Optional[dict] = None
+    data: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -102,109 +106,116 @@ SCOUT_TOOLS = [
     types.Tool(google_search=types.GoogleSearch()),  # Grounding in real-time web data
 ]
 
-SCOUT_FUNCTION_TOOLS = types.Tool(function_declarations=[
-    {
-        "name": "fetch_competitor_price",
-        "description": "Fetch the current price of a competitor's product from monitoring APIs",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "competitor_url": {"type": "string", "description": "URL of the competitor product page"},
-                "product_category": {"type": "string", "description": "Product category to search"},
+SCOUT_FUNCTION_TOOLS = types.Tool(
+    function_declarations=[
+        {
+            "name": "fetch_competitor_price",
+            "description": "Fetch the current price of a competitor's product from monitoring APIs",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "competitor_url": {"type": "string", "description": "URL of the competitor product page"},
+                    "product_category": {"type": "string", "description": "Product category to search"},
+                },
+                "required": ["product_category"],
             },
-            "required": ["product_category"]
-        }
-    },
-    {
-        "name": "detect_price_change",
-        "description": "Compare current price against last known price to detect changes",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "current_price": {"type": "number", "description": "Current detected price"},
-                "last_known_price": {"type": "number", "description": "Previously recorded price"},
-                "product_id": {"type": "string", "description": "Internal product identifier"},
+        },
+        {
+            "name": "detect_price_change",
+            "description": "Compare current price against last known price to detect changes",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "current_price": {"type": "number", "description": "Current detected price"},
+                    "last_known_price": {"type": "number", "description": "Previously recorded price"},
+                    "product_id": {"type": "string", "description": "Internal product identifier"},
+                },
+                "required": ["current_price", "last_known_price", "product_id"],
             },
-            "required": ["current_price", "last_known_price", "product_id"]
-        }
-    },
-])
+        },
+    ]
+)
 
-ANALYST_FUNCTION_TOOLS = types.Tool(function_declarations=[
-    {
-        "name": "analyze_sentiment",
-        "description": "Run sentiment analysis on social media mentions for a product category",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "product_category": {"type": "string"},
-                "timeframe_hours": {"type": "integer", "description": "Hours of history to analyze"},
+ANALYST_FUNCTION_TOOLS = types.Tool(
+    function_declarations=[
+        {
+            "name": "analyze_sentiment",
+            "description": "Run sentiment analysis on social media mentions for a product category",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_category": {"type": "string"},
+                    "timeframe_hours": {"type": "integer", "description": "Hours of history to analyze"},
+                },
+                "required": ["product_category"],
             },
-            "required": ["product_category"]
-        }
-    },
-    {
-        "name": "calculate_elasticity",
-        "description": "Calculate price elasticity of demand based on historical price-volume data",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "product_id": {"type": "string"},
-                "price_history": {"type": "array", "items": {"type": "object"}},
+        },
+        {
+            "name": "calculate_elasticity",
+            "description": "Calculate price elasticity of demand based on historical price-volume data",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {"type": "string"},
+                    "price_history": {"type": "array", "items": {"type": "object"}},
+                },
+                "required": ["product_id"],
             },
-            "required": ["product_id"]
-        }
-    },
-    {
-        "name": "assess_risk",
-        "description": "Evaluate risk factors: brand perception, competitor strength, market conditions",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "signal": {"type": "object", "description": "The MarketSignal from Scout"},
-                "sentiment_score": {"type": "number"},
+        },
+        {
+            "name": "assess_risk",
+            "description": "Evaluate risk factors: brand perception, competitor strength, market conditions",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "signal": {"type": "object", "description": "The MarketSignal from Scout"},
+                    "sentiment_score": {"type": "number"},
+                },
+                "required": ["signal", "sentiment_score"],
             },
-            "required": ["signal", "sentiment_score"]
-        }
-    },
-])
+        },
+    ]
+)
 
-STRATEGIST_FUNCTION_TOOLS = types.Tool(function_declarations=[
-    {
-        "name": "calculate_optimal_price",
-        "description": "Compute the optimal price given market assessment, costs, and constraints",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "current_price": {"type": "number"},
-                "cost_basis": {"type": "number"},
-                "margin_floor_pct": {"type": "number"},
-                "assessment": {"type": "object", "description": "MarketAssessment from Analyst"},
-                "signal": {"type": "object", "description": "MarketSignal from Scout"},
+STRATEGIST_FUNCTION_TOOLS = types.Tool(
+    function_declarations=[
+        {
+            "name": "calculate_optimal_price",
+            "description": "Compute the optimal price given market assessment, costs, and constraints",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "current_price": {"type": "number"},
+                    "cost_basis": {"type": "number"},
+                    "margin_floor_pct": {"type": "number"},
+                    "assessment": {"type": "object", "description": "MarketAssessment from Analyst"},
+                    "signal": {"type": "object", "description": "MarketSignal from Scout"},
+                },
+                "required": ["current_price", "assessment", "signal"],
             },
-            "required": ["current_price", "assessment", "signal"]
-        }
-    },
-    {
-        "name": "write_price_to_chain",
-        "description": "Execute pricing decision by writing to BNB Chain smart contract",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "product_id": {"type": "string"},
-                "new_price": {"type": "number"},
-                "reasoning_hash": {"type": "string", "description": "IPFS/hash of reasoning trace"},
-                "confidence": {"type": "number"},
+        },
+        {
+            "name": "write_price_to_chain",
+            "description": "Execute pricing decision by writing to BNB Chain smart contract",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {"type": "string"},
+                    "new_price": {"type": "number"},
+                    "reasoning_hash": {"type": "string", "description": "IPFS/hash of reasoning trace"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["product_id", "new_price", "confidence"],
             },
-            "required": ["product_id", "new_price", "confidence"]
-        }
-    },
-])
+        },
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
 # Tool Execution Handlers (called when Gemini invokes a function)
 # ---------------------------------------------------------------------------
+
 
 async def handle_tool_call(function_name: str, args: dict) -> dict:
     """
@@ -236,7 +247,7 @@ async def _handle_fetch_competitor_price(args: dict) -> dict:
         "current_price": 89.99,
         "previous_price": 105.99,
         "currency": "USD",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "last_updated": datetime.now(UTC).isoformat(),
         "source": "google_search_grounding",
     }
 
@@ -335,13 +346,14 @@ async def _handle_write_price_to_chain(args: dict) -> dict:
         "gas_used": 85432,
         "contract_address": os.getenv("BNB_CONTRACT_ADDRESS", "0xDEMO..."),
         "explorer_url": f"https://testnet.bscscan.com/tx/{tx_hash}",
-        "executed_at": datetime.now(timezone.utc).isoformat(),
+        "executed_at": datetime.now(UTC).isoformat(),
     }
 
 
 # ---------------------------------------------------------------------------
 # Agent Implementations
 # ---------------------------------------------------------------------------
+
 
 class AutonomousOrchestrator:
     """
@@ -394,7 +406,7 @@ class AutonomousOrchestrator:
         product_category: str = "electronics",
         cost_basis: float = 45.00,
         margin_floor_pct: float = 20.0,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """
         Execute pipeline with SSE streaming for real-time UI display.
         Yields Server-Sent Events showing each agent's reasoning.
@@ -405,52 +417,89 @@ class AutonomousOrchestrator:
 
             signal = await self._run_scout(product_id, product_category)
 
-            yield self._sse_event("scout", "complete", json.dumps({
-                "competitor": signal.competitor_name,
-                "price_change": f"{signal.price_change_pct:+.1f}%",
-                "signal": signal.signal_type,
-                "confidence": signal.confidence,
-            }), is_complete=True)
+            yield self._sse_event(
+                "scout",
+                "complete",
+                json.dumps(
+                    {
+                        "competitor": signal.competitor_name,
+                        "price_change": f"{signal.price_change_pct:+.1f}%",
+                        "signal": signal.signal_type,
+                        "confidence": signal.confidence,
+                    }
+                ),
+                is_complete=True,
+            )
 
             # --- ANALYST PHASE ---
-            yield self._sse_event("analyst", "starting", "📊 Analyst Agent activated — processing market intelligence...")
+            yield self._sse_event(
+                "analyst", "starting", "📊 Analyst Agent activated — processing market intelligence..."
+            )
 
             assessment = await self._run_analyst(signal)
 
-            yield self._sse_event("analyst", "complete", json.dumps({
-                "sentiment": f"{assessment.sentiment_score:+.2f} ({assessment.sentiment_label})",
-                "elasticity": assessment.demand_elasticity,
-                "risk": assessment.risk_level,
-                "direction": assessment.recommended_direction,
-                "max_safe_change": f"{assessment.max_safe_change_pct}%",
-            }), is_complete=True)
+            yield self._sse_event(
+                "analyst",
+                "complete",
+                json.dumps(
+                    {
+                        "sentiment": f"{assessment.sentiment_score:+.2f} ({assessment.sentiment_label})",
+                        "elasticity": assessment.demand_elasticity,
+                        "risk": assessment.risk_level,
+                        "direction": assessment.recommended_direction,
+                        "max_safe_change": f"{assessment.max_safe_change_pct}%",
+                    }
+                ),
+                is_complete=True,
+            )
 
             # --- STRATEGIST PHASE ---
-            yield self._sse_event("strategist", "starting", "💰 Strategist Agent activated — computing optimal price...")
+            yield self._sse_event(
+                "strategist", "starting", "💰 Strategist Agent activated — computing optimal price..."
+            )
 
             decision = await self._run_strategist(
                 signal, assessment, current_price, cost_basis, margin_floor_pct, product_id
             )
 
-            yield self._sse_event("strategist", "complete", json.dumps({
-                "action": decision.action,
-                "price": f"${decision.current_price} → ${decision.recommended_price}",
-                "change": f"{decision.change_pct:+.1f}%",
-                "confidence": f"{decision.confidence_score:.0%}",
-                "reasoning": decision.reasoning[:200],
-            }), is_complete=True)
+            yield self._sse_event(
+                "strategist",
+                "complete",
+                json.dumps(
+                    {
+                        "action": decision.action,
+                        "price": f"${decision.current_price} → ${decision.recommended_price}",
+                        "change": f"{decision.change_pct:+.1f}%",
+                        "confidence": f"{decision.confidence_score:.0%}",
+                        "reasoning": decision.reasoning[:200],
+                    }
+                ),
+                is_complete=True,
+            )
 
             # --- EXECUTION PHASE ---
             if decision.action == "execute" and decision.tx_hash:
-                yield self._sse_event("execution", "complete", json.dumps({
-                    "tx_hash": decision.tx_hash,
-                    "chain": "BNB Chain Testnet",
-                    "explorer": f"https://testnet.bscscan.com/tx/{decision.tx_hash}",
-                    "executed_at": decision.executed_at,
-                }), is_complete=True)
+                yield self._sse_event(
+                    "execution",
+                    "complete",
+                    json.dumps(
+                        {
+                            "tx_hash": decision.tx_hash,
+                            "chain": "BNB Chain Testnet",
+                            "explorer": f"https://testnet.bscscan.com/tx/{decision.tx_hash}",
+                            "executed_at": decision.executed_at,
+                        }
+                    ),
+                    is_complete=True,
+                )
 
             # --- PIPELINE COMPLETE ---
-            yield self._sse_event("pipeline", "complete", "✅ Autonomous pipeline complete. All decisions logged on-chain.", is_complete=True)
+            yield self._sse_event(
+                "pipeline",
+                "complete",
+                "✅ Autonomous pipeline complete. All decisions logged on-chain.",
+                is_complete=True,
+            )
 
         except Exception as e:
             logger.exception(f"[AUTONOMOUS] Pipeline error: {e}")
@@ -623,7 +672,7 @@ write_price_to_chain. Explain your full reasoning."""
         # Check if Gemini made function calls
         if response.candidates:
             for part in response.candidates[0].content.parts:
-                if hasattr(part, 'function_call') and part.function_call:
+                if hasattr(part, "function_call") and part.function_call:
                     fc = part.function_call
                     if fc.name == "write_price_to_chain":
                         result = await handle_tool_call(fc.name, dict(fc.args))
@@ -632,16 +681,29 @@ write_price_to_chain. Explain your full reasoning."""
 
         # If no function call was made, execute manually if conditions met
         if not tx_hash and assessment.recommended_direction != "hold":
-            result = await _handle_write_price_to_chain({
-                "product_id": product_id,
-                "new_price": round(current_price * (1 + assessment.max_safe_change_pct / 100 * (-1 if assessment.recommended_direction == "decrease" else 1)), 2),
-                "confidence": 0.87,
-            })
+            result = await _handle_write_price_to_chain(
+                {
+                    "product_id": product_id,
+                    "new_price": round(
+                        current_price
+                        * (
+                            1
+                            + assessment.max_safe_change_pct
+                            / 100
+                            * (-1 if assessment.recommended_direction == "decrease" else 1)
+                        ),
+                        2,
+                    ),
+                    "confidence": 0.87,
+                }
+            )
             tx_hash = result.get("tx_hash")
             executed_at = result.get("executed_at")
 
         # Build decision
-        optimal_price = round(current_price * 0.88, 2) if assessment.recommended_direction == "decrease" else current_price
+        optimal_price = (
+            round(current_price * 0.88, 2) if assessment.recommended_direction == "decrease" else current_price
+        )
         change_pct = round((optimal_price - current_price) / current_price * 100, 2)
 
         return PricingDecision(
@@ -649,7 +711,9 @@ write_price_to_chain. Explain your full reasoning."""
             current_price=current_price,
             change_pct=change_pct,
             confidence_score=0.87,
-            reasoning=reasoning_text[:500] if reasoning_text else (
+            reasoning=reasoning_text[:500]
+            if reasoning_text
+            else (
                 f"Competitor {signal.competitor_name} dropped price by {signal.price_change_pct:+.1f}%. "
                 f"Sentiment is {assessment.sentiment_label} ({assessment.sentiment_score:+.2f}). "
                 f"Elasticity coefficient {assessment.demand_elasticity} indicates elastic demand. "
@@ -682,6 +746,7 @@ write_price_to_chain. Explain your full reasoning."""
 # ---------------------------------------------------------------------------
 # Autonomous Trigger (runs without human prompting)
 # ---------------------------------------------------------------------------
+
 
 class AutonomousTrigger:
     """
@@ -731,7 +796,3 @@ class AutonomousTrigger:
         """Gracefully stop the monitoring loop."""
         self._is_running = False
         logger.info("[TRIGGER] Autonomous monitoring stopped")
-
-
-
-        

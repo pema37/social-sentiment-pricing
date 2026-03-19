@@ -113,7 +113,7 @@ async def _fetch_all_mentions(task_self):
         task_self.update_state(state="LOADING_PRODUCTS", meta={})
 
         # Get all active products that have keywords configured
-        stmt = select(Product).where(Product.keywords != None, Product.is_active == True)
+        stmt = select(Product).where(Product.keywords is not None, Product.is_active)
         result = await session.execute(stmt)
         products = result.scalars().all()
 
@@ -285,7 +285,7 @@ async def _process_pending_mentions(task_self, batch_size: int):
         # Get unprocessed mentions
         stmt = (
             select(SocialMention)
-            .where(SocialMention.processed == False)
+            .where(not SocialMention.processed)
             .order_by(SocialMention.collected_at.asc())
             .limit(batch_size)
         )

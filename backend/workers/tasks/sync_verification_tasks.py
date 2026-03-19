@@ -166,7 +166,7 @@ async def _verify_all_price_syncs() -> dict:
 
         links_stmt = (
             select(ProductIntegrationLink)
-            .where(ProductIntegrationLink.sync_enabled == True)
+            .where(ProductIntegrationLink.sync_enabled)
             .where(ProductIntegrationLink.integration_id.in_(integrations.keys()))
             .order_by(ProductIntegrationLink.id)
         )
@@ -351,7 +351,7 @@ async def _auto_fix_price_mismatches(dry_run: bool = True) -> dict:
             link_stmt = (
                 select(ProductIntegrationLink)
                 .where(ProductIntegrationLink.product_id == product_id)
-                .where(ProductIntegrationLink.sync_enabled == True)
+                .where(ProductIntegrationLink.sync_enabled)
             )
             link_result = await db.execute(link_stmt)
             link = link_result.scalars().first()
@@ -421,7 +421,7 @@ async def _get_sync_status_report() -> dict:
     session_maker = get_task_session_maker()
 
     async with session_maker() as db:
-        total_stmt = select(ProductIntegrationLink).where(ProductIntegrationLink.sync_enabled == True)
+        total_stmt = select(ProductIntegrationLink).where(ProductIntegrationLink.sync_enabled)
         total_result = await db.execute(total_stmt)
         total_links = list(total_result.scalars().all())
 

@@ -127,7 +127,7 @@ async def _generate_all_recommendations():
 
     async with session_maker() as db:
         # Step 1: Get all active pricing rules
-        rules_stmt = select(PricingRule).where(PricingRule.is_active == True)
+        rules_stmt = select(PricingRule).where(PricingRule.is_active)
         rules_result = await db.execute(rules_stmt)
         active_rules = list(rules_result.scalars().all())
 
@@ -143,7 +143,7 @@ async def _generate_all_recommendations():
 
         # Step 2: Get all active products for users who have rules
         user_ids = list(set(rule.user_id for rule in active_rules))
-        products_stmt = select(Product).where(Product.user_id.in_(user_ids)).where(Product.is_active == True)
+        products_stmt = select(Product).where(Product.user_id.in_(user_ids)).where(Product.is_active)
         products_result = await db.execute(products_stmt)
         all_products = list(products_result.scalars().all())
 
@@ -273,7 +273,7 @@ async def _check_competitor_prices():
 
     async with session_maker() as db:
         # Get all active competitor products
-        stmt = select(CompetitorProduct).where(CompetitorProduct.is_active == True)
+        stmt = select(CompetitorProduct).where(CompetitorProduct.is_active)
         result = await db.execute(stmt)
         competitor_products = list(result.scalars().all())
 
@@ -337,7 +337,7 @@ async def _apply_stuck_recommendations():
         stmt = (
             select(PriceRecommendation)
             .where(PriceRecommendation.status == RecommendationStatus.AUTO_APPROVED)
-            .where(PriceRecommendation.applied_at == None)
+            .where(PriceRecommendation.applied_at is None)
         )
         result = await db.execute(stmt)
         stuck = list(result.scalars().all())

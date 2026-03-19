@@ -11,7 +11,7 @@ Provides request/response models for:
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TrustLevelEnum(str, Enum):
+class TrustLevelEnum(StrEnum):
     VERIFIED = "verified"
     HIGH = "high"
     MEDIUM = "medium"
@@ -30,7 +30,7 @@ class TrustLevelEnum(str, Enum):
     BLOCKED = "blocked"
 
 
-class RiskFlagEnum(str, Enum):
+class RiskFlagEnum(StrEnum):
     NEW_ACCOUNT = "new_account"
     LOW_FOLLOWERS = "low_followers"
     HIGH_POST_FREQUENCY = "high_post_frequency"

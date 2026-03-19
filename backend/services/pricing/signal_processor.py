@@ -173,7 +173,7 @@ class SignalProcessor:
         viral_sentiment = None
         if viral_detected and top_posts:
             sentiments = []
-            for post in top_posts[:5]:
+            for _post in top_posts[:5]:
                 sent_stmt = (
                     select(Sentiment)
                     .where(Sentiment.product_id == product_id)
@@ -194,7 +194,7 @@ class SignalProcessor:
         """Get current competitor prices for the product."""
 
         stmt = select(CompetitorProduct).where(
-            CompetitorProduct.product_id == product_id, CompetitorProduct.is_active == True
+            CompetitorProduct.product_id == product_id, CompetitorProduct.is_active
         )
 
         result = await self.db.execute(stmt)

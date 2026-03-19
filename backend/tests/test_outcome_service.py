@@ -152,7 +152,7 @@ class TestCalculateOutcome:
         assert label == OutcomeLabel.NEGATIVE
 
     def test_neutral_outcome(self):
-        score, label = self.svc._calculate_outcome(
+        _score, label = self.svc._calculate_outcome(
             Decimal("1000"),
             Decimal("1005"),
             50,
@@ -193,7 +193,7 @@ class TestCalculateOutcome:
         assert score > Decimal("0")
 
     def test_zero_both(self):
-        score, label = self.svc._calculate_outcome(
+        _score, label = self.svc._calculate_outcome(
             Decimal("0"),
             Decimal("0"),
             0,

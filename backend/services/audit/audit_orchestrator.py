@@ -16,7 +16,7 @@ is down) degrades gracefully instead of killing the whole scan.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 from schemas.price_check import (
     CompetitorMatch,
@@ -29,6 +29,9 @@ from services.audit.report_generator import (
     generate_report,
 )
 from services.audit.store_scanner import ScannedProduct, scan_store
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 

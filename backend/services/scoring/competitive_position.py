@@ -22,9 +22,12 @@ Place at: backend/services/scoring/competitive_position.py
 from __future__ import annotations
 
 import statistics
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # ──────────────────────────────────────────────────────────
 # INPUT TYPE
@@ -208,7 +211,7 @@ class CompetitivePositionCalculator:
         # Higher percentile = more competitors are above us = we're cheaper
         # But AnalystOutput convention: 0.0 = cheapest, 1.0 = most expensive
         # So we invert: position_index = 1 - (priced_above / total)
-        priced_above = sum(1 for p in comp_prices if p > our_price)
+        sum(1 for p in comp_prices if p > our_price)
         priced_equal = sum(1 for p in comp_prices if abs(p - our_price) < 0.01)
         total = len(comp_prices)
 

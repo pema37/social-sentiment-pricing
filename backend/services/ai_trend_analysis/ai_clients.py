@@ -11,7 +11,7 @@ import base64
 import json
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from core.config import settings
@@ -27,7 +27,7 @@ GEMINI3_PRO = "gemini-3-pro-preview"
 DEFAULT_MODEL = GEMINI3_FLASH  # Fast streaming for demos
 
 
-class ThoughtType(str, Enum):
+class ThoughtType(StrEnum):
     """Types of AI reasoning steps (thought signatures)."""
 
     OBSERVATION = "observation"

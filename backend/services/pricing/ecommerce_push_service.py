@@ -70,7 +70,7 @@ class EcommercePushService:
                 select(ProductIntegrationLink)
                 .join(Integration, ProductIntegrationLink.integration_id == Integration.id)
                 .where(ProductIntegrationLink.product_id == product.id)
-                .where(ProductIntegrationLink.sync_enabled == True)
+                .where(ProductIntegrationLink.sync_enabled)
                 .where(Integration.status == IntegrationStatus.ACTIVE)
             )
             result = await self.db.execute(stmt)

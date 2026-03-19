@@ -82,8 +82,8 @@ class AuditPDF(FPDF):
 
     def metric_box(self, label: str, value: str, color_rgb: tuple = (220, 38, 38)):
         """Draw a highlighted metric."""
-        x = self.get_x()
-        y = self.get_y()
+        self.get_x()
+        self.get_y()
         self.set_font("Helvetica", "", 9)
         self.set_text_color(100, 100, 100)
         self.cell(60, 5, label, ln=True)

@@ -9,14 +9,14 @@ MNEE subscribers continue using the existing flow without these fields.
 """
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, String
 from sqlmodel import Field, SQLModel
 
 
-class SubscriptionTier(str, Enum):
+class SubscriptionTier(StrEnum):
     """Available subscription tiers."""
 
     FREE = "free"
@@ -25,7 +25,7 @@ class SubscriptionTier(str, Enum):
     ENTERPRISE = "enterprise"
 
 
-class SubscriptionStatus(str, Enum):
+class SubscriptionStatus(StrEnum):
     """Subscription status."""
 
     ACTIVE = "active"

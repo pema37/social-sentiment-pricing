@@ -412,10 +412,9 @@ class ConfidenceScorer:
         # Penalty for title that looks like a category, not product
         category_indicators = ["shop", "buy", "store", "category", "collection"]
         title_lower = product.title.lower()
-        if any(ind in title_lower for ind in category_indicators):
-            if len(product.title.split()) < 5:
-                score -= 0.1
-                breakdown.penalties_applied.append("category_page_suspected")
+        if any(ind in title_lower for ind in category_indicators) and len(product.title.split()) < 5:
+            score -= 0.1
+            breakdown.penalties_applied.append("category_page_suspected")
 
         return score
 

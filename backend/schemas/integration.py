@@ -11,7 +11,7 @@ FIX (2026-01-27): Added consumer_key/consumer_secret to IntegrationUpdate for cr
 
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -20,12 +20,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # ==================== Enums ====================
 
 
-class EcommercePlatform(str, Enum):
+class EcommercePlatform(StrEnum):
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
 
 
-class IntegrationStatus(str, Enum):
+class IntegrationStatus(StrEnum):
     ACTIVE = "active"
     ERROR = "error"
     PAUSED = "paused"

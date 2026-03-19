@@ -388,7 +388,6 @@ class PriorUpdater:
         ):
             # Build a mapping from raw obs to their flags
             # Only use flags for observations that survived filtering
-            filtered_set = set()
             raw_idx = 0
             obs_with_noise = []
 

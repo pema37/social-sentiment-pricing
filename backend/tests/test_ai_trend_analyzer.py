@@ -137,7 +137,7 @@ class TestAnalyze:
 
         analyzer.parser.parse_analysis_response.assert_called_once()
         call_kwargs = analyzer.parser.parse_analysis_response.call_args
-        ai_response = (
+        (
             call_kwargs[1]["ai_response"]
             if "ai_response" in (call_kwargs[1] or {})
             else call_kwargs[0][1]
@@ -227,7 +227,7 @@ class TestAnalyze:
 
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
             mock_ai.call = AsyncMock(side_effect=Exception("API down"))
-            result = await analyzer.analyze(user_id="user-1")
+            await analyzer.analyze(user_id="user-1")
 
         # Parser should still be called with fallback response
         analyzer.parser.parse_analysis_response.assert_called()
@@ -441,7 +441,7 @@ class TestGenerateInsight:
         analyzer = _make_analyzer()
         analyzer.collector.get_products.return_value = []
 
-        result = await analyzer.generate_insight(user_id="user-1")
+        await analyzer.generate_insight(user_id="user-1")
 
         analyzer.parser.parse_insight_response.assert_called_once()
         call_args = analyzer.parser.parse_insight_response.call_args
@@ -499,7 +499,7 @@ class TestGenerateInsight:
 
         with patch("services.ai_trend_analysis.analyzer.ai_clients") as mock_ai:
             mock_ai.call = AsyncMock(side_effect=Exception("API timeout"))
-            result = await analyzer.generate_insight(user_id="user-1")
+            await analyzer.generate_insight(user_id="user-1")
 
         # Parser should be called with fallback
         analyzer.parser.parse_insight_response.assert_called()

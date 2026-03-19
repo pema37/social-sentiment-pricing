@@ -119,7 +119,7 @@ class PricePushService:
         stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.integration_id == integration_id,
             ProductIntegrationLink.product_id == product_id,
-            ProductIntegrationLink.sync_enabled == True,
+            ProductIntegrationLink.sync_enabled,
         )
         if external_variant_id is not None:
             stmt = stmt.where(ProductIntegrationLink.external_variant_id == external_variant_id)
@@ -273,7 +273,7 @@ class PricePushService:
             select(ProductIntegrationLink, Product)
             .join(Product, ProductIntegrationLink.product_id == Product.id)
             .where(ProductIntegrationLink.integration_id == integration_id)
-            .where(ProductIntegrationLink.sync_enabled == True)
+            .where(ProductIntegrationLink.sync_enabled)
         )
         result = await self.db.execute(stmt)
         links_with_products = result.all()

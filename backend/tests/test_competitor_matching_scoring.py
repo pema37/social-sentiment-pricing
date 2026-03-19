@@ -331,7 +331,7 @@ class TestApplyBonuses:
     def test_in_stock_bonus(self):
         p = make_product(in_stock=True)
         breakdown = ScoreBreakdown(final_score=0.0)
-        result = self.scorer._apply_bonuses(0.5, p, breakdown)
+        self.scorer._apply_bonuses(0.5, p, breakdown)
         assert "in_stock" in breakdown.bonuses_applied
 
     def test_no_bonuses_for_minimal_product(self):
@@ -361,25 +361,25 @@ class TestApplyPenalties:
     def test_no_price_penalty(self):
         p = make_product(price=None)
         breakdown = ScoreBreakdown(final_score=0.0)
-        result = self.scorer._apply_penalties(0.5, p, "search", breakdown)
+        self.scorer._apply_penalties(0.5, p, "search", breakdown)
         assert "no_price" in breakdown.penalties_applied
 
     def test_short_title_penalty(self):
         p = make_product(title="iPhone")  # < 20 chars
         breakdown = ScoreBreakdown(final_score=0.0)
-        result = self.scorer._apply_penalties(0.5, p, "search", breakdown)
+        self.scorer._apply_penalties(0.5, p, "search", breakdown)
         assert "short_title" in breakdown.penalties_applied
 
     def test_category_page_penalty(self):
         p = make_product(title="Shop Now")  # category indicator + < 5 words
         breakdown = ScoreBreakdown(final_score=0.0)
-        result = self.scorer._apply_penalties(0.5, p, "search", breakdown)
+        self.scorer._apply_penalties(0.5, p, "search", breakdown)
         assert "category_page_suspected" in breakdown.penalties_applied
 
     def test_no_penalties_for_good_product(self):
         p = make_product()  # Full data, in stock, long title
         breakdown = ScoreBreakdown(final_score=0.0)
-        result = self.scorer._apply_penalties(0.5, p, "search", breakdown)
+        self.scorer._apply_penalties(0.5, p, "search", breakdown)
         assert breakdown.penalties_applied == []
 
 

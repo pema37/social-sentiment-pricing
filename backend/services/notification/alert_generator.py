@@ -6,6 +6,7 @@ Creates alerts from system events (sentiment drops, price recommendations,
 competitor changes, trend detection) and triggers notifications.
 """
 
+import contextlib
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -363,10 +364,9 @@ class AlertGenerator:
         )
 
         # Check if alert should be suppressed
-        if config:
-            if not await self._check_limits(config):
-                logger.debug(f"Alert suppressed due to limits: {title}")
-                return None
+        if config and not await self._check_limits(config):
+            logger.debug(f"Alert suppressed due to limits: {title}")
+            return None
 
         # Create alert record
         alert = Alert(
@@ -405,7 +405,7 @@ class AlertGenerator:
         stmt = select(AlertConfiguration).where(
             AlertConfiguration.user_id == user_id,
             AlertConfiguration.alert_type == alert_type,
-            AlertConfiguration.is_active == True,
+            AlertConfiguration.is_active,
         )
 
         configs = self.session.exec(stmt).all()
@@ -486,10 +486,8 @@ class AlertGenerator:
             if isinstance(c, AlertChannel):
                 channels.append(c)
             elif isinstance(c, str):
-                try:
+                with contextlib.suppress(ValueError):
                     channels.append(AlertChannel(c))
-                except ValueError:
-                    pass
 
         # Get channel-specific settings
         settings = config.channel_settings or {}

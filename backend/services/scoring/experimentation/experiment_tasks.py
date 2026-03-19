@@ -22,14 +22,17 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from .experiment_manager import (
     ExperimentAssignment,
     ExperimentManager,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
 
 logger = logging.getLogger(__name__)
 

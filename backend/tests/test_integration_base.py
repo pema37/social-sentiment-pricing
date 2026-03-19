@@ -149,7 +149,7 @@ class TestGetClient:
         svc = _StubService()
         with patch(f"{SVC_MOD}.RetryableClient") as mock_cls:
             mock_cls.return_value = MagicMock()
-            client = svc.get_client("mystore.myshopify.com")
+            svc.get_client("mystore.myshopify.com")
 
             mock_cls.assert_called_once_with(
                 store_url="mystore.myshopify.com",

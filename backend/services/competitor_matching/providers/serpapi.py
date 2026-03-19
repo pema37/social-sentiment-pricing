@@ -12,6 +12,7 @@ Pricing: ~$50/month for 5,000 searches
 Docs: https://serpapi.com/google-shopping-api
 """
 
+import contextlib
 import logging
 import os
 from typing import Any
@@ -243,18 +244,14 @@ class SerpAPIProvider(BaseSearchProvider):
         # Extract rating
         rating = None
         if "rating" in item:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 rating = float(item["rating"])
-            except (ValueError, TypeError):
-                pass
 
         # Extract reviews count
         reviews = None
         if "reviews" in item:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 reviews = int(item["reviews"])
-            except (ValueError, TypeError):
-                pass
 
         # Check stock status
         in_stock = True

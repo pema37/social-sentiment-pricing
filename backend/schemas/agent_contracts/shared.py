@@ -1,15 +1,15 @@
 """Shared types used across all agent contract schemas."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class PriceDirection(str, Enum):
+class PriceDirection(StrEnum):
     INCREASE = "increase"
     DECREASE = "decrease"
     HOLD = "hold"
 
 
-class UrgencyLevel(str, Enum):
+class UrgencyLevel(StrEnum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -17,7 +17,7 @@ class UrgencyLevel(str, Enum):
     NONE = "none"
 
 
-class DataSource(str, Enum):
+class DataSource(StrEnum):
     COMPETITOR_SCRAPE = "competitor_scrape"
     SOCIAL_SENTIMENT = "social_sentiment"
     PRICE_HISTORY = "price_history"

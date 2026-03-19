@@ -23,9 +23,12 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from datetime import datetime
 
 # ──────────────────────────────────────────────────────────
 # INPUT: Outcome records (duck-typed from DB rows)

@@ -489,7 +489,7 @@ class TestCheckDailyLimit:
         service = ApprovalService(db)
         service._get_user_settings = AsyncMock(return_value=None)
 
-        ok, msg = await service._check_daily_limit(uuid4())
+        ok, _msg = await service._check_daily_limit(uuid4())
         assert ok is True
 
     @pytest.mark.asyncio
@@ -500,7 +500,7 @@ class TestCheckDailyLimit:
         service = ApprovalService(db)
         service._get_user_settings = AsyncMock(return_value=settings)
 
-        ok, msg = await service._check_daily_limit(uuid4())
+        ok, _msg = await service._check_daily_limit(uuid4())
         assert ok is True
 
     @pytest.mark.asyncio
@@ -511,7 +511,7 @@ class TestCheckDailyLimit:
         service = ApprovalService(db)
         service._get_user_settings = AsyncMock(return_value=settings)
 
-        ok, msg = await service._check_daily_limit(uuid4())
+        ok, _msg = await service._check_daily_limit(uuid4())
         assert ok is True
 
     @pytest.mark.asyncio
@@ -526,7 +526,7 @@ class TestCheckDailyLimit:
         service = ApprovalService(db)
         service._get_user_settings = AsyncMock(return_value=settings)
 
-        ok, msg = await service._check_daily_limit(uuid4())
+        ok, _msg = await service._check_daily_limit(uuid4())
         assert ok is True
 
     @pytest.mark.asyncio
@@ -557,7 +557,7 @@ class TestCheckDailyLimit:
         service = ApprovalService(db)
         service._get_user_settings = AsyncMock(return_value=settings)
 
-        ok, msg = await service._check_daily_limit(uuid4())
+        ok, _msg = await service._check_daily_limit(uuid4())
         assert ok is False
 
 

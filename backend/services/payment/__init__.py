@@ -27,22 +27,22 @@ PaymentServiceFactory.register("ethereum", ethereum_payment_service)
 PaymentServiceFactory.register("bsv", bsv_payment_service)
 
 __all__ = [
-    # Existing
-    "MneeService",
-    "MneeClient",
-    "MneeBaseError",
-    "MneeValidationError",
+    "PLANS",
     "MneeApiError",
+    "MneeBaseError",
+    "MneeClient",
     "MneeConfigError",
     "MneeNetworkError",
+    # Existing
+    "MneeService",
+    "MneeValidationError",
     "PaymentError",
-    "get_mnee_service",
-    "close_mnee_service",
+    "PaymentServiceFactory",
     # New
     "PaymentVerificationService",
-    "PaymentServiceFactory",
     "SubscriptionService",
-    "PLANS",
-    "ethereum_payment_service",
     "bsv_payment_service",
+    "close_mnee_service",
+    "ethereum_payment_service",
+    "get_mnee_service",
 ]

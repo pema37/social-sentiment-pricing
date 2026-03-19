@@ -99,7 +99,7 @@ def capture_message(message: str, level: str = "info", **context) -> None:
         sentry_sdk.capture_message(message, level=level)
 
 
-def set_user(user_id: str, email: str = None, username: str = None) -> None:
+def set_user(user_id: str, email: str | None = None, username: str | None = None) -> None:
     """Set user context for Sentry."""
     sentry_sdk.set_user(
         {

@@ -97,7 +97,7 @@ class TestGetClient:
         with patch(f"{SVC_MOD}.httpx.AsyncClient") as MockClient:
             MockClient.return_value = MagicMock()
             svc = _make_service()
-            client = await svc._get_client()
+            await svc._get_client()
             MockClient.assert_called_once()
 
     @pytest.mark.asyncio
@@ -328,7 +328,7 @@ class TestGetTransactionStatus:
         svc._get_client = AsyncMock(return_value=mock_client)
         svc._create_verification_result = MagicMock(return_value=MagicMock(verified=False))
 
-        result = await svc.get_transaction_status("txhash")
+        await svc.get_transaction_status("txhash")
         # verified = confirmations > 0, so False
         verify_call = svc._create_verification_result.call_args[1]
         assert verify_call["verified"] is False

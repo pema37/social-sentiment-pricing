@@ -629,7 +629,7 @@ class SyncService:
         """
         stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.integration_id == integration.id,
-            ProductIntegrationLink.sync_enabled == True,
+            ProductIntegrationLink.sync_enabled,
         )
         result = await self.db.execute(stmt)
         links = result.scalars().all()
@@ -656,7 +656,7 @@ class SyncService:
         """
         stmt = select(func.count(ProductIntegrationLink.id)).where(
             ProductIntegrationLink.integration_id == integration_id,
-            ProductIntegrationLink.sync_enabled == True,
+            ProductIntegrationLink.sync_enabled,
         )
         result = await self.db.execute(stmt)
         return result.scalar() or 0

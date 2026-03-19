@@ -8,7 +8,7 @@ Alert: Individual alert instances that get dispatched
 """
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, String, Text
@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 
-class AlertType(str, Enum):
+class AlertType(StrEnum):
     """Types of alerts the system can generate."""
 
     SENTIMENT_DROP = "sentiment_drop"
@@ -30,7 +30,7 @@ class AlertType(str, Enum):
     ANOMALY_DETECTED = "anomaly_detected"
 
 
-class AlertSeverity(str, Enum):
+class AlertSeverity(StrEnum):
     """Alert severity levels."""
 
     LOW = "low"
@@ -39,7 +39,7 @@ class AlertSeverity(str, Enum):
     CRITICAL = "critical"
 
 
-class AlertChannel(str, Enum):
+class AlertChannel(StrEnum):
     """Notification delivery channels."""
 
     EMAIL = "email"
@@ -48,7 +48,7 @@ class AlertChannel(str, Enum):
     IN_APP = "in_app"
 
 
-class AlertStatus(str, Enum):
+class AlertStatus(StrEnum):
     """Alert lifecycle status."""
 
     PENDING = "pending"

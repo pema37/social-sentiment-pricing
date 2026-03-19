@@ -191,7 +191,7 @@ class ContentAnalyzer:
 
         max_similarity = 0.0
 
-        for recent_id, recent_text, recent_hash, timestamp in self._recent_content[-100:]:
+        for recent_id, _recent_text, recent_hash, _timestamp in self._recent_content[-100:]:
             if recent_id == content_id:
                 continue
 

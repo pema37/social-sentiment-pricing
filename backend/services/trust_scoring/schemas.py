@@ -9,7 +9,7 @@ and their content, used to weight sentiment analysis appropriately.
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ from typing import Any
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TrustLevel(str, Enum):
+class TrustLevel(StrEnum):
     """Trust level classification."""
 
     VERIFIED = "verified"  # Verified accounts, known influencers
@@ -28,7 +28,7 @@ class TrustLevel(str, Enum):
     BLOCKED = "blocked"  # Known bad actors
 
 
-class RiskFlag(str, Enum):
+class RiskFlag(StrEnum):
     """Risk indicators for suspicious activity."""
 
     NEW_ACCOUNT = "new_account"
@@ -45,7 +45,7 @@ class RiskFlag(str, Enum):
     FAKE_ENGAGEMENT = "fake_engagement"
 
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     """Type of social content."""
 
     ORIGINAL = "original"
@@ -94,9 +94,8 @@ class AuthorProfile:
             delta = datetime.now(UTC) - self.created_at
             self.account_age_days = delta.days
 
-        if self.follower_count is not None and self.following_count:
-            if self.following_count > 0:
-                self.follower_ratio = self.follower_count / self.following_count
+        if self.follower_count is not None and self.following_count and self.following_count > 0:
+            self.follower_ratio = self.follower_count / self.following_count
 
     @property
     def is_new_account(self) -> bool:

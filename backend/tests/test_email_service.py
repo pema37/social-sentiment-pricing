@@ -191,9 +191,9 @@ class TestGetClient:
                 svc._client = None
                 # The try/except ImportError should catch
                 try:
-                    result = svc._get_client()
+                    svc._get_client()
                 except (ImportError, TypeError):
-                    result = None
+                    pass
                 # Client should still be None or the method returns None
                 # Either way, no crash
 

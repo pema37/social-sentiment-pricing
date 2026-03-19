@@ -158,8 +158,6 @@ class GuardrailEnforcer:
         If prior changes consume most of the budget, reduce or block
         the current change to stay within the cap.
         """
-        passed = True
-        clamped = False
 
         if product.recent_changes and product.current_price > 0:
             now = datetime.now(UTC)
@@ -183,8 +181,6 @@ class GuardrailEnforcer:
                         else:
                             price = product.current_price * (1.0 - remaining)
 
-                    passed = False
-                    clamped = True
 
                     clamped_pct = (
                         f"{((price - product.current_price) / product.current_price):+.2%}"

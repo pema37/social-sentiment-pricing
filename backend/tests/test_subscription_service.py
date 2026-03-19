@@ -285,7 +285,7 @@ class TestCreateSubscriptionPayment:
 
             with patch(f"{SVC_MOD}.PaymentRequest") as MockReq:
                 MockReq.return_value = MagicMock()
-                _, payment = await svc.create_subscription_payment(_make_user(), "starter", billing_cycle="yearly")
+                _, _payment = await svc.create_subscription_payment(_make_user(), "starter", billing_cycle="yearly")
 
         # starter yearly = 290 (stored as float by Pydantic)
         pay_call = MockPayment.call_args[1]

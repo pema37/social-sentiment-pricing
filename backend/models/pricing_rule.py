@@ -14,7 +14,7 @@ Scoping: Rules can apply to:
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime
@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, SQLModel
 
 
-class RuleType(str, Enum):
+class RuleType(StrEnum):
     SENTIMENT_THRESHOLD = "sentiment_threshold"
     COMPETITOR_RELATIVE = "competitor_relative"
     TIME_BASED = "time_based"
@@ -31,7 +31,7 @@ class RuleType(str, Enum):
     VIRAL_DETECTION = "viral_detection"
 
 
-class RuleAction(str, Enum):
+class RuleAction(StrEnum):
     INCREASE_PERCENT = "increase_percent"
     DECREASE_PERCENT = "decrease_percent"
     SET_ABSOLUTE = "set_absolute"
@@ -126,13 +126,8 @@ class PricingRule(SQLModel, table=True):
             return True
 
         # Check products list
-        if self.applies_to_products:
-            if str(product_id) in self.applies_to_products:
-                return True
+        if self.applies_to_products and str(product_id) in self.applies_to_products:
+            return True
 
         # Check categories list
-        if self.applies_to_categories and product_category:
-            if product_category in self.applies_to_categories:
-                return True
-
-        return False
+        return bool(self.applies_to_categories and product_category and product_category in self.applies_to_categories)

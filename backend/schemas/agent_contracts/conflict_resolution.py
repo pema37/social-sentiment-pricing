@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class ConflictType(str, Enum):
+class ConflictType(StrEnum):
     DIRECTION_DISAGREE = "direction_disagree"
     POSITION_SENTIMENT_MISMATCH = "position_sentiment_mismatch"
     MARGIN_FLOOR_VIOLATION = "margin_floor_violation"

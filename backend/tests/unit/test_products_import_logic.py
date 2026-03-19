@@ -34,7 +34,7 @@ def make_row(**kwargs) -> ImportProductRow:
     return ImportProductRow(**defaults)
 
 
-def make_service(existing_skus: set = None) -> ProductImportService:
+def make_service(existing_skus: set | None = None) -> ProductImportService:
     """Create a ProductImportService with a mocked async session."""
     session = AsyncMock()
     session.add = MagicMock()

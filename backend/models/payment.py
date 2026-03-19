@@ -5,14 +5,14 @@ Tracks MNEE payment transactions for subscriptions and other purchases.
 """
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, Text
 from sqlmodel import Field, SQLModel
 
 
-class PaymentStatus(str, Enum):
+class PaymentStatus(StrEnum):
     """Payment transaction status."""
 
     PENDING = "pending"  # Awaiting payment
@@ -23,7 +23,7 @@ class PaymentStatus(str, Enum):
     REFUNDED = "refunded"  # Payment refunded
 
 
-class PaymentType(str, Enum):
+class PaymentType(StrEnum):
     """Type of payment."""
 
     SUBSCRIPTION = "subscription"

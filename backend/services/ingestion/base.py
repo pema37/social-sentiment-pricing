@@ -4,10 +4,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 
-class SocialSource(str, Enum):
+class SocialSource(StrEnum):
     """Supported social media sources."""
 
     TWITTER = "twitter"

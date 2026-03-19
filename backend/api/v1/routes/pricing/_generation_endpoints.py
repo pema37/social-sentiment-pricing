@@ -76,7 +76,7 @@ async def diagnose_product_recommendations(
         select(CompetitorProduct, Competitor)
         .join(Competitor, CompetitorProduct.competitor_id == Competitor.id)
         .where(CompetitorProduct.product_id == product_id)
-        .where(CompetitorProduct.is_active == True)
+        .where(CompetitorProduct.is_active)
     )
     result = await db.execute(stmt)
     competitor_products = result.all()
@@ -276,14 +276,14 @@ async def generate_all_recommendations(
     # Subquery: products with active pricing rules
     has_active_rules = (
         select(PricingRule.product_id)
-        .where(PricingRule.is_active == True)
+        .where(PricingRule.is_active)
         .where(PricingRule.user_id == current_user.id)
     )
 
     # Subquery: products with active competitor products that have prices
     has_competitor_products = (
         select(CompetitorProduct.product_id)
-        .where(CompetitorProduct.is_active == True)
+        .where(CompetitorProduct.is_active)
         .where(CompetitorProduct.current_price.isnot(None))
     )
 
@@ -291,7 +291,7 @@ async def generate_all_recommendations(
     stmt = (
         select(Product)
         .where(Product.user_id == current_user.id)
-        .where(Product.is_active == True)
+        .where(Product.is_active)
         .where(or_(Product.id.in_(has_active_rules), Product.id.in_(has_competitor_products)))
     )
 

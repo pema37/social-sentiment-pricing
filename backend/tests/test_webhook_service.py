@@ -492,7 +492,7 @@ class TestSendAlert:
             mock_cls.return_value = mock_client
 
             with patch.object(svc, "_sleep", new_callable=AsyncMock) as mock_sleep:
-                result = await svc.send_alert(
+                await svc.send_alert(
                     webhook_url="https://test.com",
                     alert_title="T",
                     alert_message="M",

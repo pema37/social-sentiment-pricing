@@ -14,7 +14,7 @@ PATCHED (2026-02-21):
 
 import uuid as uuid_lib
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import (
@@ -35,14 +35,14 @@ if TYPE_CHECKING:
     from models.user import User
 
 
-class EcommercePlatform(str, Enum):
+class EcommercePlatform(StrEnum):
     """Supported e-commerce platforms"""
 
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
 
 
-class IntegrationStatus(str, Enum):
+class IntegrationStatus(StrEnum):
     """Connection status states - matches architecture doc"""
 
     ACTIVE = "active"  # Successfully authenticated and working

@@ -5,7 +5,7 @@ Tests for services.integration.product_sync_service
 import sys
 import types
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -55,7 +55,7 @@ class _FakeIntegrationStatus:
     ERROR = "error"
 
 
-class _FakeEcommercePlatform(str, Enum):
+class _FakeEcommercePlatform(StrEnum):
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
 
@@ -199,7 +199,7 @@ class TestGetAllUserIntegrations:
 class TestPushProductToStore:
     @pytest.mark.asyncio
     async def test_already_linked(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         existing_link = MagicMock(id=uuid4(), external_product_id="ext-1")
         svc._get_existing_link = AsyncMock(return_value=existing_link)
 
@@ -212,7 +212,7 @@ class TestPushProductToStore:
 
     @pytest.mark.asyncio
     async def test_unsupported_platform(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         svc._get_existing_link = AsyncMock(return_value=None)
 
         product = _make_product()
@@ -227,7 +227,7 @@ class TestPushProductToStore:
 
     @pytest.mark.asyncio
     async def test_exception_returns_failure(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         svc._get_existing_link = AsyncMock(side_effect=RuntimeError("crash"))
 
         product = _make_product()
@@ -262,7 +262,7 @@ class TestCreateIntegrationLink:
     async def test_creates_link(self):
         svc, db = _make_service()
 
-        link = await svc._create_integration_link(
+        await svc._create_integration_link(
             product_id=uuid4(),
             integration_id=uuid4(),
             external_product_id="ext-1",
@@ -278,7 +278,7 @@ class TestCreateIntegrationLink:
 class TestSyncProductOnCreate:
     @pytest.mark.asyncio
     async def test_auto_push_disabled(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         product = _make_product()
 
         result = await svc.sync_product_on_create(product, uuid4(), auto_push=False)
@@ -287,7 +287,7 @@ class TestSyncProductOnCreate:
 
     @pytest.mark.asyncio
     async def test_no_integrations(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         svc.get_all_user_integrations = AsyncMock(return_value=[])
         product = _make_product()
 
@@ -297,7 +297,7 @@ class TestSyncProductOnCreate:
 
     @pytest.mark.asyncio
     async def test_pushes_to_all_integrations(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         i1 = _make_integration()
         i2 = _make_integration()
         svc.get_all_user_integrations = AsyncMock(return_value=[i1, i2])
@@ -356,7 +356,7 @@ class TestLinkExistingProduct:
 class TestBulkPushProducts:
     @pytest.mark.asyncio
     async def test_no_integrations(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         svc.get_all_user_integrations = AsyncMock(return_value=[])
 
         result = await svc.bulk_push_products(uuid4())

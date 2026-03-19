@@ -211,7 +211,7 @@ class TestGetSyncSession:
                 session.close()
 
         with pytest.raises(ValueError):
-            with get_sync_session() as s:
+            with get_sync_session():
                 raise ValueError("task failed")
 
         mock_session.rollback.assert_called_once()
@@ -268,7 +268,7 @@ class TestGetSessionContext:
                     raise
 
         with pytest.raises(Exception, match="DB error"):
-            async with get_session_context() as s:
+            async with get_session_context():
                 pass
 
         mock_session.rollback.assert_awaited_once()

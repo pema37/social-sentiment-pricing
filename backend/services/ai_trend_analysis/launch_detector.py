@@ -13,7 +13,7 @@ import json
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import (
@@ -25,7 +25,7 @@ from services.ai_trend_analysis.ai_clients import (
 logger = get_logger(__name__)
 
 
-class LaunchAgent(str, Enum):
+class LaunchAgent(StrEnum):
     """The three agents in our launch detection system."""
 
     SCANNER = "scanner"
@@ -33,7 +33,7 @@ class LaunchAgent(str, Enum):
     ASSESSOR = "assessor"
 
 
-class ThreatLevel(str, Enum):
+class ThreatLevel(StrEnum):
     """Threat levels for competitive launches."""
 
     NONE = "none"
@@ -43,7 +43,7 @@ class ThreatLevel(str, Enum):
     CRITICAL = "critical"
 
 
-class LaunchType(str, Enum):
+class LaunchType(StrEnum):
     """Types of product launches detected."""
 
     NEW_PRODUCT = "new_product"

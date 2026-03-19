@@ -8,7 +8,7 @@ message formatting, config matching, cooldown/limits, dispatch paths.
 
 import sys
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -31,7 +31,7 @@ _sqlmodel.func = MagicMock()
 
 
 # models.alert — real-ish enums
-class AlertType(str, Enum):
+class AlertType(StrEnum):
     SENTIMENT_DROP = "sentiment_drop"
     SENTIMENT_SPIKE = "sentiment_spike"
     PRICE_RECOMMENDATION = "price_recommendation"
@@ -40,20 +40,20 @@ class AlertType(str, Enum):
     VOLUME_SURGE = "volume_surge"
 
 
-class AlertSeverity(str, Enum):
+class AlertSeverity(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
 
-class AlertStatus(str, Enum):
+class AlertStatus(StrEnum):
     PENDING = "pending"
     SENT = "sent"
     FAILED = "failed"
 
 
-class AlertChannel(str, Enum):
+class AlertChannel(StrEnum):
     EMAIL = "email"
     SLACK = "slack"
     WEBHOOK = "webhook"
@@ -187,7 +187,7 @@ class TestSentimentSeverity:
     @pytest.mark.asyncio
     async def test_critical_at_0_5_drop(self):
         gen = _make_generator()
-        alert = _stub_create_and_dispatch(gen)
+        _stub_create_and_dispatch(gen)
 
         await gen.generate_sentiment_alert(
             user_id=uuid4(),
@@ -858,7 +858,7 @@ class TestCreateAndDispatch:
             mock_alert = MagicMock(id=uuid4())
             MockAlert.return_value = mock_alert
 
-            result = await gen._create_and_dispatch(
+            await gen._create_and_dispatch(
                 user_id=uuid4(),
                 alert_type=AlertType.VOLUME_SURGE,
                 severity=AlertSeverity.HIGH,

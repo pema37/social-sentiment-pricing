@@ -290,7 +290,6 @@ class CampaignDetector:
 
         # Find authors with suspicious patterns
         prolific_authors: list[str] = []  # Authors with many posts
-        single_topic_authors: list[str] = []  # Authors only posting here
 
         for author_id, posts in author_posts.items():
             # More than 5 posts in the window is suspicious

@@ -6,12 +6,12 @@ Data models and enums for e-commerce integrations.
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 # ==================== Enums ====================
 
 
-class PriceUpdateResult(str, Enum):
+class PriceUpdateResult(StrEnum):
     """Result of a price update operation"""
 
     SUCCESS = "success"
@@ -21,7 +21,7 @@ class PriceUpdateResult(str, Enum):
     UNAUTHORIZED = "unauthorized"
 
 
-class ConnectionStatus(str, Enum):
+class ConnectionStatus(StrEnum):
     """Health check status for platform connection"""
 
     HEALTHY = "healthy"

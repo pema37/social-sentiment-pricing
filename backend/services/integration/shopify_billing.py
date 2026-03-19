@@ -15,6 +15,7 @@ Flow:
 Ref: https://shopify.dev/docs/apps/launch/billing/subscription-billing
 """
 
+import contextlib
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
@@ -622,10 +623,8 @@ class ShopifyBillingService:
                 current_period_start=now,
             )
             if current_period_end:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     subscription.current_period_end = datetime.fromisoformat(current_period_end.replace("Z", "+00:00"))
-                except (ValueError, TypeError):
-                    pass
             self.session.add(subscription)
 
         # Clear pending info from integration settings

@@ -10,6 +10,7 @@ Endpoints:
 - GET /api/v1/visual-pricing/health - Health check for demo
 """
 
+import contextlib
 import json
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
@@ -326,12 +327,8 @@ async def analyze_websocket(websocket: WebSocket):
         logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        try:
+        with contextlib.suppress(BaseException):
             await websocket.send_json({"error": str(e)})
-        except:
-            pass
     finally:
-        try:
+        with contextlib.suppress(BaseException):
             await websocket.close()
-        except:
-            pass

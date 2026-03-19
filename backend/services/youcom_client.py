@@ -13,7 +13,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -37,7 +37,7 @@ MAX_RETRIES = 2
 RETRY_BACKOFF_BASE = 1.5
 
 
-class Freshness(str, Enum):
+class Freshness(StrEnum):
     """You.com freshness filter options."""
 
     DAY = "day"

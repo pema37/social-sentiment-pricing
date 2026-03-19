@@ -8,7 +8,7 @@ Contains:
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 # =========================================================================
 
 
-class TrendAgent(str, Enum):
+class TrendAgent(StrEnum):
     """The three agents in our trend analysis system."""
 
     OBSERVER = "observer"
@@ -25,7 +25,7 @@ class TrendAgent(str, Enum):
     FORECASTER = "forecaster"
 
 
-class TrendDirection(str, Enum):
+class TrendDirection(StrEnum):
     """Trend direction classifications."""
 
     STRONG_UP = "strong_up"
@@ -35,7 +35,7 @@ class TrendDirection(str, Enum):
     STRONG_DOWN = "strong_down"
 
 
-class TrendTimeframe(str, Enum):
+class TrendTimeframe(StrEnum):
     """Timeframes for trend analysis."""
 
     IMMEDIATE = "immediate"  # 24-48 hours

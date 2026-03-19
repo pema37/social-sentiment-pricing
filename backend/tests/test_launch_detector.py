@@ -429,12 +429,12 @@ class TestAnalyzeScannerResponse:
 
     def test_one_keyword_in_response(self):
         d = LaunchDetector()
-        detected, confidence = d._analyze_scanner_response("They are launching something", [])
+        _detected, confidence = d._analyze_scanner_response("They are launching something", [])
         assert confidence >= 0.2
 
     def test_three_plus_keywords_in_response(self):
         d = LaunchDetector()
-        detected, confidence = d._analyze_scanner_response(
+        _detected, confidence = d._analyze_scanner_response(
             "They are launching and introducing a new product that is available now", []
         )
         assert confidence >= 0.4
@@ -445,18 +445,18 @@ class TestAnalyzeScannerResponse:
             _make_signal(content="We are launching our new product"),
             _make_signal(content="Introducing the next generation"),
         ]
-        detected, confidence = d._analyze_scanner_response("Nothing", signals)
+        _detected, confidence = d._analyze_scanner_response("Nothing", signals)
         assert confidence >= 0.4
 
     def test_single_signal_match(self):
         d = LaunchDetector()
         signals = [_make_signal(content="We are launching today")]
-        detected, confidence = d._analyze_scanner_response("Nothing", signals)
+        _detected, confidence = d._analyze_scanner_response("Nothing", signals)
         assert confidence >= 0.2
 
     def test_strong_indicator_boost(self):
         d = LaunchDetector()
-        detected, confidence = d._analyze_scanner_response(
+        _detected, confidence = d._analyze_scanner_response(
             "They are announcing and introducing something now available", []
         )
         # "introducing" is a strong indicator
@@ -469,7 +469,7 @@ class TestAnalyzeScannerResponse:
             _make_signal(content="announcing available now brand new"),
             _make_signal(content="just dropped pre-order coming soon"),
         ]
-        detected, confidence = d._analyze_scanner_response(
+        _detected, confidence = d._analyze_scanner_response(
             "launching introducing announcing available now brand new just dropped",
             signals,
         )

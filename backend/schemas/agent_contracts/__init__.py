@@ -121,64 +121,64 @@ from .validation import (
 )
 
 __all__ = [
-    # Shared
-    "PriceDirection",
-    "UrgencyLevel",
-    "DataSource",
-    # Scout
-    "CompetitorPrice",
-    "SentimentSnapshot",
-    "PriceHistoryPoint",
-    "ScoutOutput",
-    # Analyst
-    "ElasticityEstimate",
-    "ConfidenceDecomposition",
+    "AccuracyStats",
+    # Phase 4: Validation
+    "AgentValidator",
+    "AnalystInput",
     "AnalystOutput",
-    # Strategist
-    "GuardrailCheck",
-    "StrategistOutput",
-    # Pipeline
-    "PipelineResult",
+    "AnalystOutputV2",
     # Intelligence
     "CalibrationBucket",
-    "ConfidenceCalibrationResponse",
-    "ModificationDetail",
-    "MerchantPatternResponse",
     "CategoryBenchmarkResponse",
+    # Scout
+    "CompetitorPrice",
+    "CompetitorPriceV2",
+    "ConfidenceCalibrationResponse",
+    "ConfidenceDecomposition",
+    "ConflictResolution",
+    # Phase 4: Conflict Resolution
+    "ConflictResolver",
+    "ConflictType",
+    "ContractViolation",
     "DataGapDetail",
     "DataGapFailureRate",
     "DataGapResponse",
+    "DataQualityLevel",
+    "DataSource",
     "ElasticityAccuracyBucket",
     "ElasticityAccuracyResponse",
-    "OutcomeCardData",
-    "AccuracyStats",
-    # Phase 4: Enhanced Contracts V2
-    "PriceDirectionV2",
-    "DataQualityLevel",
-    "ContractViolation",
-    "compute_provenance_hash",
-    "CompetitorPriceV2",
-    "ScoutInput",
-    "ScoutOutputV2",
+    # Analyst
+    "ElasticityEstimate",
     "ElasticityEstimateV2",
-    "PositionIndex",
-    "UrgencyScore",
-    "AnalystInput",
-    "AnalystOutputV2",
+    # Strategist
+    "GuardrailCheck",
     "GuardrailVerification",
-    "StrategistInput",
-    "StrategistOutputV2",
-    # Phase 4: Validation
-    "AgentValidator",
-    "PipelineValidator",
-    "ValidationResult",
-    "ValidationStatus",
-    # Phase 4: Conflict Resolution
-    "ConflictResolver",
-    "ConflictResolution",
-    "ConflictType",
+    "MerchantPatternResponse",
+    "ModificationDetail",
+    "OutcomeCardData",
+    # Pipeline
+    "PipelineResult",
+    "PipelineTrace",
     # Phase 4: Tracing
     "PipelineTracer",
-    "PipelineTrace",
+    "PipelineValidator",
+    "PositionIndex",
+    # Shared
+    "PriceDirection",
+    # Phase 4: Enhanced Contracts V2
+    "PriceDirectionV2",
+    "PriceHistoryPoint",
+    "ScoutInput",
+    "ScoutOutput",
+    "ScoutOutputV2",
+    "SentimentSnapshot",
+    "StrategistInput",
+    "StrategistOutput",
+    "StrategistOutputV2",
     "TraceSpan",
+    "UrgencyLevel",
+    "UrgencyScore",
+    "ValidationResult",
+    "ValidationStatus",
+    "compute_provenance_hash",
 ]

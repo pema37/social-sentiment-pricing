@@ -306,7 +306,7 @@ class TestRejectRecordsDecision:
         db = _make_db()
         db.get = AsyncMock(return_value=rec)
 
-        outcome_cls, outcome_inst = _mock_outcome_service(should_fail=True)
+        outcome_cls, _outcome_inst = _mock_outcome_service(should_fail=True)
 
         svc = ApprovalService(db)
 

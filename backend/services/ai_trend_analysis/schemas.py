@@ -7,10 +7,10 @@ These models define the structure of trend analysis results.
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 
-class TrendDirection(str, Enum):
+class TrendDirection(StrEnum):
     """Direction of a detected trend."""
 
     RISING = "rising"
@@ -19,7 +19,7 @@ class TrendDirection(str, Enum):
     VOLATILE = "volatile"
 
 
-class TrendCategory(str, Enum):
+class TrendCategory(StrEnum):
     """Category of detected trend."""
 
     VIRAL_POSITIVE = "viral_positive"
@@ -32,7 +32,7 @@ class TrendCategory(str, Enum):
     ORGANIC_DECLINE = "organic_decline"
 
 
-class OpportunityType(str, Enum):
+class OpportunityType(StrEnum):
     """Type of pricing opportunity."""
 
     PRICE_INCREASE = "price_increase"
@@ -42,7 +42,7 @@ class OpportunityType(str, Enum):
     PREMIUM_POSITIONING = "premium_positioning"
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     """Risk severity level."""
 
     LOW = "low"
@@ -51,7 +51,7 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     """Confidence level of AI prediction."""
 
     LOW = "low"

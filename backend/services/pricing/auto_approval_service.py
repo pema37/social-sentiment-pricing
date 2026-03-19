@@ -155,11 +155,7 @@ class AutoApprovalService:
             return False
 
         # Check high-value product threshold
-        if require_above_price is not None:
-            if current_price > require_above_price:
-                return False
-
-        return True
+        return not (require_above_price is not None and current_price > require_above_price)
 
     async def _check_daily_limit(self, user_id: UUID, settings: PricingSettings) -> bool:
         """Check if user has reached daily auto-change limit."""

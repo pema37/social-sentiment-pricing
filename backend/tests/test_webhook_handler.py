@@ -223,7 +223,7 @@ class TestActionToSyncAction:
 class TestHandleShopifyWebhook:
     @pytest.mark.asyncio
     async def test_integration_not_found(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         handler._find_integration = AsyncMock(return_value=None)
 
         result = await handler.handle_shopify_webhook(
@@ -234,7 +234,7 @@ class TestHandleShopifyWebhook:
 
     @pytest.mark.asyncio
     async def test_invalid_signature(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         integration = _make_integration()
         handler._find_integration = AsyncMock(return_value=integration)
         handler._get_webhook_secret = MagicMock(return_value="secret")
@@ -248,7 +248,7 @@ class TestHandleShopifyWebhook:
 
     @pytest.mark.asyncio
     async def test_no_product_id_in_payload(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         integration = _make_integration()
         handler._find_integration = AsyncMock(return_value=integration)
         handler._get_webhook_secret = MagicMock(return_value="secret")
@@ -263,7 +263,7 @@ class TestHandleShopifyWebhook:
 
     @pytest.mark.asyncio
     async def test_successful_processing(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         integration = _make_integration()
         handler._find_integration = AsyncMock(return_value=integration)
         handler._get_webhook_secret = MagicMock(return_value="secret")
@@ -281,7 +281,7 @@ class TestHandleShopifyWebhook:
 
     @pytest.mark.asyncio
     async def test_exception_returns_failure(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         handler._find_integration = AsyncMock(side_effect=RuntimeError("db down"))
 
         result = await handler.handle_shopify_webhook(
@@ -294,7 +294,7 @@ class TestHandleShopifyWebhook:
 class TestHandleWooCommerceWebhook:
     @pytest.mark.asyncio
     async def test_integration_not_found(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         handler._find_integration = AsyncMock(return_value=None)
 
         result = await handler.handle_woocommerce_webhook(
@@ -304,7 +304,7 @@ class TestHandleWooCommerceWebhook:
 
     @pytest.mark.asyncio
     async def test_invalid_signature(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         integration = _make_integration(platform=_FakeEcommercePlatform.WOOCOMMERCE)
         handler._find_integration = AsyncMock(return_value=integration)
         handler._get_webhook_secret = MagicMock(return_value="secret")
@@ -318,7 +318,7 @@ class TestHandleWooCommerceWebhook:
 
     @pytest.mark.asyncio
     async def test_successful_processing(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         integration = _make_integration(platform=_FakeEcommercePlatform.WOOCOMMERCE)
         handler._find_integration = AsyncMock(return_value=integration)
         handler._get_webhook_secret = MagicMock(return_value="secret")
@@ -335,7 +335,7 @@ class TestHandleWooCommerceWebhook:
 
     @pytest.mark.asyncio
     async def test_exception_returns_failure(self):
-        handler, db = _make_handler()
+        handler, _db = _make_handler()
         handler._find_integration = AsyncMock(side_effect=RuntimeError("crash"))
 
         result = await handler.handle_woocommerce_webhook(

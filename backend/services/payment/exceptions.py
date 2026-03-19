@@ -8,7 +8,7 @@ Custom exceptions for MNEE payment operations.
 class MneeBaseError(Exception):
     """Base exception for MNEE errors."""
 
-    def __init__(self, message: str, code: str = None, details: dict = None):
+    def __init__(self, message: str, code: str | None = None, details: dict | None = None):
         self.message = message
         self.code = code
         self.details = details or {}
@@ -18,7 +18,7 @@ class MneeBaseError(Exception):
 class MneeApiError(MneeBaseError):
     """Error from MNEE API."""
 
-    def __init__(self, message: str, status_code: int = None, response: dict = None):
+    def __init__(self, message: str, status_code: int | None = None, response: dict | None = None):
         self.status_code = status_code
         self.response = response
         super().__init__(
@@ -29,7 +29,7 @@ class MneeApiError(MneeBaseError):
 class MneeValidationError(MneeBaseError):
     """Validation error for MNEE operations."""
 
-    def __init__(self, message: str, field: str = None):
+    def __init__(self, message: str, field: str | None = None):
         self.field = field
         super().__init__(message=message, code="MNEE_VALIDATION_ERROR", details={"field": field})
 
@@ -37,7 +37,7 @@ class MneeValidationError(MneeBaseError):
 class MneeConfigError(MneeBaseError):
     """Configuration error for MNEE service."""
 
-    def __init__(self, message: str, missing_key: str = None):
+    def __init__(self, message: str, missing_key: str | None = None):
         self.missing_key = missing_key
         super().__init__(message=message, code="MNEE_CONFIG_ERROR", details={"missing_key": missing_key})
 
@@ -45,7 +45,7 @@ class MneeConfigError(MneeBaseError):
 class MneeNetworkError(MneeBaseError):
     """Network error when communicating with MNEE."""
 
-    def __init__(self, message: str, original_error: Exception = None):
+    def __init__(self, message: str, original_error: Exception | None = None):
         self.original_error = original_error
         super().__init__(
             message=message,

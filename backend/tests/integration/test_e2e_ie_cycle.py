@@ -102,7 +102,7 @@ class FakeScoringEngine:
 
     def score(self, product_context):
         self.call_count += 1
-        current = product_context.get("current_price", 39.99)
+        product_context.get("current_price", 39.99)
         return {
             "suggested_price": self._price,
             "confidence": self._confidence,

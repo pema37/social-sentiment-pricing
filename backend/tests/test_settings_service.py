@@ -293,7 +293,7 @@ class TestUpdateSettings:
         db = make_mock_db()
         svc = SettingsService(db)
 
-        existing = make_settings()
+        make_settings()
         # MagicMock has all attrs, so test that unknown fields don't crash
         existing_spec = MagicMock(spec=["auto_approve_enabled", "updated_at"])
         existing_spec.auto_approve_enabled = True

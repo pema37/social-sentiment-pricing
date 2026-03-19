@@ -342,9 +342,8 @@ async def bulk_match_products(
     results = {}
     for product in products:
         keywords = []
-        if product.keywords:
-            if isinstance(product.keywords, list):
-                keywords = product.keywords
+        if product.keywords and isinstance(product.keywords, list):
+            keywords = product.keywords
 
         try:
             response = await competitor_matching_service.find_competitors(

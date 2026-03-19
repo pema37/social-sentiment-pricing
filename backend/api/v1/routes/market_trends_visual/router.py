@@ -43,7 +43,7 @@ async def analyze_trends(data: MarketDataInput):
 
         # Collect all messages
         message_count = 0
-        async for msg in market_trends_analyzer.analyze_stream(
+        async for _msg in market_trends_analyzer.analyze_stream(
             product=data.product, category=data.category, market_data=market_data
         ):
             message_count += 1

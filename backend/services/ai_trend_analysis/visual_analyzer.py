@@ -14,7 +14,7 @@ import re
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import (
@@ -26,7 +26,7 @@ from services.ai_trend_analysis.ai_clients import (
 logger = get_logger(__name__)
 
 
-class AgentRole(str, Enum):
+class AgentRole(StrEnum):
     """The three agents in our pricing intelligence system."""
 
     SCOUT = "scout"
@@ -362,7 +362,7 @@ End with a JSON block containing your final recommendation:
         your_product_name: str,
         your_product_price: float,
         your_product_currency: str = "USD",
-        your_product_features: list[str] = None,
+        your_product_features: list[str] | None = None,
     ) -> AsyncGenerator[AgentMessage]:
         """
         Run the full multi-agent analysis pipeline.

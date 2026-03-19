@@ -101,7 +101,7 @@ class LinkRepository:
         """Find all active (sync_enabled=True) links for an integration."""
         stmt = select(ProductIntegrationLink).where(
             ProductIntegrationLink.integration_id == integration_id,
-            ProductIntegrationLink.sync_enabled == True,
+            ProductIntegrationLink.sync_enabled,
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -113,7 +113,7 @@ class LinkRepository:
         """
         stmt = select(func.count(ProductIntegrationLink.id)).where(
             ProductIntegrationLink.integration_id == integration_id,
-            ProductIntegrationLink.sync_enabled == True,
+            ProductIntegrationLink.sync_enabled,
         )
         result = await self.db.execute(stmt)
         return result.scalar() or 0

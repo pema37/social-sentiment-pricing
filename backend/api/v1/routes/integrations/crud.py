@@ -22,10 +22,9 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.deps import get_current_user
@@ -39,13 +38,19 @@ from models.integration import (
     IntegrationSyncLog,
     ProductIntegrationLink,
 )
-from models.user import User
 from schemas.integration import (
     IntegrationListResponse,
     IntegrationResponse,
     IntegrationUpdate,
 )
 from services.integration import WebhookRegistrationService, WooCommerceService
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from models.user import User
 
 logger = logging.getLogger(__name__)
 

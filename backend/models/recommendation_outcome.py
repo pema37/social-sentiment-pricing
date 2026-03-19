@@ -22,7 +22,7 @@ fields, analyst scoring snapshot, measurement status state machine.
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime
@@ -35,14 +35,14 @@ from sqlmodel import Field, SQLModel
 # ──────────────────────────────────────────────
 
 
-class OutcomeLabel(str, Enum):
+class OutcomeLabel(StrEnum):
     POSITIVE = "positive"
     NEGATIVE = "negative"
     NEUTRAL = "neutral"
     INCONCLUSIVE = "inconclusive"
 
 
-class MerchantDecision(str, Enum):
+class MerchantDecision(StrEnum):
     """What the merchant did with the recommendation."""
 
     ACCEPTED = "accepted"
@@ -53,7 +53,7 @@ class MerchantDecision(str, Enum):
     PENDING = "pending"
 
 
-class MeasurementStatus(str, Enum):
+class MeasurementStatus(StrEnum):
     """Tracks which impact windows have been measured.
 
     State machine:
@@ -72,7 +72,7 @@ class MeasurementStatus(str, Enum):
     MEASUREMENT_FAILED = "measurement_failed"
 
 
-class RecommendationSource(str, Enum):
+class RecommendationSource(StrEnum):
     """Which pipeline produced this recommendation."""
 
     FULL_PIPELINE = "full_pipeline"

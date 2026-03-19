@@ -165,7 +165,7 @@ class TestCreate:
     async def test_creates_link(self):
         repo, db = _make_repo()
 
-        result = await repo.create(
+        await repo.create(
             product_id=uuid4(),
             integration_id=uuid4(),
             external_product_id="ext-1",
@@ -205,7 +205,7 @@ class TestUpdatePrices:
             updated_at=None,
         )
 
-        result = await repo.update_prices(link, external_price=15.0, external_compare_at_price=20.0)
+        await repo.update_prices(link, external_price=15.0, external_compare_at_price=20.0)
         assert link.external_price == 15.0
         assert link.external_compare_at_price == 20.0
         assert link.last_price_pull_at is not None
@@ -221,7 +221,7 @@ class TestDisableSync:
         repo, db = _make_repo()
         link = _FakeLink(id=uuid4(), sync_enabled=True, updated_at=None)
 
-        result = await repo.disable_sync(link)
+        await repo.disable_sync(link)
         assert link.sync_enabled is False
         assert link.updated_at is not None
         db.add.assert_called_once()

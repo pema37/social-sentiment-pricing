@@ -230,7 +230,7 @@ async def _fetch_sales_data(
     link_stmt = select(ProductIntegrationLink).where(
         ProductIntegrationLink.product_id == product_id,
         ProductIntegrationLink.integration_id == integration.id,
-        ProductIntegrationLink.sync_enabled == True,
+        ProductIntegrationLink.sync_enabled,
     )
     link_result = await db.execute(link_stmt)
     link = link_result.scalars().first()

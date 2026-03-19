@@ -587,7 +587,7 @@ class TestBuildConvenience:
     def test_merchant_id_passed_through(self):
         """merchant_id parameter accepted (for future personalization)."""
         features = FakeCategoryFeatures(n_outcomes=20)
-        scoring_ctx, agent_text = self._injector().build(features, merchant_id="m-123")
+        _scoring_ctx, agent_text = self._injector().build(features, merchant_id="m-123")
         assert isinstance(agent_text, str)
 
 

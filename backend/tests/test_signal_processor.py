@@ -458,7 +458,7 @@ class TestGetViralSignals:
         db.execute.side_effect = [top_posts_result, sent_result, sent_result]
 
         sp = SignalProcessor(db)
-        viral, reach, engagement, sentiment = await sp._get_viral_signals(PRODUCT_ID)
+        viral, reach, engagement, _sentiment = await sp._get_viral_signals(PRODUCT_ID)
         assert viral is True  # reach=13000 > 10000
         assert reach == 13000
         assert engagement == 1400
@@ -480,7 +480,7 @@ class TestGetViralSignals:
         db.execute.return_value = result_mock
 
         sp = SignalProcessor(db)
-        viral, reach, engagement, sentiment = await sp._get_viral_signals(PRODUCT_ID)
+        viral, _reach, _engagement, sentiment = await sp._get_viral_signals(PRODUCT_ID)
         assert viral is False
         assert sentiment is None
 
@@ -681,15 +681,15 @@ class TestDetermineTrend:
         assert strength > Decimal("0")
 
     def test_downward_trend(self):
-        direction, strength = self.sp._determine_trend(Decimal("-0.5"), Decimal("-0.3"))
+        direction, _strength = self.sp._determine_trend(Decimal("-0.5"), Decimal("-0.3"))
         assert direction == "down"
 
     def test_stable_trend(self):
-        direction, strength = self.sp._determine_trend(Decimal("0.05"), Decimal("0.0"))
+        direction, _strength = self.sp._determine_trend(Decimal("0.05"), Decimal("0.0"))
         assert direction == "stable"
 
     def test_strength_capped_at_1(self):
-        direction, strength = self.sp._determine_trend(Decimal("5.0"), Decimal("5.0"))
+        _direction, strength = self.sp._determine_trend(Decimal("5.0"), Decimal("5.0"))
         assert strength <= Decimal("1")
 
     def test_growth_weighted_70_percent(self):

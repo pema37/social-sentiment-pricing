@@ -1,6 +1,6 @@
 # backend/schemas/common.py
 
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 T = TypeVar("T")
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     """Generic paginated response wrapper."""
 
     model_config = ConfigDict(from_attributes=True)

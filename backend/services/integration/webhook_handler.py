@@ -10,7 +10,7 @@ Verifies signatures, parses payloads, and triggers sync.
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -29,14 +29,14 @@ from .woocommerce_service import WooCommerceService
 logger = logging.getLogger(__name__)
 
 
-class WebhookSource(str, Enum):
+class WebhookSource(StrEnum):
     """Webhook source platform"""
 
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
 
 
-class WebhookAction(str, Enum):
+class WebhookAction(StrEnum):
     """Webhook action type"""
 
     PRODUCT_CREATED = "product_created"
@@ -275,9 +275,8 @@ class WebhookHandler:
         normalized = store_identifier.strip().lower()
 
         # For Shopify, it might be just the domain
-        if platform == EcommercePlatform.SHOPIFY:
-            if not normalized.endswith(".myshopify.com"):
-                normalized = f"{normalized}.myshopify.com"
+        if platform == EcommercePlatform.SHOPIFY and not normalized.endswith(".myshopify.com"):
+            normalized = f"{normalized}.myshopify.com"
 
         # Query for matching integration
         stmt = select(Integration).where(

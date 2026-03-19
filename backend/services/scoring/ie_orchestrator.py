@@ -21,11 +21,13 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
-from typing import Any, Protocol
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class IEStatus(str, Enum):
+class IEStatus(StrEnum):
     """Overall status of the IE recommendation pipeline."""
 
     SUCCESS = "success"

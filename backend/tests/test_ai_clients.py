@@ -453,7 +453,7 @@ class TestCall:
         client.call_openai = AsyncMock(return_value={"result": "openai"})
         client._gemini_client = None
 
-        result, model = await client.call("system", "user")
+        _result, model = await client.call("system", "user")
         assert model == "openai"
         client.call_openai.assert_awaited_once()
 
@@ -463,7 +463,7 @@ class TestCall:
         client.call_gemini = AsyncMock(return_value={"result": "gemini"})
         client._gemini_client = MagicMock()
 
-        result, model = await client.call("system", "user", use_model="gemini")
+        _result, model = await client.call("system", "user", use_model="gemini")
         assert model == "gemini"
         client.call_gemini.assert_awaited_once()
 
@@ -473,7 +473,7 @@ class TestCall:
         client.call_openai = AsyncMock(return_value={"result": "openai"})
 
         with patch.object(type(client), "gemini_client", new_callable=PropertyMock, return_value=None):
-            result, model = await client.call("system", "user", use_model="gemini")
+            _result, model = await client.call("system", "user", use_model="gemini")
             assert model == "openai"
 
 

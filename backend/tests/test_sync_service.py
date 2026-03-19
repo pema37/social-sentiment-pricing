@@ -590,7 +590,7 @@ class TestBackgroundFunctions:
         db = AsyncMock()
         with patch.object(SyncService, "run_sync", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = _FakeSyncLog()
-            result = await run_product_sync(db, uuid4(), "full")
+            await run_product_sync(db, uuid4(), "full")
             mock_run.assert_awaited_once()
 
     @pytest.mark.asyncio

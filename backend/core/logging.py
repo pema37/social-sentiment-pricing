@@ -7,12 +7,14 @@ import logging
 import sys
 import uuid
 from contextvars import ContextVar
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from structlog.types import Processor
 
 from core.config import settings
+
+if TYPE_CHECKING:
+    from structlog.types import Processor
 
 # Context variable for request correlation ID
 correlation_id_ctx: ContextVar[str] = ContextVar("correlation_id", default="")
@@ -73,10 +75,7 @@ def configure_logging() -> None:
         renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     structlog.configure(
-        processors=shared_processors
-        + [
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
+        processors=[*shared_processors, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,

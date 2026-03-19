@@ -5,7 +5,7 @@ Price History Model - Tracks all price changes with audit trail.
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, String
@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, SQLModel
 
 
-class ChangeReason(str, Enum):
+class ChangeReason(StrEnum):
     MANUAL = "manual"  # User manually changed price
     RECOMMENDATION_APPLIED = "recommendation_applied"  # Auto or approved recommendation
     COMPETITOR_RESPONSE = "competitor_response"  # Reacting to competitor

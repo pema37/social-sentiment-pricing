@@ -12,7 +12,7 @@ Uses Gemini 3 streaming with multimodal support for chart/graph analysis.
 import json
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import ThoughtType, ai_clients
@@ -20,7 +20,7 @@ from services.ai_trend_analysis.ai_clients import ThoughtType, ai_clients
 logger = get_logger(__name__)
 
 
-class TrendAgent(str, Enum):
+class TrendAgent(StrEnum):
     """The three agents in our trend analysis system."""
 
     OBSERVER = "observer"
@@ -28,7 +28,7 @@ class TrendAgent(str, Enum):
     FORECASTER = "forecaster"
 
 
-class TrendDirection(str, Enum):
+class TrendDirection(StrEnum):
     """Trend direction classifications."""
 
     STRONG_UP = "strong_up"
@@ -38,7 +38,7 @@ class TrendDirection(str, Enum):
     STRONG_DOWN = "strong_down"
 
 
-class TrendTimeframe(str, Enum):
+class TrendTimeframe(StrEnum):
     """Timeframes for trend analysis."""
 
     IMMEDIATE = "immediate"  # 24-48 hours
@@ -407,7 +407,7 @@ Extract the following information:
 
 2. TIME RANGE: What time period does the chart cover?
 
-3. TREND DIRECTION: 
+3. TREND DIRECTION:
    - Overall direction (up, down, sideways)
    - Strength of trend
    - Any acceleration or deceleration

@@ -81,7 +81,7 @@ class RuleEvaluator:
         # Build query for rules that could apply to this product
         stmt = (
             select(PricingRule)
-            .where(PricingRule.user_id == user_id, PricingRule.is_active == True)
+            .where(PricingRule.user_id == user_id, PricingRule.is_active)
             .order_by(PricingRule.priority.desc())
         )
 
@@ -113,16 +113,11 @@ class RuleEvaluator:
             return True
 
         # 3. Check applies_to_products list
-        if rule.applies_to_products:
-            if product_id_str in rule.applies_to_products:
-                return True
+        if rule.applies_to_products and product_id_str in rule.applies_to_products:
+            return True
 
         # 4. Check applies_to_categories list
-        if rule.applies_to_categories and product_category:
-            if product_category in rule.applies_to_categories:
-                return True
-
-        return False
+        return bool(rule.applies_to_categories and product_category and product_category in rule.applies_to_categories)
 
     async def find_matching_rule(
         self, product: Product, user_id: UUID, signals: MarketSignals
@@ -244,7 +239,7 @@ class RuleEvaluator:
         if not rule.competitor_id and signals.competitor_prices:
             # Use the lowest competitor price
             min_price = min(signals.competitor_prices.values())
-            min_competitor_id = [k for k, v in signals.competitor_prices.items() if v == min_price][0]
+            min_competitor_id = next(k for k, v in signals.competitor_prices.items() if v == min_price)
             logger.debug(f"Competitor rule using lowest price from {min_competitor_id}: ${min_price}")
             return {
                 "rule_type": "competitor_relative",

@@ -99,26 +99,26 @@ for mod_name, (cls_name, table_name) in _model_names.items():
     setattr(sys.modules[mod_name], cls_name, mock_model)
 
 # Provide real enums on models.alert so Pydantic doesn't choke
-from enum import Enum
+from enum import StrEnum
 
 
-class _AlertType(str, Enum):
+class _AlertType(StrEnum):
     PRICE_CHANGE = "price_change"
     SENTIMENT_SHIFT = "sentiment_shift"
 
 
-class _AlertSeverity(str, Enum):
+class _AlertSeverity(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class _AlertChannel(str, Enum):
+class _AlertChannel(StrEnum):
     EMAIL = "email"
     SLACK = "slack"
 
 
-class _AlertStatus(str, Enum):
+class _AlertStatus(StrEnum):
     ACTIVE = "active"
     RESOLVED = "resolved"
 

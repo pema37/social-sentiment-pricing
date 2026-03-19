@@ -67,10 +67,10 @@ _async_mod = sys.modules["sqlalchemy.ext.asyncio"]
 _async_mod.AsyncSession = MagicMock()
 
 
-from enum import Enum
+from enum import StrEnum
 
 
-class _FakeEcommercePlatform(str, Enum):
+class _FakeEcommercePlatform(StrEnum):
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
 
@@ -226,7 +226,7 @@ class TestGenerateSku:
 class TestUpsertProduct:
     @pytest.mark.asyncio
     async def test_updates_when_link_exists(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, link_repo = _make_handler()
         existing_link = MagicMock(product_id=uuid4())
         link_repo.find_by_external_id = AsyncMock(return_value=existing_link)
 
@@ -244,7 +244,7 @@ class TestUpsertProduct:
 
     @pytest.mark.asyncio
     async def test_creates_when_no_link(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, link_repo = _make_handler()
         link_repo.find_by_external_id = AsyncMock(return_value=None)
         link_repo.find_any_by_external_product = AsyncMock(return_value=None)
         new_product = MagicMock(id=uuid4())
@@ -262,7 +262,7 @@ class TestUpsertProduct:
 class TestUpdateExisting:
     @pytest.mark.asyncio
     async def test_updates_product_and_link(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, link_repo = _make_handler()
         product = MagicMock(name="Old", sku="OLD", base_price=10.0, current_price=10.0)
         prod_repo.find_by_id = AsyncMock(return_value=product)
         prod_repo.update = AsyncMock(return_value=product)
@@ -279,7 +279,7 @@ class TestUpdateExisting:
 
     @pytest.mark.asyncio
     async def test_skips_when_product_not_found(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, _link_repo = _make_handler()
         prod_repo.find_by_id = AsyncMock(return_value=None)
 
         link = MagicMock(product_id=uuid4())
@@ -294,7 +294,7 @@ class TestCreateOrLink:
     @pytest.mark.asyncio
     async def test_links_sibling_variant_to_existing_product(self):
         """When another variant of the same product already exists, link to it."""
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, link_repo = _make_handler()
         sibling = MagicMock(product_id=uuid4())
         link_repo.find_any_by_external_product = AsyncMock(return_value=sibling)
         link_repo.create = AsyncMock()
@@ -316,7 +316,7 @@ class TestCreateOrLink:
 
     @pytest.mark.asyncio
     async def test_creates_new_product_and_link(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, link_repo = _make_handler()
         link_repo.find_any_by_external_product = AsyncMock(return_value=None)
         new_product = MagicMock(id=uuid4())
         prod_repo.create = AsyncMock(return_value=new_product)
@@ -339,7 +339,7 @@ class TestCreateOrLink:
 
     @pytest.mark.asyncio
     async def test_uses_variant_id_when_available(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, prod_repo, link_repo = _make_handler()
         link_repo.find_any_by_external_product = AsyncMock(return_value=None)
         new_product = MagicMock(id=uuid4())
         prod_repo.create = AsyncMock(return_value=new_product)
@@ -363,7 +363,7 @@ class TestCreateOrLink:
 class TestSyncAllProducts:
     @pytest.mark.asyncio
     async def test_single_page_sync(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, _prod_repo, _link_repo = _make_handler()
         ext = _FakeExternalProduct(id="ext-1")
         sync_result = _make_sync_result(products=[ext], has_more=False)
 
@@ -376,14 +376,14 @@ class TestSyncAllProducts:
         with patch.object(ProductSyncHandler, "get_service", return_value=mock_service):
             with patch("services.integration.handlers.product_sync_handler.decrypt_token", return_value="token"):
                 integration = _make_integration()
-                c, u, d = await handler.sync_all_products(integration, "full")
+                c, u, _d = await handler.sync_all_products(integration, "full")
 
         assert c == 1
         assert u == 0
 
     @pytest.mark.asyncio
     async def test_raises_on_fetch_failure(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, _prod_repo, _link_repo = _make_handler()
         sync_result = _make_sync_result(success=False, error="Network error")
 
         mock_service = AsyncMock()
@@ -397,7 +397,7 @@ class TestSyncAllProducts:
 
     @pytest.mark.asyncio
     async def test_incremental_uses_cursor(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, _prod_repo, _link_repo = _make_handler()
         sync_result = _make_sync_result(products=[], has_more=False)
 
         mock_service = AsyncMock()
@@ -414,7 +414,7 @@ class TestSyncAllProducts:
 
     @pytest.mark.asyncio
     async def test_full_sync_handles_deletions(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, _prod_repo, link_repo = _make_handler()
         ext = _FakeExternalProduct(id="ext-1")
         sync_result = _make_sync_result(products=[ext], has_more=False)
 
@@ -426,14 +426,14 @@ class TestSyncAllProducts:
         with patch.object(ProductSyncHandler, "get_service", return_value=mock_service):
             with patch("services.integration.handlers.product_sync_handler.decrypt_token", return_value="token"):
                 integration = _make_integration()
-                c, u, d = await handler.sync_all_products(integration, "full")
+                _c, _u, d = await handler.sync_all_products(integration, "full")
 
         assert d == 2
         link_repo.disable_missing.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_incremental_skips_deletions(self):
-        handler, db, prod_repo, link_repo = _make_handler()
+        handler, _db, _prod_repo, link_repo = _make_handler()
         sync_result = _make_sync_result(products=[], has_more=False)
 
         mock_service = AsyncMock()
@@ -442,7 +442,7 @@ class TestSyncAllProducts:
         with patch.object(ProductSyncHandler, "get_service", return_value=mock_service):
             with patch("services.integration.handlers.product_sync_handler.decrypt_token", return_value="token"):
                 integration = _make_integration()
-                c, u, d = await handler.sync_all_products(integration, "incremental")
+                _c, _u, d = await handler.sync_all_products(integration, "incremental")
 
         assert d == 0
         link_repo.disable_missing.assert_not_awaited()

@@ -83,7 +83,7 @@ class TestAnalyzeProducts:
         )
         service = ProspectAuditService()
         results = service._analyze_products(products)
-        free = [r for r in results if r.name == "Free Sample"][0]
+        free = next(r for r in results if r.name == "Free Sample")
         assert free.gap_type == "no_data"
 
     def test_market_avg_populated(self):
@@ -257,6 +257,6 @@ class TestShopifyScraper:
             mock_instance.__aexit__ = AsyncMock(return_value=False)
             mock_client.return_value = mock_instance
 
-            store_name, products = await service._fetch_shopify_products("https://deadstore.myshopify.com")
+            _store_name, products = await service._fetch_shopify_products("https://deadstore.myshopify.com")
 
             assert products == []

@@ -13,7 +13,7 @@ import json
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from core.logging import get_logger
 from services.ai_trend_analysis.ai_clients import (
@@ -25,7 +25,7 @@ from services.ai_trend_analysis.ai_clients import (
 logger = get_logger(__name__)
 
 
-class CrisisAgentRole(str, Enum):
+class CrisisAgentRole(StrEnum):
     """The three agents in our crisis detection system."""
 
     MONITOR = "monitor"
@@ -33,7 +33,7 @@ class CrisisAgentRole(str, Enum):
     RESPONSE = "response"
 
 
-class CrisisSeverity(str, Enum):
+class CrisisSeverity(StrEnum):
     """Severity levels for detected crises."""
 
     NONE = "none"

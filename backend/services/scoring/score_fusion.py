@@ -21,8 +21,8 @@ Place at: backend/services/scoring/score_fusion.py
 
 from __future__ import annotations
 
-from .competitive_position import PositionResult
-from .elasticity_calculator import ElasticityResult
+from typing import TYPE_CHECKING
+
 from .fusion_types import (
     ELASTICITY_MAGNITUDE,
     POSITION_DIRECTION_BIAS,
@@ -33,7 +33,11 @@ from .fusion_types import (
     ProductContext,
 )
 from .guardrails import GuardrailEnforcer
-from .urgency_scorer import UrgencyResult
+
+if TYPE_CHECKING:
+    from .competitive_position import PositionResult
+    from .elasticity_calculator import ElasticityResult
+    from .urgency_scorer import UrgencyResult
 
 
 class ScoreFusion:
@@ -314,20 +318,19 @@ class ScoreFusion:
                 damping = 0.5
 
         # ── Protocol 2: Position cheapest + sentiment negative ──
-        if position.market_pressure == "underpriced" and sentiment_score is not None:
-            if sentiment_score < -0.3:
-                conflicts.append(ConflictType.POSITION_VS_SENTIMENT)
-                resolutions.append(
-                    "We're the cheapest but sentiment is negative. "
-                    "Possible quality perception issue — holding price for manual review."
-                )
-                steps.append("Conflict: cheapest + negative sentiment | Resolution: hold + manual review")
-                return "hold", {
-                    "conflicts": conflicts,
-                    "resolutions": resolutions,
-                    "steps": steps,
-                    "magnitude_damping": 0.0,
-                }
+        if position.market_pressure == "underpriced" and sentiment_score is not None and sentiment_score < -0.3:
+            conflicts.append(ConflictType.POSITION_VS_SENTIMENT)
+            resolutions.append(
+                "We're the cheapest but sentiment is negative. "
+                "Possible quality perception issue — holding price for manual review."
+            )
+            steps.append("Conflict: cheapest + negative sentiment | Resolution: hold + manual review")
+            return "hold", {
+                "conflicts": conflicts,
+                "resolutions": resolutions,
+                "steps": steps,
+                "magnitude_damping": 0.0,
+            }
 
         # ── Protocol 3: Contradictory signals ──
         if increase_votes > 0 and decrease_votes > 0:

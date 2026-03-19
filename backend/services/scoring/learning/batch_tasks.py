@@ -27,14 +27,16 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .context_injector import ContextInjector, ScoringContext
 from .feature_engineer import CategoryFeatures, FeatureEngineer, OutcomeRecord
 from .prior_updater import PriorUpdater, UpdateConfig, UpdateResult
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
 
 logger = logging.getLogger(__name__)
 

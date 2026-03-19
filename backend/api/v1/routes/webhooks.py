@@ -368,7 +368,7 @@ async def shopify_customers_data_request(request: Request):
     Called when a customer requests their data from a store that has your app installed.
     Required by Shopify even if you don't store customer data.
     """
-    body = await request.body()
+    await request.body()
     logger.info("Received Shopify GDPR customer data request")
     # If you store customer data in the future, return it here.
     # For now, ActualPrice only stores product/pricing data, not customer PII.
@@ -382,7 +382,7 @@ async def shopify_customers_redact(request: Request):
     Called when a store owner requests deletion of customer data.
     Required by Shopify even if you don't store customer data.
     """
-    body = await request.body()
+    await request.body()
     logger.info("Received Shopify GDPR customer redact request")
     return {"status": "ok"}
 
@@ -394,7 +394,7 @@ async def shopify_shop_redact(request: Request):
     Called 48 hours after a store uninstalls your app.
     Delete all data associated with this store.
     """
-    body = await request.body()
+    await request.body()
     logger.info("Received Shopify GDPR shop redact request")
     # TODO: When you have real merchant data, delete integration records here
     return {"status": "ok"}

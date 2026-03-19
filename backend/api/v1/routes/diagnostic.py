@@ -254,7 +254,7 @@ async def check_product_push_status(
         select(ProductIntegrationLink)
         .join(Integration, ProductIntegrationLink.integration_id == Integration.id)
         .where(ProductIntegrationLink.product_id == product_id)
-        .where(ProductIntegrationLink.sync_enabled == True)
+        .where(ProductIntegrationLink.sync_enabled)
         .where(Integration.status == IntegrationStatus.ACTIVE)
     )
     result = await db.execute(stmt)

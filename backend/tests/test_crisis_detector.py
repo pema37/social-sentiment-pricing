@@ -283,7 +283,7 @@ class TestCalculateAnomalyMetrics:
     def test_no_anomaly_stable_data(self):
         detector = CrisisDetector()
         data = [_make_data_point(score=0.5, volume=10, hours_ago=i) for i in range(20)]
-        detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.5)
+        detected, _metrics = detector._calculate_anomaly_metrics(data, baseline=0.5)
         assert detected is False
 
     def test_anomaly_sentiment_drop(self):
@@ -309,7 +309,7 @@ class TestCalculateAnomalyMetrics:
         detector = CrisisDetector()
         data = [_make_data_point(score=0.2, hours_ago=10)]
         data += [_make_data_point(score=0.8, hours_ago=1)]
-        detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.5)
+        _detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.5)
         assert metrics["current_sentiment"] == 0.8
 
     def test_peak_negative_time_returned(self):
@@ -319,7 +319,7 @@ class TestCalculateAnomalyMetrics:
             _make_data_point(score=-0.9, hours_ago=2),
             _make_data_point(score=0.3, hours_ago=1),
         ]
-        detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.5)
+        _detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.5)
         assert "peak_negative_time" in metrics
         assert metrics["peak_negative_score"] == -0.9
 
@@ -336,7 +336,7 @@ class TestCalculateAnomalyMetrics:
         detector = CrisisDetector()
         data = [_make_data_point(score=0.0, hours_ago=10)]
         data += [_make_data_point(score=0.0, hours_ago=1)]
-        detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.0)
+        _detected, metrics = detector._calculate_anomaly_metrics(data, baseline=0.0)
         # Should not raise ZeroDivisionError
         assert isinstance(metrics["sentiment_change"], float)
 

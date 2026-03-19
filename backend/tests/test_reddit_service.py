@@ -176,7 +176,7 @@ class TestCollect:
         rc.reddit = MagicMock()  # Pretend we have a client
         rc._collect_real_data = AsyncMock(return_value=[])
 
-        results = await rc.collect(["test"])
+        await rc.collect(["test"])
         rc._collect_real_data.assert_awaited_once_with(["test"], 100)
 
 

@@ -6,7 +6,7 @@ DispatchResult dataclass, dispatch routing, send_quick_alert convenience.
 """
 
 import sys
-from enum import Enum
+from enum import StrEnum
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -69,7 +69,7 @@ sys.modules["services.notification.webhook_service"] = _wh_mod
 
 
 # models.alert
-class AlertChannel(str, Enum):
+class AlertChannel(StrEnum):
     EMAIL = "email"
     SLACK = "slack"
     WEBHOOK = "webhook"

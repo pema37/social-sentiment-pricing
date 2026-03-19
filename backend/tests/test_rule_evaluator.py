@@ -981,7 +981,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
+        result_rule, _details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is None
 
     @pytest.mark.asyncio
@@ -998,7 +998,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
+        result_rule, _details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule
 
     @pytest.mark.asyncio
@@ -1014,7 +1014,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.8"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
+        result_rule, _details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule
 
     @pytest.mark.asyncio
@@ -1036,7 +1036,7 @@ class TestFindMatchingRule:
         product = make_product()
         signals = make_signals(sentiment_score=Decimal("0.5"))
 
-        result_rule, details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
+        result_rule, _details = await self.evaluator.find_matching_rule(product, USER_ID, signals)
         assert result_rule is rule2
 
     @pytest.mark.asyncio

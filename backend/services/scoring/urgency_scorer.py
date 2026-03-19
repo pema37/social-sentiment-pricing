@@ -514,12 +514,11 @@ class UrgencyScorer:
 
         # Inventory reasons (lower threshold — overstock is actionable at 0.4+)
         inv_score = components.get("inventory_pressure")
-        if inv_score is not None and inv_score >= 0.4:
-            if signals.days_of_inventory is not None:
-                if signals.days_of_inventory < CRITICAL_INVENTORY_DAYS:
-                    reasons.append(f"low_inventory_{signals.days_of_inventory:.0f}_days")
-                elif signals.days_of_inventory > OVERSTOCK_INVENTORY_DAYS:
-                    reasons.append(f"overstock_{signals.days_of_inventory:.0f}_days")
+        if inv_score is not None and inv_score >= 0.4 and signals.days_of_inventory is not None:
+            if signals.days_of_inventory < CRITICAL_INVENTORY_DAYS:
+                reasons.append(f"low_inventory_{signals.days_of_inventory:.0f}_days")
+            elif signals.days_of_inventory > OVERSTOCK_INVENTORY_DAYS:
+                reasons.append(f"overstock_{signals.days_of_inventory:.0f}_days")
 
         # Search demand reasons
         search_score = components.get("search_demand")
@@ -552,7 +551,6 @@ class UrgencyScorer:
 
         # Sentiment quality: more mentions = better signal
         if signals.sentiment_score is not None:
-            mention_count = 0
             # We don't have direct access to mention_count here,
             # but mention_growth_rate being available suggests data richness
             if signals.mention_growth_rate is not None:

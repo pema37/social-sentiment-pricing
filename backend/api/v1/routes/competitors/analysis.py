@@ -39,7 +39,7 @@ async def compare_prices(
     cp_result = await db.execute(
         select(CompetitorProduct)
         .where(CompetitorProduct.product_id == product_id)
-        .where(CompetitorProduct.is_active == True)
+        .where(CompetitorProduct.is_active)
         .where(CompetitorProduct.current_price.is_not(None))
     )
     competitor_products = cp_result.scalars().all()
@@ -223,7 +223,7 @@ async def get_ai_competitor_analysis(
     cp_result = await db.execute(
         select(CompetitorProduct)
         .where(CompetitorProduct.competitor_id == competitor_id)
-        .where(CompetitorProduct.is_active == True)
+        .where(CompetitorProduct.is_active)
     )
     competitor_products = cp_result.scalars().all()
 

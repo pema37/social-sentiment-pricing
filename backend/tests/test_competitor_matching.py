@@ -45,7 +45,7 @@ class TestScoringWeights:
         """Post-init validation should succeed for valid weights."""
         from services.competitor_matching.scoring import ScoringWeights
 
-        w = ScoringWeights()
+        ScoringWeights()
         # Should not raise
         assert True
 

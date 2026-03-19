@@ -5,6 +5,7 @@ Celery tasks for async notification dispatch.
 Handles sending alerts via email, Slack, webhook without blocking API requests.
 """
 
+import contextlib
 import logging
 from datetime import UTC
 from typing import Any
@@ -93,7 +94,7 @@ async def _dispatch_alert_async(alert_id: str) -> dict[str, Any]:
         channel_settings = _get_channel_settings(alert, config, user)
 
         # Initialize services
-        dispatcher = NotificationDispatcher()
+        NotificationDispatcher()
         webhook_service = WebhookService()
 
         channels_sent = []
@@ -221,10 +222,8 @@ def _get_channels(alert, config) -> list:
             if isinstance(ch, AlertChannel):
                 channels.append(ch)
             elif isinstance(ch, str):
-                try:
+                with contextlib.suppress(ValueError):
                     channels.append(AlertChannel(ch))
-                except ValueError:
-                    pass
         return channels if channels else [AlertChannel.IN_APP]
 
     # Default to in-app only

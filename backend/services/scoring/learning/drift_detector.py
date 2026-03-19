@@ -25,17 +25,20 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # ──────────────────────────────────────────────────────────
 # DRIFT SEVERITY
 # ──────────────────────────────────────────────────────────
 
 
-class DriftSeverity(str, Enum):
+class DriftSeverity(StrEnum):
     NONE = "none"
     LOW = "low"  # Noticeable but not actionable
     MEDIUM = "medium"  # Worth investigating

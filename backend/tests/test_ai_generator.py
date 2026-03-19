@@ -235,7 +235,7 @@ class TestGenerate:
         svc = _make_service(openai_client=MagicMock())
         svc._call_openai = AsyncMock(return_value="OpenAI direct")
 
-        text, provider = await svc._generate("sys", "user")
+        _text, provider = await svc._generate("sys", "user")
         assert provider == "openai"
 
 

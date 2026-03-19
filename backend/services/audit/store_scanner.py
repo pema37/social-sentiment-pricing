@@ -8,6 +8,7 @@ No API keys required. Uses the public storefront JSON endpoints:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -127,10 +128,8 @@ async def _scan_shopify(client: httpx.AsyncClient, base_url: str) -> list[Scanne
 
         compare_at = None
         if compare_str:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 compare_at = float(compare_str)
-            except (ValueError, TypeError):
-                pass
 
         image_url = ""
         images = p.get("images", [])

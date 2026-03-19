@@ -247,7 +247,7 @@ class TestTypedEvidenceExtraction:
         db._recommendation = rec
 
         svc = OutcomeService(db)
-        outcome = await svc.record_merchant_decision(
+        await svc.record_merchant_decision(
             recommendation_id=recommendation_id,
             user_id=user_id,
             merchant_decision=MerchantDecision.ACCEPTED.value,
@@ -266,7 +266,7 @@ class TestTypedEvidenceExtraction:
         db._recommendation = rec
 
         svc = OutcomeService(db)
-        outcome = await svc.record_merchant_decision(
+        await svc.record_merchant_decision(
             recommendation_id=recommendation_id,
             user_id=user_id,
             merchant_decision=MerchantDecision.ACCEPTED.value,
@@ -283,7 +283,7 @@ class TestTypedEvidenceExtraction:
         db._recommendation = rec
 
         svc = OutcomeService(db)
-        outcome = await svc.record_merchant_decision(
+        await svc.record_merchant_decision(
             recommendation_id=recommendation_id,
             user_id=user_id,
             merchant_decision=MerchantDecision.ACCEPTED.value,

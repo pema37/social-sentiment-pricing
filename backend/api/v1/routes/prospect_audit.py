@@ -86,10 +86,9 @@ async def generate_prospect_pdf(request: ProspectPDFRequest, req: Request):
     service = ProspectAuditService()
 
     products = request.products or []
-    store_name = None
 
     if request.store_url:
-        store_name, products = await service._fetch_shopify_products(request.store_url)
+        _store_name, products = await service._fetch_shopify_products(request.store_url)
 
     if not products:
         raise HTTPException(status_code=422, detail="Could not fetch products from the provided store URL.")

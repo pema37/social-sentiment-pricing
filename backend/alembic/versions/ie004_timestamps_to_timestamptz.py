@@ -21,8 +21,9 @@ Safety:
     progress that can be resumed
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers
 revision = "ie004"
@@ -36,17 +37,14 @@ TIMESTAMP_COLUMNS = [
     # ── users ──
     ("users", "created_at"),
     ("users", "updated_at"),
-
     # ── products ──
     ("products", "created_at"),
     ("products", "updated_at"),
-
     # ── price_recommendations ──
     ("price_recommendations", "created_at"),
     ("price_recommendations", "valid_until"),
     ("price_recommendations", "reviewed_at"),
     ("price_recommendations", "applied_at"),
-
     # ── recommendation_outcomes (IE Phase 1) ──
     ("recommendation_outcomes", "measured_at"),
     ("recommendation_outcomes", "created_at"),
@@ -54,87 +52,70 @@ TIMESTAMP_COLUMNS = [
     ("recommendation_outcomes", "decided_at"),
     ("recommendation_outcomes", "measurement_started_at"),
     ("recommendation_outcomes", "measurement_completed_at"),
-
     # ── pricing_rules ──
     ("pricing_rules", "created_at"),
     ("pricing_rules", "updated_at"),
     ("pricing_rules", "last_triggered_at"),
-
     # ── pricing_settings ──
     ("pricing_settings", "created_at"),
     ("pricing_settings", "updated_at"),
-
     # ── price_history ──
     ("price_history", "created_at"),
     ("price_history", "changed_at"),
-
     # ── sentiment_results ──
     ("sentiment_results", "created_at"),
     ("sentiment_results", "analyzed_at"),
-
     # ── social_mentions ──
     ("social_mentions", "created_at"),
     ("social_mentions", "collected_at"),
     ("social_mentions", "published_at"),
-
     # ── competitors ──
     ("competitors", "created_at"),
     ("competitors", "updated_at"),
     ("competitors", "last_scraped_at"),
-
     # ── competitor_products ──
     ("competitor_products", "created_at"),
     ("competitor_products", "updated_at"),
     ("competitor_products", "last_checked_at"),
-
     # ── competitor_price_history ──
     ("competitor_price_history", "observed_at"),
     ("competitor_price_history", "created_at"),
-
     # ── integrations ──
     ("integrations", "created_at"),
     ("integrations", "updated_at"),
-
     # ── product_integration_links ──
     ("product_integration_links", "created_at"),
     ("product_integration_links", "updated_at"),
     ("product_integration_links", "last_synced_at"),
     ("product_integration_links", "last_price_push_at"),
     ("product_integration_links", "last_sync_verified_at"),
-
     # ── sync_logs ──
     ("sync_logs", "started_at"),
     ("sync_logs", "completed_at"),
     ("sync_logs", "created_at"),
-
     # ── subscriptions ──
     ("subscriptions", "created_at"),
     ("subscriptions", "updated_at"),
     ("subscriptions", "current_period_start"),
     ("subscriptions", "current_period_end"),
     ("subscriptions", "cancelled_at"),
-
     # ── payments ──
     ("payments", "created_at"),
     ("payments", "updated_at"),
     ("payments", "confirmed_at"),
     ("payments", "expires_at"),
-
     # ── alert_configurations ──
     ("alert_configurations", "created_at"),
     ("alert_configurations", "updated_at"),
     ("alert_configurations", "last_triggered_at"),
-
     # ── alert_notifications ──
     ("alert_notifications", "created_at"),
     ("alert_notifications", "sent_at"),
     ("alert_notifications", "acknowledged_at"),
     ("alert_notifications", "resolved_at"),
-
     # ── bandit_state (IE Phase 3) ──
     ("bandit_state", "last_updated"),
     ("bandit_state", "created_at"),
-
     # ── experiment_assignments (IE Phase 3) ──
     ("experiment_assignments", "assigned_at"),
     ("experiment_assignments", "created_at"),
@@ -186,6 +167,3 @@ def downgrade() -> None:
                 END IF;
             END $$;
         """)
-
-
-        

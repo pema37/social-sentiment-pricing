@@ -109,10 +109,7 @@ class MneeService:
 
         # Base58 characters only (excludes 0, O, I, l)
         base58_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-        if not all(c in base58_chars for c in address):
-            return False
-
-        return True
+        return all(c in base58_chars for c in address)
 
     def require_valid_address(self, address: str, field_name: str = "address") -> str:
         """
@@ -341,8 +338,8 @@ _service_instance: MneeService | None = None
 
 
 def get_mnee_service(
-    api_key: str = None,
-    environment: str = None,
+    api_key: str | None = None,
+    environment: str | None = None,
 ) -> MneeService:
     """
     Get or create MNEE service instance (singleton).

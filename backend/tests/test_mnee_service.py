@@ -294,7 +294,7 @@ class TestTransactions:
     @pytest.mark.asyncio
     async def test_get_transaction(self):
         svc = _make_service()
-        result = await svc.get_transaction("txid-123")
+        await svc.get_transaction("txid-123")
         svc._client.get_transaction.assert_called_once_with("txid-123")
 
     @pytest.mark.asyncio
@@ -376,7 +376,7 @@ class TestFactory:
         mod._service_instance = None
 
     def test_get_mnee_service_no_api_key_raises(self):
-        with patch(f"{SVC_MOD}.MneeClient") as MockClient:
+        with patch(f"{SVC_MOD}.MneeClient"):
             # No settings module, no api_key arg
             with patch.dict("sys.modules", {"core.config": None}):
                 with pytest.raises(MneeConfigError):

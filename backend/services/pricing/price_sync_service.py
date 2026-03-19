@@ -82,7 +82,7 @@ class PriceSyncService:
             .where(ProductIntegrationLink.product_id == product_id)
             .where(Integration.user_id == user_id)
             .where(Integration.status == "active")
-            .where(ProductIntegrationLink.sync_enabled == True)
+            .where(ProductIntegrationLink.sync_enabled)
         )
         result = await self.db.execute(stmt)
         row = result.first()

@@ -44,7 +44,7 @@ class SentimentAggregator:
         result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.product_id == product_id)
-            .where(SocialMention.processed == True)
+            .where(SocialMention.processed)
             .where(SocialMention.collected_at >= cutoff)
         )
         mentions = list(result.scalars().all())
@@ -61,7 +61,7 @@ class SentimentAggregator:
         result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.user_id == user_id)
-            .where(SocialMention.processed == True)
+            .where(SocialMention.processed)
             .where(SocialMention.collected_at >= cutoff)
         )
         mentions = list(result.scalars().all())
@@ -94,7 +94,7 @@ class SentimentAggregator:
         result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.product_id == product_id)
-            .where(SocialMention.processed == True)
+            .where(SocialMention.processed)
             .where(SocialMention.collected_at >= current_start)
         )
         current_mentions = list(result.scalars().all())
@@ -103,7 +103,7 @@ class SentimentAggregator:
         result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.product_id == product_id)
-            .where(SocialMention.processed == True)
+            .where(SocialMention.processed)
             .where(SocialMention.collected_at >= previous_start)
             .where(SocialMention.collected_at < current_start)
         )
@@ -152,7 +152,7 @@ class SentimentAggregator:
         result = await self.db.execute(
             select(SocialMention)
             .where(SocialMention.product_id == product_id)
-            .where(SocialMention.processed == True)
+            .where(SocialMention.processed)
             .where(SocialMention.collected_at >= cutoff)
         )
         mentions = list(result.scalars().all())

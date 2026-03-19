@@ -519,7 +519,7 @@ class TestHasExcessiveCaps:
     def test_custom_threshold(self):
         text = "Half UPPER Half lower text"
         # default 0.5 threshold
-        result_strict = has_excessive_caps(text, threshold=0.3)
+        has_excessive_caps(text, threshold=0.3)
         result_loose = has_excessive_caps(text, threshold=0.9)
         assert result_loose is False
 

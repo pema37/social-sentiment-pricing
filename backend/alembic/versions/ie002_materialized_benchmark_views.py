@@ -31,7 +31,6 @@ REFRESH CONCURRENTLY. Each view has one.
 
 from alembic import op
 
-
 # Update this to your latest migration revision
 revision = "ie002_materialized_benchmark_views"
 down_revision = "ie001_feedback_loop"
@@ -262,6 +261,3 @@ def downgrade():
     op.execute("DROP MATERIALIZED VIEW IF EXISTS mv_available_categories CASCADE;")
     op.execute("DROP MATERIALIZED VIEW IF EXISTS mv_category_data_gaps CASCADE;")
     op.execute("DROP MATERIALIZED VIEW IF EXISTS mv_category_benchmarks CASCADE;")
-
-
-    

@@ -134,10 +134,10 @@ async def init_oauth(
 async def oauth_callback(
     code: str,
     shop: str,
-    state: str = None,
-    hmac: str = None,
-    host: str = None,
-    timestamp: str = None,
+    state: str | None = None,
+    hmac: str | None = None,
+    host: str | None = None,
+    timestamp: str | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     """

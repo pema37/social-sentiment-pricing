@@ -148,7 +148,7 @@ class TestCreate:
         repo, db = _make_repo()
         uid = uuid4()
 
-        result = await repo.create(
+        await repo.create(
             user_id=uid,
             name="Widget",
             sku="W-001",
@@ -170,7 +170,7 @@ class TestCreate:
     async def test_creates_with_defaults(self):
         repo, db = _make_repo()
 
-        result = await repo.create(
+        await repo.create(
             user_id=uuid4(),
             name="Basic",
             sku="B-001",
@@ -187,7 +187,7 @@ class TestUpdate:
         repo, db = _make_repo()
         product = _FakeProduct(id=uuid4(), name="Old", sku="S", current_price=10.0, updated_at=None)
 
-        result = await repo.update(product, name="New")
+        await repo.update(product, name="New")
         assert product.name == "New"
         assert product.sku == "S"  # unchanged
         db.add.assert_called_once()
@@ -196,7 +196,7 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_updates_sku(self):
-        repo, db = _make_repo()
+        repo, _db = _make_repo()
         product = _FakeProduct(id=uuid4(), name="W", sku="OLD", current_price=10.0, updated_at=None)
 
         await repo.update(product, sku="NEW")
@@ -204,7 +204,7 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_updates_current_price(self):
-        repo, db = _make_repo()
+        repo, _db = _make_repo()
         product = _FakeProduct(id=uuid4(), name="W", sku="S", current_price=10.0, updated_at=None)
 
         await repo.update(product, current_price=20.0)
@@ -229,7 +229,7 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_sets_updated_at(self):
-        repo, db = _make_repo()
+        repo, _db = _make_repo()
         product = _FakeProduct(id=uuid4(), name="W", sku="S", current_price=10.0, updated_at=None)
 
         await repo.update(product, name="X")
@@ -238,7 +238,7 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_skips_none_fields(self):
-        repo, db = _make_repo()
+        repo, _db = _make_repo()
         product = _FakeProduct(id=uuid4(), name="W", sku="S", current_price=10.0, updated_at=None)
 
         await repo.update(product)

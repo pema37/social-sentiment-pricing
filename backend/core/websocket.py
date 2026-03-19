@@ -3,6 +3,8 @@
 WebSocket connection manager and broadcast helpers.
 """
 
+import contextlib
+
 from fastapi import WebSocket
 
 
@@ -32,9 +34,8 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket, channel: str):
         """Disconnect from a global channel."""
-        if channel in self.active_connections:
-            if websocket in self.active_connections[channel]:
-                self.active_connections[channel].remove(websocket)
+        if channel in self.active_connections and websocket in self.active_connections[channel]:
+            self.active_connections[channel].remove(websocket)
 
     def disconnect_sentiment(self, websocket: WebSocket, product_id: str):
         """Disconnect from a product-specific sentiment channel."""
@@ -48,19 +49,15 @@ class ConnectionManager:
         """Broadcast message to all connections on a global channel."""
         if channel in self.active_connections:
             for connection in self.active_connections[channel]:
-                try:
+                with contextlib.suppress(Exception):
                     await connection.send_json(message)
-                except Exception:
-                    pass
 
     async def broadcast_sentiment(self, product_id: str, message: dict):
         """Broadcast message to all connections watching a specific product."""
         if product_id in self.sentiment_connections:
             for connection in self.sentiment_connections[product_id]:
-                try:
+                with contextlib.suppress(Exception):
                     await connection.send_json(message)
-                except Exception:
-                    pass
 
     async def send_personal(self, websocket: WebSocket, message: dict):
         """Send message to a specific connection."""

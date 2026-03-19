@@ -3,6 +3,7 @@
 Rule testing and pricing simulation endpoints.
 """
 
+import contextlib
 from decimal import Decimal
 from uuid import UUID
 
@@ -33,10 +34,8 @@ def _build_signals_from_mock(mock) -> MarketSignals:
     competitor_prices = {}
     if mock.competitor_prices:
         for k, v in mock.competitor_prices.items():
-            try:
+            with contextlib.suppress(ValueError):
                 competitor_prices[UUID(k)] = v
-            except ValueError:
-                pass
 
     return MarketSignals(
         sentiment_score=mock.sentiment_score,

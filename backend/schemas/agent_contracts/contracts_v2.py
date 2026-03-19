@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -31,13 +31,13 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ---------------------------------------------------------------------------
 
 
-class PriceDirection(str, Enum):
+class PriceDirection(StrEnum):
     INCREASE = "increase"
     DECREASE = "decrease"
     HOLD = "hold"
 
 
-class DataQualityLevel(str, Enum):
+class DataQualityLevel(StrEnum):
     HIGH = "high"  # completeness >= 0.8
     MEDIUM = "medium"  # completeness >= 0.5
     LOW = "low"  # completeness >= 0.2

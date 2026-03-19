@@ -4,7 +4,7 @@ Alerting service for critical notifications.
 Supports Slack webhooks and email (via SendGrid).
 """
 
-from enum import Enum
+from enum import StrEnum
 
 import httpx
 
@@ -14,7 +14,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-class AlertSeverity(str, Enum):
+class AlertSeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"

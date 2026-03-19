@@ -21,9 +21,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
-from enum import Enum
-from typing import Any, TypeVar
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import ValidationError
 
@@ -37,6 +36,9 @@ from .contracts_v2 import (
     StrategistOutput,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -47,7 +49,7 @@ T = TypeVar("T")
 # ---------------------------------------------------------------------------
 
 
-class ValidationStatus(str, Enum):
+class ValidationStatus(StrEnum):
     VALID = "valid"
     INVALID = "invalid"
     PARTIAL = "partial"  # Some fields invalid but usable with defaults
@@ -325,9 +327,8 @@ class PipelineValidator:
         # Step 3: Validate Scout output
         scout_output_result = AgentValidator.validate_scout_output(scout_raw)
         validations.append(scout_output_result)
-        if not scout_output_result.is_valid:
-            if self._strict:
-                return self._failure_result(validations, provenance, "Scout output invalid")
+        if not scout_output_result.is_valid and self._strict:
+            return self._failure_result(validations, provenance, "Scout output invalid")
 
         scout_output: ScoutOutput = scout_output_result.model
         provenance["scout_hash"] = scout_output.provenance_hash
@@ -352,9 +353,8 @@ class PipelineValidator:
         # Step 6: Validate Analyst output
         analyst_output_result = AgentValidator.validate_analyst_output(analyst_raw)
         validations.append(analyst_output_result)
-        if not analyst_output_result.is_valid:
-            if self._strict:
-                return self._failure_result(validations, provenance, "Analyst output invalid")
+        if not analyst_output_result.is_valid and self._strict:
+            return self._failure_result(validations, provenance, "Analyst output invalid")
 
         analyst_output: AnalystOutput = analyst_output_result.model
         provenance["analyst_hash"] = analyst_output.provenance_hash
@@ -379,9 +379,8 @@ class PipelineValidator:
         # Step 9: Validate Strategist output
         strategist_output_result = AgentValidator.validate_strategist_output(strategist_raw)
         validations.append(strategist_output_result)
-        if not strategist_output_result.is_valid:
-            if self._strict:
-                return self._failure_result(validations, provenance, "Strategist output invalid")
+        if not strategist_output_result.is_valid and self._strict:
+            return self._failure_result(validations, provenance, "Strategist output invalid")
 
         strategist_output: StrategistOutput = strategist_output_result.model
         provenance["strategist_hash"] = strategist_output.provenance_hash

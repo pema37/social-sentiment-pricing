@@ -8,7 +8,7 @@ Auto-approve: Changes < threshold are auto-approved based on user settings.
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, Text
@@ -17,7 +17,7 @@ from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
 
 
-class RecommendationStatus(str, Enum):
+class RecommendationStatus(StrEnum):
     PENDING = "pending"
     AUTO_APPROVED = "auto_approved"
     APPROVED = "approved"

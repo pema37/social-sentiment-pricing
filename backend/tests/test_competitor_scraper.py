@@ -349,17 +349,17 @@ class TestExtractFromMeta:
 
     def test_og_price(self):
         soup = self._make_soup('<html><head><meta property="og:price:amount" content="29.99"></head></html>')
-        price, raw = self.svc._extract_from_meta(soup)
+        price, _raw = self.svc._extract_from_meta(soup)
         assert price == Decimal("29.99")
 
     def test_product_price(self):
         soup = self._make_soup('<html><head><meta property="product:price:amount" content="49.99"></head></html>')
-        price, raw = self.svc._extract_from_meta(soup)
+        price, _raw = self.svc._extract_from_meta(soup)
         assert price == Decimal("49.99")
 
     def test_no_meta_returns_none(self):
         soup = self._make_soup("<html><head></head></html>")
-        price, raw = self.svc._extract_from_meta(soup)
+        price, _raw = self.svc._extract_from_meta(soup)
         assert price is None
 
 
@@ -380,19 +380,19 @@ class TestExtractFromJsonLd:
 
     def test_single_offer(self):
         soup = self._make_soup('{"@type": "Product", "offers": {"price": "29.99"}}')
-        price, raw = self.svc._extract_from_json_ld(soup)
+        price, _raw = self.svc._extract_from_json_ld(soup)
         assert price == Decimal("29.99")
 
     def test_multiple_offers_takes_lowest(self):
         soup = self._make_soup(
             '{"@type": "Product", "offers": [{"price": "49.99"}, {"price": "29.99"}, {"price": "39.99"}]}'
         )
-        price, raw = self.svc._extract_from_json_ld(soup)
+        price, _raw = self.svc._extract_from_json_ld(soup)
         assert price == Decimal("29.99")
 
     def test_no_product_type(self):
         soup = self._make_soup('{"@type": "Organization", "name": "Test"}')
-        price, raw = self.svc._extract_from_json_ld(soup)
+        price, _raw = self.svc._extract_from_json_ld(soup)
         assert price is None
 
     def test_invalid_json(self):
@@ -400,12 +400,12 @@ class TestExtractFromJsonLd:
 
         html = '<html><head><script type="application/ld+json">{invalid json}</script></head></html>'
         soup = BeautifulSoup(html, "html.parser")
-        price, raw = self.svc._extract_from_json_ld(soup)
+        price, _raw = self.svc._extract_from_json_ld(soup)
         assert price is None
 
     def test_array_wrapper(self):
         soup = self._make_soup('[{"@type": "Product", "offers": {"price": "19.99"}}]')
-        price, raw = self.svc._extract_from_json_ld(soup)
+        price, _raw = self.svc._extract_from_json_ld(soup)
         assert price == Decimal("19.99")
 
 
@@ -425,7 +425,7 @@ class TestExtractPrice:
         html = '<html><body><span class="my-price">$42.00</span></body></html>'
         soup = BeautifulSoup(html, "html.parser")
         config = {"price_selector": ".my-price"}
-        price, raw = await self.svc._extract_price(soup, config)
+        price, _raw = await self.svc._extract_price(soup, config)
         assert price == Decimal("42.00")
 
     @pytest.mark.asyncio
@@ -434,7 +434,7 @@ class TestExtractPrice:
 
         html = '<html><head><script type="application/ld+json">{"@type": "Product", "offers": {"price": "33.00"}}</script></head><body></body></html>'
         soup = BeautifulSoup(html, "html.parser")
-        price, raw = await self.svc._extract_price(soup, {})
+        price, _raw = await self.svc._extract_price(soup, {})
         assert price == Decimal("33.00")
 
     @pytest.mark.asyncio
@@ -443,7 +443,7 @@ class TestExtractPrice:
 
         html = '<html><head><meta property="og:price:amount" content="55.00"></head><body></body></html>'
         soup = BeautifulSoup(html, "html.parser")
-        price, raw = await self.svc._extract_price(soup, {})
+        price, _raw = await self.svc._extract_price(soup, {})
         assert price == Decimal("55.00")
 
     @pytest.mark.asyncio
@@ -452,7 +452,7 @@ class TestExtractPrice:
 
         html = '<html><body><span class="price">$19.99</span></body></html>'
         soup = BeautifulSoup(html, "html.parser")
-        price, raw = await self.svc._extract_price(soup, {})
+        price, _raw = await self.svc._extract_price(soup, {})
         assert price == Decimal("19.99")
 
     @pytest.mark.asyncio
@@ -461,7 +461,7 @@ class TestExtractPrice:
 
         html = '<html><body><span data-price="24.99">some text</span></body></html>'
         soup = BeautifulSoup(html, "html.parser")
-        price, raw = await self.svc._extract_price(soup, {})
+        price, _raw = await self.svc._extract_price(soup, {})
         assert price == Decimal("24.99")
 
     @pytest.mark.asyncio
@@ -470,7 +470,7 @@ class TestExtractPrice:
 
         html = "<html><body><p>No prices here</p></body></html>"
         soup = BeautifulSoup(html, "html.parser")
-        price, raw = await self.svc._extract_price(soup, {})
+        price, _raw = await self.svc._extract_price(soup, {})
         assert price is None
 
 

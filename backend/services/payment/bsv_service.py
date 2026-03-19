@@ -75,15 +75,14 @@ class BSVPaymentService(PaymentVerificationService):
                 return tx_info
 
             # Check memo if provided
-            if expected_memo and tx_info.memo:
-                if expected_memo.lower() not in tx_info.memo.lower():
-                    return self._create_verification_result(
-                        verified=False,
-                        transaction_hash=transaction_hash,
-                        error=f"Memo mismatch: expected '{expected_memo}' in '{tx_info.memo}'",
-                        memo=tx_info.memo,
-                        confirmations=tx_info.confirmations,
-                    )
+            if expected_memo and tx_info.memo and expected_memo.lower() not in tx_info.memo.lower():
+                return self._create_verification_result(
+                    verified=False,
+                    transaction_hash=transaction_hash,
+                    error=f"Memo mismatch: expected '{expected_memo}' in '{tx_info.memo}'",
+                    memo=tx_info.memo,
+                    confirmations=tx_info.confirmations,
+                )
 
             # For HandCash/RelayX payments, recipient verification is complex
             # (they use payment handles, not raw addresses)

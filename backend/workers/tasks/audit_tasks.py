@@ -98,7 +98,7 @@ async def _generate_weekly_audits():
 
     async with session_maker() as db:
         # Find all user IDs that have active competitor products
-        stmt = select(CompetitorProduct.product_id).where(CompetitorProduct.is_active == True).distinct()
+        stmt = select(CompetitorProduct.product_id).where(CompetitorProduct.is_active).distinct()
         result = await db.execute(stmt)
         product_ids_with_comps = [row[0] for row in result.all()]
 

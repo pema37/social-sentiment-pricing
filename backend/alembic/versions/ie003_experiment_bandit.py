@@ -19,10 +19,10 @@ Zero-downtime deployment order:
   3. Run ie004 (add NOT NULL where appropriate) after backfill
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
+from alembic import op
 
 # revision identifiers
 revision = "ie003_experiment_bandit"
@@ -289,6 +289,3 @@ def downgrade() -> None:
     )
     if result.fetchone() is not None:
         op.drop_column("price_recommendations", "scoring_version")
-
-
-        

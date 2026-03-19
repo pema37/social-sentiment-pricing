@@ -12,15 +12,18 @@ Place at: backend/services/scoring/fusion_types.py
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # ──────────────────────────────────────────────────────────
 # ENUMS
 # ──────────────────────────────────────────────────────────
 
 
-class ConflictType(str, Enum):
+class ConflictType(StrEnum):
     """Types of signal conflicts the fusion layer detects."""
 
     NONE = "none"
@@ -31,7 +34,7 @@ class ConflictType(str, Enum):
     CONTRADICTORY_SIGNALS = "contradictory_signals"
 
 
-class GuardrailType(str, Enum):
+class GuardrailType(StrEnum):
     """Types of guardrails that can fire."""
 
     MARGIN_FLOOR = "margin_floor"

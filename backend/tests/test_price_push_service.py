@@ -4,7 +4,7 @@ Tests for services.integration.price_push_service
 
 import sys
 import types
-from enum import Enum
+from enum import StrEnum
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -45,7 +45,7 @@ class _FakeIntegrationStatus:
     ACTIVE = "active"
 
 
-class _FakeEcommercePlatform(str, Enum):
+class _FakeEcommercePlatform(StrEnum):
     SHOPIFY = "shopify"
     WOOCOMMERCE = "woocommerce"
 
@@ -219,7 +219,7 @@ class TestGetIntegration:
 class TestPushPriceToPlatform:
     @pytest.mark.asyncio
     async def test_integration_not_found_returns_error(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         svc._get_integration = AsyncMock(side_effect=ValueError("Integration not found"))
 
         result = await svc.push_price_to_platform(uuid4(), uuid4(), 19.99)
@@ -228,7 +228,7 @@ class TestPushPriceToPlatform:
 
     @pytest.mark.asyncio
     async def test_integration_not_active_returns_error(self):
-        svc, db = _make_service()
+        svc, _db = _make_service()
         svc._get_integration = AsyncMock(side_effect=ValueError("Integration is not active"))
 
         result = await svc.push_price_to_platform(uuid4(), uuid4(), 19.99)

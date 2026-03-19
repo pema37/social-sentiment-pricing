@@ -18,10 +18,10 @@ Place at: backend/services/scoring/experimentation/strategies.py
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class StrategyType(str, Enum):
+class StrategyType(StrEnum):
     """Strategy type identifiers."""
 
     CONSERVATIVE = "conservative"

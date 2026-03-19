@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from schemas.price_check import (
     CompetitorMatch,
@@ -22,7 +23,9 @@ from schemas.price_check import (
     PriceCheckReport,
     SentimentSummary,
 )
-from services.audit.store_scanner import ScannedProduct
+
+if TYPE_CHECKING:
+    from services.audit.store_scanner import ScannedProduct
 
 logger = logging.getLogger(__name__)
 

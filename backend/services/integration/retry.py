@@ -95,13 +95,10 @@ def should_retry(exception: Exception | None, status_code: int | None, attempt: 
         return True
 
     # Retryable status codes
-    if status_code and status_code in config.retry_status_codes:
-        return True
-
-    return False
+    return bool(status_code and status_code in config.retry_status_codes)
 
 
-async def execute_with_retry(
+async def execute_with_retry[T](
     func: Callable[..., T], *args, config: RetryConfig | None = None, operation_name: str = "operation", **kwargs
 ) -> T:
     """

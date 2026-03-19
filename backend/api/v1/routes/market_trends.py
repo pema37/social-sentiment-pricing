@@ -41,7 +41,7 @@ async def analyze_market_trends(request: MarketTrendsRequest) -> MarketTrendsRes
 
 
 @router.get("/trends", response_model=MarketTrendsResponse)
-async def get_trends(category: str = None, source: str = None, limit: int = 10) -> MarketTrendsResponse:
+async def get_trends(category: str | None = None, source: str | None = None, limit: int = 10) -> MarketTrendsResponse:
     """
     Get trending products (GET version for easy testing).
     """

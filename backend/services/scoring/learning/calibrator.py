@@ -25,9 +25,12 @@ Place at: backend/services/scoring/learning/calibrator.py
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # ──────────────────────────────────────────────────────────
 # INPUT: Outcome records with confidence scores
@@ -464,10 +467,7 @@ class Calibrator:
         """Check if positive_rate is monotonically non-decreasing."""
         if len(bands) < 2:
             return True
-        for i in range(1, len(bands)):
-            if bands[i].positive_rate < bands[i - 1].positive_rate - 0.01:
-                return False
-        return True
+        return all(bands[i].positive_rate >= bands[i - 1].positive_rate - 0.01 for i in range(1, len(bands)))
 
     @staticmethod
     def _diagnose_quality(

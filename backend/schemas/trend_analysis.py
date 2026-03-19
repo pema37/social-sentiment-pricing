@@ -5,7 +5,7 @@ Pydantic schemas for the trend analysis API endpoints.
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,14 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field
 # ============================================
 
 
-class TrendDirection(str, Enum):
+class TrendDirection(StrEnum):
     RISING = "rising"
     FALLING = "falling"
     STABLE = "stable"
     VOLATILE = "volatile"
 
 
-class TrendCategory(str, Enum):
+class TrendCategory(StrEnum):
     VIRAL_POSITIVE = "viral_positive"
     VIRAL_NEGATIVE = "viral_negative"
     COMPETITOR_LAUNCH = "competitor_launch"
@@ -32,7 +32,7 @@ class TrendCategory(str, Enum):
     ORGANIC_DECLINE = "organic_decline"
 
 
-class OpportunityType(str, Enum):
+class OpportunityType(StrEnum):
     PRICE_INCREASE = "price_increase"
     PRICE_DECREASE = "price_decrease"
     HOLD = "hold"
@@ -40,14 +40,14 @@ class OpportunityType(str, Enum):
     PREMIUM_POSITIONING = "premium_positioning"
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

@@ -27,11 +27,14 @@ Place at: backend/services/scoring/elasticity_calculator.py
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from typing import TYPE_CHECKING
 
-from .category_priors import CategoryPrior, CategoryPriorStore
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from datetime import datetime
+
+    from .category_priors import CategoryPrior, CategoryPriorStore
 
 # ──────────────────────────────────────────────────────────
 # INPUT TYPES

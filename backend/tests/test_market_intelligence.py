@@ -254,7 +254,7 @@ class TestYouComClient:
         mock_client.is_closed = False
         client._client = mock_client
 
-        result = await client.search_competitor_prices(product_name="Air Max 90", brand="Nike", category="Shoes")
+        await client.search_competitor_prices(product_name="Air Max 90", brand="Nike", category="Shoes")
 
         # Verify query was constructed correctly
         call_args = mock_client.get.call_args
@@ -275,7 +275,7 @@ class TestYouComClient:
         mock_client.is_closed = False
         client._client = mock_client
 
-        result = await client.search_market_sentiment(product_name="Air Max 90", brand="Nike")
+        await client.search_market_sentiment(product_name="Air Max 90", brand="Nike")
 
         call_args = mock_client.get.call_args
         params = call_args[1]["params"] if "params" in call_args[1] else call_args[0][1]
@@ -294,7 +294,7 @@ class TestYouComClient:
         mock_client.is_closed = False
         client._client = mock_client
 
-        result = await client.search_market_trends(category="Running Shoes")
+        await client.search_market_trends(category="Running Shoes")
 
         call_args = mock_client.get.call_args
         params = call_args[1]["params"] if "params" in call_args[1] else call_args[0][1]

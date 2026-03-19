@@ -398,9 +398,8 @@ class CompetitorScraperService:
     def _check_availability(self, soup: BeautifulSoup, config: dict) -> bool:
         """Check if product is in stock."""
         # Check configured selector
-        if config.get("out_of_stock_selector"):
-            if soup.select_one(config["out_of_stock_selector"]):
-                return False
+        if config.get("out_of_stock_selector") and soup.select_one(config["out_of_stock_selector"]):
+            return False
 
         # Common out of stock indicators
         out_of_stock_indicators = [
@@ -412,12 +411,7 @@ class CompetitorScraperService:
         ]
 
         page_text = soup.get_text().lower()
-        for indicator in out_of_stock_indicators:
-            if indicator in page_text:
-                # Could be false positive, so check nearby price element
-                return False
-
-        return True
+        return all(indicator not in page_text for indicator in out_of_stock_indicators)
 
     def create_price_history_record(
         self,
@@ -436,9 +430,8 @@ class CompetitorScraperService:
         new_price = scrape_result.price
 
         # Skip if price hasn't changed (within small tolerance)
-        if old_price is not None:
-            if abs(new_price - old_price) < Decimal("0.01"):
-                return None
+        if old_price is not None and abs(new_price - old_price) < Decimal("0.01"):
+            return None
 
         # Calculate change
         change_amount = None

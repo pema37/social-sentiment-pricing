@@ -182,7 +182,7 @@ async def handle_subscription_update(
 
     shop_domain = x_shopify_shop_domain
     app_sub = payload.get("app_subscription", {})
-    shopify_sub_id = app_sub.get("admin_graphql_api_id", "")
+    app_sub.get("admin_graphql_api_id", "")
     new_status = app_sub.get("status", "").upper()
     plan_name = app_sub.get("name", "")
 

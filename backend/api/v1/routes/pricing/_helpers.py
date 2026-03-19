@@ -52,7 +52,7 @@ class RecommendationNotFoundError(RecommendationError):
 class RecommendationExpiredError(RecommendationError):
     """Raised when recommendation has expired."""
 
-    def __init__(self, recommendation_id: UUID = None):
+    def __init__(self, recommendation_id: UUID | None = None):
         super().__init__(
             message="This price recommendation has expired. Please generate a new one.",
             status_code=410,  # 410 Gone - resource no longer available
@@ -63,7 +63,7 @@ class RecommendationExpiredError(RecommendationError):
 class RecommendationAlreadyProcessedError(RecommendationError):
     """Raised when recommendation was already approved/rejected."""
 
-    def __init__(self, recommendation_id: UUID = None, current_status: str = "processed"):
+    def __init__(self, recommendation_id: UUID | None = None, current_status: str = "processed"):
         super().__init__(
             message=f"This recommendation has already been {current_status}.",
             status_code=409,  # 409 Conflict - resource state conflict
