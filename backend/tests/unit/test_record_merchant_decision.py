@@ -52,7 +52,7 @@ _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
 # ── Import the service under test ──
-from services.pricing.outcome_service import OutcomeService
+from services.pricing.outcome_service import OutcomeService  # noqa: E402
 
 # ── Pull enums from the ALREADY-LOADED module (same path the source used) ──
 # Do NOT do `from models.recommendation_outcome import ...`

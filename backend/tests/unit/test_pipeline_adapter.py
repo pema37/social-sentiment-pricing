@@ -41,7 +41,7 @@ _mock_core_db = types.ModuleType("core.db.session")
 _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
-from services.pricing.pipeline_adapter import PipelineAdapter
+from services.pricing.pipeline_adapter import PipelineAdapter  # noqa: E402
 
 # ══════════════════════════════════════════════════════════════════
 # HELPER: cross-module-safe isinstance

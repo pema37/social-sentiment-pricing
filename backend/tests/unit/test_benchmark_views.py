@@ -45,7 +45,7 @@ _mock_core_db = types.ModuleType("core.db.session")
 _mock_core_db.get_session = MagicMock()
 sys.modules.setdefault("core.db.session", _mock_core_db)
 
-from services.pricing.outcome_benchmarks import OutcomeBenchmarkService
+from services.pricing.outcome_benchmarks import OutcomeBenchmarkService  # noqa: E402
 
 # Pull enums from already-loaded module
 _outcome_mod = sys.modules["models.recommendation_outcome"]
@@ -551,7 +551,8 @@ class TestRefreshViews:
         async def _execute_side_effect(stmt, *args, **kwargs):
             nonlocal call_count
             call_count += 1
-            stmt_str = str(stmt) if hasattr(stmt, "text") else str(stmt)
+            stmt_str = str(stmt)
+            #stmt_str = str(stmt) if hasattr(stmt, "text") else str(stmt)
             if "CONCURRENTLY" in stmt_str:
                 raise Exception("Cannot refresh concurrently")
             return MagicMock()

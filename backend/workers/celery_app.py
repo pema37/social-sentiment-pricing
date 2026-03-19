@@ -157,6 +157,6 @@ celery_app.conf.beat_schedule = {
 #   8:30 AM Sun  — weekly_scout_feedback        (Phase 3C)
 #   9:00 AM Sun  — weekly_analyst_feedback      (Phase 3C)
 # ═══════════════════════════════════════════════════════════════════════
-from workers.tasks.intelligence_tasks import register_ie_beat_schedule
+from workers.tasks.intelligence_tasks import register_ie_beat_schedule  # noqa: E402
 
 register_ie_beat_schedule(celery_app)

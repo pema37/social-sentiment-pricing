@@ -69,7 +69,7 @@ if "core.logging" not in sys.modules:
     _saved["core.logging"] = None
 
 # Now import the module under test
-from workers.tasks.benchmark_refresh_tasks import (
+from workers.tasks.benchmark_refresh_tasks import (  # noqa: E402
     MATERIALIZED_VIEWS,
     _get_view_stats,
     _refresh_benchmark_views,
@@ -134,7 +134,8 @@ class TestMaterializedViewsList:
 class TestRefreshSuccess:
     @pytest.mark.asyncio
     async def test_refreshes_all_views_concurrently(self):
-        mock_factory, mock_db = _mock_session_maker()
+        #RUF059 Unpacked variable mock_db is never used
+        mock_factory, _mock_db = _mock_session_maker()
 
         with patch(PATCH_PATH, return_value=mock_factory):
             result = await _refresh_benchmark_views()
@@ -179,7 +180,8 @@ class TestConcurrentFallback:
                 raise Exception("cannot refresh concurrently: no unique index")
             return MagicMock()
 
-        mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
+        # Didn't use the mock_db
+        mock_factory, _mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(PATCH_PATH, return_value=mock_factory):
             result = await _refresh_benchmark_views()
@@ -213,7 +215,8 @@ class TestTotalFailure:
         async def _execute(stmt, *args, **kwargs):
             raise Exception("database is down")
 
-        mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
+
+        mock_factory, _mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(PATCH_PATH, return_value=mock_factory):
             result = await _refresh_benchmark_views()
@@ -248,7 +251,8 @@ class TestViewStats:
         async def _execute(stmt, *args, **kwargs):
             raise Exception("relation does not exist")
 
-        mock_factory, mock_db = _mock_session_maker(execute_side_effect=_execute)
+        # Didn't use the mock_db
+        mock_factory, _mock_db = _mock_session_maker(execute_side_effect=_execute)
 
         with patch(PATCH_PATH, return_value=mock_factory):
             result = await _get_view_stats()
