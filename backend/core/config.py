@@ -11,7 +11,12 @@ class Settings(BaseSettings):
     # ===================
     # Application
     # ===================
-    model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        env_ignore_empty=True,
+    )
     APP_NAME: str = "Social Sentiment Pricing API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
@@ -109,3 +114,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+

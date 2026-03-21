@@ -112,10 +112,21 @@ except ImportError:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
+    import os
+
     logger.info(
         "Application starting",
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
+    )
+    # DEBUG: confirm Shopify credentials are loaded from settings vs os.environ
+    logger.info(
+        f"SHOPIFY_CLIENT_ID set: {bool(settings.SHOPIFY_CLIENT_ID)} | "
+        f"os.environ: {bool(os.environ.get('SHOPIFY_CLIENT_ID'))}"
+    )
+    logger.info(
+        f"SHOPIFY_CLIENT_SECRET set: {bool(settings.SHOPIFY_CLIENT_SECRET)} | "
+        f"os.environ: {bool(os.environ.get('SHOPIFY_CLIENT_SECRET'))}"
     )
     yield
     logger.info("Application shutting down")
@@ -227,3 +238,6 @@ async def root():
         "docs": "/docs",
         "x402_enabled": HAS_X402_ROUTER,
     }
+
+
+
