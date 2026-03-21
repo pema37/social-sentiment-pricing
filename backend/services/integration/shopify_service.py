@@ -20,6 +20,12 @@ MODULARIZED (2026-02-17): Split into mixins for maintainability.
   - shopify_webhooks.py  → Webhook registration + verification
 
 All downstream callers unchanged: ShopifyService().method() still works.
+
+FIXED (2026-03-20): generate_oauth_url now uses admin.shopify.com/store/{name}
+format instead of {shop}.myshopify.com/admin/oauth/authorize. Shopify's unified
+admin intercepts the old format and routes based on active browser session,
+causing installs to land on the wrong store. The explicit store path format
+forces Shopify to use the correct store regardless of session state.
 """
 
 import logging
@@ -152,13 +158,20 @@ class ShopifyService(
 
     def generate_oauth_url(self, store_url: str, state: str, redirect_uri: str) -> str:
         shop_domain = self._get_shop_domain(store_url)
+        # Extract store name (e.g. "mystore" from "mystore.myshopify.com")
+        store_name = shop_domain.replace(".myshopify.com", "")
         params = {
             "client_id": settings.SHOPIFY_CLIENT_ID,
             "scope": ",".join(self.REQUIRED_SCOPES),
             "redirect_uri": redirect_uri,
             "state": state,
         }
-        return f"https://{shop_domain}/admin/oauth/authorize?{urlencode(params)}"
+        # FIXED (2026-03-20): Use admin.shopify.com/store/{name} format.
+        # The old format (https://{shop}.myshopify.com/admin/oauth/authorize)
+        # gets intercepted by Shopify's unified admin and routed based on
+        # the merchant's active browser session, causing installs to land on
+        # the wrong store. The explicit store path bypasses this.
+        return f"https://admin.shopify.com/store/{store_name}/oauth/authorize?{urlencode(params)}"
 
     async def exchange_oauth_code(self, store_url: str, code: str, redirect_uri: str) -> OAuthResult:
         shop_domain = self._get_shop_domain(store_url)
@@ -242,3 +255,7 @@ class ShopifyService(
             return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             return None
+        
+
+
+        
