@@ -111,11 +111,19 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     triggerSync.mutate({ integrationId: integration.id, syncType: 'full' });
   }, [triggerSync, integration.id]);
 
-  // Both disconnect and delete use the same API endpoint
-  const handleRemove = useCallback(() => {
-    disconnect.mutate(integration.id, {
-      onSuccess: () => setShowConfirm(false),
-    });
+  // Both disconnect and delete use the same API endpoint.
+  // Uses mutateAsync so setShowConfirm(false) runs deterministically after
+  // the mutation settles — per-call onSuccess callbacks in React Query v5
+  // are ephemeral and may not fire if the component re-renders mid-flight
+  // (which happens because the hook's onSuccess invalidates the full list).
+  const handleRemove = useCallback(async () => {
+    try {
+      await disconnect.mutateAsync(integration.id);
+      setShowConfirm(false);
+    } catch {
+      // React Query sets disconnect.isError + disconnect.error automatically.
+      // No additional handling needed here.
+    }
   }, [disconnect, integration.id]);
 
   const statusColors = {

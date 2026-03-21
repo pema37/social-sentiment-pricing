@@ -67,6 +67,12 @@ STALE_SYNC_HOURS = 24
 # Stuck sync recovery config (Bug #6)
 STUCK_SYNC_TIMEOUT_MINUTES = 15
 
+# Grace period after a fresh OAuth before the health check is allowed to run.
+# Prevents the health check from immediately setting status=ERROR on a
+# newly-connected integration before the first sync has had time to complete.
+# Once last_sync_at is set (first sync done), the grace period is lifted.
+HEALTH_CHECK_GRACE_PERIOD_SECONDS = 10 * 60  # 10 minutes
+
 # Health poll: statuses that should be checked every cycle.
 # ACTIVE — verify the token is still valid.
 # ERROR  — re-check so we can auto-recover if the merchant reconnected
@@ -623,6 +629,23 @@ async def _check_all_integration_health() -> dict:
         for integration in integrations:
             results["checked"] += 1
             previous_status = integration.status
+
+            # ── Grace period ───────────────────────────────────────────────
+            # Skip freshly connected integrations that haven't completed their
+            # first sync yet. Running a decrypt-based health check immediately
+            # after OAuth can fail due to token encoding transitions and sets
+            # status=ERROR, triggering a DISCONNECTED→ACTIVE→ERROR loop.
+            # Once last_sync_at is populated the grace period is lifted.
+            if integration.last_sync_at is None:
+                age_seconds = (now - integration.updated_at).total_seconds()
+                if age_seconds < HEALTH_CHECK_GRACE_PERIOD_SECONDS:
+                    logger.info(
+                        f"Health poll: skipping {integration.id} "
+                        f"({integration.store_url}) — no first sync yet, "
+                        f"within {HEALTH_CHECK_GRACE_PERIOD_SECONDS // 60}min grace period"
+                    )
+                    results["healthy"] += 1
+                    continue
 
             # ── Decrypt ────────────────────────────────────────────────────
             try:
