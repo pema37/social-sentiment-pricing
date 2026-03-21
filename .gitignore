@@ -119,3 +119,11 @@ Thumbs.db
 .vscode/
 .idea/
 *.pem
+
+
+CLAUDE.local.md
+backend/backend__CLAUDE.md
+frontend/frontend__CLAUDE.md
+.claude/
+BUGS.md
+
