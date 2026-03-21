@@ -25,6 +25,7 @@ from schemas.payment import (
     SubscriptionInfo,
     TransactionVerification,
 )
+from core.config import settings
 from services.payment.base import PaymentServiceFactory
 
 logger = logging.getLogger(__name__)
@@ -429,7 +430,7 @@ class SubscriptionService:
 
         # Activate subscription if verified (or if demo mode)
         # For hackathon: activate even if verification fails (trust user input)
-        should_activate = verification.verified or os.getenv("DEMO_MODE", "true").lower() == "true"
+        should_activate = verification.verified or settings.DEMO_MODE
 
         if should_activate:
             payment.status = "confirmed"

@@ -1,5 +1,6 @@
 # backend/schemas/user.py
 
+import uuid
 
 from pydantic import ConfigDict, EmailStr
 from sqlmodel import SQLModel
@@ -21,7 +22,7 @@ class UserCreate(SQLModel):
 
 # READ USER (response model)
 class UserRead(SQLModel):
-    id: int
+    id: uuid.UUID
     email: EmailStr
     username: str | None = None
     role: str

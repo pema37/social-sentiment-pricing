@@ -45,8 +45,7 @@ class Settings(BaseSettings):
     # ===================
     # CORS
     # ===================
-    # CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
-    CORS_ORIGINS: str = "*"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -103,6 +102,12 @@ class Settings(BaseSettings):
     # ===================
     ALERT_EMAIL: str | None = None  # Email for critical alerts
     PAGERDUTY_KEY: str | None = None  # PagerDuty integration key
+
+    # ===================
+    # Feature Flags
+    # ===================
+    # Must be explicitly set to True in env; never defaults to True in production.
+    DEMO_MODE: bool = False
 
     # ===================
     # MNEE Payments

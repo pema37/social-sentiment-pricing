@@ -49,7 +49,7 @@ class ProductSyncService:
     """
 
     # Shopify GraphQL API version (must match shopify_service.py)
-    SHOPIFY_API_VERSION = "2024-01"
+    SHOPIFY_API_VERSION = "2025-10"
 
     def __init__(self, db: AsyncSession):
         self.db = db
