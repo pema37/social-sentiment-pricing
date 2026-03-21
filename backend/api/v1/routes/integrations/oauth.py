@@ -20,6 +20,29 @@ FIXED (2026-03-17): init_oauth reconnect path now clears stale token.
 Previously access_token_encrypted was not cleared on reconnect, leaving
 the old invalid token in DB. If callback failed, stale token persisted
 and decrypt_token would fail with "invalid credentials" on next read.
+
+FIXED (2026-03-21): Three bugs resolved:
+
+BUG 1 — Duplicate integration on reconnect after orphaned install:
+  When a merchant installed via App Store (user_id=None stub created),
+  then returned to the app and clicked "Connect Shopify" again, init_oauth
+  queried by user_id and missed the orphaned row (user_id=None), creating
+  a duplicate DISCONNECTED record. The orphaned ACTIVE record with the real
+  token was never linked. Fixed: init_oauth now checks for orphaned records
+  (user_id=None) for the same platform+store_url and claims them instead of
+  creating a duplicate.
+
+BUG 2 — Claim endpoint required ACTIVE status:
+  After App Store install, if any background job (health check, Celery beat)
+  or UI action changed the integration status between OAuth completion and
+  the claim flow completing, claim would fail silently with 404.
+  Fixed: claim now accepts any status — it only requires user_id=None and a
+  non-pending token. Status is preserved; the merchant can reconnect after.
+
+BUG 3 — No logging on which OAuth path was taken:
+  Impossible to diagnose install failures without knowing whether the callback
+  hit Path 1 (embedded), Path 2 (direct+logged-in), or Path 3 (direct+anon).
+  Fixed: explicit logger.info on each path taken.
 """
 
 import logging
@@ -84,7 +107,13 @@ async def init_oauth(
 
     Allows reconnect when the existing integration is in ERROR or
     DISCONNECTED state. Only blocks if status is ACTIVE (healthy token).
+
+    FIXED (2026-03-21): Also checks for orphaned integrations (user_id=None)
+    for the same platform+store_url before creating a new record. This prevents
+    duplicate rows when a merchant installs via App Store (creating an orphan),
+    then returns to the app and initiates OAuth again.
     """
+    # 1. Check for an integration already owned by this user
     stmt = select(Integration).where(
         Integration.user_id == current_user.id,
         Integration.platform == data.platform,
@@ -93,10 +122,27 @@ async def init_oauth(
     result = await db.execute(stmt)
     existing = result.scalars().first()
 
-    # FIXED (2026-03-13): was `existing.status == IntegrationStatus.ACTIVE`
-    # which blocked reconnect when token was revoked (status stays ACTIVE
-    # until health check runs and writes ERROR to DB).
-    # Now: only block if ACTIVE — ERROR and DISCONNECTED proceed to re-auth.
+    # 2. FIXED: If no owned record, check for an orphaned one (user_id=None)
+    #    from a prior App Store install. Claim it rather than create a duplicate.
+    if not existing:
+        stmt_orphan = select(Integration).where(
+            Integration.user_id.is_(None),
+            Integration.platform == data.platform,
+            Integration.store_url == data.store_url,
+        )
+        result_orphan = await db.execute(stmt_orphan)
+        orphan = result_orphan.scalars().first()
+
+        if orphan:
+            logger.info(
+                f"init_oauth: found orphaned integration {orphan.id} for "
+                f"{data.store_url} — claiming for user {current_user.id} "
+                f"and re-initiating OAuth"
+            )
+            # Claim the orphan and treat it as the existing record
+            orphan.user_id = current_user.id
+            existing = orphan
+
     if existing and existing.status not in _RECONNECTABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -162,7 +208,7 @@ async def oauth_callback(
 
     integration = None
 
-    # 1. Try state match first (most reliable — set by shopify_install.py)
+    # 1. Try state match first (most reliable — set by init_oauth)
     if state:
         stmt = select(Integration).where(Integration.oauth_state == state)
         result = await db.execute(stmt)
@@ -177,8 +223,13 @@ async def oauth_callback(
         result = await db.execute(stmt)
         integration = result.scalars().first()
 
-    # 3. Create stub for brand-new installs with no prior record
+    # 3. Create stub for brand-new App Store installs with no prior record.
+    #    user_id will be None — the claim flow links it after login.
     if not integration:
+        logger.info(
+            f"oauth_callback: no existing integration found for shop={shop} "
+            f"state={state} — creating stub (App Store install path)"
+        )
         integration = Integration(
             platform=EcommercePlatform.SHOPIFY,
             store_url=shop,
@@ -242,11 +293,15 @@ async def oauth_callback(
         logger.warning(f"Auto webhook registration failed: {e}")
 
     # =========================================================================
-    # REDIRECT LOGIC — permanent, covers all three install paths
+    # REDIRECT LOGIC — covers all three install paths
     # =========================================================================
 
     if host:
         # Path 1: Embedded App Store install — billing required by Shopify
+        logger.info(
+            f"oauth_callback: Path 1 (embedded) for integration {integration.id} "
+            f"user_id={integration.user_id}"
+        )
         success_url = (
             f"{settings.FRONTEND_URL}/settings/billing"
             f"?shop={shop}&host={host}&installed=true&integration_id={integration.id}"
@@ -254,6 +309,10 @@ async def oauth_callback(
 
     elif integration.user_id is not None:
         # Path 2: Direct install, merchant was already logged in — fully linked
+        logger.info(
+            f"oauth_callback: Path 2 (direct+authenticated) for integration "
+            f"{integration.id} user_id={integration.user_id}"
+        )
         success_url = (
             f"{settings.FRONTEND_URL}/integrations"
             f"?connected=true&integration_id={integration.id}"
@@ -261,8 +320,18 @@ async def oauth_callback(
         )
 
     else:
-        # Path 3: Direct install, merchant was NOT logged in — needs to claim
-        claim_path = f"/integrations/claim?integration_id={integration.id}&platform={integration.platform.value}"
+        # Path 3: Direct install, merchant was NOT logged in — needs to claim.
+        # The frontend /integrations/claim page should auto-claim if the
+        # merchant is already authenticated there.
+        logger.info(
+            f"oauth_callback: Path 3 (direct+anonymous) for integration "
+            f"{integration.id} — redirecting to claim flow"
+        )
+        claim_path = (
+            f"/integrations/claim"
+            f"?integration_id={integration.id}"
+            f"&platform={integration.platform.value}"
+        )
         success_url = f"{settings.FRONTEND_URL}/login?redirect={quote(claim_path)}"
 
     return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
@@ -352,11 +421,20 @@ async def claim_integration(
 
     Called after App Store installs where the merchant was not logged in
     during the OAuth flow. The login page redirects here after auth.
+
+    FIXED (2026-03-21): Removed the status == ACTIVE requirement. Previously,
+    if any background job (health check, Celery beat) or UI action changed
+    the integration status between OAuth completion and the merchant completing
+    the claim flow, claim would return 404 and the integration would remain
+    permanently orphaned with no way to recover without manual DB intervention.
+
+    Now: claim works for any orphaned integration (user_id=None) that has a
+    real token (not the b"pending" placeholder). Status is preserved so the
+    merchant can see the real state and reconnect if needed.
     """
     stmt = select(Integration).where(
         Integration.id == integration_id,
         Integration.user_id.is_(None),
-        Integration.status == IntegrationStatus.ACTIVE,
     )
     result = await db.execute(stmt)
     integration = result.scalars().first()
@@ -367,11 +445,29 @@ async def claim_integration(
             detail="Integration not found or already claimed",
         )
 
+    # Reject stubs that never completed OAuth — no real token stored yet.
+    # b"pending" is the placeholder set by init_oauth and the callback stub.
+    if integration.access_token_encrypted in (None, b"pending", b""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth for this integration did not complete. Please reconnect.",
+        )
+
     integration.user_id = current_user.id
     integration.updated_at = datetime.now(UTC)
     db.add(integration)
     await db.commit()
 
-    logger.info(f"Integration {integration_id} claimed by user {current_user.id}")
+    logger.info(
+        f"Integration {integration_id} claimed by user {current_user.id} "
+        f"(status={integration.status.value})"
+    )
 
-    return {"ok": True, "integration_id": str(integration.id)}
+    return {
+        "ok": True,
+        "integration_id": str(integration.id),
+        "status": integration.status.value,
+    }
+
+
+
