@@ -26,6 +26,9 @@ format instead of {shop}.myshopify.com/admin/oauth/authorize. Shopify's unified
 admin intercepts the old format and routes based on active browser session,
 causing installs to land on the wrong store. The explicit store path format
 forces Shopify to use the correct store regardless of session state.
+
+DEBUG (2026-03-21): Added detailed logging to exchange_oauth_code to capture
+the exact Shopify error response when token exchange fails.
 """
 
 import logging
@@ -176,6 +179,12 @@ class ShopifyService(
     async def exchange_oauth_code(self, store_url: str, code: str, redirect_uri: str) -> OAuthResult:
         shop_domain = self._get_shop_domain(store_url)
 
+        logger.info(
+            f"OAuth exchange starting — shop={shop_domain} "
+            f"redirect_uri={redirect_uri} "
+            f"code_prefix={code[:8] if code else 'None'}..."
+        )
+
         async def _exchange():
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
@@ -191,14 +200,23 @@ class ShopifyService(
 
         try:
             data = await execute_with_retry(_exchange, config=self.retry_config, operation_name="shopify_oauth")
+            logger.info(f"OAuth exchange succeeded for shop={shop_domain}")
             return OAuthResult(
                 success=True,
                 access_token=data.get("access_token"),
                 scope=data.get("scope"),
             )
         except httpx.HTTPStatusError as e:
-            return OAuthResult(success=False, error=f"HTTP {e.response.status_code}")
+            logger.error(
+                f"OAuth exchange failed for shop={shop_domain}: "
+                f"HTTP {e.response.status_code} — {e.response.text}"
+            )
+            return OAuthResult(success=False, error=f"HTTP {e.response.status_code}: {e.response.text}")
         except httpx.RequestError as e:
+            logger.error(f"OAuth exchange request error for shop={shop_domain}: {e}")
+            return OAuthResult(success=False, error=str(e))
+        except Exception as e:
+            logger.error(f"OAuth exchange unexpected error for shop={shop_domain}: {e}")
             return OAuthResult(success=False, error=str(e))
 
     async def refresh_access_token(self, store_url: str, refresh_token: str) -> OAuthResult:
@@ -256,6 +274,5 @@ class ShopifyService(
         except ValueError:
             return None
         
-
 
         
