@@ -4,11 +4,11 @@ from typing import TypeVar
 
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
-
-class PaginatedResponse[T](BaseModel):
+class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response wrapper."""
 
     model_config = ConfigDict(from_attributes=True)
