@@ -1424,6 +1424,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/eth_service.py` line 296; `backend/services/payment/bsv_service.py` line 211
 - **Issue:** Both files create module-level singleton instances. Each lazily creates an `httpx.AsyncClient` that is never closed from any lifecycle hook (`close()` exists but is never called on app shutdown).
 - **Impact:** HTTP connections leak for the process lifetime. In long-running deployments this exhausts file descriptors.
+- **Status: FIXED 2026-03-22** — Added `await ethereum_payment_service.close()` and `await bsv_payment_service.close()` to the FastAPI lifespan shutdown handler in `main.py`.
 
 ---
 
@@ -1431,6 +1432,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/eth_service.py` lines 268–270
 - **Issue:** `"action": "getblockreward"` used to fetch block timestamp. `getblockreward` is a paid Etherscan tier endpoint. On free-tier API keys this returns an error; `timeStamp` is silently `None`. The correct endpoint is `eth_getBlockByNumber`.
 - **Impact:** Block timestamp retrieval silently fails on free-tier keys. ETH payment verification proceeds without a timestamp, potentially accepting expired transactions.
+- **Status: FIXED 2026-03-22** — Changed to `module: "proxy", action: "eth_getBlockByNumber"` which is available on free-tier keys. Parses hex timestamp from block result.
 
 ---
 
@@ -1438,6 +1440,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/eth_service.py` line 44
 - **Issue:** `is_available` property returns `True` unconditionally even when `ETHERSCAN_API_KEY` is not set. `PaymentServiceFactory.get_available_networks()` always reports Ethereum as available.
 - **Impact:** Ethereum network reported as available when no API key is configured, misleading operators and users.
+- **Status: FIXED 2026-03-22** — `is_available` now returns `bool(self.api_key)`, correctly reporting unavailable when no API key is configured.
 
 ---
 
@@ -1445,6 +1448,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/competitor_matching/service.py` line 549; `backend/services/competitor_matching/providers/__init__.py` lines 9–21
 - **Issue:** Module-level `competitor_matching_service = CompetitorMatchingService()` calls `setup_providers()` at import, which instantiates all providers, each reading API keys via `os.getenv()`. Keys set after module import are never read.
 - **Impact:** All competitor matching providers initialize as unavailable in configurations where env vars are loaded after module import. Competitor matching silently returns no results.
+- **Status: FIXED 2026-03-22** — Replaced `os.getenv()` with lazy `@property` reads from `settings.*` in GoogleCustomSearchProvider and SerpAPIProvider. Added `GOOGLE_API_KEY`, `GOOGLE_SEARCH_CX`, `SERPAPI_KEY` to `core/config.py` Settings.
 
 ---
 
@@ -2245,6 +2249,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/pricing/_list_endpoints.py` lines 39-47
 - **Issue:** Runs one separate `SELECT COUNT(*)` per `RecommendationStatus` enum member (currently 6 values = 6 queries). Should be a single `SELECT status, COUNT(*) GROUP BY status` query.
 - **Impact:** Unnecessary DB round-trips on every stats request; worsens under load.
+- **Status: FIXED 2026-03-22** — Replaced per-status loop with single `SELECT status, COUNT(*) ... GROUP BY status` query.
 
 ---
 

@@ -19,10 +19,11 @@ Docs: https://developers.google.com/custom-search/v1/overview
 """
 
 import logging
-import os
 from typing import Any
 
 import httpx
+
+from core.config import settings
 
 from ..schemas import (
     MatchedProduct,
@@ -60,13 +61,21 @@ class GoogleCustomSearchProvider(BaseSearchProvider):
             search_engine_id: Custom Search Engine ID (or set GOOGLE_SEARCH_CX env var)
             timeout: Request timeout in seconds
         """
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self.search_engine_id = search_engine_id or os.getenv("GOOGLE_SEARCH_CX")
+        self._explicit_api_key = api_key
+        self._explicit_search_engine_id = search_engine_id
         self.timeout = timeout
 
         # Track daily usage (resets at midnight)
         self._daily_requests = 0
         self._last_reset_date: str | None = None
+
+    @property
+    def api_key(self) -> str | None:
+        return self._explicit_api_key or settings.GOOGLE_API_KEY
+
+    @property
+    def search_engine_id(self) -> str | None:
+        return self._explicit_search_engine_id or settings.GOOGLE_SEARCH_CX
 
     # ─────────────────────────────────────────────────────────────────────────
     # Abstract Property Implementations

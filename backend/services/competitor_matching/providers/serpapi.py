@@ -14,10 +14,11 @@ Docs: https://serpapi.com/google-shopping-api
 
 import contextlib
 import logging
-import os
 from typing import Any
 
 import httpx
+
+from core.config import settings
 
 from ..schemas import (
     MatchedProduct,
@@ -55,13 +56,17 @@ class SerpAPIProvider(BaseSearchProvider):
             country: Country code for results (us, uk, ca, etc.)
             language: Language code (en, fr, de, etc.)
         """
-        self.api_key = api_key or os.getenv("SERPAPI_KEY")
+        self._explicit_api_key = api_key
         self.timeout = timeout
         self.country = country
         self.language = language
 
         # Track usage
         self._requests_made = 0
+
+    @property
+    def api_key(self) -> str | None:
+        return self._explicit_api_key or settings.SERPAPI_KEY
 
     # ─────────────────────────────────────────────────────────────────────────
     # Abstract Property Implementations

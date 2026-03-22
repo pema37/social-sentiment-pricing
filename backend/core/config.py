@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     YOUCOM_API_KEY: str | None = None
 
+    # Search Providers (Competitor Matching)
+    GOOGLE_API_KEY: str | None = None
+    GOOGLE_SEARCH_CX: str | None = None
+    SERPAPI_KEY: str | None = None
+
     # Reddit
     REDDIT_CLIENT_ID: str | None = None
     REDDIT_CLIENT_SECRET: str | None = None

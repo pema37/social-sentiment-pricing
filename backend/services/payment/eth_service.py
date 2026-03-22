@@ -41,8 +41,8 @@ class EthereumPaymentService(PaymentVerificationService):
 
     @property
     def is_available(self) -> bool:
-        """Service is available even without API key (limited rate)."""
-        return True
+        """Service is available only when API key is configured."""
+        return bool(self.api_key)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -265,9 +265,10 @@ class EthereumPaymentService(PaymentVerificationService):
             client = await self._get_client()
 
             params = {
-                "module": "block",
-                "action": "getblockreward",
-                "blockno": block_number,
+                "module": "proxy",
+                "action": "eth_getBlockByNumber",
+                "tag": hex(block_number),
+                "boolean": "false",
             }
             if self.api_key:
                 params["apikey"] = self.api_key
@@ -276,7 +277,7 @@ class EthereumPaymentService(PaymentVerificationService):
             data = response.json()
 
             if data.get("result"):
-                timestamp = int(data["result"].get("timeStamp", 0))
+                timestamp = int(data["result"].get("timestamp", "0x0"), 16)
                 if timestamp:
                     return datetime.fromtimestamp(timestamp)
 

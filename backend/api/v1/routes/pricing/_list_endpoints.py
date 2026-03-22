@@ -34,17 +34,17 @@ async def get_recommendation_stats(
     """Get recommendation statistics."""
     since = datetime.now(UTC) - timedelta(days=days)
 
-    # Count by status
-    stats = {}
-    for rec_status in RecommendationStatus:
-        stmt = (
-            select(func.count(PriceRecommendation.id))
-            .where(PriceRecommendation.user_id == current_user.id)
-            .where(PriceRecommendation.status == rec_status)
-            .where(PriceRecommendation.created_at >= since)
-        )
-        result = await db.execute(stmt)
-        stats[rec_status.value] = result.scalar() or 0
+    # Count by status — single query with GROUP BY
+    stmt = (
+        select(PriceRecommendation.status, func.count(PriceRecommendation.id))
+        .where(PriceRecommendation.user_id == current_user.id)
+        .where(PriceRecommendation.created_at >= since)
+        .group_by(PriceRecommendation.status)
+    )
+    result = await db.execute(stmt)
+    stats = {s.value: 0 for s in RecommendationStatus}
+    for status, count in result.all():
+        stats[status.value] = count
 
     # Calculate totals
     total_generated = sum(stats.values())

@@ -130,6 +130,11 @@ async def lifespan(app: FastAPI):
         f"os.environ: {bool(os.environ.get('SHOPIFY_CLIENT_SECRET'))}"
     )
     yield
+    # Close payment service HTTP clients to prevent connection leaks
+    from services.payment.eth_service import ethereum_payment_service
+    from services.payment.bsv_service import bsv_payment_service
+    await ethereum_payment_service.close()
+    await bsv_payment_service.close()
     logger.info("Application shutting down")
 
 
