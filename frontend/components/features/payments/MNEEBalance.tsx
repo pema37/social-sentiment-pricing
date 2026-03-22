@@ -100,8 +100,10 @@ export function MNEEBalanceCompact({ className = '' }: { className?: string }) {
 export function MNEEBalanceCard() {
   const { isConnected } = useAccount()
   const { balance, isLoadingBalance, refetchBalance } = useMNEE()
-  
-  const formattedBalance = (parseFloat(balance) || 0).toFixed(2)
+
+  const formattedBalance = isConnected && !isLoadingBalance
+    ? (parseFloat(balance) || 0).toFixed(2)
+    : '0.00'
 
   return (
     <div className="bg-linear-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
@@ -115,7 +117,7 @@ export function MNEEBalanceCard() {
           <RefreshIcon className="w-4 h-4" />
         </button>
       </div>
-      
+
       {!isConnected ? (
         <div className="text-gray-500">
           Connect wallet to view balance

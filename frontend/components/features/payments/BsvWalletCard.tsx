@@ -93,8 +93,12 @@ export function BsvWalletCard() {
 
   const handleCopy = async () => {
     if (wallet?.bsv_wallet_address) {
-      await navigator.clipboard.writeText(wallet.bsv_wallet_address);
-      toast.success('Wallet address copied to clipboard');
+      try {
+        await navigator.clipboard.writeText(wallet.bsv_wallet_address);
+        toast.success('Wallet address copied to clipboard');
+      } catch {
+        toast.error({ title: 'Copy failed', message: 'Could not copy to clipboard' });
+      }
     }
   };
 

@@ -74,10 +74,14 @@ export function GenerateDescriptionModal({
     }
   };
 
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(field);
-    setTimeout(() => setCopied(null), 2000);
+  const handleCopy = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(field);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setError('Failed to copy to clipboard');
+    }
   };
 
   // Apply individual field

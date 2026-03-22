@@ -229,10 +229,9 @@ export function PriceSuggestionModal({ product, onClose }: PriceSuggestionModalP
     if (suggestion) {
       const price = safeNumber(suggestion.suggested_price);
       if (price > 0) {
-        applyPrice.mutate(
-          { id: product.id, price },
-          { onSuccess: onClose }
-        );
+        applyPrice.mutateAsync({ id: product.id, price })
+          .then(() => onClose())
+          .catch(() => {});
       }
     }
   };

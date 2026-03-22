@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button, Input, Card } from '@/components/ui';
 import { AIBadge } from '@/components/ui/ai-badge';
 import { useAnalyzeSentiment } from '@/lib/hooks';
@@ -70,9 +70,11 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
   };
 
   // Sync productId when defaultProductId changes and modal opens
-  if (isOpen && defaultProductId && defaultProductId !== productId) {
-    setProductId(defaultProductId);
-  }
+  useEffect(() => {
+    if (isOpen && defaultProductId && defaultProductId !== productId) {
+      setProductId(defaultProductId);
+    }
+  }, [isOpen, defaultProductId]);
 
   if (!isOpen) return null;
 

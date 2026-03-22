@@ -33,12 +33,9 @@ export function DeleteProductModal({
   if (!isOpen) return null;
 
   const handleDelete = () => {
-    deleteProduct.mutate(productId, {
-      onSuccess: () => {
-        onClose();
-        onSuccess?.();
-      },
-    });
+    deleteProduct.mutateAsync(productId)
+      .then(() => { onClose(); onSuccess?.(); })
+      .catch(() => {});
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {

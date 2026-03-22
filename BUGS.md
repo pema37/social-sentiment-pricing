@@ -927,6 +927,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/ProductForm.tsx` line 206; `frontend/components/features/products/PriceSuggestionModal.tsx` line 233; `frontend/components/features/products/DeleteProductModal.tsx` lines 36–40
 - **Issue:** Per-call `onSuccess` in `.mutate(payload, { onSuccess })` is ephemeral in React Query v5 — silently dropped if component re-renders mid-mutation.
 - **Impact:** Modal close callbacks and post-action toasts may silently not fire. Delete modal may stay open; price may be double-applied.
+- **Status: FIXED 2026-03-22** — Replaced `.mutate()` with `.mutateAsync()` + `.then()` for stable callback execution in all three components.
 
 ---
 
@@ -934,6 +935,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/GenerateDescriptionModal.tsx` line 78; `frontend/components/features/payments/BsvWalletCard.tsx` line 96
 - **Issue:** Clipboard API throws in non-HTTPS contexts and when permission is denied. No error handling present.
 - **Impact:** Unhandled promise rejection; copy button silently fails.
+- **Status: FIXED 2026-03-22** — Wrapped both clipboard calls in try/catch with user-facing error feedback.
 
 ---
 
@@ -941,6 +943,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/sentiment/analyze-modal.tsx` lines 73–75
 - **Issue:** `setProductId(defaultProductId)` called directly in the render function body, not inside `useEffect`.
 - **Impact:** React warning "Cannot update during an existing state transition"; unexpected re-renders.
+- **Status: FIXED 2026-03-22** — Moved `setProductId` sync logic into a `useEffect` with `[isOpen, defaultProductId]` dependencies.
 
 ---
 
@@ -948,6 +951,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/pricing/ConfidenceIndicator.tsx`; `frontend/components/features/sentiment/sentiment-breakdown.tsx`
 - **Issue:** Both use React hooks (`useMemo`, etc.) but lack `'use client'` directives.
 - **Impact:** Throws "Hooks can only be called inside a function component" when rendered server-side in Next.js App Router.
+- **Status: FALSE POSITIVE 2026-03-22** — `ConfidenceIndicator.tsx` uses no React hooks (pure presentational component with props only). `sentiment-breakdown.tsx` already has `'use client'` on line 1.
 
 ---
 
@@ -955,6 +959,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/payments/MNEEBalance.tsx`
 - **Issue:** `parseFloat(balance).toFixed(2)` evaluated before `!isConnected` guard. If `balance` is `undefined`, `parseFloat` returns `NaN`.
 - **Impact:** Displays "NaN" to users when wallet is not connected.
+- **Status: FIXED 2026-03-22** — `MNEEBalanceCard` now guards `parseFloat(balance)` behind `isConnected && !isLoadingBalance` check. Other components already had proper guards.
 
 ---
 

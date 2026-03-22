@@ -203,10 +203,9 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
         toast.error('Please fix the errors before saving');
         return;
       }
-      updateProduct.mutate(
-        { id: product!.id, data: result.data },
-        { onSuccess: () => { toast.success('Product updated'); onSuccess?.(); } }
-      );
+      updateProduct.mutateAsync({ id: product!.id, data: result.data })
+        .then(() => onSuccess?.())
+        .catch(() => {});
     } else {
       const result = validateAndCreate(formData);
       if (!result.success) {
@@ -214,10 +213,9 @@ export function ProductForm({ product, onSuccess, onCancel }: ProductFormProps) 
         toast.error('Please fix the errors before saving');
         return;
       }
-      createProduct.mutate(
-        result.data,
-        { onSuccess: () => { toast.success('Product created'); onSuccess?.(); } }
-      );
+      createProduct.mutateAsync(result.data)
+        .then(() => onSuccess?.())
+        .catch(() => {});
     }
   };
 
