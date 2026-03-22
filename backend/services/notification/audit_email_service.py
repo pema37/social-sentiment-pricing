@@ -14,6 +14,7 @@ Usage:
     )
 """
 
+import asyncio
 import base64
 import logging
 from dataclasses import dataclass
@@ -138,7 +139,7 @@ class AuditEmailService:
             attachment.disposition = Disposition("attachment")
             message.attachment = attachment
 
-            response = client.send(message)
+            response = await asyncio.to_thread(client.send, message)
 
             if response.status_code in (200, 201, 202):
                 message_id = response.headers.get("X-Message-Id", "unknown")

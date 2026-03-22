@@ -5,6 +5,7 @@ Email notification service using SendGrid.
 SendGrid Free Tier: 100 emails/day
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -119,7 +120,7 @@ class EmailService:
                 Content("text/html", html_content),
             ]
 
-            response = client.send(message)
+            response = await asyncio.to_thread(client.send, message)
 
             if response.status_code in (200, 201, 202):
                 message_id = response.headers.get("X-Message-Id", "unknown")

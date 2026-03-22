@@ -1447,9 +1447,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [CRITICAL] BUG-053 — price_sync_service instantiates Shopify/WooCommerce with wrong arguments
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/price_sync_service.py` lines 110–126
 - **Issue:** `ShopifyService(self.db, integration)` and `WooCommerceService(self.db, integration)` — neither service accepts these constructor arguments. Their `__init__` takes only an optional `retry_config`. This is a `TypeError` at runtime.
 - **Impact:** The entire live price sync pipeline crashes immediately whenever it runs. No price drift detection, no price resyncs after competitor data updates.
+- **Fix:** Changed constructors to `ShopifyService()` / `WooCommerceService()`. Replaced non-existent `get_product_price()` with `fetch_single_product(store_url, access_token, external_product_id)` and extract price from the returned `ExternalProduct`. Access token decrypted via `decrypt_token()`.
 
 ---
 
@@ -1470,6 +1472,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [CRITICAL] BUG-056 — CORS_ORIGINS defaults to wildcard "*" — allows all cross-origin requests
+- **Status: FALSE POSITIVE 2026-03-22** — Current code at `config.py:48` shows `CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"`, not `"*"`. The default is already restricted to localhost dev origins. No fix needed.
 - **File:** `backend/core/config.py` line 49
 - **Issue:** `CORS_ORIGINS: str = "*"` is the default value. Unless the Railway env var is explicitly set, the backend accepts requests from any origin with credentials.
 - **Impact:** Any malicious website can make authenticated cross-origin requests on behalf of logged-in users. Combined with BUG-001 (localStorage JWT), this enables full account takeover via XSS + CORS.
@@ -1489,13 +1492,16 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-058 — webhook_handler calls sync_single_product() which doesn't exist
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/integration/webhook_handler.py` lines 139–143
 - **Issue:** `self.sync_service.sync_single_product(...)` is called when processing product webhook events (create/update). `SyncService` has no `sync_single_product` method — only `run_sync()` and `recover_stuck_syncs()`.
 - **Impact:** Every Shopify product webhook (product created/updated/deleted) crashes with `AttributeError`. Webhook-driven syncs never complete. Products created on Shopify never appear in the app unless manually triggered.
+- **Fix:** Added `sync_single_product(integration_id, external_product_id, action)` method to `SyncService`. Fetches the single product via `fetch_single_product()`, upserts it, and handles deletes by disabling sync on matching links.
 
 ---
 
 ## [HIGH] BUG-059 — Webhook register/unregister endpoints missing ownership check
+- **Status: FALSE POSITIVE 2026-03-22** — Both `register_webhooks` (line 269) and `unregister_webhooks` (line 336) already filter by `Integration.user_id == current_user.id` and have `get_current_user` dependency. Ownership check is present. No fix needed.
 - **File:** `backend/api/v1/routes/webhooks.py` lines 258, 321
 - **Issue:** `register_webhooks` and `unregister_webhooks` look up `Integration` by ID alone with no `.where(Integration.user_id == current_user.id)` filter. Any authenticated user can register or unregister webhooks for any other user's integration.
 - **Impact:** (1) Attacker can disable any merchant's webhooks — all product/order events stop being received. (2) Attacker can register their own webhook URLs on other merchants' integrations to receive their Shopify events.
@@ -1510,9 +1516,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-061 — Synchronous email send blocks the async event loop
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/notification/email_service.py` lines 121–122; `backend/services/notification/audit_email_service.py` line 141
 - **Issue:** `client.send(message)` (SendGrid SDK) is synchronous. It is called inside `async def` functions without `await asyncio.to_thread()` or `loop.run_in_executor()`. This blocks the entire event loop while the HTTP request to SendGrid completes.
 - **Impact:** Every email notification freezes all concurrent API requests for the duration of the SendGrid HTTP call (~200–2000ms). Under load this causes widespread request timeouts and API latency spikes.
+- **Fix:** Wrapped both `client.send(message)` calls with `await asyncio.to_thread()` to offload the synchronous SendGrid HTTP call to a thread pool, unblocking the event loop.
 
 ---
 

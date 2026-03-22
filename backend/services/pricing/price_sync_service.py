@@ -105,22 +105,47 @@ class PriceSyncService:
 
     async def _fetch_shopify_price(self, link, integration) -> Decimal | None:
         """Fetch price from Shopify."""
+        from core.encryption import decrypt_token
         from services.integration.shopify_service import ShopifyService
 
-        service = ShopifyService(self.db, integration)
-        live_data = await service.get_product_price(link.external_product_id, link.external_variant_id)
+        service = ShopifyService()
+        access_token = decrypt_token(integration.access_token_encrypted)
+        product = await service.fetch_single_product(
+            store_url=integration.store_url,
+            access_token=access_token,
+            external_product_id=link.external_product_id,
+        )
 
-        if live_data and live_data.get("price") is not None:
-            return Decimal(str(live_data["price"]))
+        if not product:
+            return None
+
+        # Match the specific variant if we have a variant ID
+        if link.external_variant_id and product.variants:
+            for variant in product.variants:
+                if variant.id == link.external_variant_id:
+                    return Decimal(str(variant.price)) if variant.price is not None else None
+
+        # Fall back to product-level price
+        if product.price is not None:
+            return Decimal(str(product.price))
         return None
 
     async def _fetch_woocommerce_price(self, link, integration) -> Decimal | None:
         """Fetch price from WooCommerce."""
+        from core.encryption import decrypt_token
         from services.integration.woocommerce_service import WooCommerceService
 
-        service = WooCommerceService(self.db, integration)
-        live_data = await service.get_product_price(link.external_product_id)
+        service = WooCommerceService()
+        access_token = decrypt_token(integration.access_token_encrypted)
+        product = await service.fetch_single_product(
+            store_url=integration.store_url,
+            access_token=access_token,
+            external_product_id=link.external_product_id,
+        )
 
-        if live_data and live_data.get("price") is not None:
-            return Decimal(str(live_data["price"]))
+        if not product:
+            return None
+
+        if product.price is not None:
+            return Decimal(str(product.price))
         return None

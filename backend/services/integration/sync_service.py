@@ -237,6 +237,70 @@ class SyncService:
 
         return stuck
 
+    # ─── Single-product sync (webhook-triggered) ────────────────
+
+    async def sync_single_product(
+        self,
+        integration_id: UUID,
+        external_product_id: str,
+        action: str = "update",
+    ) -> ProductIntegrationLink | None:
+        """Sync a single product triggered by a webhook event.
+
+        Args:
+            integration_id: The integration that received the webhook
+            external_product_id: External platform product ID
+            action: "create", "update", or "delete"
+
+        Returns:
+            The upserted ProductIntegrationLink, or None
+        """
+        integration = await self._get_integration(integration_id, user_id=None)
+        access_token = decrypt_token(integration.access_token_encrypted)
+
+        if action == "delete":
+            # Disable sync for all links matching this external product
+            stmt = select(ProductIntegrationLink).where(
+                ProductIntegrationLink.integration_id == integration.id,
+                ProductIntegrationLink.external_product_id == external_product_id,
+                ProductIntegrationLink.sync_enabled,
+            )
+            result = await self.db.execute(stmt)
+            links = result.scalars().all()
+            for link in links:
+                link.sync_enabled = False
+                link.updated_at = utc_now()
+                self.db.add(link)
+            if links:
+                await self.db.commit()
+            return links[0] if links else None
+
+        # Fetch the single product from the platform
+        service = self.get_service(integration.platform)
+        product = await service.fetch_single_product(
+            store_url=integration.store_url,
+            access_token=access_token,
+            external_product_id=external_product_id,
+        )
+
+        if not product:
+            logger.warning(
+                f"Product {external_product_id} not found on {integration.platform} "
+                f"for integration {integration_id}"
+            )
+            return None
+
+        await self._upsert_product(integration, product)
+        await self.db.commit()
+
+        # Return the link
+        stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration.id,
+            ProductIntegrationLink.external_product_id == external_product_id,
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
     # ─── Main sync orchestration ─────────────────────────────────
 
     async def run_sync(
