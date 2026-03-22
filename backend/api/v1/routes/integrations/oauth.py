@@ -50,9 +50,11 @@ import secrets
 from datetime import UTC, datetime
 from urllib.parse import quote
 from uuid import UUID
+from zlib import crc32
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -113,6 +115,10 @@ async def init_oauth(
     duplicate rows when a merchant installs via App Store (creating an orphan),
     then returns to the app and initiates OAuth again.
     """
+    # Serialize concurrent OAuth flows for the same store to prevent duplicates
+    lock_key = crc32(f"{data.platform.value}:{data.store_url}".encode()) & 0x7FFFFFFF
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+
     # 1. Check for an integration already owned by this user
     stmt = select(Integration).where(
         Integration.user_id == current_user.id,
@@ -207,6 +213,10 @@ async def oauth_callback(
     """
 
     integration = None
+
+    # Serialize concurrent callbacks for the same shop to prevent duplicate stubs
+    lock_key = crc32(f"shopify:{shop}".encode()) & 0x7FFFFFFF
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
 
     # 1. Try state match first (most reliable — set by init_oauth)
     if state:

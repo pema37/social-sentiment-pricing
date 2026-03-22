@@ -128,6 +128,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/encryption.py` lines 10–13
 - **Issue:** `get_fernet()` only validates the key on first call (lazy init). If `ENCRYPTION_KEY` is missing, empty, or malformed, no error is raised at app startup. Only the first actual decrypt attempt crashes.
 - **Impact:** Deployment to staging/prod with wrong key shows a healthy startup then immediately fails with `RuntimeError` or `InvalidToken` on the first OAuth callback. This is the root cause of Bug 313.01 on staging.
+- **Status: FIXED 2026-03-22** — Added `_validate_encryption_key()` that runs at module import time. Validates key is present and is a valid Fernet key. App now fails fast at startup if key is missing or malformed.
 
 ---
 
@@ -135,6 +136,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/oauth.py` lines 165–179
 - **Issue:** Two concurrent browser tabs doing OAuth for the same shop can both pass the state/shop lookup check and both create new integration records via fallback path 3. No DB-level unique constraint or lock.
 - **Impact:** Duplicate integration rows for the same Shopify store. One stays orphaned. Price pushes may target wrong integration.
+- **Status: FIXED 2026-03-22** — Added PostgreSQL advisory locks (`pg_advisory_xact_lock`) in both `init_oauth` and `oauth_callback` to serialize concurrent OAuth flows for the same store. Lock key derived from platform+store_url via CRC32.
 
 ---
 
@@ -1444,6 +1446,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/notification/alert_generator.py` lines 138, 187, 228
 - **Issue:** Three separate calculations: `((recommended_price - current_price) / current_price) * 100` with no zero-check on `current_price`. Any product with `current_price = 0` or `None` causes `ZeroDivisionError` or `TypeError`. This propagates up through the alert dispatch chain.
 - **Impact:** When any product has a zero/null current price, the entire alert generation task crashes. No alerts are sent for any product, not just the zero-priced one.
+- **Status: FIXED 2026-03-22** — Added zero-guards to all three division expressions: `/ current_price * 100 if current_price else 0.0` (and `old_price` for the other two).
 
 ---
 
@@ -1458,6 +1461,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/subscription_service.py` line 432
 - **Issue:** `if os.getenv("DEMO_MODE", "true").lower() == "true":` — default is `"true"`, so unless `DEMO_MODE=false` is explicitly set in Railway, the payment confirmation function skips all blockchain verification and activates subscriptions unconditionally.
 - **Impact:** On a fresh Railway deploy where `DEMO_MODE` is not set, any request to the payment confirmation endpoint activates a paid subscription without any payment. All subscription revenue can be bypassed.
+- **Status: FIXED 2026-03-22** — Removed DEMO_MODE bypass entirely from `confirm_payment()`. Subscription activation now requires `verification.verified == True`. Removed unused `settings` import.
 
 ---
 

@@ -135,7 +135,7 @@ class AlertGenerator:
         """
         Generate alert for new price recommendation.
         """
-        change_pct = ((recommended_price - current_price) / current_price) * 100
+        change_pct = ((recommended_price - current_price) / current_price) * 100 if current_price else 0.0
         direction = "increase" if change_pct > 0 else "decrease"
 
         # Severity based on confidence and change size
@@ -184,7 +184,7 @@ class AlertGenerator:
         """
         Generate alert when a price change is applied.
         """
-        change_pct = ((new_price - old_price) / old_price) * 100
+        change_pct = ((new_price - old_price) / old_price) * 100 if old_price else 0.0
         direction = "increased" if change_pct > 0 else "decreased"
 
         severity = AlertSeverity.MEDIUM if auto_applied else AlertSeverity.LOW
@@ -225,7 +225,7 @@ class AlertGenerator:
         """
         Generate alert for competitor price change.
         """
-        change_pct = ((new_price - old_price) / old_price) * 100
+        change_pct = ((new_price - old_price) / old_price) * 100 if old_price else 0.0
         direction = "increased" if change_pct > 0 else "decreased"
 
         # Larger changes are more important

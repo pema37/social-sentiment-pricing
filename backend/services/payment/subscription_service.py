@@ -25,7 +25,6 @@ from schemas.payment import (
     SubscriptionInfo,
     TransactionVerification,
 )
-from core.config import settings
 from services.payment.base import PaymentServiceFactory
 
 logger = logging.getLogger(__name__)
@@ -428,9 +427,8 @@ class SubscriptionService:
             payment.confirmed_at = datetime.now(UTC)
             payment.from_address = verification.from_address
 
-        # Activate subscription if verified (or if demo mode)
-        # For hackathon: activate even if verification fails (trust user input)
-        should_activate = verification.verified or settings.DEMO_MODE
+        # Activate subscription only when blockchain verification succeeds
+        should_activate = verification.verified
 
         if should_activate:
             payment.status = "confirmed"
