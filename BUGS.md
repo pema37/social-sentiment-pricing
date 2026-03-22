@@ -967,6 +967,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/payments/SubscriptionPlans.tsx` lines 392, 426
 - **Issue:** `setTimeout(() => refetchSubscription(), 2000)` has no cleanup — fires on unmounted component. `api.post()` called directly instead of through `useMutation`.
 - **Impact:** Memory leak / setState-on-unmounted-component warning; bypassed React Query architecture.
+- **Status: FIXED 2026-03-22** — Added `useRef` for timeout with cleanup on unmount. Replaced direct `api.post()` with `useConfirmPayment` mutation hook (new `confirmPayment` API function + hook).
 
 ---
 
@@ -974,6 +975,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/payments/TransactionHistory.tsx`
 - **Issue:** Links always constructed using mainnet Etherscan URL regardless of connected network.
 - **Impact:** Dead links for testnet transactions; confusing during development/staging.
+- **Status: FIXED 2026-03-22** — Uses `getEtherscanUrl(chainId)` from web3 config to build URLs based on connected network. Exported `getEtherscanUrl` from web3 barrel.
 
 ---
 
@@ -981,6 +983,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-intelligence.ts` lines 45–48
 - **Issue:** `staleTime: 30_000` but `refetchInterval: 60_000`. Data goes stale before refetch fires, triggering extra background fetches. Mirrors documented BUG-025 pattern.
 - **Impact:** Doubled API requests to health endpoint during normal usage.
+- **Status: FIXED 2026-03-22** — Set `staleTime` to 60s to match `refetchInterval`, preventing extra background fetches.
 
 ---
 
@@ -988,6 +991,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/trend-analysis.ts` lines 49–51, 61–64
 - **Issue:** Backend endpoints declare `use_model` and `days` as `Query(...)` parameters. Frontend sends them as JSON body in `api.post(url, { use_model, days })`. FastAPI ignores the unexpected body.
 - **Impact:** Model selection and time range have no effect. Always runs with defaults (`openai`, 30 days).
+- **Status: FIXED 2026-03-22** — Moved `use_model` and `days` to query string parameters in the URL instead of request body.
 
 ---
 
@@ -995,6 +999,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-competitors.ts` line 98
 - **Issue:** Query key is `competitorKeys.products(params?.competitor_id || '')` — varies only on `competitor_id`. Filtering by `product_id`, `is_active`, `page`, or `page_size` without a `competitor_id` produces identical cache keys.
 - **Impact:** Wrong cached data returned when filtering by any field other than `competitor_id`.
+- **Status: FIXED 2026-03-22** — Query key now includes the full `params` object, so all filter combinations produce unique cache entries.
 
 ---
 

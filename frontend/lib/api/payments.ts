@@ -304,6 +304,19 @@ export async function getPaymentHistory(
   };
 }
 
+/**
+ * Confirm a payment by transaction hash
+ */
+export async function confirmPayment(
+  paymentId: string,
+  data: { transaction_hash: string; network: string }
+): Promise<{ success: boolean; message: string; subscription_tier?: string }> {
+  return api.post<{ success: boolean; message: string; subscription_tier?: string }>(
+    `/api/v1/payments/${paymentId}/confirm`,
+    data
+  );
+}
+
 // =============================================================================
 // Validation Helpers
 // =============================================================================

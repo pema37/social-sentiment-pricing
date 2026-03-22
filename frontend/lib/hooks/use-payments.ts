@@ -8,6 +8,7 @@ import {
   getPlans,
   getSubscription,
   subscribe,
+  confirmPayment,
   getPayment,
   getPaymentHistory,
   downgradeToFree,
@@ -150,6 +151,22 @@ export function useSubscribe() {
     mutationFn: (data) => subscribe(data),
     onSuccess: () => {
       // Invalidate history since a new pending payment was created
+      queryClient.invalidateQueries({ queryKey: paymentKeys.history() });
+    },
+  });
+}
+
+/**
+ * Confirm a payment with transaction hash
+ */
+export function useConfirmPayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ paymentId, data }: { paymentId: string; data: { transaction_hash: string; network: string } }) =>
+      confirmPayment(paymentId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
       queryClient.invalidateQueries({ queryKey: paymentKeys.history() });
     },
   });

@@ -7,8 +7,8 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useAccount } from 'wagmi'
-import { MNEE_CONTRACT_ADDRESS } from '@/lib/web3'
+import { useAccount, useChainId } from 'wagmi'
+import { MNEE_CONTRACT_ADDRESS, getEtherscanUrl } from '@/lib/web3'
 
 interface Transaction {
   hash: string
@@ -25,6 +25,8 @@ interface TransactionHistoryProps {
 
 export function TransactionHistory({ className = '', limit = 10 }: TransactionHistoryProps) {
   const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const etherscanUrl = getEtherscanUrl(chainId)
   
   // For production: fetch from Etherscan API
   // https://api.etherscan.io/api?module=account&action=tokentx&contractaddress={MNEE_CONTRACT_ADDRESS}&address={address}
@@ -49,7 +51,7 @@ export function TransactionHistory({ className = '', limit = 10 }: TransactionHi
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">MNEE Transactions</h3>
         <a 
-          href={`https://etherscan.io/token/${MNEE_CONTRACT_ADDRESS}?a=${address}`}
+          href={`${etherscanUrl}/token/${MNEE_CONTRACT_ADDRESS}?a=${address}`}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-emerald-500 hover:text-emerald-400"
@@ -71,7 +73,7 @@ export function TransactionHistory({ className = '', limit = 10 }: TransactionHi
       ) : (
         <div className="space-y-2">
           {transactions.slice(0, limit).map((tx) => (
-            <TransactionRow key={tx.hash} transaction={tx} userAddress={address!} />
+            <TransactionRow key={tx.hash} transaction={tx} userAddress={address!} etherscanUrl={etherscanUrl} />
           ))}
         </div>
       )}
@@ -79,19 +81,21 @@ export function TransactionHistory({ className = '', limit = 10 }: TransactionHi
   )
 }
 
-function TransactionRow({ 
-  transaction, 
-  userAddress 
-}: { 
+function TransactionRow({
+  transaction,
+  userAddress,
+  etherscanUrl,
+}: {
   transaction: Transaction
-  userAddress: string 
+  userAddress: string
+  etherscanUrl: string
 }) {
   const isSent = transaction.from.toLowerCase() === userAddress.toLowerCase()
   const amount = parseFloat(transaction.value)
   
   return (
     <a
-      href={`https://etherscan.io/tx/${transaction.hash}`}
+      href={`${etherscanUrl}/tx/${transaction.hash}`}
       target="_blank"
       rel="noopener noreferrer"
       className="flex items-center gap-4 p-3 bg-gray-700/30 hover:bg-gray-700/50 rounded-lg transition-colors"

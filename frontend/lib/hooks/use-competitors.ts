@@ -95,7 +95,7 @@ export function useCompetitorProducts(params?: {
   page_size?: number;
 }) {
   return useQuery({
-    queryKey: competitorKeys.products(params?.competitor_id || ''),
+    queryKey: [...competitorKeys.products(params?.competitor_id), params] as const,
     queryFn: () => competitorsApi.getProducts(params),
     staleTime: 30 * 1000,
   });

@@ -46,9 +46,9 @@ export async function analyzeProductOpportunity(
 export async function detectRisks(
   useModel: 'openai' | 'gemini' = 'gemini'
 ): Promise<RiskDetectionResponse> {
-  return api.post<RiskDetectionResponse>(`${BASE_URL}/risks`, {
-    use_model: useModel,
-  });
+  return api.post<RiskDetectionResponse>(
+    `${BASE_URL}/risks?use_model=${useModel}`
+  );
 }
 
 /**
@@ -58,10 +58,9 @@ export async function generateInsight(
   days: number = 30,
   useModel: 'openai' | 'gemini' = 'gemini'
 ): Promise<AIInsight> {
-  return api.post<AIInsight>(`${BASE_URL}/insight`, {
-    days,
-    use_model: useModel,
-  });
+  return api.post<AIInsight>(
+    `${BASE_URL}/insight?days=${days}&use_model=${useModel}`
+  );
 }
 
 /**

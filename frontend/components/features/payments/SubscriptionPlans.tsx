@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Check, Star, Zap, Building2, Sparkles } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PayWithMNEE } from './PayWithMNEE';
-import { usePlans, useSubscription, useSubscribe, useDowngradeToFree } from '@/lib/hooks/use-payments';
+import { usePlans, useSubscription, useSubscribe, useConfirmPayment, useDowngradeToFree } from '@/lib/hooks/use-payments';
 import { useToast } from '@/lib/hooks/use-toast';
-import { api } from '@/lib/api/client';
 import type { SubscriptionPlan, SubscriptionTier } from '@/types/payment';
 import type { PaymentNetwork } from '@/app/(dashboard)/payments/page';
 
@@ -314,12 +313,23 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
   const { data: plansData, isLoading: plansLoading } = usePlans();
   const { data: subscription, isLoading: subLoading, refetch: refetchSubscription } = useSubscription();
   const subscribeMutation = useSubscribe();
-  const downgradeToFreeMutation = useDowngradeToFree(); 
+  const confirmMutation = useConfirmPayment();
+  const downgradeToFreeMutation = useDowngradeToFree();
   const toast = useToast();
 
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (refetchTimerRef.current) {
+        clearTimeout(refetchTimerRef.current);
+      }
+    };
+  }, []);
 
   // Reset payment when network changes
   useEffect(() => {
@@ -376,7 +386,7 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
 
   const handlePaymentSuccess = async (txHash: string) => {
     console.log('Payment txHash:', txHash);
-    
+
     if (!paymentInfo?.payment_id) {
       toast.error({
         title: 'Error',
@@ -388,14 +398,12 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
     setIsConfirming(true);
 
     try {
-      // Call backend to confirm the payment
-      const response = await api.post<{
-        success: boolean;
-        message: string;
-        subscription_tier?: string;
-      }>(`/api/v1/payments/${paymentInfo.payment_id}/confirm`, {
-        transaction_hash: txHash,
-        network: paymentInfo.network,
+      const response = await confirmMutation.mutateAsync({
+        paymentId: paymentInfo.payment_id,
+        data: {
+          transaction_hash: txHash,
+          network: paymentInfo.network,
+        },
       });
 
       if (response.success) {
@@ -404,7 +412,6 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
           message: `You are now on the ${response.subscription_tier || paymentInfo.tier} plan.`,
         });
       } else {
-        // Even if verification pending, DEMO_MODE should activate it
         toast.success({
           title: 'Payment Received!',
           message: response.message || 'Your subscription is being activated.',
@@ -412,7 +419,6 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
       }
     } catch (error) {
       console.error('Confirm error:', error);
-      // Still show success since MetaMask tx went through
       toast.warning({
         title: 'Payment Sent',
         message: 'Transaction confirmed. Subscription will activate shortly.',
@@ -422,7 +428,7 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
       setPaymentInfo(null);
       setSelectedTier(null);
       // Refetch subscription to get updated tier
-      setTimeout(() => {
+      refetchTimerRef.current = setTimeout(() => {
         refetchSubscription();
       }, 2000);
     }

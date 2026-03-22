@@ -5,11 +5,12 @@
 **/
 
 // Configuration
-export { 
-  wagmiConfig, 
-  MNEE_CONTRACT_ADDRESS, 
-  MNEE_TOKEN, 
-  ERC20_ABI 
+export {
+  wagmiConfig,
+  MNEE_CONTRACT_ADDRESS,
+  MNEE_TOKEN,
+  ERC20_ABI,
+  getEtherscanUrl,
 } from './config'
 
 // Provider

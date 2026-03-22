@@ -42,7 +42,7 @@ export function useIEHealth() {
   return useQuery({
     queryKey: intelligenceKeys.health(),
     queryFn: () => intelligenceApi.health(),
-    staleTime: 30 * 1000, // 30s — health is time-sensitive
+    staleTime: 60 * 1000, // match refetchInterval to avoid extra background fetches
     refetchInterval: 60 * 1000, // auto-refresh every 60s
   });
 }
