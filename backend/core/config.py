@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address
     SSP_ETH_WALLET_ADDRESS: str = ""  # Your ETH receiving address
 
+    # ===================
+    # x402 Payment Middleware
+    # ===================
+    PAY_TO_ADDRESS: str | None = None
+
 
 settings = Settings()
 

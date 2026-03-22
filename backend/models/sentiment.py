@@ -18,7 +18,7 @@ class Sentiment(SQLModel, table=True):
     )
 
     product_id: uuid_lib.UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True),
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True),
     )
 
     source: str = Field(max_length=50)

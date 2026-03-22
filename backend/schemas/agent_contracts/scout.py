@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from .shared import DataSource
+from .shared import DataSource, compute_provenance_hash
 
 
 class CompetitorPrice(BaseModel):
@@ -117,6 +117,10 @@ class ScoutOutput(BaseModel):
         if v == 0 and "competitors" in info.data:
             return len(info.data["competitors"])
         return v
+
+    @property
+    def provenance_hash(self) -> str:
+        return compute_provenance_hash(self.model_dump(mode="json"))
 
     def to_evidence(self) -> dict:
         """Serialize for JSONB storage on RecommendationOutcome.scout_evidence."""

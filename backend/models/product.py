@@ -28,7 +28,7 @@ class Product(SQLModel, table=True):
     )
 
     user_id: uuid_lib.UUID = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True),
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
     )
 
     name: str = Field(max_length=255, index=True)

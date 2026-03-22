@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from .shared import PriceDirection, UrgencyLevel
+from .shared import PriceDirection, UrgencyLevel, compute_provenance_hash
 
 
 class ElasticityEstimate(BaseModel):
@@ -147,6 +147,10 @@ class AnalystOutput(BaseModel):
         default="gemini-2.0-flash",
         description="Which LLM/model produced this analysis",
     )
+
+    @property
+    def provenance_hash(self) -> str:
+        return compute_provenance_hash(self.model_dump(mode="json"))
 
     def to_evidence(self) -> dict:
         """Serialize for JSONB storage on RecommendationOutcome.analyst_evidence."""

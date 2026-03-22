@@ -144,9 +144,7 @@ app = FastAPI(
 
 # ── Optional: Initialize x402 payment middleware ──────────
 # Uses Base Sepolia testnet with free x402.org facilitator
-import os
-
-if HAS_X402 and os.getenv("PAY_TO_ADDRESS"):
+if HAS_X402 and settings.PAY_TO_ADDRESS:
     init_x402(app, network="base-sepolia")
 
 # ───────────────────── Exception Handlers ───────────────────── #

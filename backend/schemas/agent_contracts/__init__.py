@@ -2,7 +2,7 @@
 Agent Semantic Contracts - Typed schemas for the Scout → Analyst → Strategist pipeline.
 
 Modularized into focused files:
-  shared.py       → Enums (PriceDirection, UrgencyLevel, DataSource)
+  shared.py       → Enums (PriceDirection, UrgencyLevel, DataSource) + compute_provenance_hash
   scout.py        → ScoutOutput + sub-models
   analyst.py      → AnalystOutput + ConfidenceDecomposition + ElasticityEstimate
   strategist.py   → StrategistOutput + GuardrailCheck
@@ -10,7 +10,7 @@ Modularized into focused files:
   intelligence.py → IE response schemas (calibration, benchmarks, data gaps, etc.)
 
 Phase 4 additions:
-  contracts_v2.py        → Enhanced input AND output contracts with provenance hashing
+  contracts_v2.py        → Input contracts, ContractViolation, legacy helper types
   validation.py          → Runtime boundary enforcement (AgentValidator, PipelineValidator)
   conflict_resolution.py → Deterministic conflict resolution protocols
   tracing.py             → Pipeline observability (PipelineTracer, TraceSpan)
@@ -21,7 +21,6 @@ All imports still work from the package root:
     from schemas.agent_contracts import AgentValidator, ConflictResolver, PipelineTracer
 """
 
-# ── Shared types ──
 # ── Analyst ──
 from .analyst import (
     AnalystOutput,
@@ -33,40 +32,26 @@ from .conflict_resolution import (
     ConflictResolver,
     ConflictType,
 )
+
+# ── Phase 4: Input contracts + shared types from contracts_v2 ──
 from .contracts_v2 import (
     AnalystInput,
     ContractViolation,
     DataQualityLevel,
-    # Strategist V2
     GuardrailVerification,
     PositionIndex,
     ScoutInput,
     StrategistInput,
     UrgencyScore,
-    compute_provenance_hash,
 )
 from .contracts_v2 import (
-    AnalystOutput as AnalystOutputV2,
-)
-from .contracts_v2 import (
-    # Scout V2
     CompetitorPrice as CompetitorPriceV2,
 )
 from .contracts_v2 import (
-    # Analyst V2
     ElasticityEstimate as ElasticityEstimateV2,
 )
-
-# ── Phase 4: Enhanced Semantic Contracts ──
 from .contracts_v2 import (
-    # Shared types (prefixed to avoid collision with Phase 1 PriceDirection)
     PriceDirection as PriceDirectionV2,
-)
-from .contracts_v2 import (
-    ScoutOutput as ScoutOutputV2,
-)
-from .contracts_v2 import (
-    StrategistOutput as StrategistOutputV2,
 )
 
 # ── Intelligence Environment Responses ──
@@ -101,6 +86,7 @@ from .shared import (
     DataSource,
     PriceDirection,
     UrgencyLevel,
+    compute_provenance_hash,
 )
 
 # ── Strategist ──
@@ -119,6 +105,11 @@ from .validation import (
     ValidationResult,
     ValidationStatus,
 )
+
+# Backward-compat aliases — these now resolve to the same per-agent classes
+ScoutOutputV2 = ScoutOutput
+AnalystOutputV2 = AnalystOutput
+StrategistOutputV2 = StrategistOutput
 
 __all__ = [
     "AccuracyStats",

@@ -11,8 +11,9 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 
@@ -68,7 +69,9 @@ class AlertConfiguration(SQLModel, table=True):
     __tablename__ = "alert_configurations"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(foreign_key="users.id", index=True)
+    user_id: UUID = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
 
     # Configuration
     name: str = Field(max_length=255)
@@ -118,8 +121,13 @@ class Alert(SQLModel, table=True):
     __tablename__ = "alerts"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(foreign_key="users.id", index=True)
-    configuration_id: UUID | None = Field(default=None, foreign_key="alert_configurations.id")
+    user_id: UUID = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
+    configuration_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("alert_configurations.id", ondelete="SET NULL"), nullable=True),
+    )
 
     # Alert details
     alert_type: AlertType
@@ -128,9 +136,18 @@ class Alert(SQLModel, table=True):
     message: str = Field(sa_column=Column(Text))
 
     # Context
-    product_id: UUID | None = Field(default=None, foreign_key="products.id")
-    competitor_id: UUID | None = Field(default=None, foreign_key="competitors.id")
-    recommendation_id: UUID | None = Field(default=None, foreign_key="price_recommendations.id")
+    product_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True),
+    )
+    competitor_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("competitors.id", ondelete="SET NULL"), nullable=True),
+    )
+    recommendation_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("price_recommendations.id", ondelete="SET NULL"), nullable=True),
+    )
 
     # Rich data payload
     # Example: {"sentiment_score": -0.45, "previous_score": 0.2, "change": -0.65}

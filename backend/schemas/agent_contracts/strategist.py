@@ -14,7 +14,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 from .analyst import ConfidenceDecomposition
-from .shared import PriceDirection
+from .shared import PriceDirection, compute_provenance_hash
 
 
 class GuardrailCheck(BaseModel):
@@ -127,6 +127,10 @@ class StrategistOutput(BaseModel):
         if self.change_direction == PriceDirection.HOLD and abs(self.change_percent) > Decimal("0.5"):
             raise ValueError("change_percent should be near zero for HOLD direction")
         return self
+
+    @property
+    def provenance_hash(self) -> str:
+        return compute_provenance_hash(self.model_dump(mode="json"))
 
     def to_evidence(self) -> dict:
         """Serialize for JSONB storage on RecommendationOutcome.strategist_evidence."""

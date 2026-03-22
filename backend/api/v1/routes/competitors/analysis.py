@@ -54,15 +54,21 @@ async def compare_prices(
             recommendation="Add competitor product links to enable price comparison.",
         )
 
+    # Batch-fetch all competitors in one query instead of N+1
+    competitor_ids = {cp.competitor_id for cp in competitor_products}
+    comp_result = await db.execute(
+        select(Competitor).where(Competitor.id.in_(competitor_ids))
+    )
+    competitors_map = {c.id: c for c in comp_result.scalars().all()}
+
     competitor_prices = []
     for cp in competitor_products:
-        comp_result = await db.execute(select(Competitor).where(Competitor.id == cp.competitor_id))
-        competitor = comp_result.scalars().first()
+        competitor = competitors_map.get(cp.competitor_id)
 
         diff = product.current_price - cp.current_price
         competitor_prices.append(
             {
-                "competitor_name": competitor.name,
+                "competitor_name": competitor.name if competitor else "Unknown",
                 "price": cp.current_price,
                 "url": cp.competitor_product_url,
                 "difference": diff,
@@ -115,10 +121,12 @@ async def get_competitor_alerts(
     """Get recent significant competitor price changes."""
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
+    # Single joined query instead of N+1 (3 queries per history record)
     result = await db.execute(
-        select(CompetitorPriceHistory)
-        .join(CompetitorProduct)
-        .join(Product)
+        select(CompetitorPriceHistory, CompetitorProduct, Competitor, Product)
+        .join(CompetitorProduct, CompetitorPriceHistory.competitor_product_id == CompetitorProduct.id)
+        .join(Competitor, CompetitorProduct.competitor_id == Competitor.id)
+        .join(Product, CompetitorProduct.product_id == Product.id)
         .where(Product.user_id == current_user.id)
         .where(CompetitorPriceHistory.observed_at >= cutoff)
         .where(
@@ -128,19 +136,10 @@ async def get_competitor_alerts(
         )
         .order_by(CompetitorPriceHistory.observed_at.desc())
     )
-    histories = result.scalars().all()
+    rows = result.all()
 
     alerts = []
-    for h in histories:
-        cp_result = await db.execute(select(CompetitorProduct).where(CompetitorProduct.id == h.competitor_product_id))
-        cp = cp_result.scalars().first()
-
-        comp_result = await db.execute(select(Competitor).where(Competitor.id == cp.competitor_id))
-        competitor = comp_result.scalars().first()
-
-        prod_result = await db.execute(select(Product).where(Product.id == cp.product_id))
-        product = prod_result.scalars().first()
-
+    for h, cp, competitor, product in rows:
         if h.change_type == "promotion":
             alert_type = "price_drop"
             suggested_action = "Monitor closely. Consider matching if promotion persists."

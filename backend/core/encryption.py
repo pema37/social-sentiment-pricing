@@ -9,7 +9,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_SENTINEL_BYTES = {b"pending", b""}
+_SENTINEL_BYTES = {b"pending", b"", b"revoked"}
 
 
 def _validate_encryption_key() -> None:

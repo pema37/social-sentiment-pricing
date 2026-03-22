@@ -68,7 +68,7 @@ class Integration(SQLModel, table=True):
 
     # Foreign key to user (will become organization_id later)
     user_id: uuid_lib.UUID | None = Field(
-        default=None, sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+        default=None, sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     )
 
     # Platform identification
@@ -133,7 +133,7 @@ class IntegrationSyncLog(SQLModel, table=True):
     )
 
     integration_id: uuid_lib.UUID = Field(
-        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("integrations.id"), nullable=False, index=True)
+        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("integrations.id", ondelete="CASCADE"), nullable=False, index=True)
     )
 
     # Sync details
@@ -189,10 +189,10 @@ class ProductIntegrationLink(SQLModel, table=True):
 
     # Links
     product_id: uuid_lib.UUID = Field(
-        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
+        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     )
     integration_id: uuid_lib.UUID = Field(
-        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("integrations.id"), nullable=False, index=True)
+        sa_column=SAColumn(PG_UUID(as_uuid=True), ForeignKey("integrations.id", ondelete="CASCADE"), nullable=False, index=True)
     )
 
     # External platform identifiers

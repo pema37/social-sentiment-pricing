@@ -639,6 +639,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/analysis.py` lines 58–74, 134–142
 - **Issue:** `compare_prices` executes one query per competitor in a Python loop. `get_competitor_alerts` executes 3 queries per history record. For 50 competitors this is 51 queries; for 100 history records this is 301 queries.
 - **Impact:** Severe performance degradation; request timeouts and DB connection pool exhaustion under load.
+- **Status: FIXED 2026-03-22** — `compare_prices`: batch-fetch all Competitors in one query with `IN` clause. `get_competitor_alerts`: single joined query selecting `(History, CompetitorProduct, Competitor, Product)` instead of 3 queries per row.
 
 ---
 
@@ -670,6 +671,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/integration.py` line 71; `backend/models/product.py` line 31; `backend/models/social_mention.py` lines 19, 23; `backend/models/sentiment.py` line 21; `backend/models/alert.py` lines 71, 121–133
 - **Issue:** FK relationships have no `ondelete` rule. Deleting a user or product either raises a constraint violation or leaves orphaned rows.
 - **Impact:** User deletion fails with FK constraint error, or leaves dangling integrations, sentiments, products, and alerts.
+- **Status: FIXED 2026-03-22** — Added `ondelete="CASCADE"` for non-nullable FKs (user_id, product_id, integration_id) and `ondelete="SET NULL"` for nullable FKs (alert context refs). Alembic migration `fk_ondelete_001` generated.
 
 ---
 
@@ -677,6 +679,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/schemas/agent_contracts/contracts_v2.py`; `backend/schemas/agent_contracts/scout.py`; `backend/schemas/agent_contracts/analyst.py`; `backend/schemas/agent_contracts/strategist.py`
 - **Issue:** Three pairs of conflicting classes with different field names and types. `contracts_v2.ScoutOutput` has `review_sentiment_score: float` while `scout.ScoutOutput` has `sentiment: SentimentSnapshot`. `contracts_v2.StrategistOutput` has `suggested_price: float` while `strategist.ScoutOutput` has `recommended_price: Decimal`. `validation.py` uses v2 variants; `pipeline.py` uses per-agent variants. They are incompatible.
 - **Impact:** Contract validation always checks a different schema than agents actually produce. Silent validation pass/fail with no correctness guarantee.
+- **Status: FIXED 2026-03-22** — Removed duplicate Output classes from `contracts_v2.py`; now re-exports from per-agent modules (`scout.py`, `analyst.py`, `strategist.py`). Added `provenance_hash` property to per-agent Output classes. Moved `compute_provenance_hash` to `shared.py`. Updated `validation.py` to import from per-agent modules. `AnalystInput`/`StrategistInput` now reference the authoritative Output types.
 
 ---
 
@@ -684,6 +687,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/encryption.py` line 8; `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 312
 - **Issue:** On uninstall, `access_token_encrypted = b"revoked"`. `_SENTINEL_BYTES = {b"pending", b""}` does not include `b"revoked"`. `decrypt_token()` attempts Fernet decryption of `b"revoked"`, raises `InvalidToken` → `ValueError` instead of the sentinel early-return path.
 - **Impact:** Any code touching an uninstalled integration's token crashes with a misleading "reconnect required" error instead of a clean "revoked" path.
+- **Status: FIXED 2026-03-22** — Added `b"revoked"` to `_SENTINEL_BYTES` set in `core/encryption.py`.
 
 ---
 
@@ -1568,6 +1572,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/main.py` line 49 (approx)
 - **Issue:** `if HAS_X402 and os.getenv("PAY_TO_ADDRESS"):` — direct `os.getenv()` call outside `core/config.py`. If `PAY_TO_ADDRESS` is defined in Settings but not in raw `os.environ` (e.g., loaded from `.env` file by Pydantic), the x402 payment middleware silently doesn't initialize.
 - **Impact:** x402 payment endpoints appear to exist but all requests return payment-required errors that are never resolved because the middleware isn't active.
+- **Status: FIXED 2026-03-22** — Added `PAY_TO_ADDRESS` to Settings class in `core/config.py`; replaced `os.getenv()` with `settings.PAY_TO_ADDRESS`; removed top-level `import os`.
 
 ---
 

@@ -3,9 +3,10 @@ Agent Contracts V2 — Enforced Semantic Contracts
 ==================================================
 Phase 4 — Reasoning Protocols
 
-Input AND output Pydantic models for Scout, Analyst, Strategist.
-Validated at every agent boundary. If validation fails, the pipeline
-halts with an explicit ContractViolation — not a degraded hallucination.
+Input contracts, shared types, and ContractViolation for the agent pipeline.
+Output contracts are defined in their respective per-agent modules
+(scout.py, analyst.py, strategist.py) and re-exported here for
+backward compatibility.
 
 Upgrades from Phase 1 agent_contracts.py:
   - Input contracts (not just output)
@@ -18,13 +19,20 @@ Location: backend/schemas/agent_contracts/contracts_v2.py
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .shared import compute_provenance_hash
+
+# Re-export authoritative Output classes from per-agent modules.
+# These replace the duplicate definitions that previously lived here
+# (which had incompatible field names/types vs what agents actually produce).
+from .analyst import AnalystOutput  # noqa: F401
+from .scout import ScoutOutput  # noqa: F401
+from .strategist import StrategistOutput  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Shared types
@@ -74,24 +82,14 @@ class ContractViolation(Exception):
         }
 
 
-def compute_provenance_hash(data: dict) -> str:
-    """
-    Compute a deterministic hash of agent output for provenance chain.
-
-    Used by downstream agents to verify they're working with the exact
-    output from the upstream agent (not a stale or modified version).
-    """
-    canonical = json.dumps(data, sort_keys=True, default=str)
-    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
-
-
 # ---------------------------------------------------------------------------
-# SCOUT CONTRACTS
+# Legacy helper types (kept for backward compatibility — no longer used by
+# the authoritative Output classes but may be imported elsewhere)
 # ---------------------------------------------------------------------------
 
 
 class CompetitorPrice(BaseModel):
-    """A single competitor price observation."""
+    """A single competitor price observation (legacy v2 schema)."""
 
     competitor_name: str = Field(min_length=1, max_length=255)
     price: float = Field(gt=0, description="Must be positive")
@@ -100,6 +98,58 @@ class CompetitorPrice(BaseModel):
     scraped_at: datetime | None = None
     in_stock: bool = True
     shipping_cost: float | None = Field(default=None, ge=0)
+
+
+class ElasticityEstimate(BaseModel):
+    """Price elasticity of demand estimate with uncertainty (legacy v2 schema)."""
+
+    value: float = Field(description="PED value (typically negative)")
+    confidence_interval_low: float
+    confidence_interval_high: float
+    sample_size: int = Field(ge=0)
+    method: str = Field(default="bayesian_hierarchical")
+
+    @field_validator("value")
+    @classmethod
+    def elasticity_reasonable(cls, v: float) -> float:
+        if abs(v) > 10:
+            raise ValueError(f"Elasticity {v} is unreasonably large (|PED| > 10)")
+        return v
+
+
+class PositionIndex(BaseModel):
+    """Competitive position index (legacy v2 schema)."""
+
+    value: float = Field(ge=0, le=200, description="CPI = (avg_competitor / our_price) * 100")
+    percentile: float = Field(ge=0, le=100, description="% of competitors priced above us")
+    competitor_count: int = Field(ge=0)
+    gap_magnitude: float = Field(description="Average % gap from competitors")
+
+
+class UrgencyScore(BaseModel):
+    """Time-pressure urgency composite (legacy v2 schema)."""
+
+    value: float = Field(ge=0, le=1)
+    components: dict[str, float] = Field(
+        default_factory=dict,
+        description="Breakdown: sentiment, trend_velocity, competitor_signal, inventory, search_demand",
+    )
+
+
+class GuardrailVerification(BaseModel):
+    """Verification that all guardrails passed (legacy v2 schema)."""
+
+    min_margin_met: bool
+    max_change_respected: bool
+    daily_limit_ok: bool
+    cooldown_respected: bool
+    margin_after: float
+    guardrails_applied: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# SCOUT INPUT CONTRACT
+# ---------------------------------------------------------------------------
 
 
 class ScoutInput(BaseModel):
@@ -125,88 +175,9 @@ class ScoutInput(BaseModel):
     )
 
 
-class ScoutOutput(BaseModel):
-    """
-    Structured competitive and market data from the Scout agent.
-
-    Every field is typed and constrained — no free-text analysis.
-    The Scout observes; it does not interpret or recommend.
-    """
-
-    product_id: str
-    merchant_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    # Competitive data
-    competitor_prices: list[CompetitorPrice] = Field(default_factory=list)
-    our_current_price: float = Field(gt=0)
-
-    # Market signals (numeric, not qualitative)
-    review_sentiment_score: float = Field(ge=-1, le=1, description="Aggregate sentiment -1 to +1")
-    review_count_30d: int = Field(ge=0)
-    search_volume_trend: float = Field(ge=-1, le=1, description="-1=declining, +1=growing")
-    social_mention_count_7d: int = Field(ge=0)
-
-    # Data quality + provenance
-    data_completeness: float = Field(ge=0, le=1, description="% of target data found")
-    sources_checked: list[str] = Field(min_length=0)
-    sources_failed: list[str] = Field(default_factory=list)
-    confidence: float = Field(ge=0, le=1)
-
-    @property
-    def data_quality_level(self) -> DataQualityLevel:
-        if self.data_completeness >= 0.8:
-            return DataQualityLevel.HIGH
-        elif self.data_completeness >= 0.5:
-            return DataQualityLevel.MEDIUM
-        elif self.data_completeness >= 0.2:
-            return DataQualityLevel.LOW
-        return DataQualityLevel.INSUFFICIENT
-
-    @property
-    def provenance_hash(self) -> str:
-        return compute_provenance_hash(self.model_dump(mode="json"))
-
-
 # ---------------------------------------------------------------------------
-# ANALYST CONTRACTS
+# ANALYST INPUT CONTRACT
 # ---------------------------------------------------------------------------
-
-
-class ElasticityEstimate(BaseModel):
-    """Price elasticity of demand estimate with uncertainty."""
-
-    value: float = Field(description="PED value (typically negative)")
-    confidence_interval_low: float
-    confidence_interval_high: float
-    sample_size: int = Field(ge=0)
-    method: str = Field(default="bayesian_hierarchical")
-
-    @field_validator("value")
-    @classmethod
-    def elasticity_reasonable(cls, v: float) -> float:
-        if abs(v) > 10:
-            raise ValueError(f"Elasticity {v} is unreasonably large (|PED| > 10)")
-        return v
-
-
-class PositionIndex(BaseModel):
-    """Competitive position index."""
-
-    value: float = Field(ge=0, le=200, description="CPI = (avg_competitor / our_price) * 100")
-    percentile: float = Field(ge=0, le=100, description="% of competitors priced above us")
-    competitor_count: int = Field(ge=0)
-    gap_magnitude: float = Field(description="Average % gap from competitors")
-
-
-class UrgencyScore(BaseModel):
-    """Time-pressure urgency composite."""
-
-    value: float = Field(ge=0, le=1)
-    components: dict[str, float] = Field(
-        default_factory=dict,
-        description="Breakdown: sentiment, trend_velocity, competitor_signal, inventory, search_demand",
-    )
 
 
 class AnalystInput(BaseModel):
@@ -214,6 +185,7 @@ class AnalystInput(BaseModel):
     What the Analyst receives from the Scout.
 
     Includes Scout's provenance hash for chain verification.
+    Uses the authoritative ScoutOutput from scout.py.
     """
 
     scout_output: ScoutOutput
@@ -232,64 +204,9 @@ class AnalystInput(BaseModel):
         return self
 
 
-class AnalystOutput(BaseModel):
-    """
-    Computed scores from the Analyst agent.
-
-    Scores are computed by the proprietary scoring engine (not LLM).
-    The Analyst interprets signals; it does not recommend prices.
-    """
-
-    product_id: str
-    merchant_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    scout_output_hash: str = Field(description="Provenance: links to exact Scout output")
-
-    # Proprietary scores (from deterministic scoring engine)
-    elasticity: ElasticityEstimate
-    position_index: PositionIndex
-    urgency_score: UrgencyScore
-
-    # Category context
-    category_avg_price: float | None = Field(default=None, gt=0)
-    category_price_range: tuple[float, float] | None = None
-    category_elasticity: float | None = None
-
-    # Signals for Strategist
-    price_direction: PriceDirection
-    magnitude_pct: float = Field(ge=-50, le=50)
-
-    # Evidence chain
-    reasoning_steps: list[str] = Field(min_length=1, description="Ordered logical steps")
-    key_evidence: list[dict] = Field(
-        default_factory=list,
-        description="[{fact, source, weight}]",
-    )
-    confidence: float = Field(ge=0, le=1)
-
-    # Quality warnings
-    data_quality_warnings: list[str] = Field(default_factory=list)
-    low_confidence_factors: list[str] = Field(default_factory=list)
-
-    @property
-    def provenance_hash(self) -> str:
-        return compute_provenance_hash(self.model_dump(mode="json"))
-
-
 # ---------------------------------------------------------------------------
-# STRATEGIST CONTRACTS
+# STRATEGIST INPUT CONTRACT
 # ---------------------------------------------------------------------------
-
-
-class GuardrailVerification(BaseModel):
-    """Verification that all guardrails passed."""
-
-    min_margin_met: bool
-    max_change_respected: bool
-    daily_limit_ok: bool
-    cooldown_respected: bool
-    margin_after: float
-    guardrails_applied: list[str] = Field(default_factory=list)
 
 
 class StrategistInput(BaseModel):
@@ -297,7 +214,8 @@ class StrategistInput(BaseModel):
     What the Strategist receives from the Analyst.
 
     Includes both Analyst output and original Scout output for
-    full evidence chain access.
+    full evidence chain access. Uses authoritative types from
+    analyst.py and scout.py.
     """
 
     analyst_output: AnalystOutput
@@ -315,79 +233,3 @@ class StrategistInput(BaseModel):
                 f"expected {expected}. Analyst output may have been modified."
             )
         return self
-
-
-class StrategistOutput(BaseModel):
-    """
-    Final pricing recommendation from the Strategist.
-
-    The Strategist produces the actionable recommendation with
-    guardrail verification and full evidence chain.
-    """
-
-    recommendation_id: str = Field(min_length=1)
-    product_id: str
-    merchant_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    analyst_output_hash: str = Field(description="Provenance chain")
-
-    # The recommendation
-    current_price: float = Field(gt=0)
-    suggested_price: float = Field(gt=0)
-    change_pct: float = Field(ge=-50, le=50)
-    direction: PriceDirection
-
-    # Guardrails verification
-    guardrails: GuardrailVerification
-
-    # Confidence with decomposition
-    confidence: float = Field(ge=0, le=1)
-    confidence_decomposition: dict[str, float] = Field(
-        default_factory=dict,
-        description="Per-component confidence: {elasticity, position, urgency, data_quality}",
-    )
-
-    # Evidence chain (full provenance from Scout → Analyst → Strategist)
-    justification: str = Field(
-        min_length=10,
-        max_length=2000,
-        description="Human-readable justification",
-    )
-    risk_factors: list[str] = Field(default_factory=list)
-    evidence_chain: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Full Scout→Analyst→Strategist evidence",
-    )
-
-    # Experiment metadata (if IE is enabled)
-    experiment_arm: str | None = None
-    is_exploration: bool = False
-    scoring_version: str | None = None
-
-    @field_validator("suggested_price")
-    @classmethod
-    def price_must_be_reasonable(cls, v: float) -> float:
-        if v > 1_000_000:
-            raise ValueError(f"Suggested price {v} is unreasonably high")
-        return v
-
-    @model_validator(mode="after")
-    def verify_direction_matches_change(self) -> StrategistOutput:
-        if self.change_pct > 0.1 and self.direction != PriceDirection.INCREASE:
-            raise ValueError(f"change_pct={self.change_pct} but direction={self.direction}")
-        if self.change_pct < -0.1 and self.direction != PriceDirection.DECREASE:
-            raise ValueError(f"change_pct={self.change_pct} but direction={self.direction}")
-        return self
-
-    @model_validator(mode="after")
-    def verify_guardrails_passed(self) -> StrategistOutput:
-        g = self.guardrails
-        if not g.min_margin_met:
-            raise ValueError(f"Cannot recommend a price that violates margin floor. Margin after: {g.margin_after}")
-        if not g.max_change_respected:
-            raise ValueError(f"Price change {self.change_pct}% exceeds max allowed")
-        return self
-
-    @property
-    def provenance_hash(self) -> str:
-        return compute_provenance_hash(self.model_dump(mode="json"))
