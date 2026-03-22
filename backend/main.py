@@ -159,6 +159,12 @@ app.add_middleware(RequestLoggingMiddleware)
 
 cors_origins = settings.cors_origins_list
 if "*" in cors_origins:
+    if settings.ENVIRONMENT == "production":
+        raise RuntimeError(
+            "CORS_ORIGINS='*' is not allowed in production. "
+            "Set explicit origins to prevent unrestricted cross-origin access."
+        )
+    logger.warning("CORS wildcard enabled — acceptable only in development/staging")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

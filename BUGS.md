@@ -1097,6 +1097,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/security.py` line 26
 - **Issue:** `CryptContext(schemes=["bcrypt"], deprecated="auto")` with no explicit `bcrypt__rounds`. Relies on passlib default of 12. No startup assertion enforces this.
 - **Impact:** Configuration regression goes undetected if passlib default changes or context is misconfigured.
+- **Status: FIXED 2026-03-22** — Added explicit `bcrypt__rounds=12` and import-time assertion that rounds == 12.
 
 ---
 
@@ -1104,6 +1105,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/config.py` line 39; `backend/core/security.py` line 19
 - **Issue:** `JWT_SECRET_KEY: str` with no minimum length or entropy validator. A value of `"secret"` accepted silently.
 - **Impact:** Weak JWT secret accidentally deployed to production enables token forgery.
+- **Status: FIXED 2026-03-22** — Added Pydantic `model_validator` on Settings that rejects JWT_SECRET_KEY shorter than 32 chars at startup.
 
 ---
 
@@ -1111,6 +1113,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/integration.py` lines 113–115; `backend/models/alert.py` lines 101–103; `backend/models/competitor.py` lines 61–64; `backend/models/competitor_product.py` lines 78–81; `backend/models/product.py` lines 62–65
 - **Issue:** `updated_at` defined with only `default=lambda: datetime.now(UTC)`, no `onupdate=`. Only `User.updated_at` has `onupdate`. All other models require routes to manually set `updated_at` on every write — done inconsistently.
 - **Impact:** `updated_at` silently stays at creation timestamp for most model types. Change-detection dashboards and audit logs show incorrect timestamps.
+- **Status: FIXED 2026-03-22** — Added `onupdate=lambda: datetime.now(UTC)` to `updated_at` Column on Integration, ProductIntegrationLink, AlertConfiguration, Competitor, CompetitorProduct, Product, and Subscription models.
 
 ---
 
@@ -1118,6 +1121,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/main.py` lines 162–169
 - **Issue:** If `CORS_ORIGINS=*` is set, `allow_origins=["*"]` is enabled with `allow_credentials=False`. No check prevents this from being deployed to production.
 - **Impact:** If accidentally set in production, all unauthenticated API endpoints accessible from any browser origin.
+- **Status: FIXED 2026-03-22** — Added `RuntimeError` if `CORS_ORIGINS=*` and `ENVIRONMENT=production`; warning log for dev/staging.
 
 ---
 
@@ -1125,6 +1129,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/integration.py` lines 110–115
 - **Issue:** `created_at` and `updated_at` use `sa_column=Column(DateTime(...), default=...)` — a SQLAlchemy server-side default, not a Python `default_factory`. Fields are `None` when constructing instances in Python before a DB flush.
 - **Impact:** `IntegrationResponse` serialization can fail or return wrong data when called on uncommitted objects.
+- **Status: FIXED 2026-03-22** — Added `default_factory=lambda: datetime.now(UTC)` on Field alongside SA Column default for Integration, ProductIntegrationLink, AlertConfiguration, and Subscription timestamp fields.
 
 ---
 

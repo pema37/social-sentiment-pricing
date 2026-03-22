@@ -1,6 +1,7 @@
 # backend/core/config.py
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).parent.parent
@@ -38,6 +39,16 @@ class Settings(BaseSettings):
     # ===================
     JWT_SECRET_KEY: str
     ALGORITHM: str = "HS256"
+
+    @model_validator(mode="after")
+    def _validate_jwt_secret_entropy(self) -> "Settings":
+        """Reject weak JWT secrets at startup — minimum 32 characters required."""
+        if len(self.JWT_SECRET_KEY) < 32:
+            raise ValueError(
+                f"JWT_SECRET_KEY too short ({len(self.JWT_SECRET_KEY)} chars). "
+                "Minimum 32 characters required to prevent token forgery."
+            )
+        return self
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
     ENCRYPTION_KEY: str

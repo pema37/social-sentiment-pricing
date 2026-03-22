@@ -88,10 +88,17 @@ class Subscription(SubscriptionBase, table=True):
 
     # Timestamps
     created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)),
     )
     updated_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            default=lambda: datetime.now(UTC),
+            onupdate=lambda: datetime.now(UTC),
+        ),
     )
 
 

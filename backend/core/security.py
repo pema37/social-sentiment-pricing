@@ -22,8 +22,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = 7  # Refresh tokens last 7 days
 RESET_TOKEN_EXPIRE_MINUTES = 30
 
-# Password hashing context (bcrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing context (bcrypt) — explicit rounds to prevent silent regression
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+
+# Assert cost factor at import time so misconfiguration is caught immediately
+_effective_rounds = pwd_context.handler("bcrypt").default_rounds
+assert _effective_rounds == 12, f"bcrypt rounds misconfigured: expected 12, got {_effective_rounds}"
 
 
 def hash_password(password: str) -> str:
