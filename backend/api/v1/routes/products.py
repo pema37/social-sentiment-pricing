@@ -420,7 +420,7 @@ async def generate_description(
     if not ai_generator.is_available():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service not available. Please configure OPENAI_API_KEY.",
+            detail="AI service is temporarily unavailable. Please try again later.",
         )
 
     # Get product

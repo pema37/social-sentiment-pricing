@@ -175,7 +175,7 @@ async def detect_sentiment_crises(
         if sentiment_drop >= threshold or current_avg < -0.3:
             # Gather negative mentions
             negative_mentions = [s for s in recent_sentiments if float(s.compound_score) < -0.1]
-            sample_texts = [s.text[:200] for s in negative_mentions[:5] if s.text]
+            sample_texts = [s.raw_text[:200] for s in negative_mentions[:5] if s.raw_text]
 
             # Determine severity
             if sentiment_drop >= 0.4 or current_avg < -0.5:

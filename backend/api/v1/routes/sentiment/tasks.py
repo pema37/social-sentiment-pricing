@@ -61,7 +61,7 @@ async def process_mentions(
     if current_user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    task = process_pending_mentions.delay(batch_size)
+    task = process_pending_mentions.delay(batch_size, user_id=str(current_user.id))
 
     return {
         "status": "queued",

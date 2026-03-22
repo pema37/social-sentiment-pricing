@@ -181,7 +181,7 @@ async def verify_shopify_charge(
 async def shopify_billing_callback(
     charge_id: str,
     shop: str | None = None,
-    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Legacy billing callback (GET redirect).

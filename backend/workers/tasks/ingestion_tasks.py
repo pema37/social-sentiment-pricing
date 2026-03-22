@@ -243,7 +243,7 @@ async def _fetch_for_product(task_self, product_id: str):
     soft_time_limit=270,
     time_limit=300,
 )
-def process_pending_mentions(self, batch_size: int = 50):
+def process_pending_mentions(self, batch_size: int = 50, user_id: str | None = None):
     """
     Process unprocessed social mentions through sentiment analysis.
 
@@ -252,6 +252,10 @@ def process_pending_mentions(self, batch_size: int = 50):
     2. Run sentiment analysis using VADER + OpenAI + Gemini (hybrid)
     3. Store the sentiment results
 
+    Args:
+        batch_size: Number of mentions to process per batch.
+        user_id: If provided, only process mentions belonging to this user (tenant scope).
+
     RATE LIMIT FIX:
     - batch_size reduced from 100 to 50
     - Checks circuit breaker before AI API calls
@@ -259,12 +263,13 @@ def process_pending_mentions(self, batch_size: int = 50):
     - Commits after EACH mention (survives task timeouts)
     - Always marks mentions as processed (no infinite loops)
     """
-    return run_async(_process_pending_mentions(self, batch_size))
+    return run_async(_process_pending_mentions(self, batch_size, user_id=user_id))
 
 
-async def _process_pending_mentions(task_self, batch_size: int):
+async def _process_pending_mentions(task_self, batch_size: int, user_id: str | None = None):
     """Async implementation of processing pending mentions."""
     from decimal import Decimal
+    from uuid import UUID
 
     from models.sentiment import Sentiment
     from models.social_mention import SocialMention
@@ -282,13 +287,14 @@ async def _process_pending_mentions(task_self, batch_size: int):
     async with session_maker() as session:
         task_self.update_state(state="LOADING", meta={"batch_size": batch_size})
 
-        # Get unprocessed mentions
+        # Get unprocessed mentions, scoped to user if provided
         stmt = (
             select(SocialMention)
             .where(SocialMention.processed.is_(False))
-            .order_by(SocialMention.collected_at.asc())
-            .limit(batch_size)
         )
+        if user_id:
+            stmt = stmt.where(SocialMention.user_id == UUID(user_id))
+        stmt = stmt.order_by(SocialMention.collected_at.asc()).limit(batch_size)
         result = await session.execute(stmt)
         mentions = result.scalars().all()
 

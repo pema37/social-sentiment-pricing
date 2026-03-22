@@ -289,9 +289,8 @@ async def match_product(
         if request.auto_link and response.success:
             background_tasks.add_task(
                 _auto_link_competitors,
-                db=db,
                 user_id=current_user.id,
-                product=product,
+                product_id=product.id,
                 matches=response.products,
                 threshold=request.auto_link_threshold,
             )
@@ -373,9 +372,8 @@ async def bulk_match_products(
             if request.auto_link and response.success:
                 background_tasks.add_task(
                     _auto_link_competitors,
-                    db=db,
                     user_id=current_user.id,
-                    product=product,
+                    product_id=product.id,
                     matches=response.products,
                     threshold=request.auto_link_threshold,
                 )
@@ -444,9 +442,8 @@ async def clear_cache(
 
 
 async def _auto_link_competitors(
-    db: AsyncSession,
     user_id: UUID,
-    product: Product,
+    product_id: UUID,
     matches: list[MatchedProduct],
     threshold: float,
 ) -> list[dict]:
@@ -454,103 +451,108 @@ async def _auto_link_competitors(
     Background task to auto-link high-confidence competitor matches.
 
     Creates CompetitorProduct entries for matches above the threshold.
+    Uses its own database session since FastAPI closes the request session
+    before background tasks run.
     """
     from sqlalchemy import select
+
+    from db.session import async_session
 
     links_created = []
     domain_cache: dict[str, "Competitor"] = {}
     seen_urls: set[str] = set()
 
-    for match in matches:
-        # Skip low confidence
-        if match.confidence_score < threshold:
-            continue
+    async with async_session() as db:
+        for match in matches:
+            # Skip low confidence
+            if match.confidence_score < threshold:
+                continue
 
-        # Skip if no price
-        if match.price is None:
-            continue
+            # Skip if no price
+            if match.price is None:
+                continue
 
-        # Deduplicate URLs within same batch to prevent duplicate rows
-        if match.url in seen_urls:
-            continue
-        seen_urls.add(match.url)
+            # Deduplicate URLs within same batch to prevent duplicate rows
+            if match.url in seen_urls:
+                continue
+            seen_urls.add(match.url)
 
-        try:
-            domain = match.merchant_domain
+            try:
+                domain = match.merchant_domain
 
-            # Use cached competitor to prevent duplicate creation for same domain
-            if domain in domain_cache:
-                competitor = domain_cache[domain]
-            else:
-                # Find or create competitor
-                stmt = select(Competitor).where(
-                    Competitor.user_id == user_id,
-                    Competitor.website.ilike(f"%{domain}%"),
+                # Use cached competitor to prevent duplicate creation for same domain
+                if domain in domain_cache:
+                    competitor = domain_cache[domain]
+                else:
+                    # Find or create competitor
+                    stmt = select(Competitor).where(
+                        Competitor.user_id == user_id,
+                        Competitor.website.ilike(f"%{domain}%"),
+                    )
+                    result = await db.execute(stmt)
+                    competitor = result.scalar_one_or_none()
+
+                    if not competitor:
+                        # Create new competitor
+                        competitor = Competitor(
+                            user_id=user_id,
+                            name=match.merchant,
+                            website=f"https://{domain}",
+                            is_active=True,
+                        )
+                        db.add(competitor)
+                        await db.flush()
+
+                    domain_cache[domain] = competitor
+
+                # Check if link already exists
+                stmt = select(CompetitorProduct).where(
+                    CompetitorProduct.product_id == product_id,
+                    CompetitorProduct.competitor_id == competitor.id,
+                    CompetitorProduct.competitor_product_url == match.url,
                 )
                 result = await db.execute(stmt)
-                competitor = result.scalar_one_or_none()
+                existing = result.scalar_one_or_none()
 
-                if not competitor:
-                    # Create new competitor
-                    competitor = Competitor(
-                        user_id=user_id,
-                        name=match.merchant,
-                        website=f"https://{domain}",
+                if existing:
+                    # Update existing
+                    existing.current_price = match.price
+                    existing.match_confidence = Decimal(str(match.confidence_score))
+                else:
+                    # Create new link
+                    link = CompetitorProduct(
+                        product_id=product_id,
+                        competitor_id=competitor.id,
+                        competitor_product_name=match.title,
+                        competitor_product_url=match.url,
+                        current_price=match.price,
+                        currency=match.currency,
+                        match_confidence=Decimal(str(match.confidence_score)),
                         is_active=True,
                     )
-                    db.add(competitor)
-                    await db.flush()
+                    db.add(link)
 
-                domain_cache[domain] = competitor
+                    links_created.append(
+                        {
+                            "merchant": match.merchant,
+                            "url": match.url,
+                            "price": str(match.price),
+                            "confidence": match.confidence_percent,
+                        }
+                    )
 
-            # Check if link already exists
-            stmt = select(CompetitorProduct).where(
-                CompetitorProduct.product_id == product.id,
-                CompetitorProduct.competitor_id == competitor.id,
-                CompetitorProduct.competitor_product_url == match.url,
-            )
-            result = await db.execute(stmt)
-            existing = result.scalar_one_or_none()
+            except Exception as e:
+                logger.error(f"Failed to auto-link {match.url}: {e}")
+                await db.rollback()
+                return []
 
-            if existing:
-                # Update existing
-                existing.current_price = match.price
-                existing.match_confidence = Decimal(str(match.confidence_score))
-            else:
-                # Create new link
-                link = CompetitorProduct(
-                    product_id=product.id,
-                    competitor_id=competitor.id,
-                    competitor_product_name=match.title,
-                    competitor_product_url=match.url,
-                    current_price=match.price,
-                    currency=match.currency,
-                    match_confidence=Decimal(str(match.confidence_score)),
-                    is_active=True,
-                )
-                db.add(link)
-
-                links_created.append(
-                    {
-                        "merchant": match.merchant,
-                        "url": match.url,
-                        "price": str(match.price),
-                        "confidence": match.confidence_percent,
-                    }
-                )
-
+        try:
+            await db.commit()
         except Exception as e:
-            logger.error(f"Failed to auto-link {match.url}: {e}")
+            logger.error(f"Failed to commit auto-linked competitors: {e}")
             await db.rollback()
             return []
 
-    try:
-        await db.commit()
-    except Exception as e:
-        logger.error(f"Failed to commit auto-linked competitors: {e}")
-        await db.rollback()
-        return []
-
-    logger.info(f"Auto-linked {len(links_created)} competitors for product {product.id}")
+    logger.info(f"Auto-linked {len(links_created)} competitors for product {product_id}")
 
     return links_created

@@ -1057,6 +1057,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/shopify_billing.py` lines 179–195
 - **Issue:** No `get_current_user` dependency. Any caller can supply an arbitrary `charge_id` and be redirected to `{FRONTEND_URL}/settings/billing?charge_id=<attacker_value>`.
 - **Impact:** Open redirect; attacker can craft a legitimate-looking app URL that redirects to a malicious billing page.
+- **Status: FIXED 2026-03-22** — Added `get_current_user` dependency; removed unused `db` session parameter.
 
 ---
 
@@ -1064,6 +1065,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/products.py` lines 419–423
 - **Issue:** 503 error detail says "Please configure OPENAI_API_KEY" — exposes internal env var name to any API caller. App uses Gemini, not OpenAI.
 - **Impact:** Information disclosure of environment variable names; misleading for debugging.
+- **Status: FIXED 2026-03-22** — Replaced with generic "AI service is temporarily unavailable" message.
 
 ---
 
@@ -1071,6 +1073,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/matching.py` lines 289–296
 - **Issue:** `background_tasks.add_task(..., db=db)` — FastAPI closes the injected `AsyncSession` after the request handler returns. Task calls `db.execute`, `db.add`, `db.commit` on a stale closed session.
 - **Impact:** Runtime `InvalidRequestError` or silent data loss when auto-linking fires after response is sent.
+- **Status: FIXED 2026-03-22** — Task now creates its own `async_session()` instead of receiving the request-scoped session. Callers pass `product_id` instead of `product` object.
 
 ---
 
@@ -1078,6 +1081,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/tasks.py` lines 48–67
 - **Issue:** `POST /process` enqueues `process_pending_mentions.delay(batch_size)` with no `user_id` argument. Any authenticated user can trigger a global system-wide processing job.
 - **Impact:** Any user can trigger expensive full-system jobs; no tenant isolation.
+- **Status: FIXED 2026-03-22** — Route now passes `user_id=str(current_user.id)` to task. Task accepts optional `user_id` and filters `SocialMention` by it; Celery beat (no user_id) still processes globally.
 
 ---
 
@@ -1085,6 +1089,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/alerts/crisis_detection.py` line 186
 - **Issue:** `sample_texts = [s.text[:200] for s in negative_mentions[:5] if s.text]` — `Sentiment` model stores text in `raw_text`, not `text`. Accessing `.text` returns `None` silently. `sample_texts` is always empty.
 - **Impact:** AI crisis summaries generated without any sample texts; always generic and useless.
+- **Status: FIXED 2026-03-22** — Changed `s.text` to `s.raw_text` to match the Sentiment model field.
 
 ---
 
