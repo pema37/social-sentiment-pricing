@@ -2356,6 +2356,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/scoring/learning/batch_tasks.py` line 468
 - **Issue:** `from database.session import get_db_session` — the module is `db.session` (not `database.session`) and the function is `get_session()` (not `get_db_session()`). This import is inside the `fetch_outcomes` nested function inside `_get_orchestrator()`.
 - **Impact:** `ImportError` at Celery task execution time. The weekly learning cycle (feature compute, prior update, context cache refresh) all fail silently. Bayesian priors and ContextInjector cache are never updated. The learning loop is completely broken in production.
+- **Status: FALSE POSITIVE** — Code already reads `from db.session import get_sync_session`, which is correct.
 
 ---
 
@@ -2370,6 +2371,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/webhook_handler.py` lines 139, 226
 - **Issue:** Both `handle_shopify_webhook()` and `handle_woocommerce_webhook()` call `await self.sync_service.sync_single_product(integration_id=..., external_product_id=..., action=...)`. `SyncService` has no `sync_single_product` method — it only has `run_sync()`, `recover_stuck_syncs()`, and `get_stuck_syncs()`. The outer `except Exception` handler at line 159/246 catches and silently swallows the resulting `AttributeError`.
 - **Impact:** Every incoming Shopify and WooCommerce product webhook (create/update/delete) silently fails. The product catalog in SSP is never updated from real-time webhook events. New products added to stores, price changes, and deletions are never reflected until a full sync runs.
+- **Status: FALSE POSITIVE** — `SyncService.sync_single_product()` exists at line 242 of `sync_service.py`.
 
 ---
 
@@ -2377,6 +2379,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/sync_verification_tasks.py` line 380
 - **Issue:** `from services.integration.models import PriceUpdateRequest` — there is no `models.py` in `services/integration/`. The correct module is `services.integration.schemas`. This import is inside `_auto_fix_price_mismatches()` and only executed when `dry_run=False`.
 - **Impact:** `auto_fix_mismatches` Celery task crashes with `ModuleNotFoundError` whenever dry_run=False is called. Automated price mismatch correction is completely broken.
+- **Status: FIXED 2026-03-22** — Changed import to `from services.integration.schemas import PriceUpdateRequest`.
 
 ---
 
@@ -2391,6 +2394,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/price_sync_service.py` lines 110–111, 121–122
 - **Issue:** `ShopifyService(self.db, integration)` and `WooCommerceService(self.db, integration)` pass `(db, integration)` positionally, but `EcommerceService.__init__` only accepts `retry_config: RetryConfig | None = None`. `self.db` lands as `retry_config`. Additionally, `service.get_product_price()` does not exist in the mixin architecture. `get_live_price()` catches all exceptions and returns `None`, silently swallowing the error.
 - **Impact:** `get_live_price()` always returns `None`. Price drift detection and live-price comparison in price sync are completely non-functional.
+- **Status: FALSE POSITIVE** — Code already uses `ShopifyService()` and `WooCommerceService()` with no args (correct), and calls `fetch_single_product()` (correct method).
 
 ---
 
@@ -2398,6 +2402,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/notification/alert_generator.py` line 48 (import), lines 387–388, 411, 439, 465, 527
 - **Issue:** `AlertGenerator.__init__(self, session: Session)` uses synchronous `sqlmodel.Session`. All public methods are `async def` but make synchronous DB calls: `self.session.exec()`, `self.session.commit()`, `self.session.refresh()`, `self.session.get()`, `self.session.add()`. These block the event loop from every async caller.
 - **Impact:** All alert generation (price change, trend, crisis) blocks the event loop. Under load, this stalls the entire FastAPI worker process, causing timeouts across unrelated requests.
+- **Status: FIXED 2026-03-22** — Changed `Session` to `AsyncSession`, converted all sync DB calls (`exec`, `commit`, `refresh`, `get`) to awaited async equivalents (`execute`, `commit`, `refresh`, `get`).
 
 ---
 

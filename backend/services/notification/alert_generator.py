@@ -12,7 +12,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlmodel import Session, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import func, select
 
 from models.alert import (
     Alert,
@@ -45,7 +46,7 @@ class AlertGenerator:
         )
     """
 
-    def __init__(self, session: Session, use_celery: bool = True):
+    def __init__(self, session: AsyncSession, use_celery: bool = True):
         """
         Initialize AlertGenerator.
 
@@ -384,8 +385,8 @@ class AlertGenerator:
         )
 
         self.session.add(alert)
-        self.session.commit()
-        self.session.refresh(alert)
+        await self.session.commit()
+        await self.session.refresh(alert)
 
         logger.info(f"Alert created: {alert.id} - {title}")
 
@@ -408,7 +409,8 @@ class AlertGenerator:
             AlertConfiguration.is_active,
         )
 
-        configs = self.session.exec(stmt).all()
+        result = await self.session.execute(stmt)
+        configs = result.scalars().all()
 
         for config in configs:
             # Check product filter
@@ -436,7 +438,8 @@ class AlertGenerator:
             Alert.configuration_id == config.id,
             Alert.created_at >= today_start,
         )
-        today_count = self.session.exec(stmt).one()
+        result = await self.session.execute(stmt)
+        today_count = result.scalar_one()
 
         if today_count >= config.max_per_day:
             logger.debug(f"Config {config.id} hit daily limit: {today_count}/{config.max_per_day}")
@@ -462,7 +465,7 @@ class AlertGenerator:
                 # Update config last_triggered_at
                 config.last_triggered_at = datetime.now(UTC)
                 self.session.add(config)
-                self.session.commit()
+                await self.session.commit()
                 return
             except Exception as e:
                 logger.warning(f"Failed to queue Celery task, falling back to sync: {e}")
@@ -479,7 +482,7 @@ class AlertGenerator:
         # Get user email from database
         from models.user import User
 
-        user = self.session.get(User, alert.user_id)
+        user = await self.session.get(User, alert.user_id)
 
         channels = []
         for c in config.channels:
@@ -524,6 +527,6 @@ class AlertGenerator:
 
         self.session.add(alert)
         self.session.add(config)
-        self.session.commit()
+        await self.session.commit()
 
         logger.info(f"Alert {alert.id} dispatched: sent={result.channels_sent}, failed={result.channels_failed}")

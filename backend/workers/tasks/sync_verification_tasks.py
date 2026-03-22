@@ -377,7 +377,7 @@ async def _auto_fix_price_mismatches(dry_run: bool = True) -> dict:
             try:
                 access_token = decrypt_token(integration.access_token_encrypted)
 
-                from services.integration.models import PriceUpdateRequest
+                from services.integration.schemas import PriceUpdateRequest
 
                 request = PriceUpdateRequest(
                     external_product_id=link.external_product_id,
