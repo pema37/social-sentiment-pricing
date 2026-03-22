@@ -231,13 +231,16 @@ async def get_experiment_statuses(
             bs.last_updated,
             bs.metadata
         FROM bandit_state bs
-        WHERE 1=1
+        WHERE bs.category_id IN (
+            SELECT DISTINCT p.category FROM products p
+            WHERE p.user_id = :user_id AND p.category IS NOT NULL
+        )
         {category_filter}
         ORDER BY bs.total_pulls DESC
     """.format(category_filter="AND bs.category_id = :category_id" if category_id else "")
     )
 
-    params = {}
+    params: dict[str, Any] = {"user_id": str(current_user.id)}
     if category_id:
         params["category_id"] = category_id
 
@@ -375,11 +378,15 @@ async def get_category_detail(
             cb.confidence_accuracy_corr
         FROM mv_category_benchmarks cb
         WHERE cb.category_id = :category_id
+        AND cb.category_id IN (
+            SELECT DISTINCT p.category FROM products p
+            WHERE p.user_id = :user_id AND p.category IS NOT NULL
+        )
         ORDER BY cb.total_recommendations DESC
         LIMIT 1
     """)
 
-    result = await db.execute(query, {"category_id": category_id})
+    result = await db.execute(query, {"category_id": category_id, "user_id": str(current_user.id)})
     row = result.fetchone()
 
     if not row:
@@ -444,9 +451,19 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
     except Exception:
         context_healthy = False
 
-    # Count experiments
+    # Count experiments (scoped to user's product categories)
     try:
-        result = await db.execute(text("SELECT COUNT(*) as total, COUNT(converged_arm) as converged FROM bandit_state"))
+        result = await db.execute(
+            text("""
+                SELECT COUNT(*) as total, COUNT(converged_arm) as converged
+                FROM bandit_state
+                WHERE category_id IN (
+                    SELECT DISTINCT p.category FROM products p
+                    WHERE p.user_id = :user_id AND p.category IS NOT NULL
+                )
+            """),
+            {"user_id": str(user.id)},
+        )
         row = result.fetchone()
         total_cats = row.total if row else 0
         converged_cats = row.converged if row else 0
@@ -493,10 +510,14 @@ async def _get_top_categories(
                 cb.confidence_accuracy_corr
             FROM mv_category_benchmarks cb
             WHERE cb.total_recommendations >= :min_recs
+            AND cb.category_id IN (
+                SELECT DISTINCT p.category FROM products p
+                WHERE p.user_id = :user_id AND p.category IS NOT NULL
+            )
             ORDER BY cb.total_recommendations DESC
             LIMIT :lim
         """),
-            {"min_recs": min_recommendations, "lim": limit},
+            {"min_recs": min_recommendations, "lim": limit, "user_id": str(user.id)},
         )
 
         rows = result.fetchall()
@@ -560,13 +581,14 @@ async def _get_calibration_reports(
             AND pi.measurement_window = '7d'
         WHERE po.action IN ('accepted', 'modified')
         AND pi.revenue_delta_pct IS NOT NULL
+        AND pr.user_id = :user_id
         {category_filter}
         ORDER BY po.created_at DESC
         LIMIT 500
     """.format(category_filter="AND pr.category_id = :category_id" if category_id else "")
     )
 
-    params = {}
+    params: dict[str, Any] = {"user_id": str(user.id)}
     if category_id:
         params["category_id"] = category_id
 

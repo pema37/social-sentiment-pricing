@@ -76,6 +76,7 @@ from api.v1.routes.integrations.shopify_billing_webhooks import (
 # Intelligence Environment — Phase 5 dashboard at /api/v1/intelligence
 from api.v1.routes.intelligence import router as intelligence_router
 from api.v1.routes.launch_detection import router as launch_detection_router
+from api.v1.routes.product_sync import router as product_sync_router
 from api.v1.routes.market_intelligence import router as market_intelligence_router
 from api.v1.routes.market_trends import router as market_trends_router
 from api.v1.routes.market_trends_visual import router as market_trends_visual_router
@@ -204,6 +205,7 @@ app.include_router(prospect_audit_router, prefix="/api/v1")
 app.include_router(audit_email_router, prefix="/api/v1")
 app.include_router(prospect_analytics_router, prefix="/api/v1")
 app.include_router(price_check_router, prefix="/api/v1")
+app.include_router(product_sync_router, prefix="/api/v1")
 
 
 # Intelligence Environment — outcomes served at /api/v1/outcomes/*

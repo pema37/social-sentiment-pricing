@@ -285,7 +285,7 @@ async def _process_pending_mentions(task_self, batch_size: int):
         # Get unprocessed mentions
         stmt = (
             select(SocialMention)
-            .where(not SocialMention.processed)
+            .where(SocialMention.processed.is_(False))
             .order_by(SocialMention.collected_at.asc())
             .limit(batch_size)
         )

@@ -12,6 +12,7 @@ from core.deps import get_current_user
 from core.rate_limit import WRITE_RATE_LIMIT, limiter
 from db.session import get_session
 from models import Sentiment, SocialMention, User
+from models.product import Product
 from schemas.common import PaginatedResponse, PaginationParams
 from schemas.sentiment import (
     SentimentResponse,
@@ -22,6 +23,19 @@ from schemas.sentiment import (
 router = APIRouter()
 
 
+async def _verify_product_ownership(
+    product_id: UUID, user_id: UUID, session: AsyncSession
+) -> Product:
+    """Verify the product belongs to the current user."""
+    result = await session.execute(
+        select(Product).where(Product.id == product_id, Product.user_id == user_id)
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+
 @router.get("/{sentiment_id}", response_model=SentimentResponse)
 async def get_sentiment(
     request: Request,
@@ -30,7 +44,11 @@ async def get_sentiment(
     session: AsyncSession = Depends(get_session),
 ):
     """Get a specific sentiment record by ID."""
-    result = await session.execute(select(Sentiment).where(Sentiment.id == sentiment_id))
+    result = await session.execute(
+        select(Sentiment)
+        .join(Product, Sentiment.product_id == Product.id)
+        .where(Sentiment.id == sentiment_id, Product.user_id == current_user.id)
+    )
     record = result.scalar_one_or_none()
 
     if not record:
@@ -54,6 +72,8 @@ async def get_product_sentiments(
     session: AsyncSession = Depends(get_session),
 ):
     """Get sentiment history for a product."""
+    await _verify_product_ownership(product_id, current_user.id, session)
+
     query = select(Sentiment).where(Sentiment.product_id == product_id)
 
     count_query = select(func.count()).select_from(query.subquery())
@@ -96,6 +116,8 @@ async def get_product_sentiment_summary(
     session: AsyncSession = Depends(get_session),
 ):
     """Get aggregated sentiment summary for a product."""
+    await _verify_product_ownership(product_id, current_user.id, session)
+
     result = await session.execute(select(Sentiment).where(Sentiment.product_id == product_id))
     records = result.scalars().all()
 
@@ -126,7 +148,11 @@ async def delete_sentiment(
     session: AsyncSession = Depends(get_session),
 ):
     """Delete a sentiment record."""
-    result = await session.execute(select(Sentiment).where(Sentiment.id == sentiment_id))
+    result = await session.execute(
+        select(Sentiment)
+        .join(Product, Sentiment.product_id == Product.id)
+        .where(Sentiment.id == sentiment_id, Product.user_id == current_user.id)
+    )
     record = result.scalar_one_or_none()
 
     if not record:
@@ -148,7 +174,12 @@ async def get_product_mentions(
     session: AsyncSession = Depends(get_session),
 ):
     """Get social mentions for a product."""
-    query = select(SocialMention).where(SocialMention.product_id == product_id)
+    await _verify_product_ownership(product_id, current_user.id, session)
+
+    query = select(SocialMention).where(
+        SocialMention.product_id == product_id,
+        SocialMention.user_id == current_user.id,
+    )
 
     if processed is not None:
         query = query.where(SocialMention.processed == processed)
