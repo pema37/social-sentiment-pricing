@@ -102,7 +102,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/matching.py` lines 490–530
 - **Issue:** Two concurrent auto-link requests for the same product both pass the existence check, both call `db.add(competitor)` + `await db.flush()`, and both proceed to create product links. The first `await db.commit()` at line 529 succeeds; the second also commits (no unique constraint on competitor URL per user). Duplicate competitor rows are created.
 - **Impact:** Same competitor appears multiple times in the competitor list. Price scraping runs twice for the same URL, doubling API usage. Deduplication logic downstream is not guaranteed.
-- **Status: FIXED 2026-03-22** — Moved `db.commit()` outside the loop so all links are created in a single transaction.
+- **Status: FIXED 2026-03-22** — Added domain cache and URL dedup set to prevent duplicate competitor/link creation within a batch. Changed error handling to rollback and return immediately on failure instead of continuing with a tainted session (the prior `await db.rollback()` + `continue` destroyed all prior work then kept going).
 
 ---
 
@@ -1436,6 +1436,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/auto_approval_service.py` line 158
 - **Issue:** `return not (require_above_price is not None and current_price > require_above_price)`. The variable name means "require manual approval for prices above this threshold." The logic is inverted: products priced ABOVE the threshold return `True` (auto-approve), and products BELOW it return `False` (require approval). The correct check should return `False` when `current_price > require_above_price`.
 - **Impact:** Expensive high-value products are auto-approved without merchant review. Low-value products are held for manual review. The entire auto-approval safety gate is backwards.
+- **Status: FALSE POSITIVE 2026-03-22** — Boolean analysis in this entry is incorrect. `not (True and True)` = `False`, not `True`. With threshold=50 and price=100: the function returns `False` (blocks auto-approval). Confirmed by `settings_service.py:169` and tests at `test_settings_service.py:383-394`. Code is correct as-is.
 
 ---
 

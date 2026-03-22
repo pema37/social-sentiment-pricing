@@ -458,6 +458,8 @@ async def _auto_link_competitors(
     from sqlalchemy import select
 
     links_created = []
+    domain_cache: dict[str, "Competitor"] = {}
+    seen_urls: set[str] = set()
 
     for match in matches:
         # Skip low confidence
@@ -468,27 +470,38 @@ async def _auto_link_competitors(
         if match.price is None:
             continue
 
+        # Deduplicate URLs within same batch to prevent duplicate rows
+        if match.url in seen_urls:
+            continue
+        seen_urls.add(match.url)
+
         try:
             domain = match.merchant_domain
 
-            # Find or create competitor
-            stmt = select(Competitor).where(
-                Competitor.user_id == user_id,
-                Competitor.website.ilike(f"%{domain}%"),
-            )
-            result = await db.execute(stmt)
-            competitor = result.scalar_one_or_none()
-
-            if not competitor:
-                # Create new competitor
-                competitor = Competitor(
-                    user_id=user_id,
-                    name=match.merchant,
-                    website=f"https://{domain}",
-                    is_active=True,
+            # Use cached competitor to prevent duplicate creation for same domain
+            if domain in domain_cache:
+                competitor = domain_cache[domain]
+            else:
+                # Find or create competitor
+                stmt = select(Competitor).where(
+                    Competitor.user_id == user_id,
+                    Competitor.website.ilike(f"%{domain}%"),
                 )
-                db.add(competitor)
-                await db.flush()
+                result = await db.execute(stmt)
+                competitor = result.scalar_one_or_none()
+
+                if not competitor:
+                    # Create new competitor
+                    competitor = Competitor(
+                        user_id=user_id,
+                        name=match.merchant,
+                        website=f"https://{domain}",
+                        is_active=True,
+                    )
+                    db.add(competitor)
+                    await db.flush()
+
+                domain_cache[domain] = competitor
 
             # Check if link already exists
             stmt = select(CompetitorProduct).where(
@@ -529,6 +542,7 @@ async def _auto_link_competitors(
         except Exception as e:
             logger.error(f"Failed to auto-link {match.url}: {e}")
             await db.rollback()
+            return []
 
     try:
         await db.commit()
