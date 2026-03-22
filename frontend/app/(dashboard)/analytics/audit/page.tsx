@@ -11,6 +11,8 @@
 
 import { useState } from 'react';
 import { useLatestAudit } from '@/lib/hooks/use-retrospective-audit';
+import { api } from '@/lib/api/client';
+import { getBearerToken } from '@/lib/auth/token';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -19,8 +21,6 @@ import { Download, Loader2, Mail, X, Send, CheckCircle } from 'lucide-react';
 import type { SKUAuditResult } from '@/types/retrospective-audit';
 
 // ── Helpers ──────────────────────────────────────────────────
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 function formatCurrency(value: string | number): string {
   const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -46,12 +46,6 @@ function formatDate(iso: string): string {
   });
 }
 
-function getAuthToken(): string {
-  // BUG-001 fix: token is now in httpOnly cookie, not localStorage.
-  // Return empty string — the cookie is sent via credentials: 'include'.
-  return '';
-}
-
 // ── PDF Export Hook ──────────────────────────────────────────
 
 function useExportPdf() {
@@ -60,11 +54,14 @@ function useExportPdf() {
   async function exportPdf(lookbackDays: number) {
     setLoading(true);
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/audit/retrospective/pdf`, {
+      const bearer = getBearerToken();
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const resp = await fetch(`${baseUrl}/api/v1/audit/retrospective/pdf`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...(bearer && { Authorization: `Bearer ${bearer}` }),
         },
         body: JSON.stringify({ lookback_days: lookbackDays }),
       });
@@ -106,20 +103,7 @@ function useEmailAudit() {
     setSent(false);
 
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/audit/retrospective/email`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || `Failed: ${resp.status}`);
-      }
-
+      await api.post('/api/v1/audit/retrospective/email', payload);
       setSent(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to send email');

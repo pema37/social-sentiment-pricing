@@ -77,7 +77,7 @@ export const wagmiConfig = createConfig({
   ],
   transports: {
     [mainnet.id]: http(),
-    [sepolia.id]: http('https://eth-sepolia.g.alchemy.com/v2/i1syJSaaz92esG2J-4NG0'),
+    [sepolia.id]: http(process.env.NEXT_PUBLIC_ALCHEMY_SEPOLIA_URL || 'https://ethereum-sepolia-rpc.publicnode.com'),
   },
 })
 
