@@ -104,8 +104,17 @@ class RecommendationService:
             logger.debug(f"Product {product.id} already has pending recommendation")
             return None
 
-        # Step 4: Gather market signals
-        signals = await self.signal_processor.gather_signals(product)
+        # Step 4: Gather market signals (degrade gracefully on upstream failure)
+        try:
+            signals = await self.signal_processor.gather_signals(product)
+        except Exception as e:
+            logger.warning(
+                "Signal gathering failed for product %s, proceeding with empty signals: %s",
+                product.id,
+                e,
+            )
+            from .rule_evaluator import MarketSignals
+            signals = MarketSignals()
 
         # Step 5: Find matching rule
         result = await self.rule_evaluator.find_matching_rule(product, user_id, signals)
@@ -346,7 +355,7 @@ class RecommendationService:
 
         # Build StrategistOutput (needs reasoning + factors)
         try:
-            if analyst_output is not None:
+            if analyst_output is not None and scout_output is not None:
                 strategist_output = PipelineAdapter.build_strategist_output(
                     analyst_output,
                     product,
@@ -364,9 +373,15 @@ class RecommendationService:
                 factors["strategist_evidence"] = strategist_output.to_evidence()
             else:
                 strategist_output = None
+                factors["scout_evidence"] = None
+                factors["analyst_evidence"] = None
+                factors["strategist_evidence"] = None
         except Exception as e:
             logger.warning(f"Failed to build Strategist output: {e}")
             strategist_output = None
+            factors["scout_evidence"] = None
+            factors["analyst_evidence"] = None
+            factors["strategist_evidence"] = None
 
         # ══════════════════════════════════════════════════════════════
         # END INTELLIGENCE ENVIRONMENT

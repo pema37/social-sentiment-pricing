@@ -275,6 +275,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/shopify_billing.py` lines 179–195
 - **Issue:** `charge_id` from query params is passed through and used to activate a subscription without validating it's a numeric GID or matching the pending charge stored for that integration.
 - **Impact:** Attacker can inject an arbitrary `charge_id` to activate the wrong subscription tier or bypass billing.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -282,6 +283,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/rate_limit.py` lines 43–67
 - **Issue:** On Redis connection failure, rate limiter silently switches to per-process memory with a `print()` instead of a structured log or alert. Per-worker memory resets on worker restart.
 - **Impact:** Rate limiting is ineffective across workers during Redis downtime. Auth endpoints (`/auth/login`) become brute-forceable.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -289,6 +291,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/shopify_pricing.py` lines 97, 213–214
 - **Issue:** `PRICE_VERIFICATION_TOLERANCE = Decimal("0.02")`. Tolerance is bidirectional — a Shopify-stored price of `$19.97` when `$19.99` was requested passes verification and reports SUCCESS.
 - **Impact:** Prices silently stored at wrong values. Merchant trusts the "success" audit log entry but price is wrong.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -296,6 +299,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/recommendation_service.py` line 107
 - **Issue:** `await self.signal_processor.gather_signals(product)` throws if sentiment service or competitor scraper is down. No try/except, no partial signal path.
 - **Impact:** If any upstream signal source is unavailable, ALL pricing recommendations fail. Should degrade gracefully with reduced confidence.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -303,6 +307,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/recommendation_service.py` lines 293–299
 - **Issue:** If `PipelineAdapter.build_scout_output()` or `build_analyst_output()` raises, `strategist_output` is set to `None` but the recommendation is still created with empty `scout_evidence` and `analyst_evidence` in the factors dict.
 - **Impact:** Recommendations written to DB with missing intelligence context. Outcome calibration and feedback loops receive corrupted training data.
+- **Status: FIXED 2026-03-22**
 
 ---
 

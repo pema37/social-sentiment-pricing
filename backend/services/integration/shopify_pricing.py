@@ -210,7 +210,10 @@ class ShopifyPricingMixin:
             actual_price = Decimal(str(actual_price))
             expected_price = Decimal(str(expected_price))
 
-            if abs(actual_price - expected_price) <= self.PRICE_VERIFICATION_TOLERANCE:
+            diff = actual_price - expected_price
+            # Only tolerate upward rounding (e.g. $19.99 → $20.00).
+            # Downward differences (actual < expected) indicate a wrong price.
+            if Decimal("0") <= diff <= self.PRICE_VERIFICATION_TOLERANCE:
                 return {"success": True, "actual_price": actual_price, "error": None}
             return {
                 "success": False,

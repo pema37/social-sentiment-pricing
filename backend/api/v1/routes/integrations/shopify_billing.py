@@ -15,6 +15,7 @@ Flow:
 """
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -188,6 +189,21 @@ async def shopify_billing_callback(
     For embedded apps, Shopify redirects to the app URL (frontend) instead
     of this endpoint. This is a fallback that forwards to the frontend.
     """
+    # Validate charge_id is a numeric GID (Shopify format: numeric string or gid://...)
+    _CHARGE_ID_RE = re.compile(r"^(\d+|gid://shopify/AppSubscription/\d+)$")
+    if not _CHARGE_ID_RE.match(charge_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid charge_id format",
+        )
+
+    # Validate shop domain if provided
+    if shop and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$", shop):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid shop domain format",
+        )
+
     redirect_url = f"{settings.FRONTEND_URL}/settings/billing?charge_id={charge_id}"
     if shop:
         redirect_url += f"&shop={shop}"

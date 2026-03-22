@@ -6,6 +6,7 @@ Uses slowapi with Redis backend for distributed rate limiting.
 FIX (2026-01-24): Added explicit type annotations for Limiter to fix Pylance warnings.
 """
 
+import logging
 from collections.abc import Callable
 from typing import Any, TypeVar, cast
 
@@ -16,6 +17,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Type variable for preserving function signatures
 F = TypeVar("F", bound=Callable[..., Any])
@@ -54,7 +57,7 @@ def _create_limiter() -> Limiter:
 
             r = redis.from_url(redis_url, socket_connect_timeout=2)
             r.ping()
-            print("Rate limiter initialized with Redis backend")
+            logger.info("Rate limiter initialized with Redis backend")
             return Limiter(
                 key_func=get_client_ip,
                 storage_uri=redis_url,
@@ -62,10 +65,17 @@ def _create_limiter() -> Limiter:
                 default_limits=["100/minute"],
             )
         except Exception as e:
-            print(f"Redis connection failed, falling back to memory: {e}")
+            logger.warning(
+                "Redis connection failed for rate limiter, falling back to in-memory storage. "
+                "Rate limiting will not be shared across workers. Error: %s",
+                e,
+            )
 
     # Fallback to in-memory storage
-    print("Rate limiter initialized with in-memory backend")
+    logger.warning(
+        "Rate limiter initialized with in-memory backend — "
+        "rate limits are per-worker and reset on restart"
+    )
     return Limiter(
         key_func=get_client_ip,
         storage_uri="memory://",
