@@ -109,7 +109,15 @@ async def push_price(
             detail="Product link not found",
         )
 
-    access_token = decrypt_token(integration.access_token_encrypted)
+    try:
+        access_token = decrypt_token(integration.access_token_encrypted)
+    except Exception as exc:
+        logger.warning(f"Failed to decrypt token for integration {integration_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stored credentials are invalid. Please reconnect your integration.",
+        )
+
     service = get_ecommerce_service(integration.platform)
 
     update_request = PriceUpdateRequest(

@@ -180,23 +180,21 @@ async def autonomous_health(current_user: User = Depends(get_current_user)):
     Verifies Gemini API connectivity and agent readiness.
     """
     try:
-        from google import genai
+        from services.ai_generator import ai_generator
 
-        test_client = genai.Client()
-        # Quick model check
-        response = test_client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents="Return 'OK' if you can read this.",
-            config={"thinking_config": {"thinking_level": "minimal"}},
+        response_text, provider = await ai_generator._generate(
+            system_prompt="You are a health check responder.",
+            user_message="Return 'OK' if you can read this.",
+            max_tokens=10,
         )
-        gemini_status = "connected" if response.text else "error"
+        gemini_status = "connected" if response_text else "error"
     except Exception as e:
         gemini_status = f"error: {e!s}"
 
     return {
         "status": "healthy" if gemini_status == "connected" else "degraded",
         "gemini_api": gemini_status,
-        "model": "gemini-3-flash-preview",
+        "model": "gemini-2.0-flash",
         "agents": {
             "scout": "ready",
             "analyst": "ready",

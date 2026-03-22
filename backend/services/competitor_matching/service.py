@@ -103,8 +103,10 @@ class CompetitorMatchingService:
         # Initialize scorer
         self.scorer = ConfidenceScorer(weights=scorer_weights)
 
-        # Result cache
+        # Per-process result cache (not shared across Uvicorn workers).
+        # Use asyncio.Lock to prevent race conditions during concurrent eviction.
         self._cache: dict[str, CacheEntry] = {}
+        self._cache_lock = asyncio.Lock()
 
         # Ensure providers are set up
         if provider_registry.available_count == 0:
@@ -168,7 +170,7 @@ class CompetitorMatchingService:
         # Check cache first
         cache_key = self._build_cache_key(request)
         if use_cache:
-            cached = self._get_from_cache(cache_key)
+            cached = await self._get_from_cache(cache_key)
             if cached:
                 logger.info(f"Cache hit for: {product_name}")
                 cached.cached = True
@@ -223,7 +225,7 @@ class CompetitorMatchingService:
 
         # Cache successful results
         if use_cache and response.success:
-            self._add_to_cache(cache_key, response)
+            await self._add_to_cache(cache_key, response)
 
         logger.info(f"Found {response.total_found} competitors for '{product_name}' in {response.search_time_ms}ms")
 
@@ -501,32 +503,34 @@ class CompetitorMatchingService:
         key_string = "|".join(key_parts)
         return hashlib.md5(key_string.encode()).hexdigest()
 
-    def _get_from_cache(self, key: str) -> MatchSearchResponse | None:
-        """Get result from cache if not expired."""
-        entry = self._cache.get(key)
+    async def _get_from_cache(self, key: str) -> MatchSearchResponse | None:
+        """Get result from cache if not expired (lock-protected)."""
+        async with self._cache_lock:
+            entry = self._cache.get(key)
 
-        if entry is None:
-            return None
+            if entry is None:
+                return None
 
-        if entry.is_expired(self.cache_ttl_hours):
-            del self._cache[key]
-            return None
+            if entry.is_expired(self.cache_ttl_hours):
+                del self._cache[key]
+                return None
 
-        return entry.response
+            return entry.response
 
-    def _add_to_cache(self, key: str, response: MatchSearchResponse) -> None:
-        """Add result to cache, evicting old entries if needed."""
-        # Evict old entries if cache is full
-        if len(self._cache) >= self.max_cache_size:
-            self._evict_oldest_entries(count=self.max_cache_size // 10)
+    async def _add_to_cache(self, key: str, response: MatchSearchResponse) -> None:
+        """Add result to cache, evicting old entries if needed (lock-protected)."""
+        async with self._cache_lock:
+            # Evict old entries if cache is full
+            if len(self._cache) >= self.max_cache_size:
+                self._evict_oldest_entries(count=self.max_cache_size // 10)
 
-        self._cache[key] = CacheEntry(
-            response=response,
-            created_at=datetime.now(UTC),
-        )
+            self._cache[key] = CacheEntry(
+                response=response,
+                created_at=datetime.now(UTC),
+            )
 
     def _evict_oldest_entries(self, count: int) -> None:
-        """Evict oldest cache entries."""
+        """Evict oldest cache entries. Must be called under _cache_lock."""
         if not self._cache:
             return
 

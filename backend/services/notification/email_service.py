@@ -6,6 +6,7 @@ SendGrid Free Tier: 100 emails/day
 """
 
 import asyncio
+import html as html_mod
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -152,11 +153,16 @@ class EmailService:
         }
         color = severity_colors.get(severity.lower(), "#6B7280")
 
+        # HTML-escape all user-controlled values to prevent XSS/injection
+        safe_title = html_mod.escape(alert_title)
+        safe_message = html_mod.escape(alert_message)
+        safe_severity = html_mod.escape(severity)
+
         data_section = ""
         if alert_data:
             data_items = "".join(
-                f"<tr><td style='padding: 4px 8px; border-bottom: 1px solid #eee;'><strong>{k}:</strong></td>"
-                f"<td style='padding: 4px 8px; border-bottom: 1px solid #eee;'>{v}</td></tr>"
+                f"<tr><td style='padding: 4px 8px; border-bottom: 1px solid #eee;'><strong>{html_mod.escape(str(k))}:</strong></td>"
+                f"<td style='padding: 4px 8px; border-bottom: 1px solid #eee;'>{html_mod.escape(str(v))}</td></tr>"
                 for k, v in alert_data.items()
             )
             data_section = f"""
@@ -180,17 +186,17 @@ class EmailService:
         <!-- Header -->
         <div style="background-color: {color}; padding: 16px 24px;">
             <h1 style="color: white; margin: 0; font-size: 18px; font-weight: 600;">
-                ⚠️ {alert_title}
+                ⚠️ {safe_title}
             </h1>
             <span style="color: rgba(255,255,255,0.8); font-size: 12px; text-transform: uppercase;">
-                {severity.upper()} PRIORITY
+                {safe_severity.upper()} PRIORITY
             </span>
         </div>
 
         <!-- Body -->
         <div style="padding: 24px;">
             <p style="color: #374151; line-height: 1.6; margin: 0 0 16px 0; white-space: pre-wrap;">
-                {alert_message}
+                {safe_message}
             </p>
 
             {data_section}

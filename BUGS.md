@@ -1299,6 +1299,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-171 — Outbound webhook HMAC signature computed with `sort_keys=True` but body sent without — signatures always wrong
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/notification/webhook_service.py` lines 193–200
 - **Issue:** `_build_headers` computes `json.dumps(payload, sort_keys=True).encode("utf-8")` for the HMAC signature, but `httpx.post(json=payload)` serializes the body using default Python dict ordering (no sort). Signed bytes ≠ transmitted bytes.
 - **Impact:** Every outbound webhook recipient that verifies the `X-SSP-Signature` header will always fail. Webhook authenticity verification is completely broken.
@@ -1306,6 +1307,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-172 — Email alert template injects unsanitized user data into HTML — XSS in emails
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/notification/email_service.py` lines 155–165, 181–193
 - **Issue:** `alert_title`, `alert_message`, `severity`, and `alert_data` key/values are interpolated directly into HTML using f-strings with no HTML escaping. Values can originate from competitor product names or scraped external data.
 - **Impact:** HTML injection into email content. Malicious HTML (script tags, phishing links, tracking pixels) can be injected into alert emails sent to merchants.
@@ -1337,6 +1339,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-176 — `CompetitorMatchingService` in-process dict cache not safe in multi-process/worker deployments
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/competitor_matching/service.py` lines 107, 517–526
 - **Issue:** `self._cache: dict[str, CacheEntry] = {}` is an in-memory dict on a singleton. Multiple Uvicorn workers each have their own isolated cache — no shared invalidation. Concurrent async coroutines can also race during `_evict_oldest_entries`.
 - **Impact:** Cache provides no benefit in multi-process deployments (the typical production configuration). Concurrent eviction can produce inconsistent cache state.
@@ -2153,6 +2156,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-185 — `autonomous_pipeline.py` — nonexistent AI model + bypasses `ai_generator.py`
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/api/v1/routes/autonomous_pipeline.py` lines 180, 183
 - **Issue:** Calls `genai.Client()` directly (line 180) without API key setup and without going through `services/ai_generator.py`. Uses `gemini-3-flash-preview` (line 183) — a nonexistent model ID. Runtime will raise `AttributeError` or API 404.
 - **Impact:** Autonomous pipeline AI calls will crash at runtime; violates the single AI-entry-point rule.
@@ -2160,6 +2164,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-186 — `integrations/operations.py` `push_price` — unhandled `decrypt_token` exception
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/api/v1/routes/integrations/operations.py` line 112
 - **Issue:** `decrypt_token(integration.access_token_encrypted)` is called with no try/except. If the token is malformed, the key is mismatched, or `access_token_encrypted` is None, this raises `ValueError`, `AttributeError`, or `cryptography.fernet.InvalidToken` — all unhandled — returning a 500 to the client.
 - **Impact:** Any merchant with an invalid/rotated integration token gets an opaque 500 instead of a clear "reconnect your integration" message. `check_integration_health` (line 190) correctly has try/except; `push_price` does not.

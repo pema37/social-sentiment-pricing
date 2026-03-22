@@ -97,8 +97,11 @@ class WebhookService:
             alert_data=alert_data,
         )
 
-        # Build headers
-        headers = self._build_headers(payload, webhook_secret)
+        # Serialize payload once so HMAC and body use identical bytes
+        payload_bytes = json.dumps(payload, sort_keys=True).encode("utf-8")
+
+        # Build headers (HMAC computed over payload_bytes)
+        headers = self._build_headers(payload_bytes, webhook_secret)
 
         # Send with retries
         last_error = None
@@ -107,7 +110,7 @@ class WebhookService:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     response = await client.post(
                         webhook_url,
-                        json=payload,
+                        content=payload_bytes,
                         headers=headers,
                     )
 
@@ -188,7 +191,7 @@ class WebhookService:
 
     def _build_headers(
         self,
-        payload: dict[str, Any],
+        payload_bytes: bytes,
         secret: str | None,
     ) -> dict[str, str]:
         """Build request headers with optional HMAC signature."""
@@ -198,8 +201,7 @@ class WebhookService:
         }
 
         if secret:
-            # Create HMAC-SHA256 signature
-            payload_bytes = json.dumps(payload, sort_keys=True).encode("utf-8")
+            # Create HMAC-SHA256 signature over the exact bytes being sent
             signature = hmac.new(
                 secret.encode("utf-8"),
                 payload_bytes,
