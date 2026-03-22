@@ -164,37 +164,47 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-015 — ChangeReason.AUTO_APPROVED may not exist — auto-approval crashes
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/approval_service.py` lines 242–244
 - **Issue:** Code uses `ChangeReason.AUTO_APPROVED` attribute. If this enum value is missing from `ChangeReason`, the conditional guard `hasattr(ChangeReason, 'AUTO_APPROVED')` falls through to `RECOMMENDATION_APPLIED`, but if the guard itself isn't there, it raises `AttributeError` on every auto-approval.
 - **Impact:** Auto-approval flow crashes silently. Recommendations pile up unprocessed.
+- **Fix:** Removed dead `hasattr` guard. `ChangeReason` has no `AUTO_APPROVED` value — replaced with direct `ChangeReason.RECOMMENDATION_APPLIED.value`.
 
 ---
 
 ## [HIGH] BUG-016 — Pricing recommendations stats 404 — endpoint path mismatch
+- **Status: FALSE POSITIVE 2026-03-22**
 - **File:** `frontend/lib/api/pricing.ts` line 196
 - **Issue:** Frontend calls `/api/v1/pricing/recommendations/stats`. Backend route likely resolves to `/api/v1/pricing/stats`. No backend route audit confirmed this path exists.
 - **Impact:** Pricing dashboard stats panel returns 404. React Query throws an error that is unhandled — entire pricing page may crash.
+- **Analysis:** Route `/recommendations/stats` is defined in `_list_endpoints.py`, included without prefix in `recommendations.py`, included without prefix in `pricing/__init__.py` (prefix `/pricing`), mounted at `/api/v1` in `main.py`. Full path = `/api/v1/pricing/recommendations/stats` — matches frontend exactly.
 
 ---
 
 ## [HIGH] BUG-017 — Missing DB flush/commit guard in ecommerce push service
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/ecommerce_push_service.py` line 99
 - **Issue:** `await self.db.flush()` is called after updating `ProductIntegrationLink`, but the final `commit()` is delegated to the caller. If an exception is raised between flush and commit, the in-memory update is lost with no rollback signal.
 - **Impact:** Price pushed to Shopify but `ProductIntegrationLink.last_price_push_at` and `external_price` not persisted. Audit trail and future drift detection corrupted.
+- **Fix:** Wrapped `flush()` in try/except with explicit `rollback()` on failure. Returns specific `METADATA_FLUSH_FAILED` error code so caller gets clean session state.
 
 ---
 
 ## [HIGH] BUG-042 — Platform enum vs string comparison in health check — Shopify integrations never verified
+- **Status: FALSE POSITIVE 2026-03-22**
 - **File:** `backend/workers/tasks/sync_verification_tasks.py` line 675
 - **Issue:** `if integration.platform == "shopify"` compares an `EcommercePlatform` enum instance to a plain string literal. `EcommercePlatform.SHOPIFY != "shopify"` so the condition is always `False`. The Shopify-specific credential check branch is never entered.
 - **Impact:** Shopify integration health is never verified against the real API. All Shopify integrations silently pass the health check regardless of token validity, masking actual credential failures.
+- **Analysis:** `EcommercePlatform` is a `StrEnum` (inherits from `str`). `StrEnum` values compare equal to their string values, so `EcommercePlatform.SHOPIFY == "shopify"` evaluates to `True`. The comparison works correctly.
 
 ---
 
 ## [HIGH] BUG-043 — Uninstall webhook missing db.commit() — integration stays ACTIVE after uninstall
+- **Status: FALSE POSITIVE 2026-03-22**
 - **File:** `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 312
 - **Issue:** On `app/uninstalled` webhook, `integration.access_token_encrypted = b"revoked"` and `integration.status = DISCONNECTED` are set but `await db.commit()` is never called. The handler returns 200 (correct), but the status update is never written to DB.
 - **Impact:** After a merchant uninstalls, the integration still shows as ACTIVE in the DB. Background sync tasks continue attempting to use the revoked token, generating endless "authentication failed" errors until a manual DB fix.
+- **Analysis:** `await db.commit()` IS present at line 324 of the file. The commit occurs after `db.add(integration)` and `_downgrade_subscription()`. The bug description is incorrect.
 
 ---
 

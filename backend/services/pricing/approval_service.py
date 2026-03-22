@@ -239,9 +239,7 @@ class ApprovalService:
             old_price=old_price,
             new_price=recommendation.recommended_price,
             change_percent=recommendation.change_percent,
-            change_reason=ChangeReason.AUTO_APPROVED.value
-            if hasattr(ChangeReason, "AUTO_APPROVED")
-            else ChangeReason.RECOMMENDATION_APPLIED.value,
+            change_reason=ChangeReason.RECOMMENDATION_APPLIED.value,
             recommendation_id=recommendation.id,
         )
         self.db.add(history)
