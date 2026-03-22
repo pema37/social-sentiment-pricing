@@ -572,7 +572,8 @@ class ScoreFusion:
             parts.append("Price was adjusted by guardrail constraints.")
 
         # Confidence note
-        conf = elasticity.confidence * 0.30 + position.confidence * 0.25 + urgency.confidence * 0.20 + 0.5 * 0.25
+        dq = ScoreFusion._data_quality_score(elasticity, position, urgency)
+        conf = elasticity.confidence * 0.30 + position.confidence * 0.25 + urgency.confidence * 0.20 + dq * 0.25
         if conf < 0.4:
             parts.append("Confidence is low — consider gathering more data before acting.")
 

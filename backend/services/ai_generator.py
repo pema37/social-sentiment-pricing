@@ -49,7 +49,7 @@ class AIGeneratorService:
     def __init__(self):
         # Gemini (primary)
         self.gemini_client = None
-        self.gemini_model_name = "gemini-2.0-flash-exp"
+        self.gemini_model_name = "gemini-2.0-flash"
         self._using_new_api = False
 
         if GEMINI_AVAILABLE and getattr(settings, "GEMINI_API_KEY", None):

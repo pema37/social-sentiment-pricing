@@ -1137,6 +1137,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/subscription_service.py` lines 432–443
 - **Issue:** `should_activate = verification.verified or settings.DEMO_MODE`. With `DEMO_MODE=True` (likely on staging), any transaction hash activates a subscription. Comment reads "For hackathon: activate even if verification fails."
 - **Impact:** Payment bypass vulnerability — on staging anyone can claim a subscription with any transaction hash.
+- **Status: FALSE POSITIVE — code already reads `should_activate = verification.verified` with no DEMO_MODE bypass. Previously fixed. 2026-03-22**
 
 ---
 
@@ -1144,6 +1145,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_generator.py` line 50
 - **Issue:** `self.gemini_model_name = "gemini-2.0-flash-exp"` — the `-exp` (experimental) suffix is not the mandated model per project rules.
 - **Impact:** Routing to experimental variant; potential breakage when Google retires the `-exp` suffix.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1151,6 +1153,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/notification_tasks.py` line 97
 - **Issue:** `NotificationDispatcher()` constructed but return value not assigned. Instance immediately garbage-collected. Task calls channel services directly, bypassing the dispatcher abstraction.
 - **Impact:** Abstraction layer broken; if dispatcher performs initialization side effects they are lost.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1158,6 +1161,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/scoring/score_fusion.py` line ~575
 - **Issue:** `_build_reasoning()` uses `0.5 * 0.25` (hardcoded) for data quality contribution while `_compute_overall_confidence()` uses the real `_data_quality_score()` value.
 - **Impact:** Confidence shown in recommendation reasoning text differs from `overall_confidence` in the DB. Merchants see inconsistent confidence figures.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1165,6 +1169,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 683–701
 - **Issue:** In `_run_strategist()`, if Gemini doesn't call `write_price_to_chain`, the code falls through to a manual execution block that calls `_handle_write_price_to_chain()` unconditionally whenever `assessment.recommended_direction != "hold"`. The confidence threshold guardrail is bypassed.
 - **Impact:** On-chain price changes executed even when the AI agent concluded confidence was below threshold. Any non-"hold" assessment triggers an autonomous price write regardless of confidence.
+- **Status: FIXED 2026-03-22**
 
 ---
 

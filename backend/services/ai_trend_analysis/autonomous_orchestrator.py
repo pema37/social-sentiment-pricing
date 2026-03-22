@@ -679,8 +679,8 @@ write_price_to_chain. Explain your full reasoning."""
                         tx_hash = result.get("tx_hash")
                         executed_at = result.get("executed_at")
 
-        # If no function call was made, execute manually if conditions met
-        if not tx_hash and assessment.recommended_direction != "hold":
+        # If no function call was made, execute manually only if confidence threshold met
+        if not tx_hash and assessment.recommended_direction != "hold" and assessment.confidence_score > 0.7:
             result = await _handle_write_price_to_chain(
                 {
                     "product_id": product_id,
@@ -694,7 +694,7 @@ write_price_to_chain. Explain your full reasoning."""
                         ),
                         2,
                     ),
-                    "confidence": 0.87,
+                    "confidence": assessment.confidence_score,
                 }
             )
             tx_hash = result.get("tx_hash")

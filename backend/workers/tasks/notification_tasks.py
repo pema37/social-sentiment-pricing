@@ -104,7 +104,6 @@ async def _dispatch_alert_async(alert_id: str) -> dict[str, Any]:
     from models.alert import Alert, AlertChannel, AlertConfiguration, AlertStatus
     from models.user import User
     from services.notification import NotificationDispatcher
-    from services.notification.webhook_service import WebhookService
 
     async with _get_task_session() as session:
         # Load alert
@@ -140,8 +139,8 @@ async def _dispatch_alert_async(alert_id: str) -> dict[str, Any]:
         channel_settings = _get_channel_settings(alert, config, user)
 
         # Initialize services
-        NotificationDispatcher()
-        webhook_service = WebhookService()
+        dispatcher = NotificationDispatcher()
+        webhook_service = dispatcher.webhook_service
 
         channels_sent = []
         channels_failed = []
