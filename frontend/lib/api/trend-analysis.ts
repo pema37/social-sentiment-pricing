@@ -24,7 +24,7 @@ export async function runTrendAnalysis(
   return api.post<TrendAnalysisResponse>(`${BASE_URL}/analyze`, {
     days: request.days ?? 30,
     product_ids: request.product_ids ?? null,
-    use_model: request.use_model ?? 'openai',
+    use_model: request.use_model ?? 'gemini',
   });
 }
 
@@ -33,7 +33,7 @@ export async function runTrendAnalysis(
  */
 export async function analyzeProductOpportunity(
   productId: string,
-  useModel: 'openai' | 'gemini' = 'openai'
+  useModel: 'openai' | 'gemini' = 'gemini'
 ): Promise<PricingOpportunity> {
   return api.post<PricingOpportunity>(
     `${BASE_URL}/opportunity/${productId}?use_model=${useModel}`
@@ -44,7 +44,7 @@ export async function analyzeProductOpportunity(
  * Detect risks across all products.
  */
 export async function detectRisks(
-  useModel: 'openai' | 'gemini' = 'openai'
+  useModel: 'openai' | 'gemini' = 'gemini'
 ): Promise<RiskDetectionResponse> {
   return api.post<RiskDetectionResponse>(`${BASE_URL}/risks`, {
     use_model: useModel,
@@ -56,7 +56,7 @@ export async function detectRisks(
  */
 export async function generateInsight(
   days: number = 30,
-  useModel: 'openai' | 'gemini' = 'openai'
+  useModel: 'openai' | 'gemini' = 'gemini'
 ): Promise<AIInsight> {
   return api.post<AIInsight>(`${BASE_URL}/insight`, {
     days,

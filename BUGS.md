@@ -2753,6 +2753,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/retrieval.py` lines 25–174
 - **Issue:** `get_sentiment`, `get_product_sentiments`, `get_product_sentiment_summary`, `delete_sentiment`, and `get_product_mentions` all query by `product_id` or `sentiment_id` without verifying that the product belongs to the requesting user. Any authenticated user can read or delete any sentiment record by knowing its UUID.
 - **Impact:** Complete tenant isolation failure for sentiment data. Any merchant can read competitors' sentiment analysis, delete their records, and access social mentions for products they don't own.
+- **Status: FALSE POSITIVE 2026-03-22** — All 5 endpoints already have ownership checks: `get_sentiment` and `delete_sentiment` join on Product with `Product.user_id == current_user.id`; `get_product_sentiments`, `get_product_sentiment_summary`, and `get_product_mentions` call `_verify_product_ownership()`. A helper function `_verify_product_ownership` was added that queries by both `product_id` and `user_id`.
 
 ---
 
@@ -2760,6 +2761,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/tasks.py` lines 32–35
 - **Issue:** `fetch_product_mentions` queries `Product` by `product_id` without checking `product.user_id == current_user.id`. Any authenticated user can queue a Reddit/social media fetch task for another user's product.
 - **Impact:** Unauthorized Celery task queuing for arbitrary products. Wastes task slots; can be used to trigger excessive mentions collection against products the user doesn't own.
+- **Status: FALSE POSITIVE 2026-03-22** — The query already includes `Product.user_id == current_user.id` in the WHERE clause (line 33). Returns 404 if product doesn't belong to the current user.
 
 ---
 
@@ -2811,6 +2813,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/scoring/experimentation/experiment_manager.py` lines 207–209, 303–331, 337–384
 - **Issue:** `self._assignments: dict[str, ExperimentAssignment] = {}` is a plain Python dict. `record_assignment()` docstring says "In production, this writes to the pricing_outcomes table (strategy_arm and is_exploration columns from Phase 1 schema)" — but the implementation only writes to the in-memory dict. `process_outcome()` looks up assignments from the same dict. If the ExperimentManager is not a process-level singleton (it is not — `create_ie_orchestrator()` creates a new one per call), every call starts with an empty dict. Even if it were a singleton, any server restart empties it. `process_outcome()` then logs "No assignment found for recommendation X" and returns `None` for every outcome, so the Thompson Sampling bandit never receives feedback and stops learning.
 - **Impact:** The entire Intelligence Environment learning loop is silently broken. Pricing strategy experimentation (Thompson Sampling) records zero outcomes, causing all arms to stay at their initial Beta(1, 19) priors indefinitely. Note: this bug is partially masked by BUG-063 (wrong constructor args mean `ExperimentManager` is never successfully initialized in production).
+- **Status: FIXED 2026-03-22** — Added optional `assignment_persister` and `assignment_loader` dependency-injection callbacks to `ExperimentManager.__init__()`. `record_assignment()` now calls `assignment_persister` to persist to DB after creating the assignment. `process_outcome()` falls through from in-memory cache to `assignment_loader` for DB lookup when assignment not found in memory. Follows the existing DI pattern used by `ExperimentTaskRunner`.
 
 ---
 
@@ -2893,6 +2896,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/trends/page.tsx` lines 34–55
 - **Issue:** Two `fetch()` calls are made directly to `${API_URL}/api/v1/market-trends/categories` and `${API_URL}/api/v1/market-trends/trends` via raw `fetch()` inside React Query `queryFn` callbacks. These bypass the centralised `api` client from `lib/api/client.ts`. Neither call includes an `Authorization` header. Unlike demo pages, this is an authenticated dashboard page.
 - **Impact:** API calls are unauthenticated — backend will return 401. Trend data and categories never load in the dashboard. Non-2xx responses are silently parsed as data since there is no `res.ok` check.
+- **Status: FALSE POSITIVE 2026-03-22** — Both calls now use `api.get()` from `@/lib/api/client` (lines 33 and 47), which includes the Authorization header automatically. No raw `fetch()` remains.
 
 ---
 
@@ -2907,6 +2911,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/trend-analysis.ts` lines 27, 37, 47, 63
 - **Issue:** `runTrendAnalysis`, `analyzeProductOpportunity`, `detectRisks`, and `generateInsight` all default to `use_model: 'openai'`. Project AI rules require: "Model: `gemini-2.0-flash` — do not change without explicit instruction" and "ALL Gemini calls go through `services/ai_generator.py`". The `openai` parameter instructs the backend to use OpenAI, bypassing `services/ai_generator.py` entirely. The trend analysis feature should default to `gemini`, not `openai`.
 - **Impact:** Trend analysis runs on OpenAI instead of Gemini, violating the AI entry point contract. Costs are billed to the wrong AI account. Any backend logic specific to `services/ai_generator.py` (tracing, guardrails, feedback loop) is bypassed.
+- **Status: FIXED 2026-03-22** — Changed all 4 function defaults from `'openai'` to `'gemini'`: `runTrendAnalysis`, `analyzeProductOpportunity`, `detectRisks`, and `generateInsight`. Union types preserved (`'openai' | 'gemini'`) for override flexibility.
 
 ---
 

@@ -24,6 +24,7 @@ Place at: backend/services/scoring/experimentation/experiment_manager.py
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -192,6 +193,8 @@ class ExperimentManager:
         registry: StrategyRegistry,
         bandit: ThompsonSamplingBandit,
         compute_probabilities: bool = False,
+        assignment_persister: Callable[[ExperimentAssignment], None] | None = None,
+        assignment_loader: Callable[[str], ExperimentAssignment | None] | None = None,
     ):
         """
         Args:
@@ -199,13 +202,20 @@ class ExperimentManager:
             bandit: Thompson Sampling engine.
             compute_probabilities: If True, include arm probabilities
                 in ExperimentConfig (expensive: ~1000 samples per call).
+            assignment_persister: Callback to persist an assignment to DB.
+                Called by record_assignment() after creating the assignment.
+            assignment_loader: Callback to load an assignment from DB by
+                recommendation_id. Called by process_outcome() when not
+                found in the in-memory cache.
         """
         self._registry = registry
         self._bandit = bandit
         self._compute_probs = compute_probabilities
+        self._assignment_persister = assignment_persister
+        self._assignment_loader = assignment_loader
 
-        # In-memory assignment store. In production, this is the DB.
-        # Keyed by recommendation_id.
+        # In-memory cache for assignments. Falls through to
+        # assignment_loader for DB lookup when not found here.
         self._assignments: dict[str, ExperimentAssignment] = {}
 
         # Counters for monitoring
@@ -327,6 +337,17 @@ class ExperimentManager:
             sampled_values=config.sampled_values,
         )
 
+        # Persist to DB if a persister is configured
+        if self._assignment_persister is not None:
+            try:
+                self._assignment_persister(assignment)
+            except Exception:
+                logger.exception(
+                    "Failed to persist assignment for recommendation %s",
+                    recommendation_id,
+                )
+
+        # Also cache in memory for fast lookup
         self._assignments[recommendation_id] = assignment
         return assignment
 
@@ -356,9 +377,18 @@ class ExperimentManager:
         Returns:
             OutcomeProcessingResult, or None if assignment not found.
         """
-        # ── Find the assignment ──
+        # ── Find the assignment: in-memory cache → DB loader → give up ──
         if assignment is None:
             assignment = self._assignments.get(recommendation_id)
+
+        if assignment is None and self._assignment_loader is not None:
+            try:
+                assignment = self._assignment_loader(recommendation_id)
+            except Exception:
+                logger.exception(
+                    "Failed to load assignment for recommendation %s",
+                    recommendation_id,
+                )
 
         if assignment is None:
             logger.warning("No assignment found for recommendation %s", recommendation_id)
