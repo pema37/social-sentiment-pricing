@@ -355,6 +355,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/analysis.py` lines 80–100
 - **Issue:** `analyze_and_save()` fetches `Product` by `product_id` only: `select(Product).where(Product.id == product_id)` — no `.where(Product.user_id == current_user.id)` filter. Any authenticated user can save sentiment analysis results to any other user's products if they know the product UUID.
 - **Impact:** Cross-user data pollution. User A can overwrite User B's product sentiment data. This is an authorization bypass affecting data integrity for all users.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 102 already filters `Product.user_id == current_user.id` alongside `Product.id == product_id`.
 
 ---
 
@@ -362,6 +363,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/matching.py` line 518
 - **Issue:** `db.add(link)` creates a new `ProductIntegrationLink` without checking if an identical (product_id, competitor_id) pair already exists. No unique constraint enforced at DB level. On any retry (network timeout, user double-click), a duplicate link is inserted.
 - **Impact:** Same competitor appears twice in the competitor list per product. Price scraping runs twice per URL. Deduplication downstream is not guaranteed, corrupting competitive analysis.
+- **Status: FALSE POSITIVE 2026-03-22** — Lines 506-513 already check for existing `(product_id, competitor_id, url)` via a SELECT before inserting; duplicates update the existing row instead.
 
 ---
 
@@ -369,6 +371,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/client.ts` lines 131–138; `frontend/app/providers.tsx` line 29
 - **Issue:** `client.ts` stores the post-auth redirect path under `sessionStorage.setItem('redirectAfterLogin', ...)` (camelCase). `providers.tsx` stores it under `sessionStorage.setItem('redirect_after_login', ...)` (snake_case). The login page reads one key — the other is silently ignored.
 - **Impact:** After a session expiry that triggers `handleAuthError`, the post-login redirect is always lost. Users land on the dashboard regardless of where they were when the session expired.
+- **Status: FALSE POSITIVE 2026-03-22** — `providers.tsx` does not use sessionStorage at all; `client.ts` stores `redirectAfterLogin` (camelCase) and `use-auth.ts` reads/removes the same camelCase key. Key names are consistent.
 
 ---
 
@@ -376,6 +379,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/integrations.ts` lines 263–265
 - **Issue:** `getAllSyncStatus()` calls `GET /api/v1/integrations/sync/status/all`. No backend route matching this exact path was found during the audit. The per-integration path is `/api/v1/integrations/{id}/sync/status`.
 - **Impact:** The integrations page banner that shows overall sync status returns 404. React Query marks the query as errored, and depending on error handling, the banner either shows a broken state or the entire integrations page throws.
+- **Status: FALSE POSITIVE 2026-03-22** — Backend route exists at `backend/api/v1/routes/integrations/sync.py:230` with `@router.get("/sync/status/all")`, mounted under the integrations router (no sub-prefix), giving the full path `/api/v1/integrations/sync/status/all` which matches the frontend call.
 
 ---
 
@@ -562,6 +566,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/settings/notifications/page.tsx` line 68
 - **Issue:** `handleSave` only does `await new Promise(resolve => setTimeout(resolve, 1000))`. No API call made. Success toast always shown regardless.
 - **Impact:** Users believe their notification preferences are saved but they revert on every page reload.
+- **Status: FIXED 2026-03-22** — Wired handleSave to existing alert configuration API: loads user's AlertConfiguration records on mount, maps channels to email/in-app toggles, creates/updates configurations on save via useCreateAlertConfiguration and useUpdateAlertConfiguration hooks.
 
 ---
 
