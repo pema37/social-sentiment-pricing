@@ -8,7 +8,7 @@
  * NOW WITH SYNC PROGRESS TRACKING + DIAGNOSTIC PANEL
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIntegrations } from '@/lib/hooks/use-integrations';
@@ -23,6 +23,23 @@ import { DiagnosticPanel } from '@/components/features/integrations/diagnostic-p
 import { PLATFORM_CONFIGS, type EcommercePlatform } from '@/types/integration';
 
 export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {[1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-48 animate-pulse rounded-lg border border-gray-200 bg-gray-50"
+          />
+        ))}
+      </div>
+    }>
+      <IntegrationsContent />
+    </Suspense>
+  );
+}
+
+function IntegrationsContent() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useIntegrations();

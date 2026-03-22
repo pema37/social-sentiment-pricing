@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from core.config import settings
+from core.url_validation import validate_webhook_url
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,12 @@ class SlackService:
         if not url:
             logger.warning("No Slack webhook URL configured - skipping notification")
             return SlackResult(success=False, error="No Slack webhook URL configured")
+
+        # Validate URL to prevent SSRF
+        url_error = validate_webhook_url(url)
+        if url_error:
+            logger.warning(f"Slack webhook URL rejected: {url_error}")
+            return SlackResult(success=False, error=f"Invalid webhook URL: {url_error}")
 
         # Build Slack message payload
         payload = self._build_payload(

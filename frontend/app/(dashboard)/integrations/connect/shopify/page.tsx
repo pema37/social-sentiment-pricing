@@ -42,7 +42,7 @@ export default function ShopifyConnectPage() {
     }
 
     // Remove protocol if present
-    const cleaned = storeUrl.trim().toLowerCase()
+    const cleaned = trimmed
       .replace(/^https?:\/\//, '')
       .replace(/\.myshopify\.com.*$/, '');
 

@@ -25,6 +25,7 @@ from decimal import Decimal, InvalidOperation
 import httpx
 from bs4 import BeautifulSoup
 
+from core.url_validation import validate_scraping_url
 from models.competitor import Competitor
 from models.competitor_price_history import CompetitorPriceHistory
 from models.competitor_product import CompetitorProduct
@@ -234,6 +235,12 @@ class CompetitorScraperService:
 
     async def _fetch_page(self, url: str, config: dict) -> str | None:
         """Fetch page HTML with retries."""
+        # Validate URL to prevent SSRF
+        url_error = validate_scraping_url(url)
+        if url_error:
+            logger.warning(f"Scraping URL rejected: {url_error} — {url}")
+            return None
+
         headers = {**self.DEFAULT_HEADERS}
         if config.get("headers"):
             headers.update(config["headers"])

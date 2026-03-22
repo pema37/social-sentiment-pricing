@@ -15,6 +15,8 @@ from typing import Any
 
 import httpx
 
+from core.url_validation import validate_webhook_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,6 +80,12 @@ class WebhookService:
         """
         if not webhook_url:
             return WebhookResult(success=False, error="No webhook URL provided")
+
+        # Validate URL to prevent SSRF
+        url_error = validate_webhook_url(webhook_url)
+        if url_error:
+            logger.warning(f"Webhook URL rejected: {url_error}")
+            return WebhookResult(success=False, error=f"Invalid webhook URL: {url_error}")
 
         # Build payload
         payload = self._build_payload(
