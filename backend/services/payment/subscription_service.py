@@ -7,7 +7,6 @@ Separated from routes for testability and reusability.
 
 import json
 import logging
-import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -25,6 +24,7 @@ from schemas.payment import (
     SubscriptionInfo,
     TransactionVerification,
 )
+from core.config import settings
 from services.payment.base import PaymentServiceFactory
 
 logger = logging.getLogger(__name__)
@@ -112,13 +112,10 @@ class SubscriptionService:
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        # BSV wallet address
-        self.recipient_address = os.getenv("SSP_MNEE_WALLET_ADDRESS", "$pema12@handcash.io")
-        # Ethereum wallet address - MUST be set for ETH payments to work!
-        self.eth_recipient = os.getenv(
-            "SSP_ETH_WALLET_ADDRESS",
-            "",  # No default - must be configured
-        )
+        # BSV wallet address — from centralized config, no hardcoded fallback
+        self.recipient_address = settings.SSP_MNEE_WALLET_ADDRESS
+        # Ethereum wallet address — from centralized config
+        self.eth_recipient = settings.SSP_ETH_WALLET_ADDRESS
 
     # =========================================================================
     # DOWNGRADE TO FREE

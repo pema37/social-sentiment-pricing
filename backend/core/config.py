@@ -116,6 +116,7 @@ class Settings(BaseSettings):
     MNEE_ENVIRONMENT: str = "sandbox"  # sandbox or production
     MNEE_WEBHOOK_SECRET: str = ""
     SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address
+    SSP_ETH_WALLET_ADDRESS: str = ""  # Your ETH receiving address
 
 
 settings = Settings()

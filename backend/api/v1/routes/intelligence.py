@@ -220,8 +220,7 @@ async def get_experiment_statuses(
     """
     from sqlalchemy import text
 
-    query = text(
-        """
+    base_sql = """
         SELECT
             bs.category_id,
             bs.arm_states,
@@ -235,10 +234,11 @@ async def get_experiment_statuses(
             SELECT DISTINCT p.category FROM products p
             WHERE p.user_id = :user_id AND p.category IS NOT NULL
         )
-        {category_filter}
-        ORDER BY bs.total_pulls DESC
-    """.format(category_filter="AND bs.category_id = :category_id" if category_id else "")
-    )
+    """
+    if category_id:
+        base_sql += " AND bs.category_id = :category_id"
+    base_sql += " ORDER BY bs.total_pulls DESC"
+    query = text(base_sql)
 
     params: dict[str, Any] = {"user_id": str(current_user.id)}
     if category_id:
@@ -569,8 +569,7 @@ async def _get_calibration_reports(
     """
     from sqlalchemy import text
 
-    query = text(
-        """
+    base_sql = """
         SELECT
             po.confidence_decomposition->>'overall' as raw_confidence,
             CASE WHEN pi.revenue_delta_pct > 0 THEN 1 ELSE 0 END as success,
@@ -582,11 +581,11 @@ async def _get_calibration_reports(
         WHERE po.action IN ('accepted', 'modified')
         AND pi.revenue_delta_pct IS NOT NULL
         AND pr.user_id = :user_id
-        {category_filter}
-        ORDER BY po.created_at DESC
-        LIMIT 500
-    """.format(category_filter="AND pr.category_id = :category_id" if category_id else "")
-    )
+    """
+    if category_id:
+        base_sql += " AND pr.category_id = :category_id"
+    base_sql += " ORDER BY po.created_at DESC LIMIT 500"
+    query = text(base_sql)
 
     params: dict[str, Any] = {"user_id": str(user.id)}
     if category_id:

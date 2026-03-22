@@ -35,21 +35,9 @@ function LoginForm() {
     const result = await login(email, password);
 
     if (result.success) {
-      // Priority order:
-      // 1. ?redirect param in URL (set by middleware or Shopify install flow)
-      // 2. sessionStorage fallback (legacy — kept for backwards compat)
-      // 3. Default dashboard
-      if (redirectParam) {
-        router.push(redirectParam);
-      } else {
-        const stored = sessionStorage.getItem('redirectAfterLogin');
-        if (stored) {
-          sessionStorage.removeItem('redirectAfterLogin');
-          router.push(stored);
-        } else {
-          router.push('/dashboard');
-        }
-      }
+      // ?redirect param in URL (set by middleware or Shopify install flow),
+      // otherwise default to dashboard
+      router.push(redirectParam || '/dashboard');
     } else {
       setError(result.error || 'Login failed');
       setIsLoading(false);

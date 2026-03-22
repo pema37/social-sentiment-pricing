@@ -26,7 +26,8 @@ interface ProvidersProps {
 function handleAuthFailure() {
   // Avoid redirect loops if already on login page
   if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-    sessionStorage.setItem('redirect_after_login', window.location.pathname)
+    // Redirect to login — middleware will handle preserving the return path
+    // via ?redirect= query param on subsequent server-side requests.
     window.location.href = '/login'
   }
 }

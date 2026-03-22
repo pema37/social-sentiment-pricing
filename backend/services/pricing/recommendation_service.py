@@ -394,14 +394,6 @@ class RecommendationService:
             valid_until=valid_until,
         )
 
-        evidence_status = "ie+pipeline" if ie_was_used else ("pipeline" if strategist_output else "partial")
-        logger.info(
-            f"Creating recommendation for product {product.id}: "
-            f"${product.current_price} → ${new_price} ({change_percent:+.1f}%), "
-            f"confidence={confidence:.2f}, requires_approval={requires_approval}, "
-            f"evidence_chain={evidence_status}"
-        )
-
         # Update rule's last_triggered_at
         rule.last_triggered_at = datetime.now(UTC)
         self.db.add(rule)
@@ -409,6 +401,14 @@ class RecommendationService:
         self.db.add(recommendation)
         await self.db.commit()
         await self.db.refresh(recommendation)
+
+        evidence_status = "ie+pipeline" if ie_was_used else ("pipeline" if strategist_output else "partial")
+        logger.info(
+            f"Recommendation created for product {product.id}: "
+            f"${product.current_price} → ${new_price} ({change_percent:+.1f}%), "
+            f"confidence={confidence:.2f}, requires_approval={requires_approval}, "
+            f"evidence_chain={evidence_status}"
+        )
 
         # Auto-apply if eligible
         if not requires_approval and settings.auto_approve_enabled:

@@ -217,23 +217,29 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-045 — Audit log written before db.commit — shows fake success on DB failure
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/recommendation_service.py` lines 407–410
 - **Issue:** `logger.info("Recommendation created: ...")` and any structured audit log write happen before `await self.db.commit()`. If the commit fails (constraint violation, connection drop), the audit log shows the recommendation as created when it was actually rolled back.
 - **Impact:** Audit trail and dashboard metrics show price recommendations that don't exist in the DB. Compliance reports are inaccurate. Debugging discrepancies is extremely difficult.
+- **Fix:** Moved `logger.info` to after `await self.db.commit()` and `await self.db.refresh(recommendation)` so the log only fires on successful persist.
 
 ---
 
 ## [HIGH] BUG-046 — Payment wallet address falls back silently to hardcoded wrong address
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/payment/subscription_service.py` (multiple lines)
 - **Issue:** `self.recipient_address = os.getenv("SSP_MNEE_WALLET_ADDRESS", "$pema12@handcash.io")` — if `SSP_MNEE_WALLET_ADDRESS` is not set in the environment, all BSV payments route to a hardcoded demo wallet address. Same pattern for ETH recipient. These are `os.getenv()` calls outside `core/config.py`.
 - **Impact:** Missing env var silently routes real merchant payments to the wrong wallet. Revenue is lost with no error surfaced. Only discovered when payment reconciliation fails.
+- **Fix:** Replaced `os.getenv()` calls with `settings.SSP_MNEE_WALLET_ADDRESS` and `settings.SSP_ETH_WALLET_ADDRESS` from `core/config.py`. Added `SSP_ETH_WALLET_ADDRESS` to Settings. Removed hardcoded fallback address and `import os`.
 
 ---
 
 ## [HIGH] BUG-047 — Dual redirect systems conflict — login redirect unreliable
+- **Status: FIXED 2026-03-22**
 - **File:** `frontend/app/providers.tsx` lines 29–30; `frontend/middleware.ts` lines 69–70
 - **Issue:** Two competing redirect-after-login systems exist: (1) `middleware.ts` appends `?next=/path` to the login URL via URL searchParams, (2) `providers.tsx` writes `sessionStorage.setItem('redirect_after_login', window.location.pathname)`. The login page reads one or the other but not both, so depending on which path triggered the redirect, the post-login destination is either correct or lost.
 - **Impact:** Users are frequently redirected to `/dashboard` instead of the page they were trying to access after a session expiry. Particularly disruptive during Shopify embedded OAuth flows.
+- **Fix:** Removed sessionStorage write from `providers.tsx` — middleware's `?redirect=` param is the single source of truth. Removed dead sessionStorage read from login page (key was also mismatched: `redirect_after_login` vs `redirectAfterLogin`). Login now uses `redirectParam || '/dashboard'`.
 
 ---
 
@@ -474,9 +480,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [CRITICAL] BUG-060 — SQL injection via f-string template in `intelligence.py` raw queries
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/api/v1/routes/intelligence.py` lines 223–237, 551–566
 - **Issue:** `query = text("""...{category_filter}...""".format(category_filter=...))` injects the WHERE clause via `.format()`. While the current literal is safe, any refactor that passes a user-controlled string into the format call creates full SQL injection.
 - **Impact:** Structural SQL injection risk in two queries. Any maintenance that uses a user value in the format call becomes immediately exploitable.
+- **Fix:** Replaced `.format()` SQL construction with conditional string concatenation. Both queries now build the SQL string with `if category_id: base_sql += " AND ... = :category_id"`, keeping all user values as bound `:params`.
 
 ---
 
@@ -1431,6 +1439,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [CRITICAL] BUG-052 — UserRead schema declares id as int — all user API responses crash on serialize
+- **Status: FALSE POSITIVE 2026-03-22** — `UserRead.id` is already declared as `uuid.UUID` at line 25. Previously fixed.
 - **File:** `backend/schemas/user.py` line 24
 - **Issue:** `UserRead` has `id: int` but `User` model stores `id: uuid.UUID`. Pydantic serialization fails every time a user object is returned from any API endpoint — `/auth/login`, `/users/me`, any endpoint that embeds user data.
 - **Impact:** Every user API response fails with a Pydantic validation error. Login, profile, and any endpoint returning a `User` schema is broken in production.
