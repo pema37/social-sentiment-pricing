@@ -7,6 +7,7 @@ Supports:
 - Gemini 3 Flash/Pro (NEW - multimodal, streaming, thought signatures, thinking levels)
 """
 
+import asyncio
 import base64
 import json
 from collections.abc import AsyncGenerator
@@ -154,7 +155,8 @@ class AIClients:
     async def call_openai(self, system_prompt: str, user_prompt: str) -> dict:
         """Call OpenAI API and return parsed JSON response."""
         try:
-            response = self.openai_client.chat.completions.create(
+            response = await asyncio.to_thread(
+                self.openai_client.chat.completions.create,
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -175,7 +177,9 @@ class AIClients:
         """Call Gemini API and return parsed JSON response (legacy method)."""
         try:
             full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            response = self.gemini_client.generate_content(full_prompt)
+            response = await asyncio.to_thread(
+                self.gemini_client.generate_content, full_prompt
+            )
 
             text = response.text
             if "```json" in text:

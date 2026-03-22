@@ -29,7 +29,9 @@ async def fetch_product_mentions(
     Queue a background task to fetch social mentions for a product.
     Returns a task_id to check status.
     """
-    result = await session.execute(select(Product).where(Product.id == product_id))
+    result = await session.execute(
+        select(Product).where(Product.id == product_id, Product.user_id == current_user.id)
+    )
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -54,8 +56,11 @@ async def process_mentions(
 ):
     """
     Queue a background task to process pending mentions through sentiment analysis.
-    Returns a task_id to check status.
+    Returns a task_id to check status. Restricted to admin users.
     """
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
     task = process_pending_mentions.delay(batch_size)
 
     return {

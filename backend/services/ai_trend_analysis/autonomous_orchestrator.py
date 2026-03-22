@@ -29,7 +29,15 @@ logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-2.0-flash"
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+_client = None
+
+
+def _get_client():
+    """Lazy-initialize Gemini client to avoid module-level API calls."""
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +352,7 @@ async def _handle_write_price_to_chain(args: dict) -> dict:
         "chain": "BNB Chain Testnet",
         "block_number": 45678901,
         "gas_used": 85432,
-        "contract_address": os.getenv("BNB_CONTRACT_ADDRESS", "0xDEMO..."),
+        "contract_address": getattr(settings, "BNB_CONTRACT_ADDRESS", "0xDEMO..."),
         "explorer_url": f"https://testnet.bscscan.com/tx/{tx_hash}",
         "executed_at": datetime.now(UTC).isoformat(),
     }
@@ -363,7 +371,7 @@ class AutonomousOrchestrator:
     """
 
     def __init__(self):
-        self.client = client
+        self.client = _get_client()
         self.model = GEMINI_MODEL
         self._reasoning_log: list[AgentStreamEvent] = []
 

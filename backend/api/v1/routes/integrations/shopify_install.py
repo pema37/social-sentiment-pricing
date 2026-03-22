@@ -118,7 +118,8 @@ async def shopify_install(
         }
     )
 
-    auth_url = f"https://{shop}/admin/oauth/authorize?{params}"
+    store_name = shop.replace(".myshopify.com", "")
+    auth_url = f"https://admin.shopify.com/store/{store_name}/oauth/authorize?{params}"
 
     logger.info(f"Shopify install initiated for shop: {shop}, integration_id: {integration.id}")
 

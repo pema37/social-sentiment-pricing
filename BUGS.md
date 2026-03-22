@@ -2399,9 +2399,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-219 — `ai_clients.py` sync HTTP calls inside async functions block event loop
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/ai_trend_analysis/ai_clients.py` lines 157, 178
 - **Issue:** `call_openai()` calls `self.openai_client.chat.completions.create()` synchronously inside `async def`. `call_gemini()` calls `self.gemini_client.generate_content()` synchronously inside `async def`. Both are blocking HTTP calls made from async context. The OpenAI and Gemini legacy clients use synchronous `httpx`/`requests` under the hood.
 - **Impact:** Every AI trend analysis call blocks the entire event loop for the duration of the API call (typically 1–10 seconds). Under load, this stalls all concurrent requests across the FastAPI worker.
+- **Fix:** Wrapped both sync calls in `asyncio.to_thread()` to offload to a thread pool.
 
 ---
 
@@ -2413,9 +2415,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-221 — `autonomous_orchestrator.py` uses `os.getenv()` and initializes Gemini client at module level
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 29–32
 - **Issue:** Line 29: `GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")` — violates security rule that `os.getenv()` must not be used outside `core/config.py`. Line 32: `client = genai.Client(api_key=GEMINI_API_KEY)` executes at module import time. If `google.genai` package version doesn't support `genai.Client`, or if the API key is missing, the entire module fails to import.
 - **Impact:** Module import failure crashes any route that imports `autonomous_orchestrator`. `os.getenv()` bypasses centralized config validation. The empty string API key `""` causes all Gemini calls to fail silently with auth errors.
+- **Fix:** Replaced module-level client init with lazy `_get_client()` getter. os.getenv on line 29 was already fixed to use `settings.GEMINI_API_KEY`. Also fixed `os.getenv("BNB_CONTRACT_ADDRESS")` on line 347 to use `getattr(settings, ...)`.
 
 ---
 
@@ -2434,12 +2438,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-224 — `ingestion_tasks.py` SQLAlchemy `is not None` / `not column` identity checks — filters never applied
+- **Status: FALSE POSITIVE 2026-03-22**
 - **File:** `backend/workers/tasks/ingestion_tasks.py` lines 116, 288
 - **Issue:** Two broken SQLAlchemy filter expressions:
   1. Line 116: `select(Product).where(Product.keywords is not None, Product.is_active)` — `Product.keywords is not None` is a Python identity check on a SQLAlchemy column descriptor, which always evaluates to `True`. The filter is silently dropped; ALL active products are fetched regardless of whether they have keywords configured.
   2. Line 288: `.where(not SocialMention.processed)` — `not SocialMention.processed` negates a SQLAlchemy column object at the Python level, which always evaluates to `False`. The WHERE clause adds `WHERE False`, so the query returns zero rows. No unprocessed mentions are ever fetched for sentiment analysis.
   - Correct idioms: `Product.keywords.isnot(None)` (line 116); `SocialMention.processed == False` or `SocialMention.processed.is_(False)` (line 288).
 - **Impact:** Line 116: scheduled ingestion queues fetches for every product, including those with no keywords — wasted API calls and Reddit fetches. Line 288 (critical): `process_pending_mentions` task silently does nothing — the sentiment analysis batch never runs. Social mentions are collected but never analyzed. Sentiment scores are never computed. Pricing rules that depend on sentiment signals have no data.
+- **Note:** Both lines already use correct SQLAlchemy idioms: `.is_not(None)` on line 116 and `.is_(False)` on line 288. Previously fixed.
 
 ---
 
@@ -2466,9 +2472,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-229 — `sentiment/tasks.py` missing ownership check — any user can trigger sentiment tasks for any product
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/api/v1/routes/sentiment/tasks.py` lines 31–37, 59
 - **Issue:** `fetch_product_mentions` queries Product by `product_id` alone with no `Product.user_id == current_user.id` check. Any authenticated user can pass any `product_id` and queue a Celery sentiment fetch task for another merchant's product. Line 59: `process_pending_mentions.delay(batch_size)` — any user can trigger a system-wide batch processing job affecting all merchants' pending mentions.
 - **Impact:** Cross-tenant data access — attacker can trigger sentiment ingestion tasks for other merchants' products, leaking competitor product keyword data through task side-effects. Resource DoS — can flood the Celery queue with tasks for any products in the system.
+- **Fix:** Added `Product.user_id == current_user.id` ownership check to `fetch_product_mentions`. Restricted `process_mentions` to admin users only (`role == "ADMIN"`).
 
 ---
 
@@ -2480,9 +2488,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-231 — `shopify_install.py` still uses old OAuth URL format — installs land on wrong store
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/api/v1/routes/integrations/shopify_install.py` line 80
 - **Issue:** `auth_url = f"https://{shop}/admin/oauth/authorize?{params}"` — uses the old `{shop}.myshopify.com/admin/oauth/authorize` format. On 2026-03-20, `shopify_service.py` was explicitly fixed to use `admin.shopify.com/store/{name}/oauth/authorize` because "Shopify's unified admin intercepts the old format and routes based on active browser session, causing installs to land on the wrong store." That fix was applied only to `generate_oauth_url()` in `shopify_service.py`, not to the install endpoint which is the primary install entry point.
 - **Impact:** All App Store installs via the `/shopify/install` endpoint use the broken old URL. Merchants installing via the App Store may be redirected to the wrong store's OAuth screen. The install completes on the wrong store, creating a token for a different shop. Core install flow is broken for multi-store merchants.
+- **Fix:** Changed to `https://admin.shopify.com/store/{store_name}/oauth/authorize` format, matching the fix in `shopify_service.py`.
 
 ---
 
