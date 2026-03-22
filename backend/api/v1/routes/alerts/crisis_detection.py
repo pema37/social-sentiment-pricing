@@ -98,23 +98,15 @@ Provide:
 
 Return JSON: {{"summary": "...", "actions": ["...", "..."]}}"""
 
-    response = await ai_generator.client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a PR crisis management expert. Be specific and actionable."},
-            {"role": "user", "content": prompt},
-        ],
+    system_prompt = "You are a PR crisis management expert. Be specific and actionable."
+    result_text, _provider = await ai_generator._generate(
+        system_prompt=system_prompt,
+        user_message=prompt,
         temperature=0.5,
         max_tokens=400,
     )
 
-    result_text = response.choices[0].message.content.strip()
-    if result_text.startswith("```"):
-        result_text = result_text.split("```")[1]
-        if result_text.startswith("json"):
-            result_text = result_text[4:]
-
-    return json.loads(result_text)
+    return ai_generator._parse_json_response(result_text)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

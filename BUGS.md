@@ -2699,6 +2699,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/ingestion_tasks.py` line 116
 - **Issue:** `select(Product).where(Product.keywords is not None, Product.is_active)` — `Product.keywords is not None` is a Python identity check evaluated at import time. SQLAlchemy column attributes are never `None` (they are `InstrumentedAttribute` objects). This expression always evaluates to `True` and is silently dropped by SQLAlchemy's `.where()`. The resulting SQL has no NULL filter on `keywords`, so ALL active products are returned, including those with no keywords configured.
 - **Impact:** `fetch_all_mentions` queues a `fetch_for_product` task for every active product, not just those with keywords. Products without keywords then fall back to using `product.name` as the keyword (`keywords = product.keywords or [product.name]`). This pollutes Reddit search results with false positives and wastes Celery task slots.
+- **Status: FALSE POSITIVE** — Code already uses `Product.keywords.is_not(None)` (correct SQLAlchemy syntax), not Python `is not None`.
 
 ---
 
@@ -2706,6 +2707,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/sync_verification_tasks.py` line 380
 - **Issue:** `from services.integration.models import PriceUpdateRequest` — `services/integration/models.py` does not exist. The correct module is `services/integration/schemas.py`. This import is inside `_auto_fix_price_mismatches()` which is only called when `dry_run=False`.
 - **Impact:** `auto_fix_mismatches(dry_run=False)` (the actual fix, not the preview) always fails immediately with `ModuleNotFoundError`. Price mismatch auto-fixing is broken. Default is `dry_run=True` so the bug is hidden until someone tries to actually apply the fixes.
+- **Status: FALSE POSITIVE** — Code already imports from `services.integration.schemas` (correct module).
 
 ---
 
@@ -2713,6 +2715,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/analysis.py` lines 102, 159
 - **Issue:** Both endpoints fetch the product by `product_id` but do not check `product.user_id == current_user.id`. Any authenticated user can save sentiment analysis records to any other user's product by knowing its UUID.
 - **Impact:** Broken authorization boundary — competitor data pollution, tenant isolation violation. A malicious user can corrupt another merchant's sentiment history, skewing their AI pricing recommendations.
+- **Status: FALSE POSITIVE** — Both queries already filter by `Product.user_id == current_user.id`.
 
 ---
 
@@ -2720,6 +2723,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/analysis.py` lines 354–362
 - **Issue:** `_generate_ai_analysis()` calls `ai_generator.client.chat.completions.create(model="gpt-4o-mini", ...)` directly from the route file. This (1) bypasses `services/ai_generator.py` (project rule violation), (2) uses the OpenAI client directly instead of the Gemini 2.0 Flash model, (3) exposes no error budget or retry logic from the central service.
 - **Impact:** AI competitor analysis uses GPT-4o-mini instead of Gemini; central AI entry-point rule is violated. If the `ai_generator.client` attribute shape changes, this crashes. No cost tracking or rate limiting from the central service.
+- **Status: FIXED 2026-03-22** — Replaced direct OpenAI call with `ai_generator._generate()` and `ai_generator._parse_json_response()`, routing through the central AI service (Gemini primary, OpenAI fallback).
 
 ---
 
@@ -2727,6 +2731,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/alerts/crisis_detection.py` lines 101–109
 - **Issue:** Same pattern as BUG-256. `_generate_crisis_summary()` calls `ai_generator.client.chat.completions.create(model="gpt-4o-mini", ...)` directly. Bypasses `services/ai_generator.py`, uses OpenAI GPT-4o-mini instead of Gemini.
 - **Impact:** Crisis detection AI summaries use the wrong model and bypass the central AI entry-point. Same risks as BUG-256.
+- **Status: FIXED 2026-03-22** — Replaced direct OpenAI call with `ai_generator._generate()` and `ai_generator._parse_json_response()`, routing through the central AI service (Gemini primary, OpenAI fallback).
 
 ---
 
