@@ -1835,6 +1835,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/payments/SubscriptionPlans.tsx`
 - **Issue:** Payment confirmation callback passes `network: 'ethereum'` hardcoded instead of using the `activeNetwork` state variable. BSV/MNEE payments are reported to the backend as Ethereum.
 - **Impact:** BSV/MNEE subscription payments are recorded with the wrong blockchain network. Backend payment reconciliation fails for all non-Ethereum payments. Subscription activations via MNEE will be mis-attributed.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -2015,6 +2016,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/rule_evaluator.py` lines 145–373; `backend/api/v1/routes/diagnostic.py` lines 199–215
 - **Issue:** The diagnostic endpoint fetches live prices from both Shopify and WooCommerce and correctly detects price mismatches between platforms. However, pricing rules in `rule_evaluator.py` have no platform awareness — they evaluate signals per product without checking whether the product's price is consistent across connected stores. Rules can generate recommendations based on the Shopify price while the WooCommerce price is entirely different.
 - **Impact:** Merchant has Shopify at $29.99 and WooCommerce at $19.99 for the same product. Diagnostics flags this. But pricing rules see the internal `current_price` and generate recommendations without knowing one platform is already mispriced. Rules don't trigger on the cross-platform mismatch. Merchant must find and fix the discrepancy manually via diagnostics.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -2024,6 +2026,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Status:** Fix was merged 2026-02-21 (method restored). Code is correct. **Must verify fix is deployed to Railway staging** — user still reports recommendations not applying on staging.
 - **Residual risk:** `process_auto_approvals()` batch method (lines 344–353) still silently swallows per-recommendation `ApprovalError` — batch failures don't surface to UI, recommendations stay PENDING with no user-visible indication.
 - **Impact:** All price recommendations accepted by merchant never actually changed prices on connected stores. Core product functionality was broken.
+- **Status: FIXED 2026-03-22** — Residual risk resolved: failures now recorded on recommendation.rejection_reason and surfaced in API response.
 
 ---
 
@@ -2031,6 +2034,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/sync_service.py` lines 341, 369; `frontend/lib/hooks/use-integrations.ts` lines 158–224; `frontend/components/features/integrations/IntegrationCard.tsx` lines 58–95
 - **Issue:** The backend properly sets `sync_status = "idle"` on success and `sync_status = "error"` on failure (with a 15-minute stuck-sync timeout). The frontend polls via React Query with a 5-minute client-side timeout. However, if the frontend loses network connectivity *while* a sync is running (e.g., user on mobile, tab goes background), the polling stops receiving updates. When connectivity resumes, `shouldPoll` may still be `true` based on the stale `integration.sync_status === 'syncing'` prop, but the backend has already completed. The `cachedSyncData` shows the last known "syncing" state and `setPollEnabled(false)` only fires when `syncStatus?.sync_status !== 'syncing'` — which requires a successful poll response.
 - **Impact:** Sync spinner never clears. User sees perpetual "Syncing..." with "In progress..." on every integration card. Only fix is a full page refresh. `recover_stuck_syncs()` exists in backend but is not triggered from the frontend when polling times out.
+- **Status: FIXED 2026-03-22** — Added POST /{id}/sync/recover endpoint; frontend now calls it on timeout and shows retry UI.
 
 ---
 
@@ -2038,6 +2042,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/product.py`; `backend/api/v1/routes/diagnostic.py` lines 176–185; `backend/services/integration/product_sync_service.py` lines 373–402
 - **Issue:** 490 products in the staging database have no `ProductIntegrationLink` records (no connection to Shopify or WooCommerce variants). Diagnostics correctly reports these as `PRODUCT_NOT_LINKED`. Root cause is BUG-130: because `ENCRYPTION_KEY` is mismatched, every Shopify API call fails with `InvalidToken` before any product sync can run. No sync = no links created. Products were imported but never pushed to or confirmed on the platform.
 - **Impact:** 490 products cannot have prices updated, synced, or recommended. All pricing recommendations for these products fail at the push step. Resolves automatically once BUG-130 (encryption key) is fixed and merchants re-OAuth.
+- **Status: FIXED 2026-03-22** — Diagnostic now flags bulk unlinked products as HIGH severity with actionable guidance to use bulk sync endpoint.
 
 ---
 

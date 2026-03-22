@@ -98,6 +98,18 @@ export async function getSyncStatus(integrationId: string): Promise<SyncStatusRe
 }
 
 /**
+ * Recover an integration stuck in 'syncing' status.
+ * Called when frontend polling times out.
+ */
+export async function recoverStuckSync(integrationId: string): Promise<{
+  recovered: boolean;
+  message: string;
+  sync_status: string;
+}> {
+  return api.post(`${BASE}/${integrationId}/sync/recover`);
+}
+
+/**
  * Get sync history logs
  */
 export async function getSyncLogs(

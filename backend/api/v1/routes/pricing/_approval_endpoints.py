@@ -159,12 +159,18 @@ async def process_auto_approvals(
                 }
             )
 
-        logger.info(f"Auto-approval processed {len(applied)} recommendations for user {current_user.id}")
+        failures = service.last_auto_approval_failures
+        logger.info(
+            f"Auto-approval processed {len(applied)} recommendations "
+            f"({len(failures)} failed) for user {current_user.id}"
+        )
 
         return {
             "message": f"Applied {len(applied)} recommendations",
             "applied_count": len(applied),
+            "failed_count": len(failures),
             "results": results,
+            "failures": failures,
         }
 
     except Exception as e:

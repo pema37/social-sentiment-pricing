@@ -287,7 +287,9 @@ class ApprovalService:
 
         return recommendation
 
-    async def process_auto_approvals(self, user_id: UUID) -> list[PriceRecommendation]:
+    async def process_auto_approvals(
+        self, user_id: UUID
+    ) -> list[PriceRecommendation]:
         """
         Process all PENDING recommendations against user's auto-approval settings.
 
@@ -295,9 +297,16 @@ class ApprovalService:
         against the user's thresholds. Those that qualify are auto-approved and
         applied atomically.
 
+        Failures are recorded on the recommendation's rejection_reason field so
+        they surface in the UI.  The list of successfully applied recommendations
+        is returned; callers can check self.last_auto_approval_failures for
+        details on any that failed.
+
         Returns:
             List of recommendations that were successfully auto-applied.
         """
+        self.last_auto_approval_failures: list[dict] = []
+
         settings = await self._get_user_settings(user_id)
 
         if not settings or not settings.auto_approve_enabled:
@@ -343,14 +352,34 @@ class ApprovalService:
                 result_rec = await self.auto_approve_and_apply(rec.id, user_id)
                 applied.append(result_rec)
             except ApprovalError as e:
-                # Log and skip — don't let one failure block the rest
                 logger.warning(f"Auto-approval failed for {rec.id}: [{e.error_code}] {e.message}")
+                rec.rejection_reason = f"Auto-approval failed: {e.message}"
+                self.db.add(rec)
+                self.last_auto_approval_failures.append({
+                    "recommendation_id": str(rec.id),
+                    "product_id": str(rec.product_id),
+                    "error_code": e.error_code,
+                    "error": e.message,
+                })
                 continue
-            except Exception:
+            except Exception as exc:
                 logger.exception(f"Unexpected error auto-approving {rec.id}")
+                rec.rejection_reason = f"Auto-approval error: {type(exc).__name__}"
+                self.db.add(rec)
+                self.last_auto_approval_failures.append({
+                    "recommendation_id": str(rec.id),
+                    "product_id": str(rec.product_id),
+                    "error_code": "UNEXPECTED_ERROR",
+                    "error": str(exc),
+                })
                 continue
 
-        logger.info(f"Auto-approval complete for user {user_id}: {len(applied)}/{len(pending)} applied")
+        await self.db.flush()
+        logger.info(
+            f"Auto-approval complete for user {user_id}: "
+            f"{len(applied)}/{len(pending)} applied, "
+            f"{len(self.last_auto_approval_failures)} failed"
+        )
         return applied
 
     async def _get_recommendation(self, recommendation_id: UUID, user_id: UUID) -> PriceRecommendation:

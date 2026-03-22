@@ -194,24 +194,35 @@ export function useSyncStatus(
           }
           
           // ========== NEW: Timeout check ==========
-          // If we've been polling for too long, stop and trigger timeout
+          // If we've been polling for too long, stop and trigger recovery
           if (pollingStartTime.current && !hasTimedOut.current) {
             const elapsed = Date.now() - pollingStartTime.current;
             if (elapsed > SYNC_POLLING_TIMEOUT_MS) {
               hasTimedOut.current = true;
               pollingStartTime.current = null;
-              
+
+              // Trigger backend recovery for the stuck sync
+              if (integrationId) {
+                integrationsApi.recoverStuckSync(integrationId).catch((err) => {
+                  console.error('[useSyncStatus] Failed to recover stuck sync:', err);
+                });
+              }
+
               // Call timeout callback if provided
               if (options?.onTimeout) {
                 // Use setTimeout to avoid calling during render
                 setTimeout(() => options.onTimeout?.(), 0);
               }
-              
+
               console.warn(
                 `[useSyncStatus] Polling timed out after ${SYNC_POLLING_TIMEOUT_MS / 1000}s ` +
-                `for integration ${integrationId}. Sync may be stuck.`
+                `for integration ${integrationId}. Triggered recovery.`
               );
-              
+
+              // Invalidate to pick up the recovered 'error' status
+              queryClient.invalidateQueries({ queryKey: integrationKeys.syncStatus(integrationId!) });
+              queryClient.invalidateQueries({ queryKey: integrationKeys.lists() });
+
               return false; // Stop polling
             }
           }

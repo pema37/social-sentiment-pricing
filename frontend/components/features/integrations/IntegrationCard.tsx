@@ -46,21 +46,27 @@ interface IntegrationCardProps {
 export function IntegrationCard({ integration }: IntegrationCardProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pollEnabled, setPollEnabled] = useState(false);
-  
+  const [syncTimedOut, setSyncTimedOut] = useState(false);
+
   // Cache the last known sync data to prevent UI from reverting to stale props
   const [cachedSyncData, setCachedSyncData] = useState<CachedSyncData | null>(null);
-  
+
   const config = PLATFORM_CONFIGS[integration.platform];
   const disconnect = useDisconnectIntegration();
   const triggerSync = useTriggerSync();
-  const initOAuth = useInitOAuth(); 
-  
+  const initOAuth = useInitOAuth();
+
   // Poll when integration prop says syncing OR when user clicked sync button
   const shouldPoll = integration.sync_status === 'syncing' || pollEnabled;
-  
+
+  const handleSyncTimeout = useCallback(() => {
+    setSyncTimedOut(true);
+    setPollEnabled(false);
+  }, []);
+
   const { data: syncStatus } = useSyncStatus(
     integration.id,
-    { polling: shouldPoll }
+    { polling: shouldPoll, onTimeout: handleSyncTimeout }
   );
 
   // Update cached data when we get fresh poll results
@@ -107,6 +113,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
   const isDisconnected = integration.status === 'disconnected';
 
   const handleSync = useCallback(() => {
+    setSyncTimedOut(false);
     setPollEnabled(true);
     triggerSync.mutate({ integrationId: integration.id, syncType: 'full' });
   }, [triggerSync, integration.id]);
@@ -187,6 +194,24 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
           </p>
         </div>
       </div>
+
+      {/* Sync timeout warning */}
+      {syncTimedOut && (
+        <div className="mt-3 rounded-md bg-amber-50 p-3 space-y-2">
+          <p className="text-xs text-amber-800">
+            Sync timed out. The operation may still be running in the background.
+          </p>
+          <button
+            onClick={() => {
+              setSyncTimedOut(false);
+              handleSync();
+            }}
+            className="text-xs font-semibold text-amber-800 underline hover:no-underline"
+          >
+            Retry sync
+          </button>
+        </div>
+      )}
 
       {/* Error message */}
       {integration.error_message && (

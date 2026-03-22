@@ -143,6 +143,7 @@ async def check_integration_health(
 
     # 4. Identify issues
     issues = []
+    unlinked_products: list[str] = []
 
     # Check for disconnected integrations
     for integration in integrations:
@@ -174,6 +175,7 @@ async def check_integration_health(
                 }
             )
         elif data["total_platforms"] == 0:
+            unlinked_products.append(product_id)
             issues.append(
                 {
                     "type": "PRODUCT_NOT_LINKED",
@@ -214,6 +216,32 @@ async def check_integration_health(
                         }
                     )
 
+    # Bulk unlinked products: if many products are unlinked, flag as HIGH severity
+    # with actionable guidance (likely a systemic issue like encryption key mismatch)
+    if len(unlinked_products) >= 10:
+        has_inactive = any(i.status != IntegrationStatus.ACTIVE for i in integrations)
+        suggestion = (
+            "Many unlinked products detected. This is likely caused by a disconnected "
+            "integration or credential issue. Reconnect your store first, then use "
+            "POST /api/v1/product-sync/sync/bulk to relink all products in one operation."
+        )
+        if has_inactive:
+            suggestion = (
+                "Many unlinked products detected. You have a disconnected integration — "
+                "reconnect it first (Integrations page), then use "
+                "POST /api/v1/product-sync/sync/bulk to relink all products."
+            )
+        issues.insert(
+            0,
+            {
+                "type": "BULK_PRODUCTS_UNLINKED",
+                "severity": "HIGH",
+                "message": f"{len(unlinked_products)} products are not linked to any platform",
+                "unlinked_count": len(unlinked_products),
+                "suggestion": suggestion,
+            },
+        )
+
     return {
         "user_id": str(current_user.id),
         "summary": {
@@ -221,6 +249,7 @@ async def check_integration_health(
             "active_integrations": sum(1 for i in integrations if i.status == IntegrationStatus.ACTIVE),
             "total_products": len(products),
             "total_links": len(links),
+            "unlinked_products": len(unlinked_products),
             "issues_found": len(issues),
         },
         "integrations": integration_summary,

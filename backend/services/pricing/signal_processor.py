@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
 from models.competitor_product import CompetitorProduct
+from models.integration import Integration, ProductIntegrationLink
 from models.product import Product
 from models.sentiment import Sentiment
 from models.social_mention import SocialMention
@@ -35,6 +36,7 @@ class SignalProcessor:
         mention_count, mention_baseline = await self._get_volume_signals(product.id)
         viral_detected, viral_reach, viral_engagement, viral_sentiment = await self._get_viral_signals(product.id)
         competitor_prices = await self._get_competitor_prices(product.id)
+        platform_prices = await self._get_platform_prices(product.id)
 
         # Get trend signals
         trend_data = await self._get_trend_signals(product.id)
@@ -56,6 +58,8 @@ class SignalProcessor:
             mention_growth_rate=trend_data["mention_growth_rate"],
             sentiment_momentum=trend_data["sentiment_momentum"],
             is_trending=trend_data["is_trending"],
+            # Cross-platform prices
+            platform_prices=platform_prices,
         )
 
     async def _get_sentiment_signals(self, product_id: UUID) -> tuple[Decimal | None, Decimal | None]:
@@ -400,3 +404,24 @@ class SignalProcessor:
         strength = min(strength, Decimal("1"))
 
         return direction, strength.quantize(Decimal("0.01"))
+
+    async def _get_platform_prices(self, product_id: UUID) -> dict[str, Decimal]:
+        """Get current prices for this product across all connected platforms."""
+        stmt = (
+            select(Integration.platform, ProductIntegrationLink.external_price)
+            .join(Integration, ProductIntegrationLink.integration_id == Integration.id)
+            .where(
+                ProductIntegrationLink.product_id == product_id,
+                ProductIntegrationLink.sync_enabled.is_(True),
+                ProductIntegrationLink.external_price.isnot(None),
+            )
+        )
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        prices: dict[str, Decimal] = {}
+        for platform, price in rows:
+            platform_name = platform.value if hasattr(platform, "value") else str(platform)
+            prices[platform_name] = Decimal(str(price))
+
+        return prices

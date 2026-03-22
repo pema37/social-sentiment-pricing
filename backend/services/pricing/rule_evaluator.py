@@ -58,6 +58,9 @@ class MarketSignals:
     sentiment_momentum: Decimal = Decimal("0")  # Sentiment trend direction
     is_trending: bool = False  # Is this product currently trending?
 
+    # Cross-platform price signals (platform_name -> price)
+    platform_prices: dict[str, Decimal] = field(default_factory=dict)
+
 
 class RuleEvaluator:
     """Evaluates pricing rules against market signals."""
@@ -138,9 +141,42 @@ class RuleEvaluator:
             # PATCHED: Now async to support name-based competitor matching
             match_details = await self._evaluate_rule(rule, product, signals)
             if match_details:
+                # Check cross-platform price consistency
+                mismatch = self._check_cross_platform_consistency(signals)
+                if mismatch:
+                    match_details["cross_platform_mismatch"] = mismatch
                 return rule, match_details
 
         return None, None
+
+    def _check_cross_platform_consistency(self, signals: MarketSignals) -> dict | None:
+        """
+        Check if product prices are consistent across connected platforms.
+
+        Returns mismatch details if prices differ by more than 1%, None otherwise.
+        """
+        if len(signals.platform_prices) < 2:
+            return None
+
+        prices = list(signals.platform_prices.items())
+        max_price = max(p for _, p in prices)
+        min_price = min(p for _, p in prices)
+
+        if min_price <= 0:
+            return None
+
+        diff_pct = float((max_price - min_price) / min_price * 100)
+
+        if diff_pct > 1.0:
+            return {
+                "platforms": {name: float(price) for name, price in prices},
+                "max_price": float(max_price),
+                "min_price": float(min_price),
+                "diff_percent": round(diff_pct, 2),
+                "warning": "Product has inconsistent prices across platforms",
+            }
+
+        return None
 
     async def _evaluate_rule(self, rule: PricingRule, product: Product, signals: MarketSignals) -> dict | None:
         """Evaluate a single rule. Returns match details if triggered, None otherwise."""

@@ -398,3 +398,44 @@ async def get_sync_logs(
         page_size=pagination.page_size,
         total_pages=total_pages,
     )
+
+
+@router.post("/{integration_id}/sync/recover")
+@limiter.limit(WRITE_RATE_LIMIT)
+async def recover_stuck_sync(
+    request: Request,
+    integration_id: UUID,
+    db: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Recover an integration stuck in 'syncing' status.
+
+    Called by the frontend when sync polling times out after 5 minutes.
+    Resets the integration sync_status to 'error' so the user can retry.
+    """
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
+
+    if not integration:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+
+    if integration.sync_status != "syncing":
+        return {
+            "recovered": False,
+            "message": f"Integration is not stuck (status: {integration.sync_status})",
+            "sync_status": integration.sync_status,
+        }
+
+    sync_service = SyncService(db)
+    recovered = await sync_service.recover_stuck_syncs(user_id=current_user.id)
+
+    return {
+        "recovered": recovered > 0,
+        "message": f"Recovered {recovered} stuck sync(s)" if recovered > 0 else "No stuck syncs found to recover",
+        "sync_status": "error" if recovered > 0 else integration.sync_status,
+    }

@@ -395,7 +395,7 @@ export function SubscriptionPlans({ activeNetwork }: SubscriptionPlansProps) {
         subscription_tier?: string;
       }>(`/api/v1/payments/${paymentInfo.payment_id}/confirm`, {
         transaction_hash: txHash,
-        network: 'ethereum',
+        network: paymentInfo.network,
       });
 
       if (response.success) {
