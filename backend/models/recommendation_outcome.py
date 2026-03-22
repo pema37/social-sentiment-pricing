@@ -25,7 +25,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, SQLModel
@@ -92,10 +92,10 @@ class RecommendationOutcome(SQLModel, table=True):
 
     # ── Identity ──
     id: UUID = Field(default_factory=uuid4, sa_column=Column(PG_UUID(as_uuid=True), primary_key=True))
-    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
-    recommendation_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, unique=True, index=True))
-    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
-    rule_id: UUID | None = Field(default=None, sa_column=Column(PG_UUID(as_uuid=True), nullable=True, index=True))
+    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True))
+    recommendation_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("price_recommendations.id"), nullable=False, unique=True, index=True))
+    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True))
+    rule_id: UUID | None = Field(default=None, sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("pricing_rules.id"), nullable=True, index=True))
     rule_type: str | None = Field(default=None, max_length=50)
 
     # ── Recommendation source ──

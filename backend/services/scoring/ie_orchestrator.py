@@ -611,9 +611,11 @@ def create_ie_orchestrator(
     """
     # Lazy imports to avoid circular deps — these are the Phase 2-3 modules
     from services.scoring.engine import ScoringEngine
+    from services.scoring.experimentation.bandit import ThompsonSamplingBandit
     from services.scoring.experimentation.experiment_manager import (
         ExperimentManager,
     )
+    from services.scoring.experimentation.strategies import StrategyRegistry
     from services.scoring.learning.calibrator import Calibrator
     from services.scoring.learning.context_injector import ContextInjector
 
@@ -624,11 +626,15 @@ def create_ie_orchestrator(
         # Default: enabled for all merchants (can be overridden per-merchant)
         return flags.get(merchant_id, True)
 
+    # Wire up the experiment manager with its real collaborators
+    registry = StrategyRegistry()
+    bandit = ThompsonSamplingBandit(arm_names=registry.list_names())
+
     return IEOrchestrator(
-        experiment_manager=ExperimentManager(db_session_factory),
+        experiment_manager=ExperimentManager(registry=registry, bandit=bandit),
         scoring_engine=ScoringEngine(),
-        context_injector=ContextInjector(db_session_factory),
-        calibrator=Calibrator(db_session_factory),
+        context_injector=ContextInjector(),
+        calibrator=Calibrator(),
         config=IEOrchestratorConfig(),
         is_ie_enabled=is_ie_enabled,
     )

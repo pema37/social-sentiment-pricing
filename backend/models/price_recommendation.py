@@ -11,7 +11,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
@@ -32,11 +32,11 @@ class PriceRecommendation(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, sa_column=Column(PG_UUID(as_uuid=True), primary_key=True))
 
     # Ownership
-    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
-    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
+    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True))
+    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True))
 
     # Which rule triggered this (null if manual or scheduled evaluation)
-    triggered_rule_id: UUID | None = Field(default=None, sa_column=Column(PG_UUID(as_uuid=True), nullable=True))
+    triggered_rule_id: UUID | None = Field(default=None, sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("pricing_rules.id"), nullable=True))
 
     # Price data
     current_price: Decimal = Field(decimal_places=2)

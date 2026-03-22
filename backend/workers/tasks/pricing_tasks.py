@@ -337,7 +337,7 @@ async def _apply_stuck_recommendations():
         stmt = (
             select(PriceRecommendation)
             .where(PriceRecommendation.status == RecommendationStatus.AUTO_APPROVED)
-            .where(PriceRecommendation.applied_at is None)
+            .where(PriceRecommendation.applied_at.is_(None))
         )
         result = await db.execute(stmt)
         stuck = list(result.scalars().all())

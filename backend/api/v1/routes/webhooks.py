@@ -16,10 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
+from core.deps import get_current_user
 from core.encryption import decrypt_token
 from core.rate_limit import WEBHOOK_RATE_LIMIT, WRITE_RATE_LIMIT, limiter
 from db.session import get_session
 from models.integration import EcommercePlatform, Integration, IntegrationStatus
+from models.user import User
 from services.integration import (
     CircuitOpenError,
     ShopifyService,
@@ -249,13 +251,17 @@ def _get_woocommerce_webhook_secret(integration: Integration) -> str | None:
 async def register_webhooks(
     request: Request,
     integration_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
     """
     Register webhooks with the e-commerce platform.
     Called after OAuth is complete to set up automatic product sync.
     """
-    stmt = select(Integration).where(Integration.id == integration_id)
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
     result = await db.execute(stmt)
     integration = result.scalars().first()
 
@@ -312,13 +318,17 @@ async def register_webhooks(
 async def unregister_webhooks(
     request: Request,
     integration_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
     """
     Unregister all webhooks for an integration.
     Called when disconnecting an integration.
     """
-    stmt = select(Integration).where(Integration.id == integration_id)
+    stmt = select(Integration).where(
+        Integration.id == integration_id,
+        Integration.user_id == current_user.id,
+    )
     result = await db.execute(stmt)
     integration = result.scalars().first()
 
