@@ -10,8 +10,9 @@ import hashlib
 import hmac
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from sqlalchemy import cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -133,7 +134,6 @@ async def process_payment_confirmation(
 @router.post("/webhook/mnee", response_model=WebhookResponse)
 async def mnee_webhook(
     request: Request,
-    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -166,9 +166,9 @@ async def mnee_webhook(
 
     payment_id_prefix = payload.memo[4:]  # Remove "SSP-" prefix
 
-    # Find matching payment
+    # Find matching payment (cast UUID to text for prefix matching)
     result = await session.execute(
-        select(Payment).where(Payment.id.startswith(payment_id_prefix)).where(Payment.status == PaymentStatus.PENDING)
+        select(Payment).where(cast(Payment.id, String).startswith(payment_id_prefix)).where(Payment.status == PaymentStatus.PENDING)
     )
     payment = result.scalar_one_or_none()
 
@@ -183,15 +183,11 @@ async def mnee_webhook(
         await session.commit()
         return WebhookResponse(success=False, message="Insufficient payment amount")
 
-    # Process payment in background
-    background_tasks.add_task(
-        process_payment_confirmation,
-        payment,
-        payload,
-        session,
-    )
+    # Process payment inline (session is closed after handler returns,
+    # so background tasks cannot use it)
+    await process_payment_confirmation(payment, payload, session)
 
-    return WebhookResponse(success=True, message="Payment processing")
+    return WebhookResponse(success=True, message="Payment confirmed")
 
 
 @router.get("/webhook/mnee/test")

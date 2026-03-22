@@ -84,13 +84,8 @@ def _task_wrapper(task_name: str, fn, *args, **kwargs) -> dict[str, Any]:
             exc,
             exc_info=True,
         )
-        return {
-            "task": task_name,
-            "status": "error",
-            "duration_ms": round(duration_ms, 2),
-            "timestamp": datetime.now(UTC).isoformat(),
-            "error": str(exc),
-        }
+        # Re-raise so Celery sees the failure and can trigger retry logic
+        raise
 
 
 # ===================================================================

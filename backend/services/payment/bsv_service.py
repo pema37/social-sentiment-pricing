@@ -84,9 +84,28 @@ class BSVPaymentService(PaymentVerificationService):
                     confirmations=tx_info.confirmations,
                 )
 
-            # For HandCash/RelayX payments, recipient verification is complex
-            # (they use payment handles, not raw addresses)
-            # For hackathon, we trust the memo as proof of payment intent
+            # Verify transaction amount meets expected minimum
+            actual_amount = await self._get_transaction_amount(transaction_hash)
+            if actual_amount is not None and actual_amount < expected_amount:
+                return self._create_verification_result(
+                    verified=False,
+                    transaction_hash=transaction_hash,
+                    error=f"Insufficient amount: expected {expected_amount}, got {actual_amount}",
+                    memo=tx_info.memo,
+                    confirmations=tx_info.confirmations,
+                )
+
+            # Verify recipient if possible
+            if expected_recipient:
+                recipient_found = await self._verify_recipient(transaction_hash, expected_recipient)
+                if not recipient_found:
+                    return self._create_verification_result(
+                        verified=False,
+                        transaction_hash=transaction_hash,
+                        error=f"Recipient address {expected_recipient} not found in transaction outputs",
+                        memo=tx_info.memo,
+                        confirmations=tx_info.confirmations,
+                    )
 
             return self._create_verification_result(
                 verified=True,
@@ -168,6 +187,52 @@ class BSVPaymentService(PaymentVerificationService):
                 transaction_hash=transaction_hash,
                 error=str(e),
             )
+
+    async def _get_transaction_amount(self, transaction_hash: str) -> int | None:
+        """
+        Get the total output amount of a BSV transaction in satoshis.
+        Returns None if the amount cannot be determined.
+        """
+        try:
+            client = await self._get_client()
+            url = f"{WHATSONCHAIN_API_URL}/tx/hash/{transaction_hash}"
+            response = await client.get(url)
+            response.raise_for_status()
+            tx_data = response.json()
+
+            # Sum all non-OP_RETURN outputs (in satoshis)
+            total = 0
+            for output in tx_data.get("vout", []):
+                script = output.get("scriptPubKey", {}).get("asm", "")
+                if not script.startswith("OP_RETURN") and not script.startswith("0 OP_RETURN"):
+                    total += output.get("value", 0)
+
+            # WhatsOnChain returns value in BSV, convert to satoshis
+            return int(total * 100_000_000) if total else 0
+        except Exception as e:
+            logger.error(f"Error getting transaction amount for {transaction_hash}: {e}")
+            return None
+
+    async def _verify_recipient(self, transaction_hash: str, expected_recipient: str) -> bool:
+        """
+        Check that at least one transaction output pays to the expected recipient address.
+        """
+        try:
+            client = await self._get_client()
+            url = f"{WHATSONCHAIN_API_URL}/tx/hash/{transaction_hash}"
+            response = await client.get(url)
+            response.raise_for_status()
+            tx_data = response.json()
+
+            for output in tx_data.get("vout", []):
+                addresses = output.get("scriptPubKey", {}).get("addresses", [])
+                if expected_recipient in addresses:
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Error verifying recipient for {transaction_hash}: {e}")
+            # Fail closed — if we can't verify, reject
+            return False
 
     def _extract_memo(self, vout: list) -> str | None:
         """
