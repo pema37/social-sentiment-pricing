@@ -1671,6 +1671,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/retrospective_audit.py` lines 51, 52
 - **Issue:** `summary_json: dict = Field(default={})` and `sku_results_json: list = Field(default=[])` use mutable defaults. All audit instances without explicit values share the same dict/list object.
 - **Impact:** One merchant's audit data modifications (in-memory, before commit) appear in all other audits. If audit data is written to the shared dict before DB persist, it bleeds across unrelated audit records. GDPR violation.
+- **Status: FIXED 2026-03-22** — Changed `default={}` to `default_factory=dict` and `default=[]` to `default_factory=list`.
 
 ---
 
@@ -1678,6 +1679,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/subscription_service.py` lines 313–320
 - **Issue:** `create_subscription_payment()` inserts a new `Payment` record every call with no uniqueness check on `(user_id, amount, tier, created_at_window)`. Browser retries or double-clicks create duplicate payment records. `confirm_payment()` at line 368 doesn't check for existing confirmed payments before reprocessing.
 - **Impact:** Network retries cause double-charges. Two `Payment` records are confirmed, both activate subscriptions — user gets double subscription or both records enter inconsistent states.
+- **Status: FIXED 2026-03-22** — Added `_find_pending_payment()` idempotency check before creating new Payment. Returns existing pending payment if one matches (user_id, tier, billing_cycle, network) within the last hour.
 
 ---
 
@@ -1699,6 +1701,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/products/import_service.py` line 135
 - **Issue:** TODO comment: update logic is not implemented. The code increments `result.updated += 1` but does not actually update any fields on the existing product record.
 - **Impact:** When re-importing a product CSV that has updated prices, names, or descriptions, the import reports success and increments the update counter but no data is changed. Merchants believe products were updated when they weren't.
+- **Status: FIXED 2026-03-22** — Implemented update logic: `_get_existing_products_by_sku()` batch-fetches products, `_update_product_from_row()` applies name, prices, description, category, and image_url from the import row to the existing product.
 
 ---
 
@@ -1735,7 +1738,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/page.tsx`
 - **Issue:** `const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://social-sentiment-pricing-staging-2ecd.up.railway.app'` — Railway staging URL is hardcoded as the fallback. If `NEXT_PUBLIC_API_URL` is unset in a production Vercel deploy, the Shopify install OAuth flow redirects to the staging backend.
 - **Impact:** Shopify merchant install attempts from production hit staging backend. OAuth flow fails or stores credentials against staging DB. Merchants cannot connect their store.
-- **Status: FIXED 2026-03-22** — Removed hardcoded staging URL; throws error if `NEXT_PUBLIC_API_URL` is not set.
+- **Status: FIXED 2026-03-22** — Verified: hardcoded staging URL removed; throws error if `NEXT_PUBLIC_API_URL` is not set.
 
 ---
 
@@ -1743,6 +1746,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/integrations/callback/page.tsx`
 - **Issue:** `useSearchParams()` called at the page level in a Client Component with no wrapping `<Suspense>` boundary. In Next.js 14 this is required — the build emits an error and forces the entire route to dynamic rendering.
 - **Impact:** Build fails or emits critical warning. Hydration mismatch possible. OAuth callback page may not render correctly on first load.
+- **Status: FIXED 2026-03-22** — Already fixed: page exports a wrapper component with `<Suspense>` boundary around `OAuthCallbackContent` which uses `useSearchParams()`.
 
 ---
 

@@ -122,8 +122,11 @@ class ProductImportService:
 
         # Get existing SKUs for duplicate detection
         existing_skus = set()
+        existing_products_by_sku: dict[str, Product] = {}
         if skip_duplicates or update_existing:
             existing_skus = await self._get_existing_skus(user_id)
+            if update_existing:
+                existing_products_by_sku = await self._get_existing_products_by_sku(user_id)
 
         products_to_add = []
 
@@ -132,7 +135,10 @@ class ProductImportService:
                 # Check for duplicate SKU
                 if row.sku and row.sku.strip() in existing_skus:
                     if update_existing:
-                        # TODO: Implement update logic
+                        existing = existing_products_by_sku.get(row.sku.strip())
+                        if existing:
+                            self._update_product_from_row(existing, row)
+                            self.session.add(existing)
                         result.updated += 1
                         continue
                     elif skip_duplicates:
@@ -183,6 +189,29 @@ class ProductImportService:
         )
         result = await self.session.execute(stmt)
         return {sku for (sku,) in result.all() if sku}
+
+    async def _get_existing_products_by_sku(self, user_id: UUID) -> dict[str, Product]:
+        """Get existing products keyed by SKU for bulk updates."""
+        from sqlmodel import select
+
+        stmt = select(Product).where(
+            Product.user_id == user_id,
+            Product.sku.isnot(None),
+        )
+        result = await self.session.execute(stmt)
+        return {p.sku.strip(): p for p in result.scalars().all() if p.sku}
+
+    def _update_product_from_row(self, product: Product, row: ImportProductRow) -> None:
+        """Update an existing product's fields from an import row."""
+        product.name = row.name.strip()
+        product.base_price = row.base_price
+        product.current_price = row.base_price
+        if row.description is not None:
+            product.description = row.description.strip()
+        if row.category is not None:
+            product.category = row.category.strip()
+        if row.image_url is not None:
+            product.image_url = row.image_url.strip()
 
     def _create_product_from_row(
         self,

@@ -248,6 +248,31 @@ class SubscriptionService:
     # PAYMENT CREATION
     # =========================================================================
 
+    async def _find_pending_payment(
+        self, user_id: UUID, tier: str, billing_cycle: str, network: str
+    ) -> Payment | None:
+        """Return an existing pending payment for the same params created in the last hour."""
+        cutoff = datetime.now(UTC) - timedelta(hours=1)
+        stmt = (
+            select(Payment)
+            .where(
+                Payment.user_id == user_id,
+                Payment.status == "pending",
+                Payment.payment_type == "subscription",
+                Payment.created_at >= cutoff,
+            )
+        )
+        result = await self.session.execute(stmt)
+        for payment in result.scalars().all():
+            meta = payment.get_metadata() or {}
+            if (
+                meta.get("tier") == tier
+                and meta.get("billing_cycle") == billing_cycle
+                and meta.get("network") == network
+            ):
+                return payment
+        return None
+
     def _get_recipient_for_network(self, network: str) -> str:
         """
         Get the correct recipient wallet address for the payment network.
@@ -315,6 +340,23 @@ class SubscriptionService:
 
         # MNEE uses 5 decimal places (1 MNEE = $1)
         amount_raw = int(amount * 100000)
+
+        # Idempotency: return existing pending payment if one was created recently
+        existing = await self._find_pending_payment(user.id, tier, billing_cycle, network)
+        if existing:
+            logger.info(f"Returning existing pending payment {existing.id} for user {user.id}")
+            payment_id_str = str(existing.id)
+            return PaymentRequest(
+                payment_id=payment_id_str,
+                amount=f"{amount:.2f}",
+                amount_raw=amount_raw,
+                currency="MNEE",
+                recipient_address=recipient_address,
+                memo=f"SSP-{payment_id_str[:8]}",
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+                network=network,
+                network_options=["bsv", "ethereum"],
+            ), existing
 
         # Create payment record
         payment_id = uuid4()

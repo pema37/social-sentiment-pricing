@@ -48,8 +48,8 @@ class RetrospectiveAudit(SQLModel, table=True):
     annual_projected_loss: Decimal = Field(default=Decimal("0"), max_digits=12, decimal_places=2)
 
     # Full audit data (JSON blob for the complete response)
-    summary_json: dict = Field(default={}, sa_column=Column(JSON))
-    sku_results_json: list = Field(default=[], sa_column=Column(JSON))
+    summary_json: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    sku_results_json: list = Field(default_factory=list, sa_column=Column(JSON))
 
     # Analysis window
     analysis_period_start: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
