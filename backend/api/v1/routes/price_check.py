@@ -51,17 +51,53 @@ def _cors_origin(request: Request) -> str:
     return "https://getactualprice.com"
 
 
-# ── Simple in-memory rate limiter ─────────────────────────────────────
+# ── Distributed rate limiter (Redis-backed) ──────────────────────────
 
-_rate_limit_store: dict[str, list[float]] = {}
 RATE_LIMIT_MAX = 10  # max requests
 RATE_LIMIT_WINDOW = 3600  # per hour (seconds)
+
+_redis_client = None
+
+
+def _get_redis():
+    """Lazy-init a Redis client for rate limiting."""
+    global _redis_client
+    if _redis_client is None:
+        import redis
+
+        from core.config import settings
+
+        try:
+            _redis_client = redis.from_url(
+                settings.REDIS_URL, socket_connect_timeout=2, decode_responses=True
+            )
+            _redis_client.ping()
+        except Exception:
+            logger.warning("Redis unavailable for rate limiting, falling back to in-memory")
+            _redis_client = None
+    return _redis_client
+
+
+# In-memory fallback (single-process only, used when Redis is unavailable)
+_rate_limit_store: dict[str, list[float]] = {}
 
 
 def _check_rate_limit(ip: str) -> bool:
     """Return True if the request is allowed, False if rate-limited."""
     import time
 
+    r = _get_redis()
+    if r is not None:
+        try:
+            key = f"price_check_rl:{ip}"
+            current = r.incr(key)
+            if current == 1:
+                r.expire(key, RATE_LIMIT_WINDOW)
+            return current <= RATE_LIMIT_MAX
+        except Exception:
+            logger.warning("Redis rate limit check failed, falling back to in-memory")
+
+    # Fallback: in-memory (per-process, best-effort)
     now = time.time()
     window_start = now - RATE_LIMIT_WINDOW
 

@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from .rule_evaluator import MarketSignals
 
@@ -28,10 +29,10 @@ class ConfidenceCalculator:
     LOW_VOLATILITY_THRESHOLD = Decimal("0.05")  # <5% = stable
     HIGH_VOLATILITY_THRESHOLD = Decimal("0.15")  # >15% = volatile
 
-    def __init__(self, db: Session = None):
+    def __init__(self, db: AsyncSession = None):
         self.db = db
 
-    def calculate(
+    async def calculate(
         self,
         signals: MarketSignals,
         price_impacts: dict,
@@ -45,7 +46,7 @@ class ConfidenceCalculator:
         signal_agreement = self._score_signal_agreement(price_impacts)
         rule_confidence = self._score_rule_confidence(triggered_rule_type, signals)
         historical_accuracy = self._score_historical_accuracy(triggered_rule_type, user_id)
-        market_stability = self._score_market_stability(product_id)
+        market_stability = await self._score_market_stability(product_id)
 
         # Weighted average (5 factors)
         confidence = (
@@ -165,7 +166,7 @@ class ConfidenceCalculator:
         service = OutcomeService(self.db)
         return service.get_historical_accuracy_for_rule_type(user_id, rule_type)
 
-    def _score_market_stability(self, product_id: UUID | None) -> Decimal:
+    async def _score_market_stability(self, product_id: UUID | None) -> Decimal:
         """
         Score based on market stability (price and sentiment volatility).
 
@@ -175,8 +176,8 @@ class ConfidenceCalculator:
         if not self.db or not product_id:
             return Decimal("0.5")
 
-        price_volatility = self._calculate_price_volatility(product_id)
-        sentiment_volatility = self._calculate_sentiment_volatility(product_id)
+        price_volatility = await self._calculate_price_volatility(product_id)
+        sentiment_volatility = await self._calculate_sentiment_volatility(product_id)
 
         # Combine volatilities (price weighted more)
         combined_volatility = price_volatility * Decimal("0.6") + sentiment_volatility * Decimal("0.4")
@@ -193,7 +194,7 @@ class ConfidenceCalculator:
             score = Decimal("1.0") - (position * Decimal("0.7"))
             return score.quantize(Decimal("0.01"))
 
-    def _calculate_price_volatility(self, product_id: UUID, days: int = 14) -> Decimal:
+    async def _calculate_price_volatility(self, product_id: UUID, days: int = 14) -> Decimal:
         """
         Calculate price volatility as coefficient of variation.
         Returns value between 0 and 1 (capped).
@@ -202,11 +203,12 @@ class ConfidenceCalculator:
 
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
-        history = self.db.exec(
+        result = await self.db.execute(
             select(PriceHistory)
             .where(PriceHistory.product_id == product_id, PriceHistory.created_at >= cutoff)
             .order_by(PriceHistory.created_at.desc())
-        ).all()
+        )
+        history = result.scalars().all()
 
         if len(history) < 3:
             return Decimal("0.05")  # Not enough data, assume stable
@@ -229,7 +231,7 @@ class ConfidenceCalculator:
         # Cap at 0.5 (50% volatility is extreme)
         return min(cv, Decimal("0.5")).quantize(Decimal("0.01"))
 
-    def _calculate_sentiment_volatility(self, product_id: UUID, days: int = 7) -> Decimal:
+    async def _calculate_sentiment_volatility(self, product_id: UUID, days: int = 7) -> Decimal:
         """
         Calculate sentiment volatility from recent sentiment scores.
         Returns value between 0 and 1 (capped).
@@ -238,12 +240,13 @@ class ConfidenceCalculator:
 
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
-        sentiments = self.db.exec(
+        result = await self.db.execute(
             select(Sentiment)
             .where(Sentiment.product_id == product_id, Sentiment.analyzed_at >= cutoff)
             .order_by(Sentiment.analyzed_at.desc())
             .limit(100)
-        ).all()
+        )
+        sentiments = result.scalars().all()
 
         if len(sentiments) < 5:
             return Decimal("0.05")  # Not enough data, assume stable
@@ -263,7 +266,7 @@ class ConfidenceCalculator:
 
         return min(volatility, Decimal("0.5")).quantize(Decimal("0.01"))
 
-    def get_confidence_breakdown(
+    async def get_confidence_breakdown(
         self,
         signals: MarketSignals,
         price_impacts: dict,
@@ -277,16 +280,16 @@ class ConfidenceCalculator:
         signal_agreement = self._score_signal_agreement(price_impacts)
         rule_confidence = self._score_rule_confidence(triggered_rule_type, signals)
         historical_accuracy = self._score_historical_accuracy(triggered_rule_type, user_id)
-        market_stability = self._score_market_stability(product_id)
+        market_stability = await self._score_market_stability(product_id)
 
-        overall = self.calculate(signals, price_impacts, triggered_rule_type, user_id, product_id)
+        overall = await self.calculate(signals, price_impacts, triggered_rule_type, user_id, product_id)
 
         # Get volatility details if available
         price_volatility = None
         sentiment_volatility = None
         if self.db and product_id:
-            price_volatility = float(self._calculate_price_volatility(product_id))
-            sentiment_volatility = float(self._calculate_sentiment_volatility(product_id))
+            price_volatility = float(await self._calculate_price_volatility(product_id))
+            sentiment_volatility = float(await self._calculate_sentiment_volatility(product_id))
 
         return {
             "overall": float(overall),

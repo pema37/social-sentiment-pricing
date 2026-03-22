@@ -258,10 +258,10 @@ class RecommendationService:
 
         # Calculate confidence
         price_impacts = self.signal_processor.calculate_price_impact(signals, product)
-        confidence = self.confidence_calculator.calculate(signals, price_impacts, rule.rule_type.value)
+        confidence = await self.confidence_calculator.calculate(signals, price_impacts, rule.rule_type.value)
 
         # Get confidence breakdown (feeds AnalystOutput)
-        confidence_breakdown = self.confidence_calculator.get_confidence_breakdown(
+        confidence_breakdown = await self.confidence_calculator.get_confidence_breakdown(
             signals, price_impacts, rule.rule_type.value
         )
 

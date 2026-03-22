@@ -2320,6 +2320,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/analytics/analytics_service.py` lines 128–175
 - **Issue:** For each product in the result set, three separate DB queries are executed: (1) latest sentiment, (2) mention count, (3) pending recommendation count. Default limit=10 produces 30+ extra queries per analytics page load.
 - **Impact:** Analytics dashboard is slow; scales linearly with product count. Should use subqueries or a single JOIN.
+- **Status: FIXED 2026-03-22** — Replaced per-product loop queries with three batch queries (subquery for latest sentiment, GROUP BY for mention counts, GROUP BY for pending recommendations), reducing 30+ queries to 4 total.
 
 ---
 
@@ -2327,6 +2328,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/confidence_calculator.py` lines 31, 205, 241
 - **Issue:** `__init__` declares `db: Session = None` (sync SQLModel Session) and uses `self.db.exec(select(...)).all()` (synchronous call). If an `AsyncSession` is passed (as FastAPI routes do), `exec()` returns a coroutine; calling `.all()` on the coroutine raises `AttributeError`.
 - **Impact:** Price volatility and sentiment volatility calculations in confidence scores silently fail or raise exceptions when called with an async DB session. Market stability score always returns the default 0.5 instead of real data.
+- **Status: FIXED 2026-03-22** — Changed type hint to `AsyncSession`, made `calculate`, `get_confidence_breakdown`, `_score_market_stability`, `_calculate_price_volatility`, and `_calculate_sentiment_volatility` async. Replaced `self.db.exec()` with `await self.db.execute()`. Updated callers in `recommendation_service.py` to await.
 
 ---
 
@@ -2334,6 +2336,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/outcome_service.py` lines 728–730
 - **Issue:** For each unique `rule_id` found in outcomes, `await self.db.get(PricingRule, rule_id)` is called inside a `for` loop. With N distinct rules, this produces N separate DB round-trips to fetch rule names.
 - **Impact:** Slow analytics responses as rule count grows. Should use `WHERE rule_id IN (...)` with a single query.
+- **Status: FIXED 2026-03-22** — Replaced per-rule `db.get()` loop with a single `SELECT id, name FROM pricing_rules WHERE id IN (...)` batch query.
 
 ---
 
@@ -2387,6 +2390,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/price_check.py` lines 56–77
 - **Issue:** `_rate_limit_store: dict[str, list[float]] = {}` is a module-level in-memory dict. In a multi-worker deployment (uvicorn `--workers N`, Railway autoscaling), each worker process maintains its own independent counter. A client can hit each worker up to 10 times/hour, bypassing the intended limit.
 - **Impact:** The `RATE_LIMIT_MAX = 10` per-hour limit is multiplied by the number of worker processes. Provides no effective protection against abuse.
+- **Status: FIXED 2026-03-22** — Replaced with Redis-backed distributed rate limiter using `INCR`/`EXPIRE` on `price_check_rl:{ip}` keys. Falls back to in-memory dict if Redis is unavailable.
 
 ---
 
@@ -2419,6 +2423,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/analysis.py` lines 354–370
 - **Issue:** `_generate_ai_analysis()` calls `ai_generator.client.chat.completions.create(model="gpt-4o-mini", ...)` directly inside a router helper — accessing an internal attribute of the service object and using OpenAI with `gpt-4o-mini` instead of the mandated Gemini 2.0 Flash. Violates project rule: "ALL AI calls go through `services/ai_generator.py` — never call Gemini API directly from routers."
 - **Impact:** AI calls from this path are invisible to the service-layer abstraction, bypass retry/fallback/logging in `ai_generator.py`, use the wrong model and wrong API client, and will break if OpenAI credentials are removed.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `ai_generator._generate()` which routes through the service layer (Gemini primary, OpenAI fallback). No direct `client.chat.completions.create()` call exists in this file.
 
 ---
 

@@ -724,14 +724,22 @@ class OutcomeService:
                     rule_scores[o.rule_id] = {"scores": [], "rule_type": o.rule_type}
                 rule_scores[o.rule_id]["scores"].append(o.outcome_score)
 
+        # Batch-fetch all referenced rules in a single query
+        rule_ids = list(rule_scores.keys())
+        rule_name_map: dict = {}
+        if rule_ids:
+            result = await self.db.execute(
+                select(PricingRule.id, PricingRule.name).where(PricingRule.id.in_(rule_ids))
+            )
+            rule_name_map = {row[0]: row[1] for row in result.all()}
+
         rule_averages: list[dict] = []
         for rule_id, data in rule_scores.items():
             avg = sum(data["scores"]) / len(data["scores"])
-            rule = await self.db.get(PricingRule, rule_id)
             rule_averages.append(
                 {
                     "rule_id": str(rule_id),
-                    "rule_name": rule.name if rule else "Unknown",
+                    "rule_name": rule_name_map.get(rule_id, "Unknown"),
                     "rule_type": data["rule_type"],
                     "avg_score": float(avg.quantize(Decimal("0.01"))),
                     "outcome_count": len(data["scores"]),

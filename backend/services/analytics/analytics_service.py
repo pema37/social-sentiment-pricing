@@ -5,8 +5,9 @@ Analytics service for dashboard metrics and reporting.
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_, case, func, literal
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from sqlmodel import select
 
 from models.alert import Alert, AlertStatus
@@ -126,6 +127,57 @@ class AnalyticsService:
         )
         products = result.scalars().all()
 
+        product_ids = [p.id for p in products]
+        if not product_ids:
+            return []
+
+        # Batch: latest sentiment score per product (single query)
+        latest_sentiment_sq = (
+            select(
+                Sentiment.product_id,
+                func.max(Sentiment.analyzed_at).label("max_at"),
+            )
+            .where(Sentiment.product_id.in_(product_ids))
+            .group_by(Sentiment.product_id)
+            .subquery()
+        )
+        sent_result = await self.session.execute(
+            select(Sentiment.product_id, Sentiment.compound_score).join(
+                latest_sentiment_sq,
+                and_(
+                    Sentiment.product_id == latest_sentiment_sq.c.product_id,
+                    Sentiment.analyzed_at == latest_sentiment_sq.c.max_at,
+                ),
+            )
+        )
+        sentiment_map: dict = {row[0]: row[1] for row in sent_result.all()}
+
+        # Batch: mention count 24h per product (single query)
+        mention_result = await self.session.execute(
+            select(Sentiment.product_id, func.count(Sentiment.id))
+            .where(
+                and_(
+                    Sentiment.product_id.in_(product_ids),
+                    Sentiment.analyzed_at >= now - timedelta(hours=24),
+                )
+            )
+            .group_by(Sentiment.product_id)
+        )
+        mention_map: dict = {row[0]: row[1] for row in mention_result.all()}
+
+        # Batch: pending recommendation flag per product (single query)
+        pending_result = await self.session.execute(
+            select(PriceRecommendation.product_id, func.count(PriceRecommendation.id))
+            .where(
+                and_(
+                    PriceRecommendation.product_id.in_([str(pid) for pid in product_ids]),
+                    PriceRecommendation.status == RecommendationStatus.PENDING,
+                )
+            )
+            .group_by(PriceRecommendation.product_id)
+        )
+        pending_map: dict = {row[0]: row[1] for row in pending_result.all()}
+
         summaries = []
         for p in products:
             # Price change from base
@@ -134,30 +186,9 @@ class AnalyticsService:
             else:
                 change_pct = 0.0
 
-            # Latest sentiment
-            result = await self.session.execute(
-                select(Sentiment).where(Sentiment.product_id == p.id).order_by(Sentiment.analyzed_at.desc()).limit(1)
-            )
-            latest_sentiment = result.scalars().first()
-
-            # Mention count 24h
-            result = await self.session.execute(
-                select(func.count(Sentiment.id)).where(
-                    and_(Sentiment.product_id == p.id, Sentiment.analyzed_at >= now - timedelta(hours=24))
-                )
-            )
-            mention_count = result.scalar_one()
-
-            # Pending recommendation check
-            result = await self.session.execute(
-                select(func.count(PriceRecommendation.id)).where(
-                    and_(
-                        PriceRecommendation.product_id == str(p.id),
-                        PriceRecommendation.status == RecommendationStatus.PENDING,
-                    )
-                )
-            )
-            has_pending = result.scalar_one() > 0
+            sentiment_score = sentiment_map.get(p.id)
+            mention_count = mention_map.get(p.id, 0)
+            has_pending = pending_map.get(str(p.id), 0) > 0
 
             summaries.append(
                 ProductSummary(
@@ -167,7 +198,7 @@ class AnalyticsService:
                     current_price=p.current_price,
                     base_price=p.base_price,
                     price_change_percent=round(change_pct, 2),
-                    sentiment_score=float(latest_sentiment.compound_score) if latest_sentiment else None,
+                    sentiment_score=float(sentiment_score) if sentiment_score is not None else None,
                     mention_count_24h=mention_count,
                     has_pending_recommendation=has_pending,
                     auto_pricing_enabled=p.auto_pricing_enabled,
