@@ -315,6 +315,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-pricing.ts` lines 164–199
 - **Issue:** `onSuccess` calls `queryClient.invalidateQueries({ queryKey: productKeys.all })` which triggers a refetch of every product in the cache. Should only invalidate the single affected product.
 - **Impact:** On large catalogs, approving one recommendation causes full product list refetch. UI shows loading spinners across all product rows.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -322,6 +323,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-integrations.ts` line 183
 - **Issue:** `staleTime: 5000ms` but `refetchInterval: 2000ms`. Data goes stale before refetch fires, causing React Query to mark data as stale during the poll window.
 - **Impact:** Sync status spinner and status badges flicker between states during active syncs.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -329,6 +331,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/middleware.py` line 28
 - **Issue:** `str(uuid.uuid4())[:8]` produces 8 hex chars = ~4 billion combinations. Under sustained load, IDs collide and log traces merge between unrelated requests.
 - **Impact:** Request tracing in Sentry and structured logs becomes unreliable. Debugging production issues harder.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -336,6 +339,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/webhook_registration.py` line 46
 - **Issue:** Webhook callback URL constructed as `/api/v1/webhooks/shopify/{integration_id}` but the registered route in `api/v1/routes/webhooks.py` may not match this exact path pattern. Unverified.
 - **Impact:** Shopify sends webhooks, gets 404, retries 19 times, then stops. App never receives product, order, or billing events.
+- **Status: FALSE POSITIVE 2026-03-22** — Verified: callback URL `/api/v1/webhooks/shopify/{integration_id}` matches route exactly (main.py prefix `/api/v1` + router prefix `/webhooks` + endpoint `/shopify/{integration_id}`).
 
 ---
 
@@ -343,6 +347,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/price_recommendation.py`
 - **Issue:** No `updated_at` column. When a recommendation is accepted, rejected, or applied, there's no timestamp for when the state changed.
 - **Impact:** Audit queries like "recommendations applied in last 7 days" are impossible. Outcome measurement at 7d/14d/30d has no anchor for state changes.
+- **Status: FIXED 2026-03-22**
 
 ---
 

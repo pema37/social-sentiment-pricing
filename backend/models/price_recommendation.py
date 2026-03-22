@@ -77,6 +77,10 @@ class PriceRecommendation(SQLModel, table=True):
         default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)),
     )
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(UTC)),
+    )
 
     class Config:
         use_enum_values = True

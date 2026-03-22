@@ -173,13 +173,11 @@ export function useApproveRecommendation() {
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendations() });
       queryClient.invalidateQueries({ queryKey: pricingKeys.recommendationStats() });
       
-      // BUG FIX #2: Also invalidate product queries since price may have changed
-      queryClient.invalidateQueries({ queryKey: productKeys.all });
-      
-      // If we have the product_id from response, invalidate that specific product
+      // Invalidate specific product queries since price may have changed
       if (response?.product_id) {
         queryClient.invalidateQueries({ queryKey: productKeys.detail(response.product_id) });
         queryClient.invalidateQueries({ queryKey: productKeys.priceHistory(response.product_id) });
+        queryClient.invalidateQueries({ queryKey: productKeys.lists() });
       }
       
       // Check if price was actually applied (status = 'applied')

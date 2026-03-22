@@ -180,7 +180,7 @@ export function useSyncStatus(
     queryKey: integrationKeys.syncStatus(integrationId || ''),
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
-    staleTime: 5 * 1000,
+    staleTime: SYNC_POLLING_INTERVAL_MS * 3,
     refetchInterval: options?.polling 
       ? (query) => {
           const data = query.state.data as SyncStatusResponse | undefined;
