@@ -12,10 +12,12 @@ Follows FastAPI best practices with clear separation from business logic.
 
 import json
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from api.v1.routes.auth import get_current_user
 from core.logging import get_logger
+from models.user import User
 
 from .schemas import MarketDataInput, TrendAnalysisResponse, TrendHealthResponse
 from .service import market_trends_analyzer
@@ -31,7 +33,7 @@ router = APIRouter(prefix="/trends-visual", tags=["Market Trends Visual"])
 
 
 @router.post("/analyze", response_model=TrendAnalysisResponse)
-async def analyze_trends(data: MarketDataInput):
+async def analyze_trends(data: MarketDataInput, current_user: User = Depends(get_current_user)):
     """
     Analyze market trends for a product (non-streaming).
 
@@ -62,7 +64,7 @@ async def analyze_trends(data: MarketDataInput):
 
 
 @router.post("/analyze/stream")
-async def analyze_trends_stream(data: MarketDataInput):
+async def analyze_trends_stream(data: MarketDataInput, current_user: User = Depends(get_current_user)):
     """
     Analyze market trends with streaming response.
 
@@ -116,6 +118,7 @@ async def analyze_trends_with_image(
     market_position: str = Form("mid"),
     seasonality: str = Form("normal"),
     image: UploadFile = File(..., description="Chart/graph image for visual analysis"),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Analyze market trends including visual chart analysis.
@@ -177,7 +180,7 @@ async def analyze_trends_with_image(
 
 
 @router.post("/analyze/image-only")
-async def analyze_image_only(product: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
+async def analyze_image_only(product: str = Form(...), category: str = Form(...), image: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     """
     Analyze just a chart image without additional market data.
 
@@ -218,7 +221,7 @@ async def trends_visual_health():
 
 
 @router.get("/agents")
-async def list_agents():
+async def list_agents(current_user: User = Depends(get_current_user)):
     """
     List available analysis agents and their roles.
     """

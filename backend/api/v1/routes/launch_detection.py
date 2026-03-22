@@ -2,10 +2,12 @@
 
 import json
 
-from fastapi import APIRouter, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
+from api.v1.routes.auth import get_current_user
 from core.logging import get_logger
+from models.user import User
 from services.ai_trend_analysis.launch_detector import LaunchSignal, launch_detector
 
 logger = get_logger(__name__)
@@ -41,6 +43,7 @@ async def stream_launch_analysis(
     your_product: str = Form(..., description="Your product name"),
     simulate_launch: bool = Form(False, description="Simulate launch for demo"),
     image: UploadFile | None = File(None, description="Product screenshot"),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Stream launch detection analysis via SSE.
@@ -94,6 +97,7 @@ async def stream_launch_analysis_get(
     competitor: str = Query(..., description="Competitor name"),
     your_product: str = Query(..., description="Your product name"),
     simulate_launch: bool = Query(False, description="Simulate launch for demo"),
+    current_user: User = Depends(get_current_user),
 ):
     """GET version for simple testing without image upload."""
 

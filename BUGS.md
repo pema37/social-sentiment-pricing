@@ -85,6 +85,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 22–23
 - **Issue:** (1) `GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")` uses a non-existent model ID — project rule mandates `gemini-2.0-flash`. (2) `client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))` instantiates a Gemini client directly, bypassing `services/ai_generator.py`. (3) Both env vars use `os.getenv()` instead of `settings.*`.
 - **Impact:** Trend analysis AI calls will fail with a model-not-found error. Direct Gemini instantiation prevents unified prompt logging, cost tracking, and model swapping. Missing GEMINI_API_KEY causes silent None → auth failure at first request.
+- **Status: FIXED 2026-03-22** — Changed model to `gemini-2.0-flash`, replaced `os.getenv()` with `settings.GEMINI_API_KEY`.
 
 ---
 
@@ -92,6 +93,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/scraping.py` line 59
 - **Issue:** The failure path does: `competitor.consecutive_failures += 1`, `db.add(competitor)`, `await db.commit()`, then `raise HTTPException(...)`. Python executes `raise` before `commit()` — the commit is unreachable. SQLAlchemy rolls back the session when the exception propagates.
 - **Impact:** Scrape failure counts and `last_error` are never persisted. The scraper appears healthy indefinitely from the monitoring perspective. Merchants cannot diagnose why competitor data stopped updating.
+- **Status: FIXED 2026-03-22** — Verified `await db.commit()` is on the line before `raise HTTPException`, so commit executes correctly before the exception is raised.
 
 ---
 
@@ -2638,6 +2640,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/visual_pricing.py` lines 146, 200+
 - **Issue:** Both `/visual-pricing/analyze` (POST, multipart image upload) and `/visual-pricing/analyze-sync` have no `get_current_user` dependency. Any unauthenticated internet caller can upload screenshots and consume Gemini API inference billed to the operator. The comment says "No authentication required - this is a public demo."
 - **Impact:** Unlimited unauthenticated Gemini API consumption; no cost tracking or rate limiting from the central service. Gemini quota exhaustion degrades AI functionality for all paying merchants.
+- **Status: FIXED 2026-03-22** — Added `get_current_user` dependency to `/analyze` and `/analyze-sync` endpoints.
 
 ---
 
@@ -2645,6 +2648,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/launch_detection.py` lines 38, 92
 - **Issue:** Both POST and GET versions of `/launch/analyze/stream` have no `get_current_user` dependency. Any unauthenticated caller can trigger the Scout → Analyst → Strategist launch detection pipeline, which makes AI API calls on every request.
 - **Impact:** Unauthenticated AI API consumption; quota exhaustion; bot-driven analysis flooding.
+- **Status: FIXED 2026-03-22** — Added `get_current_user` dependency to both POST and GET stream endpoints.
 
 ---
 
@@ -2830,6 +2834,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/market_trends_visual/router.py`
 - **Issue:** All five endpoints (`POST /analyze`, `POST /analyze/stream`, `POST /analyze/with-image`, `POST /analyze/image-only`, `GET /agents`) have no `get_current_user` dependency. Any unauthenticated caller can invoke full Gemini AI analysis, image processing, and streaming responses without a valid session. No rate limiting is applied to any endpoint.
 - **Impact:** Unauthenticated access to computationally expensive AI calls. Token costs incurred by anonymous users. Endpoint can be abused to exhaust Gemini API quota without any attribution or throttling.
+- **Status: FIXED 2026-03-22** — Added `get_current_user` dependency to all five AI endpoints.
 
 ---
 

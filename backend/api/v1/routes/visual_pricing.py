@@ -1,9 +1,6 @@
 """
 Visual Pricing Intelligence API Routes
 
-Public demo endpoints for the Gemini 3 Hackathon.
-No authentication required - this is a public demo.
-
 Endpoints:
 - POST /api/v1/visual-pricing/analyze - Upload screenshot + get streaming analysis
 - POST /api/v1/visual-pricing/analyze-sync - Non-streaming version
@@ -13,11 +10,13 @@ Endpoints:
 import contextlib
 import json
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from api.v1.routes.auth import get_current_user
 from core.logging import get_logger
+from models.user import User
 from services.ai_trend_analysis import (
     AgentMessage,
     AgentRole,
@@ -150,6 +149,7 @@ async def analyze_competitor_streaming(
     product_price: float = Form(..., gt=0, description="Your current price"),
     product_currency: str = Form(default="USD", description="Currency code"),
     product_features: str = Form(default="", description="Comma-separated list of features"),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Analyze competitor screenshot with streaming multi-agent response.
@@ -209,6 +209,7 @@ async def analyze_competitor_sync(
     product_price: float = Form(..., gt=0, description="Your current price"),
     product_currency: str = Form(default="USD", description="Currency code"),
     product_features: str = Form(default="", description="Comma-separated list of features"),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Analyze competitor screenshot (non-streaming version).

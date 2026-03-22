@@ -11,7 +11,6 @@ Scout → Analyst → Strategist → On-Chain Execution
 import asyncio
 import json
 import logging
-import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -20,16 +19,17 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Gemini 3 Client Configuration
+# Gemini Client Configuration
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.0-flash"
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
 # ---------------------------------------------------------------------------
