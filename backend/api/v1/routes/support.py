@@ -5,7 +5,10 @@ AI Support Chat API routes.
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from api.v1.routes.auth import get_current_user
+from models.user import User
 
 from schemas.ai_support import (
     SupportChatRequest,
@@ -19,7 +22,7 @@ router = APIRouter(prefix="/support", tags=["AI Support"])
 
 
 @router.post("/chat", response_model=SupportChatResponse)
-async def chat_with_support(request: SupportChatRequest) -> SupportChatResponse:
+async def chat_with_support(request: SupportChatRequest, current_user: User = Depends(get_current_user)) -> SupportChatResponse:
     """Send a message to the AI support assistant."""
     try:
         history = (
@@ -43,7 +46,7 @@ async def chat_with_support(request: SupportChatRequest) -> SupportChatResponse:
 
 
 @router.get("/topics", response_model=SupportTopicsResponse)
-async def get_support_topics() -> SupportTopicsResponse:
+async def get_support_topics(current_user: User = Depends(get_current_user)) -> SupportTopicsResponse:
     """Get available support topics for the chat UI."""
     data = ai_support_service.get_topics()
     return SupportTopicsResponse(
@@ -54,7 +57,7 @@ async def get_support_topics() -> SupportTopicsResponse:
 
 
 @router.get("/health", response_model=SupportHealthResponse)
-async def support_health_check() -> SupportHealthResponse:
+async def support_health_check(current_user: User = Depends(get_current_user)) -> SupportHealthResponse:
     """Check if AI support service is operational."""
     health = ai_support_service.get_health()
     return SupportHealthResponse(

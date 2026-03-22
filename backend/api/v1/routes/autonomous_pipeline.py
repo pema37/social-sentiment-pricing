@@ -2,15 +2,18 @@
 Autonomous Pipeline API Routes
 VETROX AGENTIC 3.0 - Track 3: The Hand
 
-Public endpoints that let judges trigger and observe the autonomous
-pricing pipeline. No auth required for demo routes.
+Endpoints for triggering and observing the autonomous pricing pipeline.
+All endpoints require authentication.
 """
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+from api.v1.routes.auth import get_current_user
+from models.user import User
 
 from services.ai_trend_analysis.autonomous_orchestrator import (
     AutonomousOrchestrator,
@@ -65,7 +68,7 @@ class MonitoringStartRequest(BaseModel):
 
 
 @router.post("/trigger", response_model=PipelineResponse)
-async def trigger_pipeline(request: PipelineTriggerRequest):
+async def trigger_pipeline(request: PipelineTriggerRequest, current_user: User = Depends(get_current_user)):
     """
     🚀 Trigger the full autonomous pricing pipeline.
 
@@ -107,6 +110,7 @@ async def stream_pipeline(
     product_category: str = Query(default="electronics"),
     cost_basis: float = Query(default=45.00),
     margin_floor_pct: float = Query(default=20.0),
+    current_user: User = Depends(get_current_user),
 ):
     """
     📡 Stream the autonomous pipeline execution via Server-Sent Events.
@@ -139,6 +143,7 @@ async def stream_pipeline(
 async def start_monitoring(
     request: MonitoringStartRequest,
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
 ):
     """
     🔄 Start autonomous monitoring loop.
@@ -162,14 +167,14 @@ async def start_monitoring(
 
 
 @router.post("/monitor/stop")
-async def stop_monitoring():
+async def stop_monitoring(current_user: User = Depends(get_current_user)):
     """⏹️ Stop the autonomous monitoring loop."""
     _trigger.stop_monitoring()
     return {"status": "monitoring_stopped"}
 
 
 @router.get("/health")
-async def autonomous_health():
+async def autonomous_health(current_user: User = Depends(get_current_user)):
     """
     Health check for the autonomous pipeline.
     Verifies Gemini API connectivity and agent readiness.

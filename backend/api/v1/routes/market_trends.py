@@ -3,7 +3,10 @@
 Market Trends API routes.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from api.v1.routes.auth import get_current_user
+from models.user import User
 
 from schemas.market_trends import (
     MarketTrendsRequest,
@@ -17,7 +20,7 @@ router = APIRouter(prefix="/market-trends", tags=["Market Trends"])
 
 
 @router.post("/analyze", response_model=MarketTrendsResponse)
-async def analyze_market_trends(request: MarketTrendsRequest) -> MarketTrendsResponse:
+async def analyze_market_trends(request: MarketTrendsRequest, current_user: User = Depends(get_current_user)) -> MarketTrendsResponse:
     """
     Get AI-analyzed trending products.
 
@@ -41,7 +44,7 @@ async def analyze_market_trends(request: MarketTrendsRequest) -> MarketTrendsRes
 
 
 @router.get("/trends", response_model=MarketTrendsResponse)
-async def get_trends(category: str | None = None, source: str | None = None, limit: int = 10) -> MarketTrendsResponse:
+async def get_trends(category: str | None = None, source: str | None = None, limit: int = 10, current_user: User = Depends(get_current_user)) -> MarketTrendsResponse:
     """
     Get trending products (GET version for easy testing).
     """
