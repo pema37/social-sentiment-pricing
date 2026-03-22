@@ -163,11 +163,4 @@ export interface AlertConfigurationUpdate {
   max_per_day?: number | null;
 }
 
-// ============================================
-// ALERT ANALYTICS
-// ============================================
-
-/**
- * Alert analytics/statistics
- * Matches: components["schemas"]["AlertAnalytics"]
- */
+// AlertAnalytics is defined in types/analytics.ts and exported from there

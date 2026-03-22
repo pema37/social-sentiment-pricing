@@ -18,6 +18,8 @@ interface ToastStore {
   clearToasts: () => void;
 }
 
+const timerMap = new Map<string, ReturnType<typeof setTimeout>>();
+
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
 
@@ -36,18 +38,30 @@ export const useToastStore = create<ToastStore>((set) => ({
 
     // Auto-remove after duration
     if (duration > 0) {
-      setTimeout(() => {
+      const timerId = setTimeout(() => {
+        timerMap.delete(id);
         set((state) => ({
           toasts: state.toasts.filter((t) => t.id !== id),
         }));
       }, duration);
+      timerMap.set(id, timerId);
     }
   },
 
-  removeToast: (id) =>
+  removeToast: (id) => {
+    const timerId = timerMap.get(id);
+    if (timerId) {
+      clearTimeout(timerId);
+      timerMap.delete(id);
+    }
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
-    })),
+    }));
+  },
 
-  clearToasts: () => set({ toasts: [] }),
+  clearToasts: () => {
+    timerMap.forEach((timerId) => clearTimeout(timerId));
+    timerMap.clear();
+    set({ toasts: [] });
+  },
 }));

@@ -58,22 +58,24 @@ export const MNEE_TOKEN = {
 } as const
 
 // WalletConnect Project ID (get yours at https://cloud.walletconnect.com)
-const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo'
+const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? ''
 
 // Wagmi Configuration
 export const wagmiConfig = createConfig({
   chains: [mainnet, sepolia],
   connectors: [
     injected(),
-    walletConnect({ 
-      projectId: WALLETCONNECT_PROJECT_ID,
-      metadata: {
-        name: 'ActualPrice',
-        description: 'AI-Powered Dynamic Pricing with MNEE Payments',
-        url: 'https://getactualprice.com',
-        icons: ['https://getactualprice.com/logo.png'],
-      },
-    }),
+    ...(WALLETCONNECT_PROJECT_ID
+      ? [walletConnect({
+          projectId: WALLETCONNECT_PROJECT_ID,
+          metadata: {
+            name: 'ActualPrice',
+            description: 'AI-Powered Dynamic Pricing with MNEE Payments',
+            url: 'https://getactualprice.com',
+            icons: ['https://getactualprice.com/logo.png'],
+          },
+        })]
+      : []),
   ],
   transports: {
     [mainnet.id]: http(),

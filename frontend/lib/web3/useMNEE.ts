@@ -10,7 +10,7 @@
 'use client'
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi'
-import { formatUnits, parseUnits } from 'viem'
+import { formatUnits, parseUnits, isAddress } from 'viem'
 import { getMneeContractAddress, MNEE_TOKEN, ERC20_ABI } from './config'
 
 export interface UseMNEEReturn {
@@ -82,14 +82,15 @@ export function useMNEE(): UseMNEEReturn {
   
   // Transfer function
   const transfer = (to: string, amount: string) => {
-    console.log('=== MNEE Transfer Debug ===');
-    console.log('to:', to);
-    console.log('amount (string):', amount);
-    console.log('decimals:', MNEE_TOKEN.decimals);
-    
+    if (!isAddress(to)) {
+      throw new Error('Invalid recipient address')
+    }
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      throw new Error('Invalid transfer amount')
+    }
+
     const amountInWei = parseUnits(amount, MNEE_TOKEN.decimals);
-    console.log('amountInWei:', amountInWei.toString());
-    
+
     writeTransfer({
       address: contractAddress,
       abi: ERC20_ABI,
@@ -97,9 +98,16 @@ export function useMNEE(): UseMNEEReturn {
       args: [to as `0x${string}`, amountInWei],
     });
   }
-  
+
   // Approve function
   const approve = (spender: string, amount: string) => {
+    if (!isAddress(spender)) {
+      throw new Error('Invalid spender address')
+    }
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      throw new Error('Invalid approve amount')
+    }
+
     const amountInWei = parseUnits(amount, MNEE_TOKEN.decimals)
     writeApprove({
       address: contractAddress,

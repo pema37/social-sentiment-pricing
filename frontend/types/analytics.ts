@@ -84,6 +84,27 @@ export interface SentimentTrendAnalytics {
 // ============================================
 
 /**
+ * Per-rule-type accuracy breakdown
+ */
+export interface RuleTypeStats {
+  count: number;
+  positive: number;
+  revenue_impact: number;
+  success_rate: number;
+}
+
+/**
+ * Individual rule performance summary
+ */
+export interface RulePerformanceSummary {
+  rule_id: string;
+  rule_name: string;
+  rule_type: string;
+  avg_score: number;
+  outcome_count: number;
+}
+
+/**
  * Accuracy statistics for recommendations
  * Matches: components["schemas"]["AccuracyStatsResponse"]
  */
@@ -98,9 +119,9 @@ export interface AccuracyStatsResponse {
   avg_outcome_score: string;
   total_revenue_impact: string;
   avg_revenue_change_percent: string | null;
-  by_rule_type: Record<string, unknown>;
-  top_performing_rules: Record<string, unknown>[];
-  worst_performing_rules: Record<string, unknown>[];
+  by_rule_type: Record<string, RuleTypeStats>;
+  top_performing_rules: RulePerformanceSummary[];
+  worst_performing_rules: RulePerformanceSummary[];
 }
 
 // Re-export ProductSummary for convenience
