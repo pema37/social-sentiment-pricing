@@ -35,6 +35,7 @@ celery_app = Celery(
         "workers.tasks.benchmark_refresh_tasks",
         "workers.tasks.intelligence_tasks",
         "workers.tasks.audit_tasks",
+        "workers.tasks.notification_tasks",
     ],
 )
 

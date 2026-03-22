@@ -465,10 +465,10 @@ def _get_orchestrator() -> LearningCycleOrchestrator:
 
     def fetch_outcomes(lookback_days: int) -> list[OutcomeRecord]:
         """Query DB for outcome records."""
-        from database.session import get_db_session
+        from db.session import get_sync_session
 
         sql = build_outcome_fetcher_sql(lookback_days)
-        with get_db_session() as session:
+        with get_sync_session() as session:
             rows = session.execute(sql).mappings().all()
             return [row_to_outcome_record(dict(r)) for r in rows]
 

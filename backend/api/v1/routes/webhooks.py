@@ -73,15 +73,19 @@ async def shopify_webhook(
         logger.warning(f"Shopify webhook for inactive integration: {integration_id}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not active")
 
-    if x_shopify_hmac_sha256:
-        webhook_secret = _get_shopify_webhook_secret(integration)
-        if webhook_secret:
-            service = ShopifyService()
-            if not service.verify_webhook_signature(body, x_shopify_hmac_sha256, webhook_secret):
-                logger.warning(f"Invalid Shopify webhook signature for integration: {integration_id}")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
-        else:
-            logger.warning(f"Skipping signature verification - no secret configured for {integration_id}")
+    if not x_shopify_hmac_sha256:
+        logger.warning(f"Missing HMAC header on Shopify webhook for integration: {integration_id}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing webhook signature")
+
+    webhook_secret = _get_shopify_webhook_secret(integration)
+    if not webhook_secret:
+        logger.error(f"No webhook secret configured for integration: {integration_id}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Webhook secret not configured")
+
+    service = ShopifyService()
+    if not service.verify_webhook_signature(body, x_shopify_hmac_sha256, webhook_secret):
+        logger.warning(f"Invalid Shopify webhook signature for integration: {integration_id}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
 
     try:
         payload = await request.json()
@@ -174,15 +178,19 @@ async def woocommerce_webhook(
         logger.warning(f"WooCommerce webhook for inactive integration: {integration_id}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integration is not active")
 
-    if x_wc_webhook_signature:
-        webhook_secret = _get_woocommerce_webhook_secret(integration)
-        if webhook_secret:
-            service = WooCommerceService()
-            if not service.verify_webhook_signature(body, x_wc_webhook_signature, webhook_secret):
-                logger.warning(f"Invalid WooCommerce webhook signature for integration: {integration_id}")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
-        else:
-            logger.warning(f"Skipping signature verification - no secret available for {integration_id}")
+    if not x_wc_webhook_signature:
+        logger.warning(f"Missing HMAC header on WooCommerce webhook for integration: {integration_id}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing webhook signature")
+
+    webhook_secret = _get_woocommerce_webhook_secret(integration)
+    if not webhook_secret:
+        logger.error(f"No webhook secret configured for WooCommerce integration: {integration_id}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Webhook secret not configured")
+
+    service = WooCommerceService()
+    if not service.verify_webhook_signature(body, x_wc_webhook_signature, webhook_secret):
+        logger.warning(f"Invalid WooCommerce webhook signature for integration: {integration_id}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
 
     try:
         payload = await request.json()

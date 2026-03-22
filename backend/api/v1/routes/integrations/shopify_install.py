@@ -6,11 +6,13 @@ the callback to miss the state match, create an orphaned integration with
 user_id=None, and leave the real integration in ERROR/DISCONNECTED status.
 """
 
+import hashlib
+import hmac as hmac_lib
 import logging
 import secrets
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -24,9 +26,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _verify_shopify_install_hmac(
+    query_params: dict[str, str],
+    secret: str,
+) -> bool:
+    """
+    Verify the HMAC on a Shopify install/auth request.
+
+    Shopify signs the query string: sort all params except 'hmac',
+    join as key=value with '&', HMAC-SHA256 with the client secret.
+    """
+    hmac_value = query_params.get("hmac", "")
+    if not hmac_value or not secret:
+        return False
+
+    # Build the message: sorted params excluding 'hmac'
+    filtered = {k: v for k, v in query_params.items() if k != "hmac"}
+    message = "&".join(f"{k}={v}" for k, v in sorted(filtered.items()))
+
+    computed = hmac_lib.new(
+        secret.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac_lib.compare_digest(computed, hmac_value)
+
+
 @router.get("/shopify/install")
 async def shopify_install(
+    request: Request,
     shop: str = Query(..., description="The shop domain from Shopify"),
+    hmac: str | None = Query(None),
+    timestamp: str | None = Query(None),
     db: AsyncSession = Depends(get_session),
 ):
     """
@@ -34,6 +66,15 @@ async def shopify_install(
     No auth required — this is the first thing Shopify hits.
     Redirects merchant to Shopify's OAuth permission screen.
     """
+    # Verify Shopify HMAC signature on the install request
+    query_params = dict(request.query_params)
+    if not _verify_shopify_install_hmac(query_params, settings.SHOPIFY_CLIENT_SECRET):
+        logger.warning(f"Shopify install HMAC verification failed for shop={shop}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid HMAC signature",
+        )
+
     if not shop.endswith(".myshopify.com"):
         shop = f"{shop}.myshopify.com"
 

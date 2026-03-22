@@ -23,12 +23,19 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def get_client_ip(request: Request) -> str:
     """
-    Get client IP address, handling proxies.
-    Checks X-Forwarded-For header first (for reverse proxies).
+    Get client IP address, handling proxies securely.
+
+    Uses the rightmost IP in X-Forwarded-For (appended by the nearest
+    trusted proxy, e.g. Railway) rather than the leftmost (which the
+    client can spoof). Falls back to the direct connection IP.
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        # Rightmost entry is added by our trusted proxy (Railway/load balancer).
+        # Leftmost is client-controlled and trivially spoofable.
+        ips = [ip.strip() for ip in forwarded.split(",") if ip.strip()]
+        if ips:
+            return ips[-1]
     return get_remote_address(request)
 
 
