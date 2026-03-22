@@ -9,16 +9,17 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: '*.myshopify.com',
       },
       {
-        protocol: 'http',
-        hostname: '**',
+        protocol: 'https',
+        hostname: 'cdn.shopify.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.railway.app',
       },
     ],
-    dangerouslyAllowSVG: true,
-    contentDispositionType: 'attachment',
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
   async headers() {
@@ -28,7 +29,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org https://rpc.sepolia.org https://eth.merkle.io https://*.infura.io https://*.alchemy.com https://cloudflare-eth.com https://ethereum.publicnode.com https://sepolia.publicnode.com; frame-ancestors https://admin.shopify.com https://*.myshopify.com;",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.shopify.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: http:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:* ws://localhost:* https://*.railway.app https://*.sentry.io wss://*.railway.app https://*.walletconnect.org https://*.walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org https://rpc.sepolia.org https://eth.merkle.io https://*.infura.io https://*.alchemy.com https://cloudflare-eth.com https://ethereum.publicnode.com https://sepolia.publicnode.com; frame-ancestors https://admin.shopify.com https://*.myshopify.com;",
           },
           {
             key: 'X-Content-Type-Options',

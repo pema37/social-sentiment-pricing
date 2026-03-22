@@ -96,18 +96,22 @@ export const sentimentKeys = {
 export const analyticsKeys = {
   all: ['analytics'] as const,
   dashboard: () => [...analyticsKeys.all, 'dashboard'] as const,
-  recommendations: (params?: Record<string, unknown>) => [...analyticsKeys.all, 'recommendations', params] as const,
-  sentiment: (params?: Record<string, unknown>) => [...analyticsKeys.all, 'sentiment', params] as const,
-  alerts: (params?: Record<string, unknown>) => [...analyticsKeys.all, 'alerts', params] as const,
+  productSummaries: (limit?: number) => [...analyticsKeys.all, 'product-summaries', limit] as const,
+  recommendationStats: (days?: number) => [...analyticsKeys.all, 'recommendation-stats', days] as const,
+  alertAnalytics: (days?: number) => [...analyticsKeys.all, 'alert-analytics', days] as const,
+  sentimentTrend: (params?: { product_id?: string; days?: number; bucket?: string }) =>
+    [...analyticsKeys.all, 'sentiment-trend', params] as const,
 };
 
 export const paymentKeys = {
   all: ['payments'] as const,
   wallet: () => [...paymentKeys.all, 'wallet'] as const,
-  balance: () => [...paymentKeys.all, 'balance'] as const,
-  history: (params?: Record<string, unknown>) => [...paymentKeys.all, 'history', params] as const,
+  balance: (address: string) => [...paymentKeys.all, 'balance', address] as const,
   subscription: () => [...paymentKeys.all, 'subscription'] as const,
   plans: () => [...paymentKeys.all, 'plans'] as const,
+  history: (params?: { limit?: number; offset?: number }) =>
+    [...paymentKeys.all, 'history', params] as const,
+  payment: (id: string) => [...paymentKeys.all, 'payment', id] as const,
 };
 
 export const userKeys = {
@@ -123,6 +127,7 @@ export const trendAnalysisKeys = {
   analysis: (params?: Record<string, unknown>) => [...trendAnalysisKeys.all, 'analysis', params] as const,
   opportunity: (productId: string) => [...trendAnalysisKeys.all, 'opportunity', productId] as const,
   risks: () => [...trendAnalysisKeys.all, 'risks'] as const,
+  insight: (days: number) => [...trendAnalysisKeys.all, 'insight', days] as const,
 };
 
 

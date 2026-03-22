@@ -42,12 +42,12 @@ function hasHintCookie(): boolean {
 
 function setHintCookie(): void {
   if (typeof document === 'undefined') return;
-  document.cookie = 'ssp_auth=1; path=/; max-age=604800; SameSite=Lax';
+  document.cookie = 'ssp_auth=1; path=/; max-age=604800; SameSite=Lax; Secure';
 }
 
 function clearHintCookie(): void {
   if (typeof document === 'undefined') return;
-  document.cookie = 'ssp_auth=; path=/; max-age=0';
+  document.cookie = 'ssp_auth=; path=/; max-age=0; SameSite=Lax; Secure';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

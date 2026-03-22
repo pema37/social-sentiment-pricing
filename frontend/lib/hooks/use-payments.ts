@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getWallet,
   updateWallet,
+  removeWallet,
   checkBalance,
   getPlans,
   getSubscription,
@@ -11,6 +12,8 @@ import {
   getPaymentHistory,
   downgradeToFree,
 } from '@/lib/api/payments';
+import { paymentKeys } from '@/lib/api/query-keys';
+export { paymentKeys };
 import type {
   Subscription,
   WalletInfo,
@@ -21,18 +24,6 @@ import type {
   WalletUpdateRequest,
   PlansResponse,
 } from '@/types/payment';
-
-// Query keys for React Query
-export const paymentKeys = {
-  all: ['payments'] as const,
-  wallet: () => [...paymentKeys.all, 'wallet'] as const,
-  balance: (address: string) => [...paymentKeys.all, 'balance', address] as const,
-  subscription: () => [...paymentKeys.all, 'subscription'] as const,
-  plans: () => [...paymentKeys.all, 'plans'] as const,
-  history: (params?: { limit?: number; offset?: number }) => 
-    [...paymentKeys.all, 'history', params] as const,
-  payment: (id: string) => [...paymentKeys.all, 'payment', id] as const,
-};
 
 // ============================================
 // SUBSCRIPTION HOOKS
@@ -115,7 +106,7 @@ export function useRemoveWallet() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: () => updateWallet({ bsv_wallet_address: null }),
+    mutationFn: () => removeWallet(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.wallet() });
     },

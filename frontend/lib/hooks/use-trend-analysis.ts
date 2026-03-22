@@ -10,8 +10,8 @@ import {
   detectRisks,
   generateInsight,
   getQuickStats,
-  trendAnalysisKeys,
 } from '@/lib/api/trend-analysis';
+import { trendAnalysisKeys } from '@/lib/api/query-keys';
 import { useToast } from '@/lib/hooks/use-toast';
 import type { TrendAnalysisRequest } from '@/types/trend-analysis';
 

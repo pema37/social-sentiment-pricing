@@ -278,26 +278,18 @@ export function useRealtimeSentiment(
   
   const clientRef = useRef<WebSocketClient | null>(null);
   const queryClient = useQueryClient();
-  
+
   const [isConnected, setIsConnected] = useState(false);
   const [latestUpdate, setLatestUpdate] = useState<SentimentUpdateMessage | null>(null);
 
-  // Initialize client (recreate when productId changes)
+  // Initialize client, setup handlers, and connect atomically
+  // Merged into one effect to prevent race between client creation and handler
+  // registration when productId changes under React 18 concurrent mode.
   useEffect(() => {
-    if (typeof window === 'undefined' || !productId) return;
-    
-    clientRef.current = createSentimentClient(productId);
-    
-    return () => {
-      clientRef.current?.disconnect();
-      clientRef.current = null;
-    };
-  }, [productId]);
+    if (typeof window === 'undefined' || !productId || !enabled) return;
 
-  // Setup connection and handlers
-  useEffect(() => {
-    const client = clientRef.current;
-    if (!client || !enabled || !productId) return;
+    const client = createSentimentClient(productId);
+    clientRef.current = client;
 
     const unsubConnect = client.onConnect(() => {
       setIsConnected(true);
@@ -312,20 +304,20 @@ export function useRealtimeSentiment(
     const unsubSentiment = client.on('sentiment_update', (data) => {
       const update = data as SentimentUpdateMessage;
       setLatestUpdate(update);
-      
+
       // Invalidate sentiment queries
       queryClient.invalidateQueries({ queryKey: sentimentKeys.all });
-      
+
       onSentimentUpdate?.(update);
     });
 
     const unsubMention = client.on('new_mention', (data) => {
       const mention = data as SentimentUpdateMessage;
       setLatestUpdate(mention);
-      
+
       // Invalidate sentiment queries
       queryClient.invalidateQueries({ queryKey: sentimentKeys.all });
-      
+
       onNewMention?.(mention);
     });
 
@@ -336,6 +328,8 @@ export function useRealtimeSentiment(
       unsubDisconnect();
       unsubSentiment();
       unsubMention();
+      client.disconnect();
+      clientRef.current = null;
     };
   }, [enabled, productId, onConnect, onDisconnect, onSentimentUpdate, onNewMention, queryClient]);
 

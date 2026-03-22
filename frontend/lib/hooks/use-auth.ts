@@ -9,18 +9,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/lib/api';
+import { authKeys } from '@/lib/api/query-keys';
 import {
   setToken,
   removeAllTokens,
   isAuthenticated
 } from '@/lib/auth/token';
 import { useRouter } from 'next/navigation';
-
-// Query keys
-export const authKeys = {
-  all: ['auth'] as const,
-  user: () => [...authKeys.all, 'user'] as const,
-};
 
 // Get current user
 export function useUser() {

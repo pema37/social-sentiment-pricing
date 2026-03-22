@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, Sparkles, RefreshCw, Filter } from 'lucide-react';
 import { AIBadge } from '@/components/ui/ai-badge';
+import { api } from '@/lib/api/client';
 
 interface TrendingProduct {
   rank: number;
@@ -23,35 +24,31 @@ interface Category {
   icon: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 export default function TrendsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Fetch categories
   const { data: categoriesData } = useQuery({
     queryKey: ['trend-categories'],
-    queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/market-trends/categories`);
-      return res.json();
-    }
+    queryFn: () => api.get<{ categories: Category[] }>('/api/v1/market-trends/categories'),
   });
 
   // Fetch trends
-  const { 
-    data: trendsData, 
-    isLoading, 
+  const {
+    data: trendsData,
+    isLoading,
     refetch,
-    isFetching 
+    isFetching
   } = useQuery({
     queryKey: ['market-trends', selectedCategory],
-    queryFn: async () => {
-      const url = selectedCategory 
-        ? `${API_URL}/api/v1/market-trends/trends?category=${selectedCategory}&limit=10`
-        : `${API_URL}/api/v1/market-trends/trends?limit=10`;
-      const res = await fetch(url);
-      return res.json();
-    }
+    queryFn: () => {
+      const params: Record<string, string | number | boolean> = { limit: 10 };
+      if (selectedCategory) params.category = selectedCategory;
+      return api.get<{ trends: TrendingProduct[]; ai_summary?: string; generated_at?: string }>(
+        '/api/v1/market-trends/trends',
+        params,
+      );
+    },
   });
 
   const getSentimentColor = (sentiment: string) => {

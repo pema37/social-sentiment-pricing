@@ -92,7 +92,7 @@ export function ShopifyEmbeddedProvider({ children }: Props) {
     if (!isEmbedded) return null;
 
     try {
-      const appBridge = await waitForAppBridge(10000) as { idToken?: () => Promise<string> } | null;
+      const appBridge = await waitForAppBridge(10000);
 
       if (!appBridge) {
         throw new Error('App Bridge not available after 10s');
@@ -183,13 +183,22 @@ export function ShopifyEmbeddedProvider({ children }: Props) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
+interface ShopifyGlobal {
+  idToken?: () => Promise<string>;
+}
+
+declare global {
+  interface Window {
+    shopify?: ShopifyGlobal;
+  }
+}
+
 /**
  * Polls for window.shopify (App Bridge global) with exponential backoff.
  * App Bridge CDN script loads async, so it may not be available immediately.
  * Starts polling at 50ms intervals, backs off to 500ms max.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function waitForAppBridge(timeoutMs: number): Promise<any> {
+function waitForAppBridge(timeoutMs: number): Promise<ShopifyGlobal | null> {
   return new Promise((resolve) => {
     if (typeof window !== 'undefined' && window.shopify) {
       resolve(window.shopify);

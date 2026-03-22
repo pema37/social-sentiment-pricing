@@ -1,17 +1,7 @@
 // Analytics hooks
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { analyticsApi } from '@/lib/api';
-
-// Query keys
-export const analyticsKeys = {
-  all: ['analytics'] as const,
-  dashboard: () => [...analyticsKeys.all, 'dashboard'] as const,
-  productSummaries: (limit?: number) => [...analyticsKeys.all, 'product-summaries', limit] as const,
-  recommendationStats: (days?: number) => [...analyticsKeys.all, 'recommendation-stats', days] as const,
-  alertAnalytics: (days?: number) => [...analyticsKeys.all, 'alert-analytics', days] as const,
-  sentimentTrend: (params?: { product_id?: string; days?: number; bucket?: string }) =>
-    [...analyticsKeys.all, 'sentiment-trend', params] as const,
-};
+import { analyticsKeys } from '@/lib/api/query-keys';
 
 // Dashboard overview
 export function useDashboardOverview() {

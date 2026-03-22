@@ -559,6 +559,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx` lines 63, 109; `frontend/app/(dashboard)/trends/page.tsx` lines 35, 49
 - **Issue:** Raw `fetch()` calls with no `Authorization` header (trends page) or via manual localStorage token (audit page). Non-2xx responses silently parsed as data.
 - **Impact:** Unauthenticated requests receive 401 response bodies treated as valid data. Auth interceptor, error normalization, and token refresh are all bypassed.
+- **Status: FIXED 2026-03-22** — Trends page converted from raw `fetch()` to centralized `api.get()` client with auth, error handling, and token refresh. Audit page localStorage issue was previously fixed in BUG-001.
 
 ---
 
@@ -566,6 +567,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/trends/page.tsx` line 26
 - **Issue:** `const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'` — on Vercel preview/production when env var is absent, calls hit a developer's local machine.
 - **Impact:** All trend analysis API calls silently fail or hit the wrong server in staging/production.
+- **Status: FIXED 2026-03-22** — Removed hardcoded `API_URL` constant; trends page now uses centralized `api.get()` client which manages base URL internally.
 
 ---
 
@@ -573,6 +575,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/context/shopify-embedded.tsx` lines 191–216
 - **Issue:** Return type is `Promise<any>` with an explicit `// eslint-disable-next-line @typescript-eslint/no-explicit-any`. `any` is forbidden per project rules.
 - **Impact:** Type safety hole in the most security-critical embedded auth function. Runtime shape changes not caught at compile time.
+- **Status: FIXED 2026-03-22** — Replaced `Promise<any>` with `Promise<ShopifyGlobal | null>` using a proper `ShopifyGlobal` interface. Removed eslint-disable and `as` cast at call site.
 
 ---
 
@@ -580,6 +583,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/ws/client.ts` lines 208–223
 - **Issue:** `reconnectAttempts` is incremented inside the `setTimeout` callback (after the check fires). Under rapid synchronous failures, the counter accumulates beyond `maxReconnectAttempts` before the guard fires.
 - **Impact:** Actual reconnect attempts may exceed configured maximum under rapid failure conditions.
+- **Status: FIXED 2026-03-22** — Moved `reconnectAttempts++` before `setTimeout` so the counter increments synchronously and the guard fires correctly on subsequent calls.
 
 ---
 
@@ -587,6 +591,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/ws/hooks.ts` lines 90–142
 - **Issue:** Two separate `useEffect` calls — one initializes `clientRef.current`, the other registers handlers. Under React 18 concurrent mode, a `productId` change can cause handlers to register on the old client before the new client is initialized.
 - **Impact:** WS handlers attached to stale client or `connect()` called on a disconnected client under concurrent mode.
+- **Status: FIXED 2026-03-22** — Merged the two `useEffect` calls in `useRealtimeSentiment` into one atomic effect that creates the client, registers handlers, and connects in a single pass. Cleanup disconnects and nulls the ref.
 
 ---
 
@@ -753,6 +758,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/query-keys.ts`; `frontend/lib/hooks/use-analytics.ts` line 6; `frontend/lib/api/trend-analysis.ts` line 75; `frontend/lib/hooks/use-auth.ts` line 21; `frontend/lib/hooks/use-payments.ts` line 26
 - **Issue:** Four query-key factories defined in two separate locations with different shapes. `paymentKeys.balance()` in the central registry takes no args; in the hook it takes `(address: string)`. Cache invalidations using the central registry keys never match the hook's actual keys.
 - **Impact:** External cache invalidation for analytics, trends, auth, and payment queries silently fails. Stale data displayed after mutations.
+- **Status: FIXED 2026-03-22** — Consolidated all query-key definitions into `query-keys.ts` as single source of truth. Removed duplicates from hook/API files. Updated central registry to match correct shapes (e.g., `balance(address)`, `payment(id)`, `insight(days)`).
 
 ---
 
@@ -760,6 +766,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-payments.ts` line 118
 - **Issue:** `useRemoveWallet` calls `updateWallet({ bsv_wallet_address: null })` — the dedicated `DELETE /api/v1/payments/wallet` endpoint is never used. If backend validates `bsv_wallet_address` as non-null string, this fails with 422.
 - **Impact:** Wallet removal either silently no-ops or errors. The DELETE endpoint is dead code.
+- **Status: FIXED 2026-03-22** — Changed `useRemoveWallet` to call `removeWallet()` (DELETE endpoint) instead of `updateWallet({ bsv_wallet_address: null })`.
 
 ---
 
@@ -771,6 +778,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/next.config.ts` lines 9–18
 - **Issue:** `hostname: '**'` wildcard for both `https` and `http`. `dangerouslyAllowSVG: true` allows proxying SVG from any origin. Turns the app into an open SSRF/image proxy.
 - **Impact:** SSRF via image proxy; potential XSS via proxied malicious SVG content.
+- **Status: FIXED 2026-03-22** — Restricted image proxy to specific HTTPS hostnames (`*.myshopify.com`, `cdn.shopify.com`, `*.railway.app`). Removed `http://` wildcard, `dangerouslyAllowSVG`, and related SVG config.
 
 ---
 
@@ -778,6 +786,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/next.config.ts` line 31
 - **Issue:** `'unsafe-eval'` present in `script-src`. Per CSP spec, `unsafe-eval` negates the main XSS protection value of CSP entirely.
 - **Impact:** Content Security Policy provides no meaningful XSS protection.
+- **Status: FIXED 2026-03-22** — Removed `'unsafe-eval'` from `script-src` CSP directive.
 
 ---
 
@@ -785,6 +794,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/auth/token.ts` line 30
 - **Issue:** `document.cookie = 'ssp_auth=1; path=/; max-age=604800; SameSite=Lax'` — no `Secure` attribute. Transmitted over plaintext HTTP. Deletion string also lacks `Secure`.
 - **Impact:** Cookie transmitted over HTTP; inconsistent deletion behavior in mixed environments.
+- **Status: FIXED 2026-03-22** — Added `Secure` flag to both the set and clear operations of the `ssp_auth` hint cookie.
 
 ---
 
@@ -792,6 +802,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/stores/toast-store.ts` lines 38–44
 - **Issue:** `addToast` schedules `setTimeout` for auto-removal but timer ID is never stored. `clearToasts()` wipes state but pending callbacks still fire, calling `set(state => ...)` on stale state.
 - **Impact:** Memory leak; stale state updates after `clearToasts()`; test flakiness.
+- **Status: FIXED 2026-03-22** — Timer IDs tracked in a `Map<string, timerId>`. `removeToast()` and `clearToasts()` now clear pending timers before updating state.
 
 ---
 
@@ -799,6 +810,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/types/analytics.ts` lines 101–103
 - **Issue:** `by_rule_type`, `top_performing_rules`, `worst_performing_rules` typed as `Record<string, unknown>` / `Record<string, unknown>[]` instead of structured types.
 - **Impact:** All components consuming rule performance data require runtime casts or `any` assertions.
+- **Status: FIXED 2026-03-22** — Added `RuleTypeStats` and `RulePerformanceSummary` interfaces matching the backend data shape. `by_rule_type` now typed as `Record<string, RuleTypeStats>`, rule arrays as `RulePerformanceSummary[]`.
 
 ---
 
@@ -806,6 +818,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/types/alert.ts` lines 170–174
 - **Issue:** `AlertAnalytics` interface has a comment header but no fields. `types/analytics.ts` defines a separate `AlertAnalytics` with actual fields. Both are re-exported from `types/index.ts`, creating a conflicting empty declaration.
 - **Impact:** Imports from `alert.ts` path get a structurally empty type; field access silently bypassed by TypeScript.
+- **Status: FIXED 2026-03-22** — Removed the dangling JSDoc/empty interface stub from `alert.ts`. The canonical `AlertAnalytics` in `analytics.ts` is now the sole export.
 
 ---
 
@@ -813,6 +826,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/web3/useMNEE.ts` lines 84–98, 102–109
 - **Issue:** `transfer(to: string, amount: string)` calls `parseUnits(amount, 18)` with no pre-validation. Empty string, "0", or non-numeric input throws an unhandled exception. `to`/`spender` cast directly to `0x${string}` without address validation.
 - **Impact:** Invalid inputs crash the wallet interaction silently. Invalid Ethereum addresses sent to contract write without validation.
+- **Status: FIXED 2026-03-22** — Added `isAddress()` validation for `to`/`spender` and numeric validation for `amount` before `parseUnits`. Invalid inputs throw descriptive errors instead of cryptic viem exceptions.
 
 ---
 
@@ -820,6 +834,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/web3/config.ts` line 61
 - **Issue:** `process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo'` — `'demo'` is rejected by the WalletConnect relay as an invalid project ID.
 - **Impact:** WalletConnect initialization fails in any environment where the env var is not set, with no build-time error.
+- **Status: FIXED 2026-03-22** — Removed `'demo'` fallback. WalletConnect connector is now conditionally included only when `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is set. Injected wallet (MetaMask etc.) still works without it.
 
 ---
 

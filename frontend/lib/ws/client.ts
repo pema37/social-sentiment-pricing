@@ -212,12 +212,12 @@ export class WebSocketClient {
     }
 
     this.clearReconnectTimer();
-    
+
     const delay = this.reconnectInterval * Math.pow(1.5, this.reconnectAttempts);
-    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+    this.reconnectAttempts++;
+    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
-      this.reconnectAttempts++;
       this.connect();
     }, delay);
   }

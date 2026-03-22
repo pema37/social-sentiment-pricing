@@ -71,17 +71,8 @@ export async function getQuickStats(): Promise<QuickStatsResponse> {
   return api.get<QuickStatsResponse>(`${BASE_URL}/quick-stats`);
 }
 
-// Query keys for React Query
-export const trendAnalysisKeys = {
-  all: ['trend-analysis'] as const,
-  analysis: (params?: TrendAnalysisRequest) =>
-    [...trendAnalysisKeys.all, 'analysis', params] as const,
-  opportunity: (productId: string) =>
-    [...trendAnalysisKeys.all, 'opportunity', productId] as const,
-  risks: () => [...trendAnalysisKeys.all, 'risks'] as const,
-  insight: (days: number) => [...trendAnalysisKeys.all, 'insight', days] as const,
-  quickStats: () => [...trendAnalysisKeys.all, 'quick-stats'] as const,
-};
+// Query keys re-exported from centralized registry
+// See: lib/api/query-keys.ts
 
 
 
