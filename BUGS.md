@@ -1628,6 +1628,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-073 — Division by zero in pipeline_adapter when no competitor prices exist
+- **Status: FALSE POSITIVE 2026-03-22** — Code already guards: line 106 checks `if competitors and product.current_price`, line 108 checks `len(all_prices) > 1`, line 111 checks `if max_p > min_p` with `else: 0.5` fallback.
 - **File:** `backend/services/pricing/pipeline_adapter.py` line 107
 - **Issue:** Position index normalization uses `(price - min_p) / (max_p - min_p)`. When `all_prices` is empty (no competitors), `min_p` and `max_p` both raise `ValueError` from `min([])`/`max([])`. When there is exactly one competitor, `max_p == min_p` → division by zero.
 - **Impact:** Competitive position calculation crashes for all new products and single-competitor scenarios. Price recommendations cannot be generated.
@@ -1635,6 +1636,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-074 — Multiple division-by-zero in analytics_service and trend_detector
+- **Status: FALSE POSITIVE 2026-03-22** — All divisions already guarded: line 132 checks `p.base_price and p.base_price > 0`, lines 305/307 check `if recent:`/`if earlier:`, trend_detector line 117 checks `if baseline_avg > 0`.
 - **File:** `backend/services/analytics/analytics_service.py` lines 133, 306, 308; `backend/services/analysis/trend_detector.py` line 118
 - **Issue:** (1) `(p.current_price - p.base_price) / p.base_price` with no `base_price > 0` check. (2) `sum(scores) / len(recent)` and `sum(scores) / len(earlier)` with no empty-list guard. (3) `current_count / baseline_avg` with no zero-check on `baseline_avg`.
 - **Impact:** Analytics endpoints crash for any product with `base_price = 0`. Trend detection fails for products with no historical baseline. Dashboard returns 500 errors instead of data.
@@ -1642,6 +1644,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-075 — Division by zero in elasticity calculator on zero price or zero units
+- **Status: FALSE POSITIVE 2026-03-22** — All divisions already guarded: line 74 checks `self.old_price == 0`, line 81 checks `self.avg_daily_units_before == 0`, line 96 guards `abs(pct_price) < 0.02` returning None (0.02 threshold prevents float-precision zero).
 - **File:** `backend/services/scoring/elasticity_calculator.py` lines 76, 83, 99
 - **Issue:** `price_change_pct` divides by `old_price`; `quantity_change_pct` divides by `avg_daily_units_before`. Both can be zero. PED calculation at line 99 divides `pct_qty / pct_price` where `pct_price` is only guarded to `>= 0.02` — but if it rounds to 0 via float precision, infinity results.
 - **Impact:** Price elasticity calculation crashes or returns infinity for any new product (no sales history) or free product. Thompson Sampling bandit receives infinity confidence values, corrupting all strategy selection.
@@ -1649,6 +1652,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-076 — Division by zero in guardrails velocity cap on zero current price
+- **Status: FALSE POSITIVE 2026-03-22** — Code already guards: line 162 checks `product.current_price > 0` before entering velocity cap logic, line 187 also checks `if product.current_price > 0` before formatting.
 - **File:** `backend/services/scoring/guardrails.py` lines 168, 186
 - **Issue:** `(price - product.current_price) / product.current_price` — no zero-guard on `product.current_price`. String formatting on line 186 executes before any guard. Products with `current_price = 0` (unpublished, archived) crash the guardrail check.
 - **Impact:** Guardrail enforcement crashes for any product with zero price. Price recommendations bypass all safety checks — prices can be set to any value including negative numbers.
@@ -1656,6 +1660,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-077 — Mutable list defaults in Integration model shared across instances
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/models/integration.py` lines 90, 95
 - **Issue:** `scopes: list[str] = Field(default=[])` and `webhook_ids: list[str] = Field(default=[])`. SQLModel/Pydantic v2 should use `default_factory=list`. With `default=[]`, the same list object is shared by all instances that don't explicitly set these fields.
 - **Impact:** (1) Adding a webhook ID to one integration's in-memory state adds it to all others. Webhook cleanup on disconnect doesn't work reliably. (2) OAuth scope tracking is corrupted — scopes granted to one integration leak to others.

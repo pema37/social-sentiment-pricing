@@ -87,12 +87,12 @@ class Integration(SQLModel, table=True):
     token_expires_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
     # OAuth scopes granted
-    scopes: list[str] = Field(default=[], sa_column=Column(JSON))
+    scopes: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     # Webhook secret (encrypted)
     webhook_secret_encrypted: bytes | None = Field(default=None, sa_column=SAColumn(LargeBinary, nullable=True))
     # Webhook IDs for cleanup on disconnect
-    webhook_ids: list[str] = Field(default=[], sa_column=Column(JSON))
+    webhook_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     # ========== OAuth Flow (temporary fields) ==========
     oauth_state: str | None = Field(default=None, max_length=64)
