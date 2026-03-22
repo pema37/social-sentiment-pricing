@@ -2257,6 +2257,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/pricing/simulation.py` line 110
 - **Issue:** `change_percent = ((calculated_price - product.current_price) / product.current_price) * 100` — no guard on `product.current_price == 0`. Products imported with price 0 (drafts, bundles) will cause `ZeroDivisionError`.
 - **Impact:** 500 error on simulate endpoint for zero-price products.
+- **Status: FIXED 2026-03-22** — Added zero-guard on `product.current_price` before division in both `test_rule` and `simulate_pricing` endpoints. Returns `Decimal("0")` for change_percent when current price is zero.
 
 ---
 
@@ -2264,6 +2265,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/products_import.py` lines 100-168
 - **Issue:** Extensive `🔍 IMPORT DEBUG:` log statements at `logger.info` level scattered throughout the import endpoint. These flood production logs and expose internal row-by-row state to log aggregators.
 - **Impact:** Log pollution; potential PII exposure (product names, SKUs printed for every import row).
+- **Status: FIXED 2026-03-22** — Removed all emoji debug log statements. Kept only a `logger.warning` on import row failure for operational visibility.
 
 ---
 
@@ -2271,6 +2273,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/signal_processor.py` lines 176-186
 - **Issue:** For each of up to 5 viral posts, a separate `SELECT` query fetches sentiment. Should be a single query with `WHERE product_id = X ORDER BY analyzed_at DESC LIMIT 5`.
 - **Impact:** Up to 5 extra DB round-trips per `gather_signals()` call; multiplied across all products during batch pricing runs.
+- **Status: FIXED 2026-03-22** — Replaced N+1 loop with a single query. The loop variable `_post` was unused — all 5 iterations ran the identical query. Now runs one `SELECT ... ORDER BY analyzed_at DESC LIMIT 1` outside the loop.
 
 ---
 
@@ -2285,6 +2288,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 29–32
 - **Issue:** `GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")` and `client = genai.Client(api_key=GEMINI_API_KEY)` are executed at module import time, bypassing `core/config.py`. If the env var is not set at import time the client is initialized with an empty string key. Also uses nonexistent model `gemini-3-flash-preview`.
 - **Impact:** Module fails silently or at first use with auth errors; violates project config contract. All autonomous pipeline AI calls fail.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `settings.GEMINI_API_KEY` via `core.config`, model is `gemini-2.0-flash`, and client is lazy-initialized via `_get_client()`. No `os.getenv()` calls present.
 
 ---
 
@@ -2292,6 +2296,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/notification/email_service.py` line 122
 - **Issue:** `response = client.send(message)` — `SendGridAPIClient` is synchronous (blocking HTTP). Called from an `async` function without `asyncio.get_event_loop().run_in_executor()`. Blocks the event loop for the duration of the network call.
 - **Impact:** Every email send (password reset, alerts, invites) blocks all FastAPI concurrent requests for the duration of the SendGrid HTTP call. Under load, this degrades API responsiveness.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `await asyncio.to_thread(client.send, message)` to run the synchronous SendGrid call off the event loop.
 
 ---
 

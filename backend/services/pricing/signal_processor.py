@@ -176,21 +176,16 @@ class SignalProcessor:
         # Get sentiment of viral posts
         viral_sentiment = None
         if viral_detected and top_posts:
-            sentiments = []
-            for _post in top_posts[:5]:
-                sent_stmt = (
-                    select(Sentiment)
-                    .where(Sentiment.product_id == product_id)
-                    .order_by(Sentiment.analyzed_at.desc())
-                    .limit(1)
-                )
-                result = await self.db.execute(sent_stmt)
-                sent = result.scalars().first()
-                if sent:
-                    sentiments.append(sent.compound_score)
-
-            if sentiments:
-                viral_sentiment = sum(sentiments) / len(sentiments)
+            sent_stmt = (
+                select(Sentiment)
+                .where(Sentiment.product_id == product_id)
+                .order_by(Sentiment.analyzed_at.desc())
+                .limit(1)
+            )
+            result = await self.db.execute(sent_stmt)
+            sent = result.scalars().first()
+            if sent:
+                viral_sentiment = sent.compound_score
 
         return viral_detected, total_reach, total_engagement, viral_sentiment
 

@@ -107,8 +107,11 @@ async def test_rule(
 
         if calculated_price:
             calculated_price = rec_service._apply_boundaries(calculated_price, product, rule)
-            change_percent = ((calculated_price - product.current_price) / product.current_price) * 100
-            change_percent = change_percent.quantize(Decimal("0.01"))
+            if product.current_price and product.current_price != 0:
+                change_percent = ((calculated_price - product.current_price) / product.current_price) * 100
+                change_percent = change_percent.quantize(Decimal("0.01"))
+            else:
+                change_percent = Decimal("0")
             reason = (
                 f"Rule would change price from ${product.current_price} to ${calculated_price} ({change_percent:+.2f}%)"
             )
@@ -166,8 +169,11 @@ async def simulate_pricing(
             calculated_price = rec_service._calculate_new_price(product, rule, signals)
             if calculated_price:
                 calculated_price = rec_service._apply_boundaries(calculated_price, product, rule)
-                change_percent = ((calculated_price - product.current_price) / product.current_price) * 100
-                change_percent = change_percent.quantize(Decimal("0.01"))
+                if product.current_price and product.current_price != 0:
+                    change_percent = ((calculated_price - product.current_price) / product.current_price) * 100
+                    change_percent = change_percent.quantize(Decimal("0.01"))
+                else:
+                    change_percent = Decimal("0")
                 reason = f"Would change price to ${calculated_price} ({change_percent:+.2f}%)"
         else:
             reason = "Conditions not met"
