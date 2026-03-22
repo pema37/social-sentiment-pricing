@@ -42,9 +42,11 @@ class RateLimitState:
 
     def mark_rate_limited(self, retry_after: int | None = None):
         """Mark as rate limited (e.g., after receiving 429)"""
+        from datetime import timedelta
+
         self.is_limited = True
         if retry_after:
-            self.reset_at = datetime.now(UTC)
+            self.reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)
 
     def should_wait(self) -> bool:
         """Check if we should wait before making a request"""

@@ -1591,6 +1591,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/retrieval.py` lines 33, 99, 129, 151
 - **Issue:** Four endpoints (`GET /sentiment/{id}`, `GET /sentiment/product/{id}/summary`, `DELETE /sentiment/{id}`, `GET /sentiment/product/{id}/mentions`) query by ID alone without `.where(Sentiment.user_id == current_user.id)`. Any user can read or delete any sentiment record.
 - **Impact:** Authorization bypass: User A can read, summarize, and delete User B's sentiment data. GDPR violation. Data poisoning possible.
+- **Status: FALSE POSITIVE 2026-03-22** — All endpoints already have user_id filters: GET/DELETE by sentiment_id join on Product.user_id == current_user.id; product-scoped endpoints call _verify_product_ownership; mentions endpoint also filters SocialMention.user_id.
 
 ---
 
@@ -1598,6 +1599,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/analysis.py` lines 59–61, 135–142
 - **Issue:** `get_competitor_alerts` fetches alert records then inside a loop executes 2 additional DB queries per record (CompetitorProduct + Competitor + Product). With 100 results, this is 300+ queries per request instead of 1 with joins.
 - **Impact:** Competitor alerts endpoint slows to seconds per request as data grows. Under load causes DB connection pool exhaustion. Dashboard becomes unusable for merchants with large catalogs.
+- **Status: FALSE POSITIVE 2026-03-22** — compare_prices already batch-fetches with Competitor.id.in_(); get_competitor_alerts already uses a single joined query across all 4 tables.
 
 ---
 
@@ -1605,6 +1607,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/price_check.py` lines 95, 130
 - **Issue:** `get_session()` is an async generator (used via `async with`) but is called directly as a coroutine in `_store_lead()` and `_update_lead_report()` helper functions. The async context manager is not entered correctly.
 - **Impact:** DB session is never properly closed. Connection pool leaks one connection per price-check lead store/update. Under sustained traffic, DB connections are exhausted.
+- **Status: FALSE POSITIVE 2026-03-22** — Both functions already use `async for db in get_session():` which is the correct way to consume an async generator dependency outside of FastAPI's DI.
 
 ---
 
@@ -1612,6 +1615,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/rate_limit.py` lines 46–47
 - **Issue:** `mark_rate_limited(retry_after=N)` stores `reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)` — but the actual code sets `reset_at = retry_after` directly (the integer), not `now + timedelta(retry_after)`. The reset timestamp becomes a small integer (epoch seconds offset), not a future datetime.
 - **Impact:** Rate limiting resets at epoch second N (early 1970s), meaning the rate limit is effectively never enforced. Shopify API rate limit detection is bypassed, leading to 429 floods.
+- **Status: FIXED 2026-03-22** — Changed `self.reset_at = datetime.now(UTC)` to `self.reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)` so the reset time is correctly set in the future.
 
 ---
 
@@ -1619,6 +1623,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/outcome_service.py` lines 140–144
 - **Issue:** `merchant_modification_percent = (actual_price_set - recommended_price) / recommended_price * 100` — no zero-check on `recommended_price`. If `recommended_price` is `Decimal("0")` or `None`, this raises `ZeroDivisionError` or `TypeError`.
 - **Impact:** Outcome recording crashes for any recommendation with a zero recommended price. Feedback loop data is lost; calibration degrades over time.
+- **Status: FALSE POSITIVE 2026-03-22** — Both record_outcome (line 140) and record_merchant_decision (line 475) already guard with `recommendation.recommended_price > 0` before dividing.
 
 ---
 
