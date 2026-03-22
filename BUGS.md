@@ -1528,6 +1528,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/notification/alert_generator.py` line 336
 - **Issue:** Trend detection alerts are created with `AlertType.COMPETITOR_PRICE_CHANGE` instead of the correct trend alert type. Users who have disabled competitor price change alerts won't receive trend alerts either — and users who have enabled only trend alerts will receive them labelled as competitor changes.
 - **Impact:** Alert filtering by type is broken. Merchants receive wrong alert types or miss alerts entirely. Alert dashboard shows incorrect category counts.
+- **Status: FIXED 2026-03-22** — Changed `AlertType.COMPETITOR_PRICE_CHANGE` to `AlertType.TREND_DETECTED`.
 
 ---
 
@@ -1535,6 +1536,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/ai_clients.py` lines 25–26, 106
 - **Issue:** Declares models `"gemini-3-flash-preview"`, `"gemini-3-pro-preview"`, and `"gemini-1.5-flash"`. Project rule mandates `"gemini-2.0-flash"` only. `gemini-3-*` models don't exist in the Gemini API.
 - **Impact:** All trend analysis AI calls fail at the API level with a model-not-found error. Market trend analysis, launch detection, and crisis detection are completely non-functional.
+- **Status: FIXED 2026-03-22** — Changed all model names to `"gemini-2.0-flash"` (lines 25, 26, and 103).
 
 ---
 
@@ -1542,6 +1544,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/analyzer.py` line 259
 - **Issue:** `sum(competitor_prices) / len(competitor_prices)` — no guard if `competitor_prices` is an empty list. `.get("competitor_prices", [])` can return `[]` and `len([]) == 0`.
 - **Impact:** `ZeroDivisionError` whenever a product has no competitor prices. Trend analysis crashes for new products before any competitor data is scraped.
+- **Status: FALSE POSITIVE 2026-03-22** — The described pattern `sum(competitor_prices) / len(competitor_prices)` does not exist in `analyzer.py`. Competitor prices are formatted via `format_competitor_prices()` (string output), not averaged numerically. No division by zero possible.
 
 ---
 
@@ -1549,6 +1552,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/analysis/sentiment_aggregator.py` line 117
 - **Issue:** `(curr_count - prev_count) / prev_count` — no zero-check on `prev_count`. For a brand-new product with no prior mentions, `prev_count = 0`.
 - **Impact:** `ZeroDivisionError` on the first sentiment aggregation run for any new product. Sentiment signal is unavailable until the bug is hit and the task crashes.
+- **Status: FALSE POSITIVE 2026-03-22** — Code at lines 133-136 already has a zero guard: `if prev_count > 0: volume_change = ... else: volume_change = 1.0 if curr_count > 0 else 0.0`. No division by zero possible.
 
 ---
 
@@ -1556,6 +1560,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/notification_tasks.py` line 16
 - **Issue:** `from db.session import get_session_context, run_async` — `run_async` is not exported by `db/session.py`. This is an `ImportError` at module import time.
 - **Impact:** The entire `notification_tasks` module fails to import. Celery worker crashes at startup. No notification tasks (price alerts, email digests) ever run.
+- **Status: FALSE POSITIVE 2026-03-22** — `run_async` is defined at `db/session.py` line 126 as a Celery async helper. The import is valid.
 
 ---
 

@@ -333,7 +333,7 @@ class AlertGenerator:
 
         return await self._create_and_dispatch(
             user_id=user_id,
-            alert_type=AlertType.COMPETITOR_PRICE_CHANGE,
+            alert_type=AlertType.TREND_DETECTED,
             severity=severity,
             title=title,
             message=message,

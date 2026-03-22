@@ -22,8 +22,8 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Gemini 3 model constants
 # ---------------------------------------------------------------------------
-GEMINI3_FLASH = "gemini-3-flash-preview"
-GEMINI3_PRO = "gemini-3-pro-preview"
+GEMINI3_FLASH = "gemini-2.0-flash"
+GEMINI3_PRO = "gemini-2.0-flash"
 DEFAULT_MODEL = GEMINI3_FLASH  # Fast streaming for demos
 
 
@@ -100,7 +100,7 @@ class AIClients:
                 import google.generativeai as genai
 
                 genai.configure(api_key=settings.GEMINI_API_KEY)
-                self._gemini_client = genai.GenerativeModel("gemini-1.5-flash")
+                self._gemini_client = genai.GenerativeModel("gemini-2.0-flash")
                 logger.info("Gemini client initialized (legacy SDK)")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
