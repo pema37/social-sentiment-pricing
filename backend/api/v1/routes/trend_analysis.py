@@ -72,7 +72,7 @@ async def run_trend_analysis(
 @router.post("/opportunity/{product_id}", response_model=PricingOpportunityResponse)
 async def analyze_product_opportunity(
     product_id: str,
-    use_model: str = Query(default="openai", pattern="^(openai|gemini)$"),
+    use_model: str = Query(default="gemini", pattern="^(openai|gemini)$"),
     db: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ):
@@ -120,7 +120,7 @@ async def analyze_product_opportunity(
 
 @router.post("/risks", response_model=RiskDetectionResponse)
 async def detect_risks(
-    use_model: str = Query(default="openai", pattern="^(openai|gemini)$"),
+    use_model: str = Query(default="gemini", pattern="^(openai|gemini)$"),
     db: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ):
@@ -186,7 +186,7 @@ async def detect_risks(
 @router.post("/insight", response_model=AIInsightResponse)
 async def generate_insight(
     days: int = Query(default=30, ge=7, le=90),
-    use_model: str = Query(default="openai", pattern="^(openai|gemini)$"),
+    use_model: str = Query(default="gemini", pattern="^(openai|gemini)$"),
     db: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ):

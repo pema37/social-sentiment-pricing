@@ -8,7 +8,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, String
+from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, SQLModel
 
@@ -29,8 +29,8 @@ class PriceHistory(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, sa_column=Column(PG_UUID(as_uuid=True), primary_key=True))
 
     # Ownership
-    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
-    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True))
+    user_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True))
+    product_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True))
 
     # Price data
     old_price: Decimal = Field(decimal_places=2)

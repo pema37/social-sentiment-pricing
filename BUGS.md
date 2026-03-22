@@ -2981,6 +2981,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/market_trends_visual/service.py`
 - **Issue:** `MarketTrendsAnalyzer.analyze_stream()` calls `ai_clients.stream_gemini3()` and `ai_clients.analyze_image_stream()` directly, bypassing the mandatory central AI entry point `services/ai_generator.py`. This violates the project rule: "ALL Gemini calls go through `services/ai_generator.py`." The analyzer is instantiated as a module-level singleton.
 - **Impact:** No tracing, guardrails, feedback loop, or cost attribution for all market-trends-visual AI calls. Model-swap requires editing the service directly rather than the central entry point.
+- **Status: FIXED 2026-03-22** — Added `stream_content()` and `stream_image_analysis()` methods to `AIGeneratorService` in `ai_generator.py`. Updated `service.py` to import from `services.ai_generator` instead of `services.ai_trend_analysis.ai_clients`. All Gemini streaming calls now route through the central AI entry point.
 
 ---
 
@@ -2988,6 +2989,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/trend_analysis.py`
 - **Issue:** The route handler functions for `/analyze`, `/opportunity/{id}`, `/risks`, and `/insight` all specify `use_model: str = "openai"` as their default parameter. Project AI rules require all models to default to `gemini-2.0-flash` via `services/ai_generator.py`. Even when the frontend sends no model preference, the backend defaults to OpenAI. (BUG-276 covered the frontend defaulting to `openai`; this is the separate backend route default.)
 - **Impact:** All trend analysis requests served by OpenAI rather than Gemini by default. Costs billed to the wrong AI provider. `services/ai_generator.py` tracing, guardrails, and feedback loop are bypassed.
+- **Status: FIXED 2026-03-22** — Changed all `default="openai"` to `default="gemini"` in route Query params and in `TrendAnalysisRequest` schema.
 
 ---
 
@@ -3044,6 +3046,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/payment.py` lines 52–53
 - **Issue:** `txid: str | None = Field(default=None, max_length=100, index=True)` — the field has an index for lookup performance but no `unique=True` constraint. A blockchain transaction ID (txid) is globally unique by definition. Without a unique constraint, a replay attack or race condition could insert two `Payment` records with the same `txid`, crediting a subscription twice for a single on-chain payment.
 - **Impact:** Double-spend vulnerability: a single BSV/MNEE transaction could be credited to two separate subscription activations. No database-level guard prevents concurrent webhook deliveries from creating duplicate confirmed payments for the same txid.
+- **Status: FIXED 2026-03-22** — Added `unique=True` to `Payment.txid` field. Alembic migration `batch24_001` adds `uq_payments_txid` unique constraint. PostgreSQL allows multiple NULLs in unique columns, so pending payments are unaffected.
 
 ---
 
@@ -3051,6 +3054,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/price_history.py` lines 32–33
 - **Issue:** `user_id` and `product_id` are declared as `Column(PG_UUID(as_uuid=True), nullable=False, index=True)` with no `ForeignKey("users.id")` or `ForeignKey("products.id")`. The price history table is the primary audit trail for all pricing mutations. Without foreign keys, orphaned records can exist for deleted users or products, and the database cannot enforce referential integrity. BUG-061 documented this pattern for other models; `PriceHistory` was not in that list.
 - **Impact:** Audit trail can contain records referencing non-existent users or products. Cascading deletes cannot be defined. Data integrity of the pricing audit log — a compliance requirement — is not enforced at the database level.
+- **Status: FIXED 2026-03-22** — Added `ForeignKey("users.id")` and `ForeignKey("products.id")` to `user_id` and `product_id` columns. Alembic migration `batch24_001` creates the FK constraints.
 
 ---
 
@@ -3058,6 +3062,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/init_db.py` lines 7–8
 - **Issue:** `init_db()` calls `SQLModel.metadata.create_all(bind=engine)` where `engine` is imported from `db/session.py` — which is an `AsyncEngine` created by `create_async_engine(...)`. `create_all()` is a synchronous method that requires a sync `Engine`. Passing an `AsyncEngine` raises `AttributeError: 'AsyncEngine' object has no attribute 'execute'` (or equivalent) at runtime. The correct approach — `async with engine.begin() as conn: await conn.run_sync(SQLModel.metadata.create_all)` — is already implemented in `db/session.py::init_db()`, making this file a broken duplicate.
 - **Impact:** Running `python init_db.py` crashes immediately. Any CI/CD step or deployment script that calls `init_db.py` directly will fail, blocking database initialisation.
+- **Status: FIXED 2026-03-22** — Changed import from `engine` (AsyncEngine) to `sync_engine` (sync Engine). `create_all()` now works correctly as a synchronous call.
 
 ---
 

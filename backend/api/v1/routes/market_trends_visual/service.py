@@ -13,7 +13,8 @@ import json
 from collections.abc import AsyncGenerator
 
 from core.logging import get_logger
-from services.ai_trend_analysis.ai_clients import ThoughtType, ai_clients
+from services.ai_generator import ai_generator
+from services.ai_trend_analysis.ai_clients import ThoughtType
 
 from .schemas import TrendAgent, TrendMessage
 
@@ -62,11 +63,11 @@ class MarketTrendsAnalyzer:
         observer_prompt = self._build_observer_prompt(product, category, data_summary, visual_context)
 
         full_response = ""
-        async for chunk in ai_clients.stream_gemini3(observer_prompt, model=self.model):
-            if chunk.text and not chunk.is_final:
-                full_response += chunk.text
-                thought_type = self._classify_observer_thought(chunk.text)
-                yield TrendMessage(agent=TrendAgent.OBSERVER, thought_type=thought_type, content=chunk.text)
+        async for text in ai_generator.stream_content(observer_prompt, model=self.model):
+            if text:
+                full_response += text
+                thought_type = self._classify_observer_thought(text)
+                yield TrendMessage(agent=TrendAgent.OBSERVER, thought_type=thought_type, content=text)
 
         observations = self._extract_observations(full_response, market_data)
 
@@ -97,11 +98,11 @@ class MarketTrendsAnalyzer:
         analyst_prompt = self._build_analyst_prompt(product, category, market_data, observations)
 
         full_response = ""
-        async for chunk in ai_clients.stream_gemini3(analyst_prompt, model=self.model):
-            if chunk.text and not chunk.is_final:
-                full_response += chunk.text
-                thought_type = self._classify_analyst_thought(chunk.text)
-                yield TrendMessage(agent=TrendAgent.ANALYST, thought_type=thought_type, content=chunk.text)
+        async for text in ai_generator.stream_content(analyst_prompt, model=self.model):
+            if text:
+                full_response += text
+                thought_type = self._classify_analyst_thought(text)
+                yield TrendMessage(agent=TrendAgent.ANALYST, thought_type=thought_type, content=text)
 
         analysis = self._parse_analyst_json(full_response)
 
@@ -132,11 +133,11 @@ class MarketTrendsAnalyzer:
         forecaster_prompt = self._build_forecaster_prompt(product, category, market_data, analysis)
 
         full_response = ""
-        async for chunk in ai_clients.stream_gemini3(forecaster_prompt, model=self.model):
-            if chunk.text and not chunk.is_final:
-                full_response += chunk.text
-                thought_type = self._classify_forecaster_thought(chunk.text)
-                yield TrendMessage(agent=TrendAgent.FORECASTER, thought_type=thought_type, content=chunk.text)
+        async for text in ai_generator.stream_content(forecaster_prompt, model=self.model):
+            if text:
+                full_response += text
+                thought_type = self._classify_forecaster_thought(text)
+                yield TrendMessage(agent=TrendAgent.FORECASTER, thought_type=thought_type, content=text)
 
         forecast = self._parse_forecaster_json(full_response)
 
@@ -162,9 +163,9 @@ class MarketTrendsAnalyzer:
 
         try:
             response = ""
-            async for chunk in ai_clients.analyze_image_stream(image_bytes, image_type, image_prompt, model=self.model):
-                if chunk.text:
-                    response += chunk.text
+            async for text in ai_generator.stream_image_analysis(image_bytes, image_type, image_prompt, model=self.model):
+                if text:
+                    response += text
             return response
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")

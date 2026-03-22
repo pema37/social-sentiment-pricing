@@ -6,8 +6,10 @@ Uses Google Gemini (primary) with OpenAI GPT-4o-mini fallback.
 """
 
 import asyncio
+import base64
 import json
 import logging
+from collections.abc import AsyncGenerator
 
 from core.config import settings
 
@@ -288,6 +290,69 @@ Change: {direction} by ${abs(price_change):.2f}"""
             "ai_generated": False,
             "ai_provider": "none",
         }
+
+    async def stream_content(
+        self,
+        prompt: str,
+        model: str | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream text content from Gemini. Central entry point for streaming AI calls."""
+        if not self.gemini_client or not self._using_new_api:
+            logger.warning("Gemini streaming not available (client not configured or legacy API)")
+            return
+
+        model = model or self.gemini_model_name
+
+        try:
+            response = self.gemini_client.models.generate_content_stream(
+                model=model,
+                contents=prompt,
+            )
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            logger.error(f"Gemini streaming failed: {e}")
+
+    async def stream_image_analysis(
+        self,
+        image_data: bytes,
+        image_type: str,
+        prompt: str,
+        model: str | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream image analysis from Gemini. Central entry point for multimodal streaming."""
+        if not self.gemini_client or not self._using_new_api:
+            logger.warning("Gemini image streaming not available")
+            return
+
+        model = model or self.gemini_model_name
+        image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+        contents = [
+            {
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": f"image/{image_type}",
+                            "data": image_base64,
+                        }
+                    },
+                ]
+            }
+        ]
+
+        try:
+            response = self.gemini_client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+            )
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            logger.error(f"Gemini image streaming failed: {e}")
 
     def get_health(self) -> dict:
         """Health check for the service."""

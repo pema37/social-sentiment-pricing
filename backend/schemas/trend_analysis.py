@@ -67,7 +67,7 @@ class TrendAnalysisRequest(BaseModel):
         default=None, description="Specific product IDs to analyze (None = all products)"
     )
     use_model: str = Field(
-        default="openai", pattern="^(openai|gemini)$", description="AI model to use: 'openai' or 'gemini'"
+        default="gemini", pattern="^(openai|gemini)$", description="AI model to use: 'gemini' or 'openai'"
     )
 
 

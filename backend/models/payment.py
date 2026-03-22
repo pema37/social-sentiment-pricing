@@ -49,7 +49,7 @@ class PaymentBase(SQLModel):
     payment_type: str = Field(default="subscription", max_length=20)
 
     # Transaction details
-    txid: str | None = Field(default=None, max_length=100, index=True)
+    txid: str | None = Field(default=None, max_length=100, index=True, unique=True)
     from_address: str | None = Field(default=None, max_length=50)
     to_address: str | None = Field(default=None, max_length=50)
     memo: str | None = Field(default=None, max_length=200)
