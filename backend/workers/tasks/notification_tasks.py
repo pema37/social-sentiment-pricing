@@ -5,18 +5,66 @@ Celery tasks for async notification dispatch.
 Handles sending alerts via email, Slack, webhook without blocking API requests.
 """
 
+import asyncio
 import contextlib
 import logging
+import re
 from datetime import UTC
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import select
 
-# Use run_async helper and async session context from session.py
-from db.session import get_session_context, run_async
+from core.config import settings
 from workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+def _get_task_session_maker():
+    """Create a fresh async session maker with NullPool for Celery tasks."""
+    db_url = settings.DATABASE_URL
+
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    if "sslmode=" in db_url:
+        db_url = re.sub(r"[\?&]sslmode=[^&]*", "", db_url)
+        db_url = db_url.replace("?&", "?").replace("&&", "&").rstrip("?&")
+
+    use_ssl = "neon.tech" in db_url or "railway" in db_url
+
+    engine = create_async_engine(
+        db_url,
+        echo=False,
+        poolclass=NullPool,
+        connect_args={"ssl": True} if use_ssl else {},
+    )
+
+    return sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+
+def _run_async(coro):
+    """Run async code in sync Celery task with a fresh event loop."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+@contextlib.asynccontextmanager
+async def _get_task_session():
+    """Async context manager for a NullPool session in Celery tasks."""
+    session_maker = _get_task_session_maker()
+    async with session_maker() as session:
+        yield session
 
 
 @celery_app.task(
@@ -46,8 +94,7 @@ def dispatch_alert_task(
     Returns:
         Dict with channels_sent, channels_failed, errors
     """
-    # Use run_async helper from session.py
-    return run_async(_dispatch_alert_async(alert_id))
+    return _run_async(_dispatch_alert_async(alert_id))
 
 
 async def _dispatch_alert_async(alert_id: str) -> dict[str, Any]:
@@ -59,8 +106,7 @@ async def _dispatch_alert_async(alert_id: str) -> dict[str, Any]:
     from services.notification import NotificationDispatcher
     from services.notification.webhook_service import WebhookService
 
-    # Use existing get_session_context from session.py
-    async with get_session_context() as session:
+    async with _get_task_session() as session:
         # Load alert
         result = await session.execute(select(Alert).where(Alert.id == alert_id))
         alert = result.scalars().first()

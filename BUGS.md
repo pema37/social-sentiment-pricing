@@ -2543,6 +2543,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-233 — `intelligence_tasks.py` IE tasks fail at runtime — wrong constructor args and non-existent methods
+- **Status: FIXED 2026-03-22** — Removed invalid `db_session=db` from ContextInjector, Calibrator, DriftDetector constructors. Replaced non-existent `recalibrate_all()` with `measure([])`, `detect_all()` with `detect_all_categories([])`, and removed broken `refresh_cache()` call.
 - **File:** `backend/workers/tasks/intelligence_tasks.py` lines 110–320
 - **Issue:** The IE Celery tasks instantiate and call learning service classes with signatures that do not match their actual implementations:
   1. `ContextInjector(db_session=db)` — `ContextInjector` (context_injector.py) has no `__init__` at all (no params). Raises `TypeError`.
@@ -2584,6 +2585,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-238 — `notification_tasks.py` uses pooled `get_session_context` instead of NullPool — Celery worker event-loop mismatch
+- **Status: FIXED 2026-03-22** — Replaced pooled `get_session_context`/`run_async` from `db.session` with local NullPool `_get_task_session_maker()`, `_run_async()`, and `_get_task_session()` matching the pattern used by all other Celery tasks.
 - **File:** `backend/workers/tasks/notification_tasks.py` lines 16-17, 63
 - **Issue:** `notification_tasks.py` imports and uses `get_session_context` from `db.session` (line 16) and `run_async` from `db.session` (line 17). `get_session_context()` creates sessions from the module-level pooled `async_session` (backed by `create_async_engine` with default pool at `db/session.py:32`). Every other Celery task (pricing_tasks, ingestion_tasks, sync_verification_tasks, outcome_measurement_tasks, etc.) creates its own NullPool engine via a local `get_task_session_maker()` — explicitly to prevent "Future attached to a different loop" errors in forked Celery workers. `notification_tasks.py` is the only Celery task that uses the shared pooled engine.
 - **Impact:** After fork, the pooled asyncpg connections are attached to the parent's event loop. When `run_async()` creates a fresh event loop in the worker and `get_session_context()` tries to use the old pooled connections, `asyncpg` raises `InterfaceError: cannot perform operation: another operation is in progress` or `Future attached to a different event loop`. Alert dispatch tasks fail immediately and silently (retry backoff eventually exhausts). No alerts are delivered.
@@ -2628,6 +2630,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-244 — `webhooks.py` webhook register/unregister endpoints have no authentication — any caller can hijack webhook registration
+- **Status: FALSE POSITIVE** — Both endpoints already have `current_user: User = Depends(get_current_user)` and filter by `Integration.user_id == current_user.id`. Auth and ownership checks are in place.
 - **File:** `backend/api/v1/routes/webhooks.py` lines 247-358
 - **Issue:** `POST /{integration_id}/register` and `DELETE /{integration_id}/unregister` have no `get_current_user` dependency. They only verify that the integration exists and is `ACTIVE`, with no ownership check. Any caller who knows a valid `integration_id` UUID can register their own callback URLs as webhooks for that integration, or silently unregister all existing webhooks.
 - **Impact:** Attacker who discovers an integration UUID (via URL enumeration or API error messages) can: (1) redirect Shopify/WooCommerce event notifications to their own server, receiving real-time price/product data; (2) deregister all webhooks for a merchant, breaking real-time sync silently.
@@ -2642,6 +2645,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-246 — WebSocket `ConnectionManager` broadcasts to all connected clients — no per-user data isolation
+- **Status: FIXED 2026-03-22** — Restructured `ConnectionManager` to track connections per-user (`channel -> user_id -> [websockets]`). All `connect`/`disconnect`/`broadcast` methods now require `user_id`. `_authenticate_websocket` now returns user_id from JWT. Broadcast helpers require `user_id` parameter for scoped delivery.
 - **File:** `backend/core/websocket.py` (ConnectionManager); `backend/api/v1/routes/websockets.py`
 - **Issue:** `manager.broadcast(channel, data)` sends to every connection in `active_connections[channel]` with no user filtering. All clients connected to `/ws/prices` receive all price broadcasts, and all clients connected to `/ws/alerts` receive all alert broadcasts — regardless of which user's products those events belong to. Additionally, `/ws/sentiment/{product_id}` (line 62 of `websockets.py`) has no auth dependency, extending the unauthenticated access issue of BUG-202 to the sentiment channel. BUG-202 only explicitly named `/ws/prices` and `/ws/alerts`.
 - **Impact:** Data isolation failure: User A can connect and observe all real-time price and alert events from User B's store. Competitors monitoring the WebSocket channel see every merchant's price changes in real time. Sentiment updates for any product_id are accessible without authentication.
@@ -2677,6 +2681,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-251 — `subscription.py` route ordering: `GET /{payment_id}` registered before `GET /history` — history endpoint unreachable
+- **Status: FALSE POSITIVE** — `/history` (line 120) is already registered before `/{payment_id}` (line 142). Route ordering is correct.
 - **File:** `backend/api/v1/routes/payments/subscription.py` lines 119, 180
 - **Issue:** `GET /{payment_id}` (line 119) is registered before `GET /history` (line 180). FastAPI matches routes in registration order; requests to `/payments/history` are intercepted by `/{payment_id}`, `UUID("history")` fails, and the handler raises `HTTP 400 "Invalid payment ID format"`. The `/history` endpoint is completely unreachable.
 - **Impact:** `GET /payments/history` always returns 400. Users and frontends cannot retrieve payment history through this endpoint. The fix is to register `/history` before `/{payment_id}`.

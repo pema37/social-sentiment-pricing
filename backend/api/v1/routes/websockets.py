@@ -19,27 +19,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _authenticate_websocket(websocket: WebSocket, token: str | None) -> bool:
-    """Validate JWT on the WebSocket handshake. Returns True if authenticated."""
+async def _authenticate_websocket(websocket: WebSocket, token: str | None) -> str | None:
+    """Validate JWT on the WebSocket handshake. Returns user_id if authenticated, None otherwise."""
     if not token:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing authentication token")
-        return False
+        return None
 
     payload = decode_access_token(token)
     if payload is None or payload.get("sub") is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid or expired token")
-        return False
+        return None
 
-    return True
+    return str(payload["sub"])
 
 
 @router.websocket("/ws/prices")
 async def websocket_prices(websocket: WebSocket, token: str | None = Query(default=None)):
     """WebSocket endpoint for real-time price updates."""
-    if not await _authenticate_websocket(websocket, token):
+    user_id = await _authenticate_websocket(websocket, token)
+    if not user_id:
         return
 
-    await manager.connect(websocket, "prices")
+    await manager.connect(websocket, "prices", user_id)
     try:
         while True:
             data = await websocket.receive_text()
@@ -54,16 +55,17 @@ async def websocket_prices(websocket: WebSocket, token: str | None = Query(defau
             except json.JSONDecodeError:
                 await manager.send_personal(websocket, {"error": "Invalid JSON"})
     except WebSocketDisconnect:
-        manager.disconnect(websocket, "prices")
+        manager.disconnect(websocket, "prices", user_id)
 
 
 @router.websocket("/ws/alerts")
 async def websocket_alerts(websocket: WebSocket, token: str | None = Query(default=None)):
     """WebSocket endpoint for real-time alert notifications."""
-    if not await _authenticate_websocket(websocket, token):
+    user_id = await _authenticate_websocket(websocket, token)
+    if not user_id:
         return
 
-    await manager.connect(websocket, "alerts")
+    await manager.connect(websocket, "alerts", user_id)
     try:
         while True:
             data = await websocket.receive_text()
@@ -83,16 +85,17 @@ async def websocket_alerts(websocket: WebSocket, token: str | None = Query(defau
             except json.JSONDecodeError:
                 await manager.send_personal(websocket, {"error": "Invalid JSON"})
     except WebSocketDisconnect:
-        manager.disconnect(websocket, "alerts")
+        manager.disconnect(websocket, "alerts", user_id)
 
 
 @router.websocket("/ws/sentiment/{product_id}")
 async def websocket_sentiment(websocket: WebSocket, product_id: str, token: str | None = Query(default=None)):
     """WebSocket endpoint for real-time sentiment updates."""
-    if not await _authenticate_websocket(websocket, token):
+    user_id = await _authenticate_websocket(websocket, token)
+    if not user_id:
         return
 
-    await manager.connect_sentiment(websocket, product_id)
+    await manager.connect_sentiment(websocket, product_id, user_id)
     try:
         await manager.send_personal(
             websocket,
@@ -118,4 +121,4 @@ async def websocket_sentiment(websocket: WebSocket, product_id: str, token: str 
             except json.JSONDecodeError:
                 await manager.send_personal(websocket, {"error": "Invalid JSON"})
     except WebSocketDisconnect:
-        manager.disconnect_sentiment(websocket, product_id)
+        manager.disconnect_sentiment(websocket, product_id, user_id)
