@@ -289,13 +289,18 @@ export async function getPaymentHistory(
   limit: number = 20,
   offset: number = 0
 ): Promise<PaymentHistoryResponse> {
-  const apiPayments = await api.get<ApiPayment[]>('/api/v1/payments/history', { limit, offset });
-  
+  const response = await api.get<{
+    payments: ApiPayment[];
+    total: number;
+    limit: number;
+    offset: number;
+  }>('/api/v1/payments/history', { limit, offset });
+
   return {
-    payments: apiPayments.map(transformApiPayment),
-    total: apiPayments.length,
-    limit,
-    offset,
+    payments: response.payments.map(transformApiPayment),
+    total: response.total,
+    limit: response.limit,
+    offset: response.offset,
   };
 }
 

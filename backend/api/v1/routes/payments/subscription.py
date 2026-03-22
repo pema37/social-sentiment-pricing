@@ -20,6 +20,7 @@ from models.user import User
 from schemas.payment import (
     ConfirmPaymentRequest,
     ConfirmPaymentResponse,
+    PaymentHistoryResponse,
     PaymentInfo,
     PaymentRequest,
     PlanInfo,
@@ -116,7 +117,7 @@ async def subscribe(
 # =============================================================================
 
 
-@router.get("/history", response_model=list[PaymentInfo])
+@router.get("/history", response_model=PaymentHistoryResponse)
 async def get_payment_history(
     current_user: User = Depends(get_current_user),
     service: SubscriptionService = Depends(get_subscription_service),
@@ -124,9 +125,16 @@ async def get_payment_history(
     offset: int = 0,
 ):
     """Get user's payment history."""
-    return await service.get_payment_history(
+    capped_limit = min(limit, 100)
+    payments, total = await service.get_payment_history(
         user=current_user,
-        limit=min(limit, 100),  # Cap at 100
+        limit=capped_limit,
+        offset=offset,
+    )
+    return PaymentHistoryResponse(
+        payments=payments,
+        total=total,
+        limit=capped_limit,
         offset=offset,
     )
 

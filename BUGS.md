@@ -1751,6 +1751,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-088 — analytics/audit/page.tsx calls localStorage without SSR guard — crashes on server
+- **Status: FALSE POSITIVE 2026-03-22** — The code uses `getBearerToken()` from `lib/auth/token.ts`, which returns an in-memory variable (`_bearerToken`), not `localStorage`. No SSR issue exists.
 - **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx`
 - **Issue:** `getAuthToken()` calls `localStorage.getItem()` without `typeof window !== 'undefined'` guard. During SSR or Next.js static generation, `window` is undefined.
 - **Impact:** "ReferenceError: window is not defined" during build or server-side render. The audit analytics page fails to build or crashes on first render.
@@ -1758,6 +1759,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-089 — React Query data accessed before null check in analytics/audit/page.tsx
+- **Status: FALSE POSITIVE 2026-03-22** — Line 470 uses `if (!audit || audit.summary.total_products_analyzed === 0)` — the `!audit` short-circuits before accessing `.summary`. The null check is already in place.
 - **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx`
 - **Issue:** `audit.summary.total_products_analyzed` is accessed before checking whether `audit` is defined. React Query returns `undefined` until the query resolves, so on initial mount `audit` is undefined.
 - **Impact:** "Cannot read properties of undefined (reading 'summary')" crash on component mount. Audit analytics page is broken on every first load.
@@ -1765,6 +1767,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-090 — window.prompt() return value not null-checked before .length — crashes on cancel
+- **Status: FALSE POSITIVE 2026-03-22** — Line 165 has `if (!reason) return;` which catches `null` from `window.prompt()` Cancel. The `.length` access on line 167 is only reached when `reason` is a non-empty string.
 - **File:** `frontend/app/(dashboard)/pricing/recommendations/[id]/page.tsx`
 - **Issue:** `const reason = window.prompt(...)` returns `null` if the user clicks Cancel. Code immediately calls `if (reason.length < 10)` on the null return value → `TypeError: Cannot read properties of null (reading 'length')`.
 - **Impact:** App crashes whenever a user clicks Cancel on the rejection reason dialog. Recommendation rejection is broken.
@@ -1772,6 +1775,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-091 — Approval POST sends literal string "undefined" as request body
+- **Status: FALSE POSITIVE 2026-03-22** — Lines 142-152 already handle this: `if (data && Object.keys(data).length > 0)` sends body only when data exists; otherwise calls `api.post()` with no body argument.
 - **File:** `frontend/lib/api/pricing.ts`
 - **Issue:** When no modification data is provided, `api.post(url, undefined)` is called. Depending on Axios config, `JSON.stringify(undefined)` produces the string `"undefined"` or an empty body, neither of which is valid JSON. The backend expects either `{}` or `null`.
 - **Impact:** Backend returns 422 Unprocessable Entity on approve-without-modification. The approval workflow silently fails for every recommendation that doesn't have a price override.
@@ -1779,9 +1783,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-092 — Payment history total count reports page size not server total
+- **Status: FIXED 2026-03-22**
 - **File:** `frontend/lib/api/payments.ts`
 - **Issue:** `total: apiPayments.length` uses the length of the current page of results instead of the server-provided total count. If the server has 50 payment records and returns 10 per page, `total` is reported as 10.
 - **Impact:** Pagination UI always shows page size as total. Users cannot see whether there are more pages of payment history. Pagination is effectively broken.
+- **Fix:** Updated backend route to return `PaymentHistoryResponse` (with `total` from a `COUNT(*)` query) instead of bare `list[PaymentInfo]`. Updated frontend to read `response.total` from the server instead of using `apiPayments.length`.
 
 ---
 

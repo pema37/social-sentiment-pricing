@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select
 
 from models.payment import Payment
@@ -616,8 +617,14 @@ class SubscriptionService:
         user: User,
         limit: int = 20,
         offset: int = 0,
-    ) -> list[PaymentInfo]:
-        """Get user's payment history."""
+    ) -> tuple[list[PaymentInfo], int]:
+        """Get user's payment history with total count."""
+        # Count total payments for this user
+        count_result = await self.session.execute(
+            select(func.count()).select_from(Payment).where(Payment.user_id == user.id)
+        )
+        total = count_result.scalar_one()
+
         result = await self.session.execute(
             select(Payment)
             .where(Payment.user_id == user.id)
@@ -637,7 +644,7 @@ class SubscriptionService:
                 transaction_hash=p.txid,
             )
             for p in payments
-        ]
+        ], total
 
     # =========================================================================
     # HELPERS
