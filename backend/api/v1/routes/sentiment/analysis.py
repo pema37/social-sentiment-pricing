@@ -99,7 +99,7 @@ async def analyze_and_save(
     session: AsyncSession = Depends(get_session),
 ):
     """Analyze sentiment and save to database linked to a product."""
-    result = await session.execute(select(Product).where(Product.id == product_id))
+    result = await session.execute(select(Product).where(Product.id == product_id, Product.user_id == current_user.id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -156,7 +156,7 @@ async def analyze_bulk(
     session: AsyncSession = Depends(get_session),
 ):
     """Analyze multiple texts and save all to database."""
-    result = await session.execute(select(Product).where(Product.id == product_id))
+    result = await session.execute(select(Product).where(Product.id == product_id, Product.user_id == current_user.id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")

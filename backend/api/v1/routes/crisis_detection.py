@@ -1,7 +1,7 @@
 """Crisis Detection API - SSE streaming endpoint."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse

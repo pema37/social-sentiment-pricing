@@ -511,4 +511,4 @@ def filter_trusted_mentions(
 
     trusted_ids = {wm.mention_id for wm in weighted if wm.author_trust_score >= min_trust and wm.weight >= min_trust}
 
-    return [m for m in mentions if m.get("mention_id") or m.get("id") in trusted_ids]
+    return [m for m in mentions if (m.get("mention_id") or m.get("id")) in trusted_ids]

@@ -2232,6 +2232,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/ingestion_tasks.py` lines 116, 288
 - **Issue:** Line 116: `Product.keywords is not None` — Python identity check on the ORM Column descriptor; always `True`, so ALL products are fetched regardless of keywords field. Line 288: `not SocialMention.processed` — `not Column` evaluates the truthiness of the descriptor object (always truthy), producing a broken SQL filter; fetches wrong set of mentions.
 - **Impact:** Line 116 causes the ingestion task to queue social mention fetches for all products including those without keywords, creating wasted API calls. Line 288 means the `process_pending_mentions` query does not correctly filter to unprocessed mentions only.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses correct SQLAlchemy ORM methods: `Product.keywords.is_not(None)` on line 116 and `SocialMention.processed.is_(False)` on line 288.
 
 ---
 
@@ -2267,6 +2268,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/webhooks.py` lines 74–82
 - **Issue:** `if x_shopify_hmac_sha256:` — the entire HMAC check block is conditional on the header being present. Any caller that omits the `X-Shopify-Hmac-Sha256` header completely bypasses signature verification. Line 82 just logs a warning when the secret is missing, still proceeding. A malicious actor can forge any Shopify webhook by not sending the HMAC header.
 - **Impact:** Forged webhooks can trigger product syncs or deletions. Shopify's security requirement is that HMAC must always be verified; silently skipping it creates a spoofing surface.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already raises `HTTPException(status_code=401)` when HMAC header is absent (lines 76-78), properly blocking unauthenticated webhook calls.
 
 ---
 
@@ -2312,6 +2314,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/crisis_detection.py` line 20
 - **Issue:** `now = datetime.now(timezone.utc)` — but `timezone` is not imported. The file imports only `from datetime import datetime, timedelta`. `timezone` is a separate object from `datetime.timezone`.
 - **Impact:** `NameError: name 'timezone' is not defined` is raised any time `generate_mock_data()` is called (i.e., when `simulate_crisis=True` in the SSE endpoint), crashing the demo endpoint.
+- **Status: FIXED 2026-03-22** — Added `timezone` to the `from datetime import` statement.
 
 ---
 
@@ -2321,6 +2324,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/analysis.py` lines 102–105, 159–162
 - **Issue:** Both `analyze_and_save` (POST `/sentiment/analyze/{product_id}`) and `analyze_bulk` (POST `/sentiment/analyze/{product_id}/bulk`) fetch the product with `select(Product).where(Product.id == product_id)` but do NOT filter by `Product.user_id == current_user.id`. Any authenticated user can supply any product_id and write sentiment data to another user's product.
 - **Impact:** Broken access control (OWASP A01) on write paths. Attacker can pollute competitor product sentiment, trigger unwanted AI analysis jobs, and inflate their billing if sentiment calls are metered.
+- **Status: FIXED 2026-03-22** — Added `Product.user_id == current_user.id` filter to both `analyze_and_save` and `analyze_bulk` queries.
 
 ---
 
@@ -2344,6 +2348,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/trust_scoring/service.py` line 514
 - **Issue:** `return [m for m in mentions if m.get("mention_id") or m.get("id") in trusted_ids]` is parsed as `(m.get("mention_id")) or (m.get("id") in trusted_ids)`. If any mention has a `mention_id` field (truthy), it passes the filter regardless of trust score. The correct intent is `(m.get("mention_id") or m.get("id")) in trusted_ids`.
 - **Impact:** The `min_trust` filter is completely bypassed for all mentions that contain a `mention_id` key — the majority of real mentions. Low-trust and untrusted authors pass through unchecked, defeating the entire spam/bot filtering purpose.
+- **Status: FIXED 2026-03-22** — Added parentheses: `(m.get("mention_id") or m.get("id")) in trusted_ids` so the `in` check applies to the resolved ID.
 
 ---
 
