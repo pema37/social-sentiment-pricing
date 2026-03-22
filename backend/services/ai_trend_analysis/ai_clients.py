@@ -199,15 +199,27 @@ class AIClients:
         use_model: str = "openai",
     ) -> tuple[dict, str]:
         """
-        Call the specified AI model.
+        Call the specified AI model via centralized ai_generator service.
 
         Returns:
             Tuple of (response_dict, model_used)
         """
-        if use_model == "gemini" and self.gemini_client:
-            return await self.call_gemini(system_prompt, user_prompt), "gemini"
-        else:
-            return await self.call_openai(system_prompt, user_prompt), "openai"
+        from services.ai_generator import ai_generator
+
+        try:
+            result_text, provider = await ai_generator._generate(
+                system_prompt=system_prompt,
+                user_message=user_prompt,
+            )
+            text = result_text
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0]
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0]
+            return json.loads(text.strip()), provider
+        except Exception as e:
+            logger.error(f"AI call via ai_generator failed: {e}")
+            return self._get_fallback_response(), "fallback"
 
     def _get_fallback_response(self) -> dict:
         """Return a safe fallback response when AI fails."""

@@ -1,6 +1,7 @@
 # backend/api/v1/routes/alerts/crisis_detection.py
 """AI-powered crisis detection endpoint."""
 
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -137,26 +138,39 @@ async def detect_sentiment_crises(
     products_result = await session.execute(select(Product).where(Product.user_id == current_user.id))
     products = products_result.scalars().all()
 
+    if not products:
+        return CrisisDetectionResponse(
+            crises_detected=0, alerts=[], scan_period_hours=hours, ai_powered=ai_generator.is_available()
+        )
+
+    product_ids = [p.id for p in products]
+
+    # Batch fetch: all recent sentiments for user's products (1 query instead of N)
+    recent_result = await session.execute(
+        select(Sentiment)
+        .where(Sentiment.product_id.in_(product_ids))
+        .where(Sentiment.analyzed_at >= cutoff)
+    )
+    recent_by_product: dict[UUID, list] = defaultdict(list)
+    for s in recent_result.scalars().all():
+        recent_by_product[s.product_id].append(s)
+
+    # Batch fetch: all previous period sentiments (1 query instead of N)
+    previous_result = await session.execute(
+        select(Sentiment)
+        .where(Sentiment.product_id.in_(product_ids))
+        .where(Sentiment.analyzed_at >= previous_cutoff)
+        .where(Sentiment.analyzed_at < cutoff)
+    )
+    previous_by_product: dict[UUID, list] = defaultdict(list)
+    for s in previous_result.scalars().all():
+        previous_by_product[s.product_id].append(s)
+
     crises = []
 
     for product in products:
-        # Get recent sentiment
-        recent_result = await session.execute(
-            select(Sentiment)
-            .where(Sentiment.product_id == product.id)
-            .where(Sentiment.analyzed_at >= cutoff)
-            .order_by(Sentiment.analyzed_at.desc())
-        )
-        recent_sentiments = recent_result.scalars().all()
-
-        # Get previous period sentiment
-        previous_result = await session.execute(
-            select(Sentiment)
-            .where(Sentiment.product_id == product.id)
-            .where(Sentiment.analyzed_at >= previous_cutoff)
-            .where(Sentiment.analyzed_at < cutoff)
-        )
-        previous_sentiments = previous_result.scalars().all()
+        recent_sentiments = recent_by_product.get(product.id, [])
+        previous_sentiments = previous_by_product.get(product.id, [])
 
         if not recent_sentiments:
             continue

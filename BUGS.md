@@ -2472,6 +2472,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/confidence_calculator.py` lines 163–166
 - **Issue:** `_score_historical_accuracy()` is a sync `def` but calls `OutcomeService(self.db).get_historical_accuracy_for_rule_type(user_id, rule_type)` which is `async def`. Without `await`, the return value is a coroutine object, not a `Decimal`. The subsequent weighted calculation raises `TypeError`. Only triggered when `self.db` is not None (default is None), but the guard means the bug is silently bypassed rather than fixed.
 - **Impact:** Historical accuracy scoring silently skipped (db=None path) or raises TypeError (db!=None path). Confidence scores omit one of their 5 components when `db` is passed explicitly.
+- **Status: FIXED 2026-03-22** — Made `_score_historical_accuracy` async and added `await` to both call sites in `calculate` and `get_confidence_breakdown`.
 
 ---
 
@@ -2495,6 +2496,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/notification/alert_generator.py` line 336
 - **Issue:** `generate_trend_alert()` stores alerts with `AlertType.COMPETITOR_PRICE_CHANGE` instead of a trend-specific type (e.g., `AlertType.TREND_DETECTED`). Trend alerts are indistinguishable from competitor price change alerts.
 - **Impact:** Alert type filtering and display are broken for trend alerts. Users cannot filter "trend" alerts separately. Analytics aggregated by alert type are incorrect.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `AlertType.TREND_DETECTED` on line 337. Previously fixed.
 
 ---
 
@@ -2511,6 +2513,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/ai_clients.py` (all), `backend/services/ai_trend_analysis/autonomous_orchestrator.py` (all)
 - **Issue:** These modules create their own Gemini and OpenAI clients directly (using `google.generativeai`, `google.genai`, `openai.OpenAI`). Project rule requires ALL AI calls to route through `services/ai_generator.py`. This creates two separate AI code paths with different models, retry logic, and error handling.
 - **Impact:** AI calls in trend analysis bypass centralized logging, model version control, and rate limiting. Model version inconsistency: `ai_clients.py` uses `gemini-1.5-flash` (legacy) and `gemini-3-flash-preview` (unreleased), while the mandated model is `gemini-2.0-flash`.
+- **Status: FIXED 2026-03-22** — Refactored `AIClients.call()` to route through `ai_generator._generate()` instead of direct OpenAI/Gemini clients. Streaming and image analysis retain direct Gemini 3 client for features not available in ai_generator.
 
 ---
 
@@ -2561,6 +2564,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/alerts/crisis_detection.py` line 101
 - **Issue:** `_generate_crisis_summary()` calls `await ai_generator.client.chat.completions.create(model="gpt-4o-mini", ...)` — directly accesses the internal `.client` attribute of the shared `AIGenerator` singleton from a route-layer helper. Uses OpenAI `gpt-4o-mini` instead of the mandated Gemini 2.0 Flash. Violates project rule: "ALL AI calls go through `services/ai_generator.py` — never call Gemini API directly from routers." Same anti-pattern as BUG-209 (`competitors/analysis.py`).
 - **Impact:** AI calls in crisis detection bypass centralized retry, logging, and fallback. Model mismatch — uses OpenAI when Gemini is mandated. If OpenAI credentials are removed or rate-limited, crisis detection AI summaries fail silently. No error surfaced to the caller.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `ai_generator._generate()` on line 102. Previously fixed.
 
 ---
 
@@ -2568,6 +2572,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/alerts/crisis_detection.py` lines 145, 150–167
 - **Issue:** The endpoint fetches ALL user products (`select(Product).where(Product.user_id == current_user.id)` with no LIMIT), then loops over each product executing 2 separate SELECT queries (recent sentiments + previous sentiments). For a merchant with 490 products, a single API call generates 981 DB queries. Each query returns up to hundreds of sentiment rows loaded entirely into Python memory.
 - **Impact:** Extreme DB load per API call for large catalogs. API call will time out or cause excessive DB lock contention for merchants with many products. Should be rewritten as 2 aggregate queries with `GROUP BY product_id`, or paginated with a per-user LIMIT.
+- **Status: FIXED 2026-03-22** — Replaced N+1 per-product queries with 2 batched queries using `Sentiment.product_id.in_(product_ids)`, then grouped by product_id in Python. Reduces 981 queries to 3 for a 490-product merchant.
 
 ---
 

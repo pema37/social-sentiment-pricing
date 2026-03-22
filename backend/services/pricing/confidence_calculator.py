@@ -45,7 +45,7 @@ class ConfidenceCalculator:
         data_quality = self._score_data_quality(signals)
         signal_agreement = self._score_signal_agreement(price_impacts)
         rule_confidence = self._score_rule_confidence(triggered_rule_type, signals)
-        historical_accuracy = self._score_historical_accuracy(triggered_rule_type, user_id)
+        historical_accuracy = await self._score_historical_accuracy(triggered_rule_type, user_id)
         market_stability = await self._score_market_stability(product_id)
 
         # Weighted average (5 factors)
@@ -155,7 +155,7 @@ class ConfidenceCalculator:
 
         return Decimal("0.5")
 
-    def _score_historical_accuracy(self, rule_type: str | None, user_id: UUID | None) -> Decimal:
+    async def _score_historical_accuracy(self, rule_type: str | None, user_id: UUID | None) -> Decimal:
         """Score based on historical accuracy of this rule type."""
 
         if not self.db or not rule_type or not user_id:
@@ -164,7 +164,7 @@ class ConfidenceCalculator:
         from services.pricing.outcome_service import OutcomeService
 
         service = OutcomeService(self.db)
-        return service.get_historical_accuracy_for_rule_type(user_id, rule_type)
+        return await service.get_historical_accuracy_for_rule_type(user_id, rule_type)
 
     async def _score_market_stability(self, product_id: UUID | None) -> Decimal:
         """
@@ -279,7 +279,7 @@ class ConfidenceCalculator:
         data_quality = self._score_data_quality(signals)
         signal_agreement = self._score_signal_agreement(price_impacts)
         rule_confidence = self._score_rule_confidence(triggered_rule_type, signals)
-        historical_accuracy = self._score_historical_accuracy(triggered_rule_type, user_id)
+        historical_accuracy = await self._score_historical_accuracy(triggered_rule_type, user_id)
         market_stability = await self._score_market_stability(product_id)
 
         overall = await self.calculate(signals, price_impacts, triggered_rule_type, user_id, product_id)
