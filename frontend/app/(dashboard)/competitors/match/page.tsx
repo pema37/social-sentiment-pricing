@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Sparkles, HelpCircle, AlertTriangle } from 'lucide-react';
@@ -15,6 +15,14 @@ import { useToast } from '@/lib/hooks/use-toast';
 import type { MatchedProduct } from '@/types';
 
 export default function CompetitorMatchPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full" /></div>}>
+      <CompetitorMatchContent />
+    </Suspense>
+  );
+}
+
+function CompetitorMatchContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
   

@@ -2,15 +2,15 @@
 
 /**
  * OAuth Callback Handler
- * 
+ *
  * Handles the redirect from Shopify after user authorizes the app.
  * Captures OAuth params (code, state, shop) and sends to backend
  * to exchange for access token.
- * 
+ *
  * URL: /integrations/callback?code=xxx&state=xxx&shop=xxx
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api/client';
 
@@ -32,6 +32,14 @@ interface OAuthCallbackResponse {
 // ==================== Component ====================
 
 export default function OAuthCallbackPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center"><LoadingSpinner /></div>}>
+      <OAuthCallbackContent />
+    </Suspense>
+  );
+}
+
+function OAuthCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   

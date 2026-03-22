@@ -1,13 +1,21 @@
 // frontend/app/(dashboard)/integrations/claim/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api/client';
 
 type ClaimStatus = 'claiming' | 'success' | 'error';
 
 export default function ClaimIntegrationPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center"><Spinner /></div>}>
+      <ClaimIntegrationContent />
+    </Suspense>
+  );
+}
+
+function ClaimIntegrationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<ClaimStatus>('claiming');

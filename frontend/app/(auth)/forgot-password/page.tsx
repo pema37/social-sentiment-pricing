@@ -4,24 +4,31 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Button, Input } from '@/components/ui';
+import { api } from '@/lib/api/client';
 
 export default function ForgotPasswordPage() {
   // Form state
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
-    // TODO: Implement password reset API call
-    // For now, just simulate a delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    setIsLoading(false);
-    setIsSubmitted(true);
+    try {
+      await api.post('/api/v1/auth/forgot-password', { email });
+      setIsSubmitted(true);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Show success message after submission
@@ -68,6 +75,13 @@ export default function ForgotPasswordPage() {
       <p className="text-sm text-gray-500 mb-6">
         Enter your email and we&apos;ll send you a reset link.
       </p>
+
+      {/* Error message */}
+      {error && (
+        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Forgot password form */}
       <form onSubmit={handleSubmit} className="space-y-4">

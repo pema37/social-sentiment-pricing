@@ -1,7 +1,7 @@
 // frontend/app/(dashboard)/settings/billing/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardTitle } from '@/components/ui';
 import { Button } from '@/components/ui/Button';
@@ -657,6 +657,14 @@ function MneeBillingPage() {
 // =============================================================================
 
 export default function BillingSettingsPage() {
+  return (
+    <Suspense fallback={<div className="space-y-6"><Card><div className="animate-pulse"><div className="h-6 bg-gray-200 rounded w-1/3 mb-4" /><div className="h-16 bg-gray-200 rounded" /></div></Card></div>}>
+      <BillingSettingsContent />
+    </Suspense>
+  );
+}
+
+function BillingSettingsContent() {
   const { isEmbedded, shopDomain, isSessionReady } = useShopifyEmbedded();
 
   // Wait for embedded context to resolve

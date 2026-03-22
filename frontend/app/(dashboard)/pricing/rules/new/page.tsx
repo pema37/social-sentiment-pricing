@@ -3,6 +3,7 @@
 
 'use client';
 
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +15,14 @@ import { usePricingRule } from '@/lib/hooks/use-pricing';
 // ============================================
 
 export default function NewPricingRulePage() {
+  return (
+    <Suspense fallback={<div className="p-6 max-w-3xl mx-auto animate-pulse"><div className="h-10 bg-gray-200 rounded-lg mb-4" /><div className="h-32 bg-gray-200 rounded-lg" /></div>}>
+      <NewPricingRuleContent />
+    </Suspense>
+  );
+}
+
+function NewPricingRuleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const duplicateId = searchParams.get('duplicate');
