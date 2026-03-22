@@ -230,31 +230,45 @@ export default function NotificationSettingsPage() {
       </Card>
 
       {/* Email Digest */}
-      <Card>
-        <CardTitle>Email Digest</CardTitle>
-        <p className="text-sm text-gray-500 mt-1">
-          Receive a summary of your activity
-        </p>
-
-        <div className="mt-6 space-y-3">
-          <DigestOption
-            label="Daily Digest"
-            description="Get a daily summary every morning"
-            value="daily"
-          />
-          <DigestOption
-            label="Weekly Digest"
-            description="Get a weekly summary every Monday"
-            value="weekly"
-          />
-          <DigestOption
-            label="No Digest"
-            description="Only receive real-time notifications"
-            value="none"
-          />
-        </div>
-      </Card>
+      <DigestCard />
     </div>
+  );
+}
+
+function DigestCard() {
+  const [digestFrequency, setDigestFrequency] = useState('weekly');
+
+  return (
+    <Card>
+      <CardTitle>Email Digest</CardTitle>
+      <p className="text-sm text-gray-500 mt-1">
+        Receive a summary of your activity
+      </p>
+
+      <div className="mt-6 space-y-3">
+        <DigestOption
+          label="Daily Digest"
+          description="Get a daily summary every morning"
+          value="daily"
+          selected={digestFrequency === 'daily'}
+          onSelect={setDigestFrequency}
+        />
+        <DigestOption
+          label="Weekly Digest"
+          description="Get a weekly summary every Monday"
+          value="weekly"
+          selected={digestFrequency === 'weekly'}
+          onSelect={setDigestFrequency}
+        />
+        <DigestOption
+          label="No Digest"
+          description="Only receive real-time notifications"
+          value="none"
+          selected={digestFrequency === 'none'}
+          onSelect={setDigestFrequency}
+        />
+      </div>
+    </Card>
   );
 }
 
@@ -262,17 +276,19 @@ function DigestOption({
   label,
   description,
   value,
+  selected,
+  onSelect,
 }: {
   label: string;
   description: string;
   value: string;
+  selected: boolean;
+  onSelect: (value: string) => void;
 }) {
-  const [selected, setSelected] = useState(value === 'weekly');
-
   return (
     <button
       type="button"
-      onClick={() => setSelected(!selected)}
+      onClick={() => onSelect(value)}
       className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${
         selected
           ? 'border-blue-500 bg-blue-50'

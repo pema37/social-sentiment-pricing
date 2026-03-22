@@ -62,7 +62,7 @@ export function AIInsightPanel({ insight, isLoading }: AIInsightPanelProps) {
           <h3 className="text-lg font-semibold">{insight.title}</h3>
         </div>
         <Badge variant="info">
-          {insight.model_used === 'openai' ? 'GPT-4' : 'Gemini'}
+          Gemini 2.0 Flash
         </Badge>
       </div>
 

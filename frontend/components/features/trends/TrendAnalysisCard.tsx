@@ -19,7 +19,7 @@ import { getTrendDisplayInfo } from '@/types/trend-analysis';
 interface TrendAnalysisCardProps {
   analysis?: TrendAnalysisResponse;
   isLoading?: boolean;
-  onRunAnalysis?: (params: { days: number; useModel: 'openai' | 'gemini' }) => void;
+  onRunAnalysis?: (params: { days: number; useModel: 'gemini' }) => void;
 }
 
 export function TrendAnalysisCard({
@@ -28,7 +28,6 @@ export function TrendAnalysisCard({
   onRunAnalysis,
 }: TrendAnalysisCardProps) {
   const [days, setDays] = useState(30);
-  const [model, setModel] = useState<'openai' | 'gemini'>('openai');
 
   if (isLoading) {
     return (
@@ -66,7 +65,7 @@ export function TrendAnalysisCard({
         </p>
 
         {/* Configuration */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="mb-6">
           {/* Time Period */}
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">
@@ -84,26 +83,11 @@ export function TrendAnalysisCard({
               <option value={90}>Last 90 days</option>
             </select>
           </div>
-
-          {/* AI Model */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">
-              AI Model
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value as 'openai' | 'gemini')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="openai">OpenAI GPT-4</option>
-              <option value="gemini">Google Gemini</option>
-            </select>
-          </div>
         </div>
 
         {/* Run Button */}
         <Button
-          onClick={() => onRunAnalysis?.({ days, useModel: model })}
+          onClick={() => onRunAnalysis?.({ days, useModel: 'gemini' })}
           variant="primary"
           className="w-full flex items-center justify-center gap-2"
           size="lg"
@@ -116,8 +100,7 @@ export function TrendAnalysisCard({
         <div className="mt-4 flex items-center gap-2 text-xs text-gray-500">
           <Brain className="h-4 w-4" />
           <span>
-            Analysis uses {model === 'openai' ? 'GPT-4o-mini' : 'Gemini 1.5 Flash'} for
-            fast, accurate insights
+            Analysis uses Gemini 2.0 Flash for fast, accurate insights
           </span>
         </div>
       </Card>
@@ -138,7 +121,7 @@ export function TrendAnalysisCard({
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => onRunAnalysis?.({ days, useModel: model })}
+          onClick={() => onRunAnalysis?.({ days, useModel: 'gemini' })}
           className="flex items-center gap-1"
         >
           <RefreshCw className="h-3 w-3" />

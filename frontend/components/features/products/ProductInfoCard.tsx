@@ -12,6 +12,7 @@ import { Package, Tag } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import type { Product } from '@/types';
 import Image from 'next/image';
+import DOMPurify from 'dompurify';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -218,7 +219,7 @@ export function ProductInfoCard({ product }: ProductInfoCardProps) {
           {product.description && (
             <div 
               className="mt-3 text-gray-600 text-sm line-clamp-2 prose prose-sm"
-              dangerouslySetInnerHTML={{ __html: product.description }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
             />
           )}
         </div>

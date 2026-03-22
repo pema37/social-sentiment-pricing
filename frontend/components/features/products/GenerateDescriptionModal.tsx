@@ -7,6 +7,7 @@ import { AIBadge } from '@/components/ui/ai-badge';
 import { cn } from '@/lib/utils';
 import { productsApi } from '@/lib/api';
 import { Sparkles, Copy, Check, CheckCircle } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
 interface GenerateDescriptionModalProps {
   isOpen: boolean;
@@ -212,7 +213,7 @@ export function GenerateDescriptionModal({
               >
                 <div
                   className="p-3 bg-white border border-gray-200 rounded-lg text-sm prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: result.description }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(result.description) }}
                 />
               </FieldResult>
 

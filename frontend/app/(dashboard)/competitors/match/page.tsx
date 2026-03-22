@@ -31,7 +31,7 @@ function CompetitorMatchContent() {
   const createCompetitorProduct = useCreateCompetitorProduct();
   
   // Fetch the product if productId is provided
-  const { data: product } = useProduct(productId || '');
+  const { data: product } = useProduct(productId);
   
   // Track linked URLs to show checkmarks
   const [linkedUrls, setLinkedUrls] = useState<string[]>([]);

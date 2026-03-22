@@ -122,7 +122,7 @@ export function AnalyzeModal({ isOpen, onClose, defaultProductId }: AnalyzeModal
                   </svg>
                   <div>
                     <p className="text-sm font-medium text-gray-900">Use AI Analysis</p>
-                    <p className="text-xs text-gray-500">GPT-4o-mini for more accurate results</p>
+                    <p className="text-xs text-gray-500">Gemini 2.0 Flash for more accurate results</p>
                   </div>
                 </div>
                 <button

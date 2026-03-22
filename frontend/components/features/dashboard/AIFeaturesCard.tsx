@@ -25,7 +25,7 @@ interface AIFeature {
 const aiFeatures: AIFeature[] = [
   {
     name: 'AI Sentiment',
-    description: 'GPT-powered analysis',
+    description: 'AI-powered analysis',
     icon: Brain,
     href: '/sentiment',
     color: 'text-purple-600',
@@ -83,7 +83,7 @@ export function AIFeaturesCard() {
           </div>
           <CardTitle>AI Features</CardTitle>
           <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
-            GPT-4o
+            Gemini 2.0
           </span>
         </div>
       </div>
@@ -121,7 +121,7 @@ export function AIFeaturesCard() {
 
       <div className="mt-4 pt-4 border-t border-gray-100">
         <p className="text-xs text-gray-500 text-center">
-          Powered by OpenAI GPT-4o-mini • All features work with or without AI
+          Powered by Google Gemini 2.0 Flash • All features work with or without AI
         </p>
       </div>
     </Card>

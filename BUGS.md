@@ -897,6 +897,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/competitors/match/page.tsx` line 26
 - **Issue:** `useProduct(productId || '')` called when `productId` is null. Dispatches `GET /api/v1/products/` with empty string ID. Should use `enabled: !!productId`.
 - **Impact:** Spurious API request on every page load without a `productId` param.
+- **Status: FIXED 2026-03-22** — Changed `useProduct(productId || '')` to `useProduct(productId)`. The hook already accepts `string | null` and has `enabled: !!id`.
 
 ---
 
@@ -904,6 +905,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/settings/notifications/page.tsx` line 196
 - **Issue:** Each `DigestOption` has its own independent `useState(value === 'weekly')`. All three (daily/weekly/monthly) can be simultaneously checked. No shared radio-group state.
 - **Impact:** Users can select multiple digest frequencies. Even if save were fixed (BUG-068), the wrong value would be submitted.
+- **Status: FIXED 2026-03-22** — Lifted digest frequency state to parent `DigestCard` component. `DigestOption` now receives `selected` and `onSelect` props, behaving as a radio group.
 
 ---
 
@@ -911,6 +913,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/dashboard/AIFeaturesCard.tsx` lines 28, 87, 124; `frontend/components/features/competitors/AIAnalysisCard.tsx` line 66; `frontend/components/features/sentiment/analyze-modal.tsx` line 123; `frontend/components/features/trends/TrendAnalysisCard.tsx` lines 31, 98–99, 119; `frontend/components/features/trends/AIInsightPanel.tsx` line 65
 - **Issue:** UI shows "GPT-4o-mini", "GPT-4", "OpenAI GPT-4o-mini", "Gemini 1.5 Flash". Project uses Gemini 2.0 Flash exclusively. `TrendAnalysisCard` defaults state to `'openai'` and offers an "OpenAI GPT-4" option that the backend doesn't support.
 - **Impact:** Factually incorrect model attribution shown to users. OpenAI model selection in trends card triggers backend calls with unsupported model ID.
+- **Status: FIXED 2026-03-22** — Updated all model references to "Gemini 2.0 Flash" across AIFeaturesCard, AIAnalysisCard, analyze-modal, TrendAnalysisCard, and AIInsightPanel. Removed OpenAI model selector from TrendAnalysisCard; always passes `'gemini'`.
 
 ---
 
@@ -918,6 +921,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/GenerateDescriptionModal.tsx` line 211
 - **Issue:** AI-generated description rendered via `dangerouslySetInnerHTML={{ __html: result.description }}` with no client-side sanitization (e.g., DOMPurify).
 - **Impact:** Potential XSS if backend AI output ever includes script tags or event handlers.
+- **Status: FIXED 2026-03-22** — Added DOMPurify sanitization: `DOMPurify.sanitize(result.description)` before rendering.
 
 ---
 
@@ -925,6 +929,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/ProductInfoCard.tsx` lines 221–223
 - **Issue:** `dangerouslySetInnerHTML={{ __html: product.description }}` renders description HTML sourced from external merchants/stores without sanitization.
 - **Impact:** Potential XSS if a synced product description contains malicious HTML.
+- **Status: FIXED 2026-03-22** — Added DOMPurify sanitization: `DOMPurify.sanitize(product.description)` before rendering.
 
 ---
 

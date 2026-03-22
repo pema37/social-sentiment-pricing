@@ -63,7 +63,7 @@ export function AIAnalysisCard({ competitorId, competitorName }: AIAnalysisCardP
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">AI Strategy Analysis</h3>
-            <p className="text-xs text-gray-500">Powered by GPT-4o-mini</p>
+            <p className="text-xs text-gray-500">Powered by Gemini 2.0 Flash</p>
           </div>
         </div>
         
