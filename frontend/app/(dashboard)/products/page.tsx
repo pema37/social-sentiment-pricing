@@ -1,7 +1,7 @@
 // app/(dashboard)/products/page.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -70,8 +70,17 @@ export default function ProductsPage() {
   // Pagination & Search
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const pageSize = 20;
 
+  // Debounce search input to avoid excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Sorting state (default: by name ascending, like WooCommerce)
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -84,22 +93,17 @@ export default function ProductsPage() {
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // Data fetching
-  const { data, isLoading, error, refetch } = useProducts({ page, page_size: pageSize });
+  // Data fetching — search is server-side so all pages are covered
+  const { data, isLoading, error, refetch } = useProducts({
+    page,
+    page_size: pageSize,
+    search: debouncedSearch || undefined,
+  });
 
-  // Filter products by search (client-side)
-  const filteredProducts = useMemo(() => {
-    return data?.items.filter(
-      (product) =>
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
-        product.sku?.toLowerCase().includes(search.toLowerCase())
-    ) ?? [];
-  }, [data?.items, search]);
-
-  // Sort products (client-side)
+  // Sort products (client-side, page already filtered by server)
   const sortedProducts = useMemo(() => {
-    return sortProducts(filteredProducts, sortConfig);
-  }, [filteredProducts, sortConfig]);
+    return sortProducts(data?.items ?? [], sortConfig);
+  }, [data?.items, sortConfig]);
 
   // Handle sort toggle
   const handleSort = (field: SortField) => {

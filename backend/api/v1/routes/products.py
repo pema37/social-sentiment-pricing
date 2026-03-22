@@ -147,6 +147,7 @@ async def list_products(
     page_size: int = Query(default=20, ge=1, le=100),
     is_active: bool | None = Query(default=None),
     category: str | None = Query(default=None),
+    search: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     service: ProductService = Depends(get_product_service),
     session: AsyncSession = Depends(get_session),
@@ -158,6 +159,7 @@ async def list_products(
         page_size=page_size,
         is_active=is_active,
         category=category,
+        search=search,
     )
 
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1

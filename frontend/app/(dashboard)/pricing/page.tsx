@@ -55,6 +55,9 @@ export default function PricingPage() {
   const [filterStatus, setFilterStatus] = useState<RecommendationStatus | 'all'>('pending');
   const [actionLoadingId, setActionLoadingId] = useState<string | undefined>();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [rejectModalId, setRejectModalId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState('');
 
   // Fetch recommendations
   const {
@@ -151,29 +154,35 @@ export default function PricingPage() {
     [approveMutation, refetchRecommendations]
   );
 
-  // Handle reject
-  const handleReject = useCallback(
-    async (id: string) => {
-      const reason = window.prompt('Enter rejection reason:');
-      if (!reason || reason.trim().length < 10) {
-        toast.error('Please provide a reason (at least 10 characters)');
-        return;
-      }
+  // Handle reject — open modal
+  const handleReject = useCallback((id: string) => {
+    setRejectModalId(id);
+    setRejectReason('');
+    setRejectError('');
+  }, []);
 
-      setActionLoadingId(id);
-      try {
-        await rejectMutation.mutateAsync({ id, data: { reason: reason.trim() } });
-        toast.success('Recommendation rejected');
-        refetchRecommendations();
-      } catch (error) {
-        toast.error('Failed to reject recommendation');
-        console.error('Reject error:', error);
-      } finally {
-        setActionLoadingId(undefined);
-      }
-    },
-    [rejectMutation, refetchRecommendations]
-  );
+  // Handle reject confirm from modal
+  const handleRejectConfirm = useCallback(async () => {
+    if (!rejectModalId) return;
+    const trimmed = rejectReason.trim();
+    if (trimmed.length < 10) {
+      setRejectError('Please provide a reason (at least 10 characters)');
+      return;
+    }
+
+    setActionLoadingId(rejectModalId);
+    try {
+      await rejectMutation.mutateAsync({ id: rejectModalId, data: { reason: trimmed } });
+      toast.success('Recommendation rejected');
+      setRejectModalId(null);
+      refetchRecommendations();
+    } catch (error) {
+      toast.error('Failed to reject recommendation');
+      console.error('Reject error:', error);
+    } finally {
+      setActionLoadingId(undefined);
+    }
+  }, [rejectModalId, rejectReason, rejectMutation, refetchRecommendations]);
 
   // Handle view details
   const handleView = useCallback(
@@ -318,6 +327,46 @@ export default function PricingPage() {
           actionLoadingId={actionLoadingId}
           showFilters
         />
+      )}
+
+      {/* Reject Reason Modal */}
+      {rejectModalId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !actionLoadingId && setRejectModalId(null)}
+            aria-hidden="true"
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6" role="dialog" aria-modal="true">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Reject Recommendation</h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleRejectConfirm(); }}>
+              <div className="mb-4">
+                <label htmlFor="reject-reason" className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for Rejection
+                </label>
+                <textarea
+                  id="reject-reason"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Explain why this recommendation should not be applied..."
+                  rows={4}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 ${rejectError ? 'border-red-300' : 'border-gray-300'}`}
+                  disabled={!!actionLoadingId}
+                  autoFocus
+                />
+                {rejectError && <p className="mt-1 text-sm text-red-600">{rejectError}</p>}
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button variant="secondary" size="sm" type="button" onClick={() => setRejectModalId(null)} disabled={!!actionLoadingId}>
+                  Cancel
+                </Button>
+                <Button variant="danger" size="sm" type="submit" disabled={!!actionLoadingId || !rejectReason.trim()}>
+                  {actionLoadingId ? 'Rejecting...' : 'Reject'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

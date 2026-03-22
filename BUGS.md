@@ -857,6 +857,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/ws/hooks.ts` line 48
 - **Issue:** `data: Record<string, unknown>` for sentiment WS messages while `AlertMessage` and `PriceUpdateMessage` have typed `.data` sub-shapes. Typed alternatives exist in `types/sentiment.ts`.
 - **Impact:** All sentiment WebSocket consumers operate without type safety.
+- **Status: FIXED 2026-03-22** — Split into `SentimentUpdateMessage` (typed `SentimentUpdateData`) and `MentionReceivedMessage` (typed `MentionUpdateData`) with proper fields from `types/sentiment.ts`. Hook uses union type `SentimentWsMessage`.
 
 ---
 
@@ -864,6 +865,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/pricing/page.tsx` line 157; `frontend/app/(dashboard)/pricing/recommendations/[id]/page.tsx` line 163
 - **Issue:** `handleReject` calls `window.prompt('Please provide a reason for rejection:')`. Blocks the browser event loop; suppressed in Shopify embedded context.
 - **Impact:** Native dialog inconsistent with UI design system; non-functional in Shopify embedded app.
+- **Status: FIXED 2026-03-22** — Replaced `window.prompt()` with inline reject modals (textarea + confirm/cancel buttons) on both pricing pages, matching the existing `RecommendationActions` component pattern.
 
 ---
 
@@ -871,6 +873,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/products/page.tsx` line 91
 - **Issue:** `filteredProducts` filters over `data?.items` (current paginated page only). Products on other pages are invisible to search.
 - **Impact:** Search silently returns incomplete results for merchants with multiple pages of products.
+- **Status: FIXED 2026-03-22** — Added server-side `search` query parameter to backend `list_products` endpoint and `ProductService.list()` with `ilike` on name/sku. Frontend passes debounced search to API and resets to page 1.
 
 ---
 
@@ -878,6 +881,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/trends/analysis/page.tsx` line 56
 - **Issue:** `handleRunAnalysis({ days: 30, useModel: 'openai' })` — ignores user's selected time range; sends `'openai'` despite project using Gemini exclusively.
 - **Impact:** Refresh always uses 30-day window. Incorrect model identifier sent to backend.
+- **Status: FIXED 2026-03-22** — Changed to use `analysisResult.time_range_days` (falling back to 30) and `'gemini'` model.
 
 ---
 
@@ -885,6 +889,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/trends/analysis/page.tsx` lines 44, 48, 52
 - **Issue:** `handleApplyOpportunity`, `handleDismissOpportunity`, `handleAcknowledgeRisk` all only call `console.log()`. No mutations, state changes, or API calls.
 - **Impact:** Buttons appear functional but do nothing. Core market trend response actions silently unimplemented.
+- **Status: FIXED 2026-03-22** — `handleApplyOpportunity` navigates to the product page. `handleDismissOpportunity` and `handleAcknowledgeRisk` remove items from local analysis state with toast notifications.
 
 ---
 

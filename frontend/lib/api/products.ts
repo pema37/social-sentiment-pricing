@@ -41,7 +41,7 @@ export interface ImportProductsResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const productsApi = {
-  getAll: (params?: { page?: number; page_size?: number }) =>
+  getAll: (params?: { page?: number; page_size?: number; search?: string }) =>
     api.get<PaginatedProducts>('/api/v1/products', params),
 
   getById: (id: string) =>

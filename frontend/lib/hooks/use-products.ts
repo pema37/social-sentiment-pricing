@@ -27,7 +27,7 @@ export { productKeys };
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Get paginated products
-export function useProducts(params?: { page?: number; page_size?: number }) {
+export function useProducts(params?: { page?: number; page_size?: number; search?: string }) {
   return useQuery({
     queryKey: productKeys.list(params),
     queryFn: () => productsApi.getAll(params),

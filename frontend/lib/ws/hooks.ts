@@ -14,6 +14,7 @@ import {
   createSentimentClient 
 } from './client';
 import { alertKeys, productKeys, sentimentKeys } from '@/lib/api/query-keys';
+import type { SentimentLabel } from '@/types/sentiment';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -42,10 +43,42 @@ interface PriceUpdateMessage {
   };
 }
 
+interface SentimentUpdateData {
+  sentiment_score: number;
+  sentiment_label: SentimentLabel;
+  confidence: number;
+  emotions?: {
+    positive: number;
+    negative: number;
+    neutral: number;
+  };
+  topics?: string[];
+  analyzed_by?: string;
+}
+
+interface MentionUpdateData {
+  id: string;
+  source: string;
+  content: string;
+  author: string | null;
+  author_followers: number | null;
+  engagement_count: number | null;
+  url: string | null;
+  published_at: string | null;
+  sentiment_score: number | null;
+  sentiment_label: SentimentLabel | null;
+}
+
 interface SentimentUpdateMessage {
-  type: 'sentiment_update' | 'new_mention';
+  type: 'sentiment_update';
   product_id: string;
-  data: Record<string, unknown>;
+  data: SentimentUpdateData;
+}
+
+interface MentionReceivedMessage {
+  type: 'new_mention';
+  product_id: string;
+  data: MentionUpdateData;
 }
 
 interface UseWebSocketOptions {
@@ -254,14 +287,16 @@ export function useRealtimePrices(
 // useRealtimeSentiment Hook
 // ─────────────────────────────────────────────────────────────────────────────
 
+type SentimentWsMessage = SentimentUpdateMessage | MentionReceivedMessage;
+
 interface UseRealtimeSentimentOptions extends UseWebSocketOptions {
   productId: string;
   onSentimentUpdate?: (update: SentimentUpdateMessage) => void;
-  onNewMention?: (mention: SentimentUpdateMessage) => void;
+  onNewMention?: (mention: MentionReceivedMessage) => void;
 }
 
 interface UseRealtimeSentimentResult extends UseWebSocketResult {
-  latestUpdate: SentimentUpdateMessage | null;
+  latestUpdate: SentimentWsMessage | null;
 }
 
 export function useRealtimeSentiment(
@@ -280,7 +315,7 @@ export function useRealtimeSentiment(
   const queryClient = useQueryClient();
 
   const [isConnected, setIsConnected] = useState(false);
-  const [latestUpdate, setLatestUpdate] = useState<SentimentUpdateMessage | null>(null);
+  const [latestUpdate, setLatestUpdate] = useState<SentimentWsMessage | null>(null);
 
   // Initialize client, setup handlers, and connect atomically
   // Merged into one effect to prevent race between client creation and handler
@@ -312,7 +347,7 @@ export function useRealtimeSentiment(
     });
 
     const unsubMention = client.on('new_mention', (data) => {
-      const mention = data as SentimentUpdateMessage;
+      const mention = data as MentionReceivedMessage;
       setLatestUpdate(mention);
 
       // Invalidate sentiment queries

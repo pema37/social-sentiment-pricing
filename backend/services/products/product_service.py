@@ -133,6 +133,7 @@ class ProductService:
         page_size: int = 20,
         is_active: bool | None = None,
         category: str | None = None,
+        search: str | None = None,
     ) -> tuple[list[Product], int]:
         """
         List products for a user with pagination.
@@ -148,6 +149,11 @@ class ProductService:
             base_query = base_query.where(Product.is_active == is_active)
         if category:
             base_query = base_query.where(Product.category == category)
+        if search:
+            pattern = f"%{search}%"
+            base_query = base_query.where(
+                Product.name.ilike(pattern) | Product.sku.ilike(pattern)
+            )
 
         # Get total count
         count_stmt = select(func.count()).select_from(base_query.subquery())

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RefreshCw, Download, Settings, ArrowLeft, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   QuickStatsGrid,
@@ -24,8 +26,9 @@ import {
 import type { TrendAnalysisResponse, PricingOpportunity, RiskAlert } from '@/types/trend-analysis';
 
 export default function TrendAnalysisPage() {
+  const router = useRouter();
   const [analysisResult, setAnalysisResult] = useState<TrendAnalysisResponse | null>(null);
-  
+
   // Hooks
   const { data: quickStats, isLoading: statsLoading, refetch: refetchStats } = useQuickStats();
   const runAnalysis = useRunTrendAnalysis();
@@ -41,22 +44,40 @@ export default function TrendAnalysisPage() {
     setAnalysisResult(result);
   };
 
-  const handleApplyOpportunity = (opportunity: PricingOpportunity) => {
-    console.log('Applying opportunity:', opportunity);
-  };
+  const handleApplyOpportunity = useCallback((opportunity: PricingOpportunity) => {
+    toast.success(`Navigating to pricing for ${opportunity.product_name}`);
+    router.push(`/products/${opportunity.product_id}`);
+  }, [router]);
 
-  const handleDismissOpportunity = (opportunity: PricingOpportunity) => {
-    console.log('Dismissing opportunity:', opportunity);
-  };
+  const handleDismissOpportunity = useCallback((opportunity: PricingOpportunity) => {
+    if (!analysisResult) return;
+    setAnalysisResult({
+      ...analysisResult,
+      opportunities: analysisResult.opportunities.filter(
+        (o) => o.product_id !== opportunity.product_id || o.opportunity_type !== opportunity.opportunity_type
+      ),
+    });
+    toast.info(`Dismissed opportunity for ${opportunity.product_name}`);
+  }, [analysisResult]);
 
-  const handleAcknowledgeRisk = (risk: RiskAlert) => {
-    console.log('Acknowledging risk:', risk);
-  };
+  const handleAcknowledgeRisk = useCallback((risk: RiskAlert) => {
+    if (!analysisResult) return;
+    setAnalysisResult({
+      ...analysisResult,
+      risks: analysisResult.risks.filter(
+        (r) => r.title !== risk.title || r.detected_at !== risk.detected_at
+      ),
+    });
+    toast.info(`Acknowledged risk: ${risk.title}`);
+  }, [analysisResult]);
 
   const handleRefreshAll = () => {
     refetchStats();
     if (analysisResult) {
-      handleRunAnalysis({ days: 30, useModel: 'openai' });
+      handleRunAnalysis({
+        days: analysisResult.time_range_days || 30,
+        useModel: 'gemini',
+      });
     }
   };
 

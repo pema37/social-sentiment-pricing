@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -144,6 +144,10 @@ export default function RecommendationDetailPage() {
   const approveMutation = useApproveRecommendation();
   const rejectMutation = useRejectRecommendation();
 
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState('');
+
   const isPending = recommendation?.status === 'pending';
   const isIncrease = (recommendation?.change_percent ?? 0) > 0;
 
@@ -159,25 +163,31 @@ export default function RecommendationDetailPage() {
     }
   }, [recommendationId, approveMutation, refetch]);
 
-  // Handle reject
-  const handleReject = useCallback(async () => {
-    const reason = window.prompt('Please provide a reason for rejection:');
-    if (!reason) return;
+  // Handle reject — open modal
+  const handleReject = useCallback(() => {
+    setShowRejectModal(true);
+    setRejectReason('');
+    setRejectError('');
+  }, []);
 
-    if (reason.length < 10) {
-      toast.error('Please provide a more detailed reason (at least 10 characters)');
+  // Handle reject confirm from modal
+  const handleRejectConfirm = useCallback(async () => {
+    const trimmed = rejectReason.trim();
+    if (trimmed.length < 10) {
+      setRejectError('Please provide a more detailed reason (at least 10 characters)');
       return;
     }
 
     try {
-      await rejectMutation.mutateAsync({ id: recommendationId, data: { reason } });
+      await rejectMutation.mutateAsync({ id: recommendationId, data: { reason: trimmed } });
       toast.success('Recommendation rejected');
+      setShowRejectModal(false);
       refetch();
     } catch (error) {
       toast.error('Failed to reject recommendation');
       console.error('Reject error:', error);
     }
-  }, [recommendationId, rejectMutation, refetch]);
+  }, [recommendationId, rejectReason, rejectMutation, refetch]);
 
   // Loading state
   if (isLoading) {
@@ -514,9 +524,51 @@ export default function RecommendationDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Reject Reason Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !rejectMutation.isPending && setShowRejectModal(false)}
+            aria-hidden="true"
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6" role="dialog" aria-modal="true">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Reject Recommendation</h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleRejectConfirm(); }}>
+              <div className="mb-4">
+                <label htmlFor="rejection-reason" className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for Rejection
+                </label>
+                <textarea
+                  id="rejection-reason"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Explain why this recommendation should not be applied..."
+                  rows={4}
+                  className={cn(
+                    'w-full px-3 py-2 border rounded-lg text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                    'placeholder:text-gray-400',
+                    rejectError ? 'border-red-300' : 'border-gray-300'
+                  )}
+                  disabled={rejectMutation.isPending}
+                  autoFocus
+                />
+                {rejectError && <p className="mt-1 text-sm text-red-600">{rejectError}</p>}
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button variant="secondary" size="sm" type="button" onClick={() => setShowRejectModal(false)} disabled={rejectMutation.isPending}>
+                  Cancel
+                </Button>
+                <Button variant="danger" size="sm" type="submit" disabled={rejectMutation.isPending || !rejectReason.trim()}>
+                  {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-
-
