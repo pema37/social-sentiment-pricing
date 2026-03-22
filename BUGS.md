@@ -1795,6 +1795,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/intelligence/OutcomeDashboard.tsx`
 - **Issue:** `outcomes.map((outcome) => ...)` is called without a null check. If React Query returns `null` (not `[]`) or the hook fails, calling `.map()` on null throws `TypeError: Cannot read properties of null (reading 'map')`.
 - **Impact:** Outcome dashboard crashes with white screen when the API returns null for outcomes.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 253 already checks `!outcomes || outcomes.length === 0` before `.map()` on line 270.
 
 ---
 
@@ -1802,6 +1803,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/pricing/RecommendationCard.tsx` lines 189, 206
 - **Issue:** `parseFloat(current_price)` and `parseFloat(recommended_price)` called directly on backend-supplied strings without validating they are numeric. If backend returns `"pending"`, `""`, or `null`, the result is `NaN`.
 - **Impact:** Recommendation cards display "NaN" in price fields. Price change indicators show "NaN%" instead of valid values.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1809,6 +1811,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/PriceHistoryCard.tsx` line 95
 - **Issue:** `((price - previousPrice) / previousPrice) * 100` — no guard when `previousPrice === 0`. Products that start at zero price (free products, gift cards, recently imported) produce `Infinity` or `NaN`.
 - **Impact:** Price change percentage shows "Infinity%" or "NaN%" for products with a zero baseline price.
+- **Status: FIXED 2026-03-22** — Division was already guarded by truthy check, but `{previousPrice && (` rendered `0` in React for previousPrice=0. Fixed both to use explicit null/zero checks.
 
 ---
 
@@ -1816,6 +1819,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/trends/TrendAnalysisCard.tsx`
 - **Issue:** `getTrendDisplayInfo(analysis.market_sentiment)` is called without checking whether `analysis` exists. The prop is typed as optional (`analysis?: TrendAnalysisResponse`), so it can be undefined when data is loading.
 - **Impact:** "Cannot read properties of undefined (reading 'market_sentiment')" crash while trend data is loading.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 55 `if (!analysis)` returns early before line 128 accesses `analysis.market_sentiment`.
 
 ---
 
@@ -1823,6 +1827,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/payments/MNEEBalance.tsx` line 31
 - **Issue:** `parseFloat(balance).toFixed(2)` — no null check before `parseFloat()`. When the wallet is disconnected or the `useMNEE()` hook hasn't resolved, `balance` is `undefined`; `parseFloat(undefined)` returns `NaN`, then `.toFixed(2)` throws `TypeError`.
 - **Impact:** MNEEBalance component crashes on every render when no wallet is connected. Payments page shows white screen for non-connected users.
+- **Status: FIXED 2026-03-22**
 
 ---
 

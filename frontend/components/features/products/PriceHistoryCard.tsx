@@ -92,7 +92,7 @@ interface PriceHistoryItemProps {
 }
 
 function PriceHistoryItem({ price, date, previousPrice, source }: PriceHistoryItemProps) {
-  const change = previousPrice ? ((price - previousPrice) / previousPrice) * 100 : 0;
+  const change = previousPrice != null && previousPrice !== 0 ? ((price - previousPrice) / previousPrice) * 100 : 0;
   
   const changeColorClass = change > 0
     ? 'text-green-600'
@@ -110,7 +110,7 @@ function PriceHistoryItem({ price, date, previousPrice, source }: PriceHistoryIt
         </div>
       </div>
       <div className="text-right">
-        {previousPrice && (
+        {previousPrice != null && previousPrice !== 0 && (
           <p className={`text-sm font-medium ${changeColorClass}`}>
             {change >= 0 && '+'}
             {(Number(change ?? 0)).toFixed(1)}%

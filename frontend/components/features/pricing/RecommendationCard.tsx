@@ -121,6 +121,8 @@ export function RecommendationCard({
     created_at,
   } = recommendation;
 
+  const currentPriceNum = Number.isFinite(parseFloat(current_price)) ? parseFloat(current_price) : 0;
+  const recommendedPriceNum = Number.isFinite(parseFloat(recommended_price)) ? parseFloat(recommended_price) : 0;
   const isPending = status === 'pending';
   const isApplied = status === 'applied';
   const isIncrease = change_percent > 0;
@@ -186,7 +188,7 @@ export function RecommendationCard({
             Current
           </p>
           <p className="text-lg font-semibold text-gray-700">
-            {formatCurrency(parseFloat(current_price))}
+            {formatCurrency(currentPriceNum)}
           </p>
         </div>
 
@@ -203,7 +205,7 @@ export function RecommendationCard({
             Recommended
           </p>
           <p className="text-lg font-semibold text-gray-900">
-            {formatCurrency(parseFloat(recommended_price))}
+            {formatCurrency(recommendedPriceNum)}
           </p>
         </div>
       </div>

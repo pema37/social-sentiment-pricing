@@ -28,8 +28,8 @@ export function MNEEBalance({
     return null
   }
   
-  const formattedBalance = parseFloat(balance).toFixed(2)
-  
+  const formattedBalance = (parseFloat(balance) || 0).toFixed(2)
+
   const sizeClasses = {
     sm: 'text-sm',
     md: 'text-base',
@@ -42,7 +42,7 @@ export function MNEEBalance({
       onClick={() => refetchBalance()}
       title="Click to refresh"
     >
-      <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full">
+      <div className="flex items-center justify-center w-8 h-8 bg-linear-to-br from-emerald-400 to-emerald-600 rounded-full">
         <span className="text-white font-bold text-xs">M</span>
       </div>
       
@@ -88,8 +88,8 @@ export function MNEEBalanceCompact({ className = '' }: { className?: string }) {
     )
   }
   
-  const formattedBalance = parseFloat(balance).toFixed(2)
-  
+  const formattedBalance = (parseFloat(balance) || 0).toFixed(2)
+
   return (
     <span className={`font-medium ${className}`}>
       {formattedBalance} MNEE
@@ -101,10 +101,10 @@ export function MNEEBalanceCard() {
   const { isConnected } = useAccount()
   const { balance, isLoadingBalance, refetchBalance } = useMNEE()
   
-  const formattedBalance = parseFloat(balance).toFixed(2)
-  
+  const formattedBalance = (parseFloat(balance) || 0).toFixed(2)
+
   return (
-    <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
+    <div className="bg-linear-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-gray-400 text-sm font-medium">MNEE Balance</h3>
         <button
