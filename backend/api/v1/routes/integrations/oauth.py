@@ -214,8 +214,20 @@ async def oauth_callback(
         result = await db.execute(stmt)
         integration = result.scalars().first()
 
-    # 2. Fall back to shop URL lookup
+    # 2. Fall back to shop URL lookup ONLY for App Store installs (no state param).
+    #    If a state was provided but didn't match, that's suspicious — reject it.
     if not integration and shop:
+        if state:
+            # State was provided but didn't match any integration — CSRF attempt
+            logger.warning(
+                f"oauth_callback: state parameter provided but not found in DB. "
+                f"shop={shop} state={state} — possible CSRF attempt"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OAuth state parameter",
+            )
+        # No state at all — App Store install path (Shopify doesn't send state)
         stmt = select(Integration).where(
             Integration.platform == EcommercePlatform.SHOPIFY,
             Integration.store_url == shop,

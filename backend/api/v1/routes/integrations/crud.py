@@ -226,7 +226,7 @@ async def disconnect_integration(
         sync_logs = list(sync_logs_result.scalars().all())
 
         for log in sync_logs:
-            await db.delete(log)
+            db.delete(log)
 
         # Delete associated product links (foreign key constraint)
         links_stmt = select(ProductIntegrationLink).where(ProductIntegrationLink.integration_id == integration_id)
@@ -234,10 +234,10 @@ async def disconnect_integration(
         links = list(links_result.scalars().all())
 
         for link in links:
-            await db.delete(link)
+            db.delete(link)
 
         # Now delete the integration itself
-        await db.delete(integration)
+        db.delete(integration)
         await db.commit()
 
         logger.info(

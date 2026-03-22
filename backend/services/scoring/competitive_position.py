@@ -211,7 +211,7 @@ class CompetitivePositionCalculator:
         # Higher percentile = more competitors are above us = we're cheaper
         # But AnalystOutput convention: 0.0 = cheapest, 1.0 = most expensive
         # So we invert: position_index = 1 - (priced_above / total)
-        sum(1 for p in comp_prices if p > our_price)
+        priced_above = sum(1 for p in comp_prices if p > our_price)
         priced_equal = sum(1 for p in comp_prices if abs(p - our_price) < 0.01)
         total = len(comp_prices)
 

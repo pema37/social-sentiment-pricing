@@ -92,10 +92,10 @@ export function ShopifyEmbeddedProvider({ children }: Props) {
     if (!isEmbedded) return null;
 
     try {
-      const appBridge = await waitForAppBridge(3000) as { idToken?: () => Promise<string> } | null;
+      const appBridge = await waitForAppBridge(10000) as { idToken?: () => Promise<string> } | null;
 
       if (!appBridge) {
-        throw new Error('App Bridge not available after 3s');
+        throw new Error('App Bridge not available after 10s');
       }
 
       if (typeof appBridge.idToken !== 'function') {
@@ -184,8 +184,9 @@ export function ShopifyEmbeddedProvider({ children }: Props) {
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /**
- * Polls for window.shopify (App Bridge global) with timeout.
+ * Polls for window.shopify (App Bridge global) with exponential backoff.
  * App Bridge CDN script loads async, so it may not be available immediately.
+ * Starts polling at 50ms intervals, backs off to 500ms max.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function waitForAppBridge(timeoutMs: number): Promise<any> {
@@ -195,23 +196,28 @@ function waitForAppBridge(timeoutMs: number): Promise<any> {
       return;
     }
 
-    const interval = 50;
+    let interval = 50;
     let elapsed = 0;
 
-    const timer = setInterval(() => {
+    const poll = () => {
       elapsed += interval;
 
       if (typeof window !== 'undefined' && window.shopify) {
-        clearInterval(timer);
         resolve(window.shopify);
         return;
       }
 
       if (elapsed >= timeoutMs) {
-        clearInterval(timer);
         resolve(null);
+        return;
       }
-    }, interval);
+
+      // Exponential backoff: 50 → 100 → 200 → 400 → 500 (cap)
+      interval = Math.min(interval * 2, 500);
+      setTimeout(poll, interval);
+    };
+
+    setTimeout(poll, interval);
   });
 }
 

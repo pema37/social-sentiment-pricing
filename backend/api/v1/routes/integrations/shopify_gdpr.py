@@ -16,9 +16,18 @@ import hmac as hmac_lib
 import json
 import logging
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from core.config import settings
+from db.session import get_session
+from models.integration import (
+    EcommercePlatform,
+    Integration,
+    IntegrationSyncLog,
+    ProductIntegrationLink,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,22 +100,76 @@ async def customers_redact(
 async def shop_redact(
     request: Request,
     x_shopify_hmac_sha256: str | None = Header(None, alias="X-Shopify-Hmac-Sha256"),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Handle shop data deletion (48 hours after uninstall).
 
-    TODO: Implement full cleanup before going live:
-    - Delete Integration record for this shop
-    - Delete ProductIntegrationLinks
-    - Delete cached Shopify product data
-    - Audit log the deletion
+    Deletes all data associated with the shop:
+    - IntegrationSyncLog records
+    - ProductIntegrationLink records
+    - Integration record itself
     """
     body = await _verify_webhook(request, x_shopify_hmac_sha256)
 
     try:
         payload = json.loads(body)
-        logger.info(f"GDPR shop redact: shop={payload.get('shop_domain', 'unknown')}")
+        shop_domain = payload.get("shop_domain", "")
     except Exception:
-        logger.info("GDPR shop redact received")
+        logger.warning("GDPR shop redact: could not parse payload")
+        return {"status": "acknowledged", "message": "Shop data redacted"}
 
-    return {"status": "acknowledged", "message": "Shop data redaction queued"}
+    if not shop_domain:
+        logger.warning("GDPR shop redact: missing shop_domain in payload")
+        return {"status": "acknowledged", "message": "No shop_domain provided"}
+
+    logger.info(f"GDPR shop redact: starting cleanup for shop={shop_domain}")
+
+    # Find all integrations for this shop
+    stmt = select(Integration).where(
+        Integration.platform == EcommercePlatform.SHOPIFY,
+        Integration.store_url == shop_domain,
+    )
+    result = await db.execute(stmt)
+    integrations = list(result.scalars().all())
+
+    if not integrations:
+        logger.info(f"GDPR shop redact: no integrations found for shop={shop_domain}")
+        return {"status": "acknowledged", "message": "No data found for shop"}
+
+    total_logs = 0
+    total_links = 0
+
+    for integration in integrations:
+        # Delete sync logs
+        logs_stmt = select(IntegrationSyncLog).where(
+            IntegrationSyncLog.integration_id == integration.id
+        )
+        logs_result = await db.execute(logs_stmt)
+        logs = list(logs_result.scalars().all())
+        for log in logs:
+            db.delete(log)
+        total_logs += len(logs)
+
+        # Delete product links
+        links_stmt = select(ProductIntegrationLink).where(
+            ProductIntegrationLink.integration_id == integration.id
+        )
+        links_result = await db.execute(links_stmt)
+        links = list(links_result.scalars().all())
+        for link in links:
+            db.delete(link)
+        total_links += len(links)
+
+        # Delete the integration record
+        db.delete(integration)
+
+    await db.commit()
+
+    logger.info(
+        f"GDPR shop redact complete: shop={shop_domain}, "
+        f"deleted {len(integrations)} integrations, "
+        f"{total_logs} sync logs, {total_links} product links"
+    )
+
+    return {"status": "acknowledged", "message": "Shop data redacted"}
