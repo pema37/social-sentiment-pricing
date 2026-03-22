@@ -692,16 +692,20 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-087 — `EcommercePushService._services` is class-level — shared circuit breaker across all merchants
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/ecommerce_push_service.py` lines 43–58
 - **Issue:** `_services: dict[EcommercePlatform, EcommerceService] = {}` is a class variable (shared singleton). One merchant's failing integration can trip the circuit breaker and block all other merchants' price pushes.
 - **Impact:** One merchant with a dead Shopify token prevents all other merchants from pushing price changes until the circuit resets.
+- **Fix:** Moved `_services` from class-level to instance-level in `__init__`. Changed `_get_service` from `@classmethod` to regular method. Each `EcommercePushService` instance now has its own service cache.
 
 ---
 
 ## [HIGH] BUG-088 — `recommendation_service.py` calls synchronous `generate_recommendation()` without `await` in async context
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/recommendation_service.py` line 195
 - **Issue:** `_try_ie_recommendation` is `async def` but calls `orchestrator.generate_recommendation(product_context)` without `await`. `generate_recommendation` is a blocking synchronous function.
 - **Impact:** Event loop starvation during IE recommendation generation. All concurrent request handling degrades while this runs.
+- **Fix:** Wrapped the sync call with `await asyncio.to_thread(orchestrator.generate_recommendation, product_context)` to offload blocking work to a thread pool without starving the event loop.
 
 ---
 
@@ -714,6 +718,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-090 — `integration.platform.lower()` called on an enum — `AttributeError` in sync verification
+- **Status: FALSE POSITIVE 2026-03-22** — `EcommercePlatform` is `StrEnum` (inherits from `str`), not plain `Enum`. Calling `.lower()` on a `StrEnum` instance works correctly since it IS a string. No fix needed.
 - **File:** `backend/workers/tasks/sync_verification_tasks.py` lines 219, 231
 - **Issue:** `integration.platform` is `EcommercePlatform` enum. If it is a plain `Enum` (not `StrEnum`), calling `.lower()` raises `AttributeError`. Should be `integration.platform.value.lower()`.
 - **Impact:** `_verify_all_price_syncs()` crashes for every integration. Price sync verification task fails entirely.
@@ -729,9 +734,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [HIGH] BUG-092 — Python identity check bypasses SQL keyword filter — wrong products scraped
+- **Status: FIXED 2026-03-22**
 - **File:** `backend/workers/tasks/ingestion_tasks.py` line 116
 - **Issue:** `.where(Product.keywords is not None)` — Python identity check on descriptor, always `True`. No SQL `IS NOT NULL` generated. Products with null keywords included in sentiment ingestion. Should be `Product.keywords.isnot(None)`.
 - **Impact:** Keyword-based sentiment queries called with `None` keywords, causing downstream `AttributeError` or empty results for every null-keyword product.
+- **Fix:** Changed `Product.keywords is not None` to `Product.keywords.is_not(None)` to generate proper SQL `IS NOT NULL` clause.
 
 ---
 

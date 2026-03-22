@@ -113,7 +113,7 @@ async def _fetch_all_mentions(task_self):
         task_self.update_state(state="LOADING_PRODUCTS", meta={})
 
         # Get all active products that have keywords configured
-        stmt = select(Product).where(Product.keywords is not None, Product.is_active)
+        stmt = select(Product).where(Product.keywords.is_not(None), Product.is_active)
         result = await session.execute(stmt)
         products = result.scalars().all()
 

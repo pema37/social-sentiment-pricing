@@ -39,23 +39,21 @@ logger = logging.getLogger(__name__)
 class EcommercePushService:
     """Handles pushing price updates to e-commerce platforms."""
 
-    # Cached service instances (same pattern as SyncService)
-    _services: dict[EcommercePlatform, EcommerceService] = {}
-
     def __init__(self, db: AsyncSession):
         self.db = db
+        # Per-instance service cache — prevents shared circuit breaker across merchants
+        self._services: dict[EcommercePlatform, EcommerceService] = {}
 
-    @classmethod
-    def _get_service(cls, platform: EcommercePlatform) -> EcommerceService:
-        """Get the appropriate e-commerce service (cached)."""
-        if platform not in cls._services:
+    def _get_service(self, platform: EcommercePlatform) -> EcommerceService:
+        """Get the appropriate e-commerce service (cached per instance)."""
+        if platform not in self._services:
             if platform == EcommercePlatform.SHOPIFY:
-                cls._services[platform] = ShopifyService()
+                self._services[platform] = ShopifyService()
             elif platform == EcommercePlatform.WOOCOMMERCE:
-                cls._services[platform] = WooCommerceService()
+                self._services[platform] = WooCommerceService()
             else:
                 raise ValueError(f"Unsupported platform: {platform}")
-        return cls._services[platform]
+        return self._services[platform]
 
     async def push_price(self, product: Product) -> dict:
         """

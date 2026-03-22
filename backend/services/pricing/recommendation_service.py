@@ -22,6 +22,7 @@ If IE is enabled and succeeds, uses its suggested price + calibrated confidence.
 If IE fails or is disabled, falls back to existing PipelineAdapter flow unchanged.
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -192,7 +193,7 @@ class RecommendationService:
             )
 
             # Generate IE recommendation
-            ie_result = orchestrator.generate_recommendation(product_context)
+            ie_result = await asyncio.to_thread(orchestrator.generate_recommendation, product_context)
 
             if ie_result.status in (IEStatus.SUCCESS, IEStatus.PARTIAL):
                 logger.info(
