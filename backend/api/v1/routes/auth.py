@@ -11,11 +11,12 @@ PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
 from collections.abc import Callable
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from core.config import settings
 from core.rate_limit import AUTH_RATE_LIMIT, PASSWORD_RESET_RATE_LIMIT, REGISTER_RATE_LIMIT, limiter
 from core.security import (
     create_access_token,
@@ -42,6 +43,40 @@ from schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login/oauth")
+
+# Cookie settings for httpOnly JWT storage (BUG-001 fix)
+_COOKIE_SECURE = settings.ENVIRONMENT != "development"
+_COOKIE_SAMESITE: str = "none" if _COOKIE_SECURE else "lax"
+_ACCESS_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+_REFRESH_MAX_AGE = 7 * 24 * 60 * 60  # 7 days
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Set httpOnly cookies for both tokens on the response."""
+    response.set_cookie(
+        key="ssp_access_token",
+        value=access_token,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite=_COOKIE_SAMESITE,
+        max_age=_ACCESS_MAX_AGE,
+        path="/",
+    )
+    response.set_cookie(
+        key="ssp_refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite=_COOKIE_SAMESITE,
+        max_age=_REFRESH_MAX_AGE,
+        path="/",
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    """Delete httpOnly auth cookies."""
+    response.delete_cookie("ssp_access_token", path="/")
+    response.delete_cookie("ssp_refresh_token", path="/")
 
 
 # ───────────────────── Role hierarchy ───────────────────── #
@@ -158,9 +193,10 @@ async def register(
 async def login(
     request: Request,
     payload: LoginRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ):
-    """Login and receive JWT tokens (JSON body)."""
+    """Login and receive JWT tokens (JSON body + httpOnly cookies)."""
     email = payload.email.lower()
     result = await session.execute(select(User).where(User.email == email))
     user = result.scalars().first()
@@ -185,6 +221,8 @@ async def login(
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
+    _set_auth_cookies(response, access_token, refresh_token)
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -195,6 +233,7 @@ async def login(
 @limiter.limit(AUTH_RATE_LIMIT)
 async def login_oauth(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
 ):
@@ -223,6 +262,8 @@ async def login_oauth(
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
+    _set_auth_cookies(response, access_token, refresh_token)
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -233,19 +274,33 @@ async def login_oauth(
 @limiter.limit(AUTH_RATE_LIMIT)
 async def refresh_tokens(
     request: Request,
-    payload: RefreshRequest,
+    response: Response,
+    payload: RefreshRequest | None = Body(default=None),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Get new access token using a valid refresh token.
 
-    This endpoint allows the frontend to silently refresh the session
-    without forcing the user to re-login.
+    Reads the refresh token from:
+      1. httpOnly cookie ``ssp_refresh_token`` (preferred — browser clients)
+      2. JSON body ``refresh_token`` field (fallback — API clients)
     """
+    # Prefer httpOnly cookie, fall back to request body
+    raw_token = request.cookies.get("ssp_refresh_token")
+    if not raw_token and payload and payload.refresh_token:
+        raw_token = payload.refresh_token
+
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token provided",
+        )
+
     # Decode the refresh token
-    token_payload = decode_refresh_token(payload.refresh_token)
+    token_payload = decode_refresh_token(raw_token)
 
     if token_payload is None:
+        _clear_auth_cookies(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
@@ -290,10 +345,19 @@ async def refresh_tokens(
     new_access_token = create_access_token(token_data)
     new_refresh_token = create_refresh_token(token_data)
 
+    _set_auth_cookies(response, new_access_token, new_refresh_token)
+
     return TokenResponse(
         access_token=new_access_token,
         refresh_token=new_refresh_token,
     )
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(response: Response):
+    """Clear httpOnly auth cookies."""
+    _clear_auth_cookies(response)
+    return {"message": "Logged out"}
 
 
 @router.get("/me", response_model=UserResponse)

@@ -1,7 +1,6 @@
 // lib/api/products.ts
 
 import { api } from './client';
-import { getToken } from '@/lib/auth/token';
 import type {
   Product,
   PaginatedProducts,
@@ -72,22 +71,7 @@ export const productsApi = {
   import: (data: ImportProductsRequest) =>
     api.post<ImportProductsResponse>('/api/v1/products/import', data),
 
-  // TEMPORARY: hardcoded URL to test backend
-  generateDescription: async (id: string, options: { tone: string; length: string }) => {
-    const token = getToken();
-    const res = await fetch(
-      `https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/products/${id}/generate-description`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify(options),
-      }
-    );
-    if (!res.ok) throw new Error('Failed to generate');
-    return res.json();
-  },
+  generateDescription: (id: string, options: { tone: string; length: string }) =>
+    api.post(`/api/v1/products/${id}/generate-description`, options),
 };
 

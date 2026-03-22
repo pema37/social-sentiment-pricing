@@ -47,9 +47,9 @@ function formatDate(iso: string): string {
 }
 
 function getAuthToken(): string {
-  return typeof window !== 'undefined'
-    ? localStorage.getItem('access_token') || ''
-    : '';
+  // BUG-001 fix: token is now in httpOnly cookie, not localStorage.
+  // Return empty string — the cookie is sent via credentials: 'include'.
+  return '';
 }
 
 // ── PDF Export Hook ──────────────────────────────────────────
@@ -62,9 +62,9 @@ function useExportPdf() {
     try {
       const resp = await fetch(`${API_BASE}/api/v1/audit/retrospective/pdf`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({ lookback_days: lookbackDays }),
       });
@@ -108,9 +108,9 @@ function useEmailAudit() {
     try {
       const resp = await fetch(`${API_BASE}/api/v1/audit/retrospective/email`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify(payload),
       });

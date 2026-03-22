@@ -7,12 +7,11 @@
  * PATCHED (2025-01-15): Integrated centralized error parsing from errors.ts
  */
 
-import { 
-  getToken, 
-  setToken, 
+import {
+  getBearerToken,
+  setToken,
   setRefreshToken,
-  getRefreshToken, 
-  removeAllTokens 
+  removeAllTokens
 } from '@/lib/auth/token';
 import { ErrorCodes, type ErrorCode } from '@/lib/api/errors';
 
@@ -68,37 +67,34 @@ let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
 
 /**
- * Attempt to refresh the access token using the refresh token.
+ * Attempt to refresh the access token using the httpOnly refresh cookie.
+ * The cookie is sent automatically via credentials: 'include'.
  */
 async function refreshAccessToken(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  
-  if (!refreshToken) {
-    return false;
-  }
-  
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/refresh`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    
+
     if (!response.ok) {
       return false;
     }
-    
+
     const data = await response.json();
-    
+
+    // Backend sets new httpOnly cookies automatically.
+    // Update the hint cookie so middleware stays in sync.
     if (data.access_token) {
       setToken(data.access_token);
     }
     if (data.refresh_token) {
       setRefreshToken(data.refresh_token);
     }
-    
+
     return true;
   } catch {
     return false;
@@ -270,16 +266,20 @@ export async function apiClient<T>(
 ): Promise<T> {
   const { method = 'GET', body, headers = {}, params, _isRetry = false } = options;
   
-  const token = getToken();
   const queryString = buildQueryString(params);
   const url = `${getApiBaseUrl()}${endpoint}${queryString}`;
-  
+
+  // Shopify embedded flow: App Bridge session token sent as Bearer header.
+  // Regular flow: httpOnly cookies sent automatically via credentials: 'include'.
+  const bearer = getBearerToken();
+
   const config: RequestInit = {
     method,
     cache: 'no-store',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(bearer && { Authorization: `Bearer ${bearer}` }),
       ...headers,
     },
   };

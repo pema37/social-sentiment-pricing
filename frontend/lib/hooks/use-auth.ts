@@ -9,11 +9,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/lib/api';
-import { 
-  setToken, 
-  setRefreshToken,
-  removeAllTokens, 
-  getToken 
+import {
+  setToken,
+  removeAllTokens,
+  isAuthenticated
 } from '@/lib/auth/token';
 import { useRouter } from 'next/navigation';
 
@@ -28,7 +27,7 @@ export function useUser() {
   return useQuery({
     queryKey: authKeys.user(),
     queryFn: () => authApi.me(),
-    enabled: !!getToken(),
+    enabled: isAuthenticated(),
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
   });
@@ -43,14 +42,9 @@ export function useLogin() {
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       authApi.login(email, password),
     onSuccess: (data) => {
-      // Store access token
+      // Backend sets httpOnly cookies automatically.
+      // Set the hint cookie so Next.js middleware knows we're logged in.
       setToken(data.access_token);
-      
-      // BUGFIX: Store refresh token for silent session renewal
-      // Without this, users get "Not authenticated" after 30 min
-      if (data.refresh_token) {
-        setRefreshToken(data.refresh_token);
-      }
       
       queryClient.invalidateQueries({ queryKey: authKeys.user() });
       
@@ -96,9 +90,17 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
-      // Clear both access and refresh tokens
+      // Clear httpOnly cookies on the backend
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/auth/logout`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch {
+        // Best-effort — cookies will expire anyway
+      }
+      // Clear the hint cookie
       removeAllTokens();
-      return Promise.resolve();
     },
     onSuccess: () => {
       queryClient.clear();

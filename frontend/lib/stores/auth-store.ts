@@ -9,7 +9,7 @@
  */
 
 import { create } from 'zustand';
-import { getToken, setTokens, removeAllTokens } from '@/lib/auth/token';
+import { isAuthenticated as hasAuth, setTokens, removeAllTokens } from '@/lib/auth/token';
 import { authApi, ApiError } from '@/lib/api';
 import type { User } from '@/types';
 
@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Call the login API
       const response = await authApi.login(email, password);
       
-      // Save BOTH tokens to localStorage
+      // Backend sets httpOnly cookies. Set hint cookie for middleware.
       setTokens(response.access_token, response.refresh_token);
       
       // Fetch the user's profile data
@@ -77,16 +77,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   
   logout: () => {
-    // Remove ALL tokens from localStorage
+    // Clear hint cookie (httpOnly cookies cleared by backend /auth/logout)
     removeAllTokens();
-    // Clear user from state
     set({ user: null, isAuthenticated: false });
   },
-  
+
   checkAuth: async () => {
-    const token = getToken();
-    
-    if (!token) {
+    if (!hasAuth()) {
       set({ isLoading: false, isAuthenticated: false });
       return;
     }

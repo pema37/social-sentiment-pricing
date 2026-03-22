@@ -2,89 +2,124 @@
 
 /**
  * Token Management Utilities
- * Handles storing/retrieving JWT tokens from browser localStorage
- * 
- * PATCHED (2025-01-07): Added refresh token support to prevent session timeouts.
- * PATCHED (2026-02-23): Added ssp_auth cookie flag so middleware.ts can detect
- *   auth state server-side. The cookie is just a boolean hint (no sensitive data).
- *   Actual JWT validation still happens client-side in the Zustand auth store.
+ *
+ * FIXED (2026-03-21): BUG-001 — Removed localStorage JWT storage.
+ * JWTs are now stored in httpOnly cookies set by the backend.
+ * JavaScript cannot read the actual tokens (that's the point — XSS-safe).
+ *
+ * This module manages:
+ *  - The `ssp_auth` hint cookie (non-httpOnly) so Next.js middleware can
+ *    detect auth state server-side and prevent flash of unauthorized content.
+ *  - An in-memory bearer token for the Shopify embedded flow, where App
+ *    Bridge session tokens must be sent as Authorization headers.
+ *
+ * Regular browser auth: httpOnly cookies (credentials: 'include').
+ * Shopify embedded auth: in-memory bearer token (Authorization header).
  */
 
-const ACCESS_TOKEN_KEY = 'ssp_access_token';
-const REFRESH_TOKEN_KEY = 'ssp_refresh_token';
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Access Token
+// In-memory token for Shopify embedded flow
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Get the access token from localStorage */
-export function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(ACCESS_TOKEN_KEY);
+let _bearerToken: string | null = null;
+
+/**
+ * Returns the in-memory bearer token if one has been set (Shopify embedded),
+ * or null if the regular httpOnly cookie flow is in use.
+ */
+export function getBearerToken(): string | null {
+  return _bearerToken;
 }
 
-/** Save the access token to localStorage */
-export function setToken(token: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+// ─────────────────────────────────────────────────────────────────────────────
+// Hint cookie helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function hasHintCookie(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie.split(';').some(c => c.trim().startsWith('ssp_auth=1'));
+}
+
+function setHintCookie(): void {
+  if (typeof document === 'undefined') return;
   document.cookie = 'ssp_auth=1; path=/; max-age=604800; SameSite=Lax';
 }
 
-/** Remove the access token from localStorage */
-export function removeToken(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
+function clearHintCookie(): void {
+  if (typeof document === 'undefined') return;
   document.cookie = 'ssp_auth=; path=/; max-age=0';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Refresh Token
+// Public API — signatures preserved for callers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Get the refresh token from localStorage */
-export function getRefreshToken(): string | null {
+/**
+ * Check whether the user has an active auth session.
+ * Returns the in-memory bearer token (Shopify embedded) or a truthy hint
+ * string when httpOnly cookies are in use. Returns null if not authenticated.
+ */
+export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  return _bearerToken ?? (hasHintCookie() ? 'httponly' : null);
 }
 
-/** Save the refresh token to localStorage */
-export function setRefreshToken(token: string): void {
+/**
+ * Store a token. For regular login the actual JWT lives in an httpOnly cookie
+ * set by the backend — this just sets the hint cookie. For Shopify embedded
+ * flow, the App Bridge session token is held in memory so the API client can
+ * send it as a Bearer header.
+ */
+export function setToken(token: string): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  _bearerToken = token === 'httponly' ? null : token;
+  setHintCookie();
 }
 
-/** Remove the refresh token from localStorage */
+/** Clear the auth hint cookie and in-memory token. */
+export function removeToken(): void {
+  if (typeof window === 'undefined') return;
+  _bearerToken = null;
+  clearHintCookie();
+}
+
+/**
+ * Refresh tokens are now stored in httpOnly cookies by the backend.
+ * These functions are kept for API compatibility but are no-ops.
+ */
+export function getRefreshToken(): string | null {
+  return hasHintCookie() ? 'httponly' : null;
+}
+
+export function setRefreshToken(_token: string): void {
+  // No-op: backend sets the httpOnly cookie directly
+}
+
 export function removeRefreshToken(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  // No-op: cleared by backend /auth/logout or cookie expiry
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Combined Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Save both tokens at once (after login) */
-export function setTokens(accessToken: string, refreshToken?: string): void {
+/** Store tokens after login. Sets hint cookie and optional in-memory bearer. */
+export function setTokens(accessToken: string, _refreshToken?: string): void {
   setToken(accessToken);
-  if (refreshToken) {
-    setRefreshToken(refreshToken);
-  }
 }
 
-/** Remove all tokens (logout) */
+/** Clear all auth state. */
 export function removeAllTokens(): void {
-  removeToken();
-  removeRefreshToken();
+  _bearerToken = null;
+  clearHintCookie();
 }
 
-/** Check if user is authenticated (has an access token) */
+/** Check if user is authenticated (in-memory token or hint cookie present). */
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  return _bearerToken !== null || hasHintCookie();
 }
 
-/** Check if we can attempt a refresh (has a refresh token) */
+/** Check if we can attempt a refresh (hint cookie present). */
 export function canRefresh(): boolean {
-  return !!getRefreshToken();
+  return hasHintCookie();
 }
-
-
