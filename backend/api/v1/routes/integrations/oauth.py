@@ -282,7 +282,7 @@ async def oauth_callback(
     if oauth_result.scope:
         integration.scopes = oauth_result.scope.split(",")
 
-    integration.status = IntegrationStatus.ACTIVE
+    integration.status = IntegrationStatus.ACTIVE if integration.user_id is not None else IntegrationStatus.DISCONNECTED
     integration.oauth_state = None
     integration.error_message = None
     integration.updated_at = datetime.now(UTC)

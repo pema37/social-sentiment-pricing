@@ -116,6 +116,21 @@ async def subscribe(
 # =============================================================================
 
 
+@router.get("/history", response_model=list[PaymentInfo])
+async def get_payment_history(
+    current_user: User = Depends(get_current_user),
+    service: SubscriptionService = Depends(get_subscription_service),
+    limit: int = 20,
+    offset: int = 0,
+):
+    """Get user's payment history."""
+    return await service.get_payment_history(
+        user=current_user,
+        limit=min(limit, 100),  # Cap at 100
+        offset=offset,
+    )
+
+
 @router.get("/{payment_id}", response_model=PaymentInfo)
 async def get_payment(
     payment_id: str,
@@ -175,18 +190,3 @@ async def confirm_payment(
         )
 
     return result
-
-
-@router.get("/history", response_model=list[PaymentInfo])
-async def get_payment_history(
-    current_user: User = Depends(get_current_user),
-    service: SubscriptionService = Depends(get_subscription_service),
-    limit: int = 20,
-    offset: int = 0,
-):
-    """Get user's payment history."""
-    return await service.get_payment_history(
-        user=current_user,
-        limit=min(limit, 100),  # Cap at 100
-        offset=offset,
-    )

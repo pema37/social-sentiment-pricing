@@ -62,6 +62,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/oauth.py` lines 181–190
 - **Issue:** Fallback path 3 creates a new integration stub with `user_id=None` (no assignment). If the merchant closes the browser before completing the claim flow, the integration stays in DB with `status=ACTIVE` and `user_id=None` indefinitely.
 - **Impact:** Accumulation of orphaned active integrations. Re-installs may find stale records and skip OAuth. DB integrity broken.
+- **Status: FIXED 2026-03-22** — Integration stays DISCONNECTED when user_id is None; only set to ACTIVE when user_id is present.
 
 ---
 
@@ -101,6 +102,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/matching.py` lines 490–530
 - **Issue:** Two concurrent auto-link requests for the same product both pass the existence check, both call `db.add(competitor)` + `await db.flush()`, and both proceed to create product links. The first `await db.commit()` at line 529 succeeds; the second also commits (no unique constraint on competitor URL per user). Duplicate competitor rows are created.
 - **Impact:** Same competitor appears multiple times in the competitor list. Price scraping runs twice for the same URL, doubling API usage. Deduplication logic downstream is not guaranteed.
+- **Status: FIXED 2026-03-22** — Moved `db.commit()` outside the loop so all links are created in a single transaction.
 
 ---
 
@@ -478,6 +480,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 548–557
 - **Issue:** When JSON parsing of the Scout Agent response fails, the fallback returns a `MarketSignal` with hardcoded values: `competitor_name="CompetitorX"`, `competitor_price=89.99`, `price_change_pct=-15.1`, `confidence=0.85`. These fabricated signals pass through Analyst and Strategist agents as real data.
 - **Impact:** Autonomous pricing decisions made on fake data whenever the AI response is malformed. A corrupted Scout response triggers a real on-chain price change recommendation based on fictional intelligence.
+- **Status: FIXED 2026-03-22** — Replaced hardcoded fallback with `raise RuntimeError` to halt the pipeline on parse failure.
 
 ---
 
@@ -509,6 +512,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/payments/subscription.py` lines 119, 180
 - **Issue:** `GET /{payment_id}` is registered before `GET /history`. FastAPI matches in declaration order — `/history` is captured by `/{payment_id}` with `payment_id="history"`, returning 404.
 - **Impact:** `getPaymentHistory()` and `usePaymentHistory()` always fail. Payment history page is entirely broken.
+- **Status: FIXED 2026-03-22** — Moved `GET /history` before `GET /{payment_id}` so the static route matches first.
 
 ---
 
@@ -1672,6 +1676,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/page.tsx`
 - **Issue:** `const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://social-sentiment-pricing-staging-2ecd.up.railway.app'` — Railway staging URL is hardcoded as the fallback. If `NEXT_PUBLIC_API_URL` is unset in a production Vercel deploy, the Shopify install OAuth flow redirects to the staging backend.
 - **Impact:** Shopify merchant install attempts from production hit staging backend. OAuth flow fails or stores credentials against staging DB. Merchants cannot connect their store.
+- **Status: FIXED 2026-03-22** — Removed hardcoded staging URL; throws error if `NEXT_PUBLIC_API_URL` is not set.
 
 ---
 

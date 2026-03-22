@@ -526,11 +526,16 @@ async def _auto_link_competitors(
                     }
                 )
 
-            await db.commit()
-
         except Exception as e:
             logger.error(f"Failed to auto-link {match.url}: {e}")
             await db.rollback()
+
+    try:
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to commit auto-linked competitors: {e}")
+        await db.rollback()
+        return []
 
     logger.info(f"Auto-linked {len(links_created)} competitors for product {product.id}")
 

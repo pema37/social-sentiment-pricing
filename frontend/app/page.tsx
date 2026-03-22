@@ -12,7 +12,10 @@ export default async function Home({
   
   // Shopify install flow: redirect to backend install endpoint
   if (params.shop) {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://social-sentiment-pricing-staging-2ecd.up.railway.app';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!backendUrl) {
+      throw new Error('NEXT_PUBLIC_API_URL environment variable is not set');
+    }
     redirect(`${backendUrl}/api/v1/integrations/shopify/install?shop=${params.shop}`);
   }
 

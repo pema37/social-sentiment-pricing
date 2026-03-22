@@ -545,16 +545,8 @@ Return a structured MarketSignal.""",
             data = json.loads(response.text)
             return MarketSignal(**data)
         except (json.JSONDecodeError, Exception) as e:
-            logger.warning(f"Scout parse fallback: {e}")
-            return MarketSignal(
-                competitor_name="CompetitorX",
-                competitor_price=89.99,
-                price_change_pct=-15.1,
-                signal_type="price_drop",
-                product_category=product_category,
-                source="google_search",
-                confidence=0.85,
-            )
+            logger.error(f"Scout agent failed to parse response: {e}")
+            raise RuntimeError(f"Scout agent produced unparseable response: {e}") from e
 
     async def _run_analyst(self, signal: MarketSignal) -> MarketAssessment:
         """
