@@ -150,7 +150,6 @@ async def list_products(
     search: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     service: ProductService = Depends(get_product_service),
-    session: AsyncSession = Depends(get_session),
 ):
     """List all products for the current user with pagination."""
     products, total = await service.list(
@@ -167,7 +166,7 @@ async def list_products(
     # ─────────────────────────────────────────────────────────────────────
     # FIX BUG-005: Enrich products with platform links (single batch query)
     # ─────────────────────────────────────────────────────────────────────
-    platform_map = await _enrich_with_platform_links(products, current_user.id, session)
+    platform_map = await _enrich_with_platform_links(products, current_user.id, service.session)
 
     # Convert ORM objects to response dicts with platform data
     items = []

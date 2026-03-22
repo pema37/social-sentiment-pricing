@@ -67,7 +67,7 @@ export function useProductOpportunity(productId: string) {
     queryKey: trendAnalysisKeys.opportunity(productId),
     queryFn: () => analyzeProductOpportunity(productId),
     staleTime: 5 * 60_000,
-    enabled: !!productId,
+    enabled: false,
   });
 }
 

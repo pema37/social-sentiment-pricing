@@ -1017,6 +1017,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-integrations.ts` lines 180, 361
 - **Issue:** `useSyncPolling` key: `[...integrationKeys.syncStatus(id), 'polling']`; `useSyncStatus` key: `integrationKeys.syncStatus(id)`. Two separate cache entries for the same URL — doubled requests, inconsistent data.
 - **Impact:** Same sync status endpoint fetched twice simultaneously from independent cache slots.
+- **Status: FIXED 2026-03-22** — Removed `'polling'` suffix from `useSyncPolling` queryKey so both hooks share the same cache entry.
 
 ---
 
@@ -1024,6 +1025,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-trend-analysis.ts` lines 65–71
 - **Issue:** `enabled: !!productId` auto-fetches on mount. Other analysis queries correctly use `enabled: false`. AI analysis calls are expensive and should be user-triggered.
 - **Impact:** Every product detail page mount triggers an AI backend call, risking rate-limit hits and unnecessary AI cost.
+- **Status: FIXED 2026-03-22** — Changed `enabled: !!productId` to `enabled: false` so the query is only triggered explicitly by user action.
 
 ---
 
@@ -1031,6 +1033,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/auth.py` lines 390–392
 - **Issue:** After successful password reset, the JWT reset token is not stored in a denylist. The same token remains valid until its natural expiry and can reset the password again.
 - **Impact:** Intercepted reset token can be reused by attacker after legitimate user has already reset.
+- **Status: FIXED 2026-03-22** — Added `iat` claim to reset tokens. `reset_password` now checks token `iat` against `user.updated_at` — if the user was modified after the token was issued (i.e., password already reset), the token is rejected.
 
 ---
 
@@ -1038,6 +1041,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/auth.py` lines 341–346
 - **Issue:** When user does not exist, function returns immediately. When user exists, `create_reset_token` is called before returning. Observable timing difference enables user enumeration.
 - **Impact:** User existence enumerable via timing side-channel on the forgot-password endpoint.
+- **Status: FIXED 2026-03-22** — Added dummy `create_reset_token` call on not-found and inactive-user paths to equalize timing.
 
 ---
 
@@ -1045,6 +1049,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/products.py` lines 143–153
 - **Issue:** `list_products` injects both `service: ProductService = Depends(get_product_service)` and `session: AsyncSession = Depends(get_session)`. `get_product_service` also calls `Depends(get_session)`. FastAPI creates two separate sessions.
 - **Impact:** Two sessions can observe different transaction states. Wastes a DB connection per request.
+- **Status: FIXED 2026-03-22** — Removed standalone `session` parameter from `list_products`. Platform link enrichment now uses `service.session` for a single shared session.
 
 ---
 

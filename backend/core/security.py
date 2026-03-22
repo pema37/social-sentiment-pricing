@@ -80,10 +80,12 @@ def create_reset_token(user_id: str) -> str:
     """
     Create a password reset token (30-min expiry).
     """
-    expire = datetime.now(UTC) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    now = datetime.now(UTC)
+    expire = now + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
     to_encode = {
         "sub": user_id,
         "exp": expire,
+        "iat": now,
         "type": "reset",
     }
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

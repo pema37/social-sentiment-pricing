@@ -18,7 +18,11 @@ from sqlmodel import select
 
 from core.config import settings
 from core.rate_limit import AUTH_RATE_LIMIT, PASSWORD_RESET_RATE_LIMIT, REGISTER_RATE_LIMIT, limiter
+from jose import JWTError, jwt
+
 from core.security import (
+    ALGORITHM,
+    SECRET_KEY,
     create_access_token,
     create_refresh_token,
     create_reset_token,
@@ -397,9 +401,11 @@ async def forgot_password(
     user = result.scalars().first()
 
     if not user:
+        create_reset_token("00000000-0000-0000-0000-000000000000")
         return {"message": "If that email exists, a reset link has been sent"}
 
     if not user.is_active:
+        create_reset_token("00000000-0000-0000-0000-000000000000")
         return {"message": "If that email exists, a reset link has been sent"}
 
     reset_token = create_reset_token(str(user.id))
@@ -440,6 +446,19 @@ async def reset_password(
     user = await session.get(User, user_uuid)
 
     if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    # Reject reused tokens: if password was changed after token was issued,
+    # the token has already been consumed (BUG-126)
+    try:
+        token_payload = jwt.decode(payload.token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_iat = token_payload.get("iat", 0)
+    except JWTError:
+        token_iat = 0
+    if user.updated_at and token_iat and user.updated_at.timestamp() > token_iat:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token",

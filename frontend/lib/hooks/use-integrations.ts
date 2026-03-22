@@ -369,7 +369,7 @@ export function useSyncPolling(integrationId: string | null) {
   const isTimedOut = timeoutInfo.forIntegrationId === integrationId && timeoutInfo.isTimedOut;
   
   const query = useQuery({
-    queryKey: [...integrationKeys.syncStatus(integrationId || ''), 'polling'] as const,
+    queryKey: integrationKeys.syncStatus(integrationId || ''),
     queryFn: () => integrationsApi.getSyncStatus(integrationId!),
     enabled: !!integrationId,
     refetchInterval: (query) => {
