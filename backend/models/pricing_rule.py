@@ -102,7 +102,9 @@ class PricingRule(SQLModel, table=True):
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     )
-    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    updated_at: datetime | None = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=True, default=lambda: datetime.now(UTC))
+    )
 
     class Config:
         use_enum_values = True

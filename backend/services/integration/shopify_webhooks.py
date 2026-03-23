@@ -107,5 +107,7 @@ class ShopifyWebhooksMixin:
         return success
 
     def verify_webhook_signature(self, payload: bytes, signature: str, secret: str) -> bool:
+        if signature.startswith("sha256="):
+            signature = signature[7:]
         computed = base64.b64encode(hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()
         return hmac.compare_digest(computed, signature)

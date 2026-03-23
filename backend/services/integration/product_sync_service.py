@@ -230,7 +230,7 @@ class ProductSyncService:
         MIGRATED from: POST /admin/api/2024-01/products.json
         MIGRATED to:   POST /admin/api/2024-01/graphql.json (productCreate mutation)
         """
-        import httpx
+        from services.integration.http_client import RetryableClient
 
         try:
             access_token = decrypt_token(integration.access_token_encrypted)
@@ -276,7 +276,7 @@ class ProductSyncService:
                 ],
             }
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with RetryableClient(store_url, "shopify", timeout=30.0) as client:
                 response = await client.post(
                     graphql_url,
                     json={"query": mutation, "variables": {"input": product_input}},

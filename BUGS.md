@@ -1315,6 +1315,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/sentiment/retrieval.py` lines 120, 138
 - **Issue:** `DELETE /{sentiment_id}` has no `status_code=status.HTTP_204_NO_CONTENT` and returns `{"status": "deleted", "sentiment_id": ...}`.
 - **Impact:** Incorrect HTTP semantics; clients expecting 204 handle this as a failed delete.
+- **Status: FIXED 2026-03-22** — Added `status_code=status.HTTP_204_NO_CONTENT` to decorator and return `Response(status_code=204)` instead of JSON body.
 
 ---
 
@@ -1322,6 +1323,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/schemas/products.py` line 29; `backend/models/product.py` line 50
 - **Issue:** Schema defaults `sentiment_multiplier` to `Decimal("0.1")`; model defaults to `Decimal("0.2")`. New products via API get half the intended sentiment impact.
 - **Impact:** Pricing recommendations for new products use half the intended sentiment weighting.
+- **Status: FALSE POSITIVE 2026-03-22** — Schema already defaults to `Decimal("0.2")`, matching the model. Bug was previously fixed.
 
 ---
 
@@ -1329,6 +1331,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/pricing_rule.py` line 105
 - **Issue:** `updated_at: datetime | None = Field(default=None)` — all other `updated_at` fields default to creation time. Sorting rules by `updated_at` is non-deterministic for all unmodified rules.
 - **Impact:** Rule ordering by `updated_at` treats all unmodified rules as equivalent nulls.
+- **Status: FIXED 2026-03-22** — Changed `updated_at` to use `default=lambda: datetime.now(UTC)` via sa_column, matching the `created_at` pattern.
 
 ---
 
@@ -1336,6 +1339,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/product_sync_service.py` lines 279–296
 - **Issue:** Uses a raw `httpx.AsyncClient` instead of `RetryableClient`. Transient Shopify errors not retried; 429 rate-limit responses not backed off; circuit breaker state not updated.
 - **Impact:** Product creation mutations unprotected from transient failures and rate limiting.
+- **Status: FIXED 2026-03-22** — Replaced `httpx.AsyncClient` with `RetryableClient` from `services.integration.http_client`, gaining retry, rate-limit backoff, and circuit breaker support.
 
 ---
 
@@ -1343,6 +1347,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/shopify_webhooks.py` line 110
 - **Issue:** Shopify prepends `sha256=` to `X-Shopify-Hmac-SHA256` header values. If the caller does not strip this prefix before passing to `verify_webhook_signature`, every HMAC comparison fails and all webhooks are rejected.
 - **Impact:** All Shopify webhooks rejected as invalid if the prefix is not stripped upstream.
+- **Status: FIXED 2026-03-22** — Added `sha256=` prefix stripping in `verify_webhook_signature` before HMAC comparison.
 
 ---
 

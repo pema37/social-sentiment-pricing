@@ -3,7 +3,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -139,7 +139,7 @@ async def get_product_sentiment_summary(
     )
 
 
-@router.delete("/{sentiment_id}")
+@router.delete("/{sentiment_id}", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit(WRITE_RATE_LIMIT)
 async def delete_sentiment(
     request: Request,
@@ -161,7 +161,7 @@ async def delete_sentiment(
     await session.delete(record)
     await session.commit()
 
-    return {"status": "deleted", "sentiment_id": str(sentiment_id)}
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/mentions/{product_id}", response_model=PaginatedResponse[SocialMentionResponse])
