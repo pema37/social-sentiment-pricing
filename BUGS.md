@@ -1,5 +1,5 @@
 # ActualPrice — Bug Audit
-**Date:** 2026-03-21 | **Branch:** develop | **Auditor:** Claude Code
+**Date:** 2026-03-22 | **Branch:** develop | **Auditor:** pema37
 
 Full codebase audit across Shopify integration, backend services, and frontend.
 Ordered by severity. Fix CRITICAL issues before next staging deploy.
@@ -7,6 +7,276 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## CRITICAL
+
+---
+
+## [CRITICAL] BUG-054 — `analytics/audit` page reads JWT from localStorage and bypasses API client
+- **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx` lines 51, 63, 109
+- **Issue:** `getAuthToken()` reads `localStorage.getItem('access_token')`. Two raw `fetch()` calls with manual `Authorization: Bearer` headers bypass the `@/lib/api/client` Axios instance (no auth interceptor, no token refresh, no error normalization).
+- **Impact:** Auth is bypassed on this page; session expiry is silently unhandled; token exposed in JS.
+
+---
+
+## [CRITICAL] BUG-057 — `setState` called during render in `PayWithMNEE`
+- **File:** `frontend/components/features/payments/PayWithMNEE.tsx` lines 69–76
+- **Issue:** `setCallbackFired(true)` and `onSuccess`/`onError` callbacks invoked directly in the render function body (not inside `useEffect`), causing state updates during render.
+- **Impact:** "Cannot update a component while rendering a different component" React errors. Infinite render loops. Broken payment callback flow.
+
+---
+
+## [CRITICAL] BUG-130 — 313.01: Railway staging ENCRYPTION_KEY mismatch — all integrations fail with "stored credentials invalid"
+- **File:** `backend/core/encryption.py`; Railway staging env vars; `backend/api/v1/routes/integrations/oauth.py`
+- **Issue:** The `ENCRYPTION_KEY` on Railway staging does not match the key that was used to encrypt tokens when merchants first connected their stores. Every call to `decrypt_token()` raises `cryptography.fernet.InvalidToken`, which the integration layer surfaces as "Stored credentials are invalid. Please reconnect." All merchant integrations (both Shopify and WooCommerce) are broken on staging.
+- **Root cause (deployment):** Key was either never set, was regenerated without re-encrypting stored tokens, or staging was redeployed with a fresh key. See `core/encryption.py` Shopify rules: "To fix: either restore original key OR delete integration record and re-OAuth. Never rotate ENCRYPTION_KEY without re-encrypting all existing tokens first."
+- **Cascading effect:** 490 unlinked products (BUG-129), all diagnostic failures (310.01), all price sync failures, all pricing recommendation pushes blocked.
+- **Fix:** Check Railway staging → Settings → Environment Variables. Verify `ENCRYPTION_KEY` is set to the original Fernet key used at first deploy. If lost, delete all integration records and ask merchants to re-OAuth. See also BUG-004 and BUG-005 (code-level encryption bugs).
+- **Impact:** Every merchant on staging cannot use any integration. Entire platform is non-functional. Shopify App Store submission blocked.
+
+---
+
+## HIGH
+
+---
+
+## [HIGH] BUG-008 — os.getenv() called outside core/config.py in multiple services
+- **File:** `backend/workers/celery_app.py` line 23; `backend/services/ai_trend_analysis/autonomous_orchestrator.py`; `backend/services/competitor_matching/providers/serpapi.py`; `backend/services/competitor_matching/providers/google_custom.py`
+- **Issue:** Direct `os.getenv()` / `os.environ.get()` calls scattered across services. Project rule: all env vars must go through `settings.*` in `core/config.py` only.
+- **Impact:** API keys are not validated at startup. Celery workers read Redis URL independently — if changed in Railway, only `core/config.py` callers pick it up. Silent misconfiguration failures in prod.
+
+---
+
+## [HIGH] BUG-009 — Celery task engine creates new DB pool per task — file handle exhaustion
+- **File:** `backend/workers/tasks/pricing_tasks.py` lines 51–83
+- **Issue:** Each task calls `get_task_session_maker()` which creates a new async engine with `NullPool` but never closes the engine. Under concurrent load this exhausts OS file handles.
+- **Impact:** After ~1000 task invocations Celery workers crash with `EMFILE: too many open files`. Pricing recommendation and sync tasks stop processing.
+
+---
+
+## [HIGH] BUG-012 — Unhandled ValueError propagates from decrypt_token() to API callers
+- **File:** `backend/core/encryption.py` lines 25–26
+- **Issue:** `decrypt_token()` re-raises as `ValueError` on `InvalidToken`. Callers in `oauth.py`, `shopify_billing.py`, `shopify_service.py` etc. have no try/except around it. FastAPI catches it as a 500.
+- **Impact:** Any request that touches a stale, pending, or key-mismatched token returns an unhandled 500 to the frontend instead of a recoverable `401/403` with a reconnect prompt.
+
+---
+
+## [HIGH] BUG-060 — product_sync.py imports get_db instead of get_session — endpoints crash on call
+- **File:** `backend/api/v1/routes/product_sync.py` lines 22, 174
+- **Issue:** `from db.session import get_db` — `get_db` does not exist in `db/session.py`. The correct dependency is `get_session`. Import succeeds if `get_db` is accidentally exported somewhere, but the injected session will be wrong type.
+- **Impact:** All product sync route endpoints (`/product-sync/*`) fail at dependency injection with `ImportError` or inject the wrong session, causing silent DB errors.
+
+---
+
+## [HIGH] BUG-074 — Alchemy API key hardcoded in source
+- **File:** `frontend/lib/web3/config.ts` line 80
+- **Issue:** `http('https://eth-sepolia.g.alchemy.com/v2/i1syJSaaz92esG2J-4NG0')` — Alchemy project API key committed to source.
+- **Impact:** Key publicly visible. Anyone can consume the project's Alchemy rate limit/quota.
+
+---
+
+## [HIGH] BUG-076 — Direct OpenAI API calls in `competitors/analysis.py` and `crisis_detection.py`
+- **File:** `backend/api/v1/routes/competitors/analysis.py` line 354; `backend/api/v1/routes/alerts/crisis_detection.py` line 101
+- **Issue:** Both call `ai_generator.client.chat.completions.create(model="gpt-4o-mini", ...)` directly on the underlying OpenAI client, bypassing `services/ai_generator.py`. Project mandates all AI through the central service using `gemini-2.0-flash`.
+- **Impact:** Calls fail if only Gemini key is configured; no centralized rate limiting or model-swap capability.
+
+---
+
+## [HIGH] BUG-078 — `sentiment/tasks.py` fetch task missing product ownership check
+- **File:** `backend/api/v1/routes/sentiment/tasks.py` lines 32–35
+- **Issue:** `POST /fetch/{product_id}` fetches the product without checking `product.user_id == current_user.id`. Any user can dispatch an expensive Celery scraping task against any product.
+- **Impact:** Resource exhaustion and unauthorized task dispatch against arbitrary products.
+
+---
+
+## [HIGH] BUG-294 — `trends/page.tsx` uses raw `fetch()` without auth token for both API calls
+- **File:** `frontend/app/(dashboard)/trends/page.tsx` lines 35, 52
+- **Issue:** Both `queryFn` functions use bare `fetch(\`${API_URL}/api/v1/market-trends/...\`)` with `process.env.NEXT_PUBLIC_API_URL` as the base URL (line 26) rather than the centralised `api` client (`@/lib/api/client`). Neither call includes an `Authorization: Bearer` header. The `api` client handles auth token injection, token refresh, and error normalisation.
+- **Impact:** Market trends endpoints receive unauthenticated requests and will return 401, silently rendering the page empty. If the backend ever enforces auth on these endpoints, the feature breaks completely with no user-visible error. Consistent with BUG-054 pattern but a new, previously unlisted file.
+
+---
+
+## MEDIUM
+
+---
+
+## [MEDIUM] BUG-080 — Webhook delivery doesn't retry on HTTP 5xx — alerts silently dropped
+- **File:** `backend/services/notification/webhook_service.py` lines 141–142
+- **Issue:** Retry logic only triggers on connection errors and timeouts. HTTP 502, 503, 504 from a temporarily overloaded webhook receiver are treated as permanent failures. Delivery is marked as failed with no retry.
+- **Impact:** Any temporary outage on the user's webhook receiver causes permanent alert loss. Merchants don't know their webhook endpoint was down — they just silently stop receiving alerts.
+
+---
+
+## [MEDIUM] BUG-081 — ai_generator.py and ai_support_service.py use "gemini-2.0-flash-exp" not "gemini-2.0-flash"
+- **File:** `backend/services/ai_generator.py` line 50; `backend/services/ai_support_service.py` line 111
+- **Issue:** Model identifier `"gemini-2.0-flash-exp"` uses the experimental suffix. Project rules mandate `"gemini-2.0-flash"` exactly. The `-exp` variant may have different rate limits, quota restrictions, or behavioral differences.
+- **Impact:** Main AI entry point uses a non-standard model variant. If Google deprecates or changes the `-exp` model, all AI-powered features (pricing recommendations, competitor analysis, support) silently break or produce inconsistent results.
+
+---
+
+## [MEDIUM] BUG-099 — PLATFORM_CONFIGS accessed with unvalidated platform key — crashes on unknown platform
+- **File:** `frontend/app/(dashboard)/integrations/[id]/page.tsx`
+- **Issue:** `const config = PLATFORM_CONFIGS[integration.platform]` — if the DB record has a platform value not in `PLATFORM_CONFIGS` (e.g., a future platform or corrupted data), `config` is `undefined`, and the subsequent `config.logo` access crashes.
+- **Impact:** Integration detail page crashes with "Cannot read properties of undefined (reading 'logo')" for any integration with an unrecognized platform value.
+
+---
+
+## [MEDIUM] BUG-100 — productsData?.items.find() crashes when items is null
+- **File:** `frontend/app/(dashboard)/sentiment/page.tsx`
+- **Issue:** `productsData?.items.find(...)` — optional chaining only guards against `productsData` being nullish, not `productsData.items`. If `productsData` is defined but `items` is `null`, `null.find(...)` throws.
+- **Impact:** Sentiment page crashes if the products API returns a response object with a null items array.
+
+---
+
+## [MEDIUM] BUG-101 — useProduct hook called with empty string when no productId is selected
+- **File:** `frontend/app/(dashboard)/competitors/match/page.tsx`
+- **Issue:** `useProduct(productId || '')` passes empty string `''` to the hook when `productId` is null. This fires an API request to `GET /api/v1/products/` (empty ID) on every render without a selected product.
+- **Impact:** Unnecessary 404 API errors on every page load. If the API endpoint mishandles empty IDs (e.g., list endpoint), may return unintended data.
+
+---
+
+## [MEDIUM] BUG-102 — sessionStorage used for auth redirect in login page (security violation)
+- **File:** `frontend/app/(auth)/login/page.tsx`
+- **Issue:** `sessionStorage.getItem('redirectAfterLogin')` / `sessionStorage.setItem(...)` used for post-login redirect. Project security rules require httpOnly cookies for all auth-related storage. `sessionStorage` is accessible to JavaScript and violates the same-policy as `localStorage`.
+- **Impact:** Security violation consistent with BUG-001. Additionally crashes during SSR (`window is not defined`).
+
+---
+
+## [MEDIUM] BUG-103 — setInterval in ShopifyEmbeddedProvider not cleaned up on unmount
+- **File:** `frontend/lib/context/shopify-embedded.tsx`
+- **Issue:** `waitForAppBridge()` uses `setInterval` to poll for `window.shopify`. The interval is cleared on success, but if the component unmounts while the promise is still pending, the interval continues running, capturing stale closures.
+- **Impact:** Memory leak — polling interval continues after provider unmounts. May call `setState` on an unmounted component, causing React warnings or crashes.
+
+---
+
+## [MEDIUM] BUG-104 — useOutcomeDashboard hardcodes calibration window to 90 days regardless of parameter
+- **File:** `frontend/lib/hooks/use-outcomes.ts`
+- **Issue:** `useConfidenceCalibration({ days: 90 })` always passes `90` regardless of the `days` parameter passed to `useOutcomeDashboard`. The accuracy stats query uses the passed `days` but calibration data is always 90-day window.
+- **Impact:** Calibration chart always shows 90-day window even when user selects a different time range. Analytics data is inconsistent within the same dashboard view.
+
+---
+
+## [MEDIUM] BUG-105 — competitorProductToFormData uses || instead of ?? for match_confidence — zeroes become 1.0
+- **File:** `frontend/lib/domain/competitors.ts`
+- **Issue:** `decimalToFormString(cp.match_confidence) || '1.0'` — when `match_confidence` is `0`, `decimalToFormString` returns `'0'` which is falsy; the `||` operator replaces it with `'1.0'`. Should use `??` (nullish coalescing).
+- **Impact:** Competitor products with zero confidence scores silently display as 100% confidence. Merchants see misleading match confidence data.
+
+---
+
+## [MEDIUM] BUG-106 — useProductMatch doesn't invalidate per-product competitor query after auto-link
+- **File:** `frontend/lib/hooks/use-competitor-matching.ts`
+- **Issue:** After an auto-link mutation succeeds, the code invalidates `competitorKeys.products()` and `competitorKeys.all` but not the per-product competitor query key (`competitorKeys.productCompetitors(productId)`). Product detail page still shows old competitor list.
+- **Impact:** Newly linked competitors don't appear on the product detail page until a manual page refresh. Creates confusing UX where the action appears to have no effect.
+
+---
+
+## [MEDIUM] BUG-107 — Outcomes API treats zero-revenue outcomes as unmeasured (falsy check instead of null check)
+- **File:** `frontend/lib/api/outcomes.ts`
+- **Issue:** `outcome.revenue_7d_after ? parseFloat(...) : null` — a truthy check is used instead of `!= null`. When backend returns `"0"` (zero revenue), the check evaluates to falsy, returning `null` instead of `0`.
+- **Impact:** Price changes with zero revenue impact are shown as "not yet measured" instead of "$0.00 impact". Analytics dashboard misrepresents all zero-revenue outcomes.
+
+---
+
+## [MEDIUM] BUG-108 — Trend analysis API interpolates model name into URL without encoding
+- **File:** `frontend/lib/api/trend-analysis.ts`
+- **Issue:** `` `?use_model=${useModel}` `` appends model name directly to URL without `encodeURIComponent()`. Model names containing `+`, `&`, `=`, or `/` would break URL parsing.
+- **Impact:** Trend analysis requests silently fail or hit wrong endpoint if model name contains reserved URL characters.
+
+---
+
+## [MEDIUM] BUG-109 — CalibrationChart uses double-cast `as unknown as` bypassing type safety
+- **File:** `frontend/components/features/intelligence/CalibrationChart.tsx`
+- **Issue:** `(report?.confidence_bands ?? []) as unknown as CalibrationBand[]` — the double cast silently accepts any shape and bypasses TypeScript's structural check. If the backend changes the shape of `confidence_bands`, the chart will silently render incorrect data or crash.
+- **Impact:** Calibration chart renders wrong data without any type error. Shape changes from backend are invisible until visual regression.
+
+---
+
+## [MEDIUM] BUG-110 — LinkProductForm isSubmitting prop is received but never used — double-submission possible
+- **File:** `frontend/components/features/integrations/LinkProductForm.tsx`
+- **Issue:** The component accepts `isSubmitting` as a prop and uses it in the button's `disabled` condition, but the parent component passes a static value and doesn't update it based on mutation state. The button can be re-clicked during submission.
+- **Impact:** Users can submit the link form multiple times in rapid succession, creating duplicate competitor product links.
+
+---
+
+## [MEDIUM] BUG-111 — EthWalletCard shows "0.00 MNEE" when balance fetch fails instead of error state
+- **File:** `frontend/components/features/payments/EthWalletCard.tsx`
+- **Issue:** `Number(undefined)` returns `NaN`; the balance formatter displays "0.00" as a fallback without distinguishing between a real zero balance and a failed load.
+- **Impact:** Users see "0.00 MNEE" when the balance failed to load, mistakenly believing they have no funds rather than experiencing a connectivity issue.
+
+---
+
+## [MEDIUM] BUG-112 — PaymentHistory crashes or renders broken UI on unrecognized payment status
+- **File:** `frontend/components/features/payments/PaymentHistory.tsx`
+- **Issue:** `STATUS_CONFIG[payment.status]` — if the backend returns a new status value not present in `STATUS_CONFIG`, this returns `undefined`. Subsequent access to `statusConfig.icon` or `statusConfig.color` throws.
+- **Impact:** PaymentHistory component crashes for any payment with a status not in the hardcoded config map. Adding a new backend status breaks the entire payment history view.
+
+---
+
+## [MEDIUM] BUG-113 — Sentiment API silently maps content→text field with no schema validation
+- **File:** `frontend/lib/api/sentiment.ts`
+- **Issue:** Frontend sends `{ text: content, ... }` but the field name mapping (`content` → `text`) is undocumented and not validated against the backend Pydantic schema. If the backend expects `content`, all sentiment analysis requests return 422 Unprocessable Entity.
+- **Impact:** Sentiment analysis submissions either silently fail (if backend accepts `text`) or return validation errors. No test coverage catches backend field name drift.
+
+---
+
+## [MEDIUM] BUG-114 — alerts/[id]/page.tsx crashes when alert.created_at is null
+- **File:** `frontend/app/(dashboard)/alerts/[id]/page.tsx`
+- **Issue:** `format(new Date(alert.created_at), 'PPp')` — `new Date(null)` produces an Invalid Date object, and `date-fns format()` throws "Invalid time value" when given an invalid Date.
+- **Impact:** Alert detail page crashes with unhandled error for any alert record where `created_at` is null or an invalid timestamp.
+
+---
+
+## ENHANCEMENTS
+
+---
+
+## [ENHANCEMENT] ENH-001 — Rules and recommendations must indicate which store(s) they apply to
+- **Files:** `backend/models/pricing_rule.py`; `backend/models/price_recommendation.py`; `backend/api/v1/routes/pricing/rules.py`; `frontend/components/features/pricing/RuleCard.tsx`
+- **Gap:** `PricingRule` model has no `integration_id` or `applies_to_stores` field. Rules apply globally across all connected stores. `PriceRecommendation` has `applied_to_platform` (string, e.g. "Shopify") but no `integration_id` — when multiple stores of the same platform are connected, it's ambiguous which store a recommendation was applied to.
+- **Required:** Add nullable `integration_id` FK to `PricingRule`. Add `integration_id` to `PriceRecommendation`. Update rule evaluation to scope per integration. Update `RuleCard` and recommendation display to show store badge.
+
+---
+
+## [ENHANCEMENT] ENH-002 — Collections model: rules for Shopify/WooCommerce collections show member products
+- **Files:** No collection model exists; `backend/models/pricing_rule.py`; `backend/services/integration/shopify_service.py`
+- **Gap:** No `Collection` model in the backend. `PricingRule` supports `applies_to_categories` (flat string list) but not platform collections. Shopify collections (smart/manual) and WooCommerce product categories cannot be used as rule scopes. Merchants using Shopify collections to group products cannot apply pricing rules at the collection level.
+- **Required:** Sync Shopify collections and WooCommerce categories on product sync. Create `Collection` model (id, name, platform, integration_id, member product IDs). Add `applies_to_collections` to `PricingRule`. Update rule evaluation to resolve collection → product IDs. Add collection member list to `RuleCard` UI.
+
+---
+
+## [ENHANCEMENT] ENH-003 — AI auto-generation of competitor fields: current price, description, product URL
+- **Files:** `backend/services/ai_generator.py`; `backend/schemas/agent_contracts/scout.py`; `backend/services/competitor_scraper.py`; `backend/models/competitor_product.py`
+- **Gap:** Scout agent outputs `CompetitorPrice` (price, url, is_on_sale) but only via scraper. When scraper fails to extract price (invalid CSS selector, JS-rendered price, CAPTCHA), no AI fallback infers price from page HTML/metadata. No AI function generates competitor product description or validates the product URL. `CompetitorProduct` model has no `description` field.
+- **Required:** Add `generate_competitor_current_price(html: str) -> Decimal` to `ai_generator.py` as Gemini fallback when scraper fails. Add `generate_competitor_product_description(html: str) -> str`. Add `description` field to `CompetitorProduct`. Wire AI fallback into `competitor_scraper.py` on extraction failure. Track confidence: AI-inferred vs scraped.
+
+---
+
+## [ENHANCEMENT] ENH-004 — Pricing history of dropshipper products with time dimension for outreach proposals
+- **Files:** `backend/models/competitor_price_history.py`; `backend/models/retrospective_audit.py`; `backend/api/v1/routes/prospect_audit.py`; `frontend/app/(dashboard)/analytics/page.tsx`
+- **Gap:** `CompetitorPriceHistory` tracks price-over-time with `observed_at` timestamps, but: (1) no competitor tagging system to mark a competitor as a "drop shipper"; (2) no outreach proposal generator that shows a prospect how a drop shipper's price history maps to missed margin opportunities; (3) prospect audit route is unauthenticated/teaser-only — authenticated merchants can't generate custom outreach proposals; (4) analytics page has 7/14/30/90-day views but no time-series chart for competitor price evolution.
+- **Required:** Add `competitor_type` field (e.g., `drop_shipper`, `manufacturer`, `retailer`) to `Competitor` model. Build `OutreachProposalService` that takes competitor_id + date range → generates PDF/JSON report with price timeline and projected savings. Add authenticated endpoint `POST /api/v1/proposals/generate`. Add time-series competitor price chart to analytics.
+
+---
+
+## [ENHANCEMENT] ENH-005 — Quarterly ActualPrice impact view: revenue with different rule/competitor sets over time
+- **Files:** `backend/models/retrospective_audit.py`; `backend/api/v1/routes/prospect_audit.py`; `frontend/app/(dashboard)/analytics/page.tsx`; `frontend/app/(dashboard)/pricing/` (no simulation page exists)
+- **Gap:** `RetrospectiveAudit` model stores quarterly impact projections but only for the unauthenticated teaser flow. No authenticated "What-if simulation" exists: a merchant cannot say "show me Q1-Q4 revenue impact if I apply Rule A vs Rule B". No quarterly time bucketing in the analytics dashboard. No `PricingScenario` model for saving rule + competitor combinations.
+- **Required:** Create `PricingScenario` model. Build `POST /api/v1/pricing/simulation/quarterly` endpoint — takes scenario config → returns quarterly revenue projections. Add "Quarterly Impact" dashboard page with: Q1–Q4 revenue bars, scenario comparison overlay, rule effectiveness by season. Add quarterly granularity to existing time-range selector.
+
+---
+
+## [ENHANCEMENT] ENH-006 — AP-INTAKE-001: Universal Product Intake Layer
+- **Files:** `backend/api/v1/routes/products_import.py`; `backend/services/products/import_service.py`; `backend/services/integration/shopify_products.py`; `backend/services/integration/woocommerce_service.py`
+- **Current state:** `POST /api/v1/products/import` accepts JSON array only (max 1000 products). No CSV/XLSX parsing. No file upload endpoint. No fuzzy column mapping. No dry-run mode. No platform adapter pattern — Shopify and WooCommerce sync are independent pipelines. No competitor attachment after bulk import.
+- **Gap summary:**
+  - Phase 1 (Intake Parser): No file upload endpoint; no CSV/XLSX parsers; no column fuzzy-mapper; no dry_run parameter in import service
+  - Phase 2 (Platform Adapters): Import is JSON-only; no Shopify CSV format adapter (`Handle`→`sku`, `Title`→`name`); no WooCommerce CSV adapter; adding a new platform requires touching multiple files
+  - Phase 3 (Competitor Attachment): `CompetitorMatchingService` exists but is not wired to import workflow; imported products have no competitors auto-attached; Scout agent is not triggered post-import
+- **Required:** New endpoint `POST /api/v1/intake/upload` (multipart); file format detector; CSV/XLSX parsers; fuzzy column mapper service; `dry_run: bool` param in `import_service.py`; refactor Shopify/WooCommerce sync to adapter pattern; post-import async Celery task to trigger competitor matching.
+
+---
+
+---
+
+## FIXED
 
 ---
 
@@ -66,64 +336,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [CRITICAL] BUG-037 — Competitive position calculation is fully inverted — all merchants get wrong signals *(FIXED 2026-03-21)*
-- **File:** `backend/services/scoring/competitive_position.py` line 214
-- **Issue:** `sum(1 for p in comp_prices if p > our_price)` computes the count of competitors priced above our price but the result is **never assigned to a variable** — it is immediately discarded. `priced_above` is therefore undefined. The percentile rank `((priced_below + 0.5 * priced_equal) / total) * 100.0` uses only `priced_below`, making `position_index=1.0` mean "most expensive" but the calculation points in the wrong direction. "Underpriced" products register as high-percentile and get a "raise price" signal. "Overpriced" products register as low-percentile and get a "lower price" signal — the exact opposite of correct.
-- **Impact:** ALL competitive pricing recommendations are directionally wrong. Merchants who rely on competitive positioning will raise prices when they should lower them and vice versa. Revenue impact for every merchant using this signal.
-- **Fix:** Assigned the discarded expression to `priced_above` variable. The percentile formula using `priced_below` is mathematically equivalent to the intended `1 - (priced_above / total)` approach.
-
----
-
-## [CRITICAL] BUG-038 — await db.delete() crashes hard deletes — integration removal broken *(FIXED 2026-03-21)*
-- **File:** `backend/api/v1/routes/integrations/crud.py` lines 229, 237, 240
-- **Issue:** `await db.delete(log)`, `await db.delete(link)`, `await db.delete(integration)` — `Session.delete()` is a synchronous method and is not awaitable. Awaiting it raises `TypeError: object NoneType can't be used in 'await' expression` at runtime.
-- **Impact:** Every attempt to hard-delete a disconnected integration crashes with a 500. Merchants cannot remove integrations from the UI. Orphaned records accumulate permanently.
-- **Fix:** Removed `await` from all `db.delete()` calls. `Session.delete()` is synchronous — it marks the object for deletion, and the subsequent `await db.commit()` persists the change.
-
----
-
-## [CRITICAL] BUG-039 — autonomous_orchestrator.py uses wrong Gemini model and calls API directly
-- **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 22–23
-- **Issue:** (1) `GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")` uses a non-existent model ID — project rule mandates `gemini-2.0-flash`. (2) `client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))` instantiates a Gemini client directly, bypassing `services/ai_generator.py`. (3) Both env vars use `os.getenv()` instead of `settings.*`.
-- **Impact:** Trend analysis AI calls will fail with a model-not-found error. Direct Gemini instantiation prevents unified prompt logging, cost tracking, and model swapping. Missing GEMINI_API_KEY causes silent None → auth failure at first request.
-- **Status: FIXED 2026-03-22** — Changed model to `gemini-2.0-flash`, replaced `os.getenv()` with `settings.GEMINI_API_KEY`.
-
----
-
-## [CRITICAL] BUG-040 — db.commit() is unreachable after raise HTTPException in scraping — failures never recorded
-- **File:** `backend/api/v1/routes/competitors/scraping.py` line 59
-- **Issue:** The failure path does: `competitor.consecutive_failures += 1`, `db.add(competitor)`, `await db.commit()`, then `raise HTTPException(...)`. Python executes `raise` before `commit()` — the commit is unreachable. SQLAlchemy rolls back the session when the exception propagates.
-- **Impact:** Scrape failure counts and `last_error` are never persisted. The scraper appears healthy indefinitely from the monitoring perspective. Merchants cannot diagnose why competitor data stopped updating.
-- **Status: FIXED 2026-03-22** — Verified `await db.commit()` is on the line before `raise HTTPException`, so commit executes correctly before the exception is raised.
-
----
-
-## [CRITICAL] BUG-041 — Race condition in competitor auto-linking creates duplicate competitor rows
-- **File:** `backend/api/v1/routes/competitors/matching.py` lines 490–530
-- **Issue:** Two concurrent auto-link requests for the same product both pass the existence check, both call `db.add(competitor)` + `await db.flush()`, and both proceed to create product links. The first `await db.commit()` at line 529 succeeds; the second also commits (no unique constraint on competitor URL per user). Duplicate competitor rows are created.
-- **Impact:** Same competitor appears multiple times in the competitor list. Price scraping runs twice for the same URL, doubling API usage. Deduplication logic downstream is not guaranteed.
-- **Status: FIXED 2026-03-22** — Added domain cache and URL dedup set to prevent duplicate competitor/link creation within a batch. Changed error handling to rollback and return immediately on failure instead of continuing with a tainted session (the prior `await db.rollback()` + `continue` destroyed all prior work then kept going).
-
----
-
-## HIGH
-
----
-
-## [HIGH] BUG-008 — os.getenv() called outside core/config.py in multiple services
-- **File:** `backend/workers/celery_app.py` line 23; `backend/services/ai_trend_analysis/autonomous_orchestrator.py`; `backend/services/competitor_matching/providers/serpapi.py`; `backend/services/competitor_matching/providers/google_custom.py`
-- **Issue:** Direct `os.getenv()` / `os.environ.get()` calls scattered across services. Project rule: all env vars must go through `settings.*` in `core/config.py` only.
-- **Impact:** API keys are not validated at startup. Celery workers read Redis URL independently — if changed in Railway, only `core/config.py` callers pick it up. Silent misconfiguration failures in prod.
-
----
-
-## [HIGH] BUG-009 — Celery task engine creates new DB pool per task — file handle exhaustion
-- **File:** `backend/workers/tasks/pricing_tasks.py` lines 51–83
-- **Issue:** Each task calls `get_task_session_maker()` which creates a new async engine with `NullPool` but never closes the engine. Under concurrent load this exhausts OS file handles.
-- **Impact:** After ~1000 task invocations Celery workers crash with `EMFILE: too many open files`. Pricing recommendation and sync tasks stop processing.
-
----
-
 ## [HIGH] BUG-010 — ENCRYPTION_KEY not validated at startup — silent crash on first OAuth use
 - **File:** `backend/core/encryption.py` lines 10–13
 - **Issue:** `get_fernet()` only validates the key on first call (lazy init). If `ENCRYPTION_KEY` is missing, empty, or malformed, no error is raised at app startup. Only the first actual decrypt attempt crashes.
@@ -137,13 +349,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** Two concurrent browser tabs doing OAuth for the same shop can both pass the state/shop lookup check and both create new integration records via fallback path 3. No DB-level unique constraint or lock.
 - **Impact:** Duplicate integration rows for the same Shopify store. One stays orphaned. Price pushes may target wrong integration.
 - **Status: FIXED 2026-03-22** — Added PostgreSQL advisory locks (`pg_advisory_xact_lock`) in both `init_oauth` and `oauth_callback` to serialize concurrent OAuth flows for the same store. Lock key derived from platform+store_url via CRC32.
-
----
-
-## [HIGH] BUG-012 — Unhandled ValueError propagates from decrypt_token() to API callers
-- **File:** `backend/core/encryption.py` lines 25–26
-- **Issue:** `decrypt_token()` re-raises as `ValueError` on `InvalidToken`. Callers in `oauth.py`, `shopify_billing.py`, `shopify_service.py` etc. have no try/except around it. FastAPI catches it as a 500.
-- **Impact:** Any request that touches a stale, pending, or key-mismatched token returns an unhandled 500 to the frontend instead of a recoverable `401/403` with a reconnect prompt.
 
 ---
 
@@ -187,79 +392,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** `await self.db.flush()` is called after updating `ProductIntegrationLink`, but the final `commit()` is delegated to the caller. If an exception is raised between flush and commit, the in-memory update is lost with no rollback signal.
 - **Impact:** Price pushed to Shopify but `ProductIntegrationLink.last_price_push_at` and `external_price` not persisted. Audit trail and future drift detection corrupted.
 - **Fix:** Wrapped `flush()` in try/except with explicit `rollback()` on failure. Returns specific `METADATA_FLUSH_FAILED` error code so caller gets clean session state.
-
----
-
-## [HIGH] BUG-042 — Platform enum vs string comparison in health check — Shopify integrations never verified
-- **Status: FALSE POSITIVE 2026-03-22**
-- **File:** `backend/workers/tasks/sync_verification_tasks.py` line 675
-- **Issue:** `if integration.platform == "shopify"` compares an `EcommercePlatform` enum instance to a plain string literal. `EcommercePlatform.SHOPIFY != "shopify"` so the condition is always `False`. The Shopify-specific credential check branch is never entered.
-- **Impact:** Shopify integration health is never verified against the real API. All Shopify integrations silently pass the health check regardless of token validity, masking actual credential failures.
-- **Analysis:** `EcommercePlatform` is a `StrEnum` (inherits from `str`). `StrEnum` values compare equal to their string values, so `EcommercePlatform.SHOPIFY == "shopify"` evaluates to `True`. The comparison works correctly.
-
----
-
-## [HIGH] BUG-043 — Uninstall webhook missing db.commit() — integration stays ACTIVE after uninstall
-- **Status: FALSE POSITIVE 2026-03-22**
-- **File:** `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 312
-- **Issue:** On `app/uninstalled` webhook, `integration.access_token_encrypted = b"revoked"` and `integration.status = DISCONNECTED` are set but `await db.commit()` is never called. The handler returns 200 (correct), but the status update is never written to DB.
-- **Impact:** After a merchant uninstalls, the integration still shows as ACTIVE in the DB. Background sync tasks continue attempting to use the revoked token, generating endless "authentication failed" errors until a manual DB fix.
-- **Analysis:** `await db.commit()` IS present at line 324 of the file. The commit occurs after `db.add(integration)` and `_downgrade_subscription()`. The bug description is incorrect.
-
----
-
-## [HIGH] BUG-044 — shopify.app.toml webhook version is 2026-01 but app uses 2025-10
-- **Status: FIXED 2026-03-21**
-- **File:** `shopify.app.toml` line 8
-- **Issue:** `api_version = "2026-01"` in the toml manifest but `shopify_service.py` declares `API_VERSION = "2025-10"`. Shopify delivers webhooks in the format of the version registered in the manifest.
-- **Impact:** Webhook payloads arrive in 2026-01 schema. Handlers in `shopify_webhooks.py` parse them expecting 2025-10 field names. Missing or renamed fields cause silent parsing failures. Sync events triggered by webhooks (product updates, order events) are lost.
-
----
-
-## [HIGH] BUG-045 — Audit log written before db.commit — shows fake success on DB failure
-- **Status: FIXED 2026-03-22**
-- **File:** `backend/services/pricing/recommendation_service.py` lines 407–410
-- **Issue:** `logger.info("Recommendation created: ...")` and any structured audit log write happen before `await self.db.commit()`. If the commit fails (constraint violation, connection drop), the audit log shows the recommendation as created when it was actually rolled back.
-- **Impact:** Audit trail and dashboard metrics show price recommendations that don't exist in the DB. Compliance reports are inaccurate. Debugging discrepancies is extremely difficult.
-- **Fix:** Moved `logger.info` to after `await self.db.commit()` and `await self.db.refresh(recommendation)` so the log only fires on successful persist.
-
----
-
-## [HIGH] BUG-046 — Payment wallet address falls back silently to hardcoded wrong address
-- **Status: FIXED 2026-03-22**
-- **File:** `backend/services/payment/subscription_service.py` (multiple lines)
-- **Issue:** `self.recipient_address = os.getenv("SSP_MNEE_WALLET_ADDRESS", "$pema12@handcash.io")` — if `SSP_MNEE_WALLET_ADDRESS` is not set in the environment, all BSV payments route to a hardcoded demo wallet address. Same pattern for ETH recipient. These are `os.getenv()` calls outside `core/config.py`.
-- **Impact:** Missing env var silently routes real merchant payments to the wrong wallet. Revenue is lost with no error surfaced. Only discovered when payment reconciliation fails.
-- **Fix:** Replaced `os.getenv()` calls with `settings.SSP_MNEE_WALLET_ADDRESS` and `settings.SSP_ETH_WALLET_ADDRESS` from `core/config.py`. Added `SSP_ETH_WALLET_ADDRESS` to Settings. Removed hardcoded fallback address and `import os`.
-
----
-
-## [HIGH] BUG-047 — Dual redirect systems conflict — login redirect unreliable
-- **Status: FIXED 2026-03-22**
-- **File:** `frontend/app/providers.tsx` lines 29–30; `frontend/middleware.ts` lines 69–70
-- **Issue:** Two competing redirect-after-login systems exist: (1) `middleware.ts` appends `?next=/path` to the login URL via URL searchParams, (2) `providers.tsx` writes `sessionStorage.setItem('redirect_after_login', window.location.pathname)`. The login page reads one or the other but not both, so depending on which path triggered the redirect, the post-login destination is either correct or lost.
-- **Impact:** Users are frequently redirected to `/dashboard` instead of the page they were trying to access after a session expiry. Particularly disruptive during Shopify embedded OAuth flows.
-- **Fix:** Removed sessionStorage write from `providers.tsx` — middleware's `?redirect=` param is the single source of truth. Removed dead sessionStorage read from login page (key was also mismatched: `redirect_after_login` vs `redirectAfterLogin`). Login now uses `redirectParam || '/dashboard'`.
-
----
-
-## [HIGH] BUG-035 — Health check fires immediately after OAuth — forces status to ERROR/DISCONNECTED
-- **File:** `backend/workers/tasks/sync_verification_tasks.py` lines 623–648 (now fixed)
-- **Issue:** `check_all_integration_health` runs every 30 minutes on all `ACTIVE` integrations. Immediately after OAuth, the encrypted token is stored as bytes in `LargeBinary`. `decrypt_token(bytes)` hits BUG-004 (`AttributeError: 'bytes' object has no attribute 'encode'`), is caught at line 630, and sets `integration.status = ERROR`. The user then clicks "Reconnect" → `init_oauth` sets status to `DISCONNECTED` → cycle repeats.
-- **Impact:** Every fresh Shopify install appears broken within 30 minutes. Staging shows "stored credentials invalid" immediately after OAuth succeeds.
-- **Fix applied:** Added `HEALTH_CHECK_GRACE_PERIOD_SECONDS = 600` (10 min). Integrations with `last_sync_at is None` and `updated_at < 10 min ago` are skipped by the health check. Grace period lifts automatically once the first sync completes.
-
----
-
-## [HIGH] BUG-036 — IntegrationCard Confirm button does nothing — mutate onSuccess not firing
-- **File:** `frontend/components/features/integrations/IntegrationCard.tsx` lines 115–119 (now fixed)
-- **Issue:** `handleRemove` called `disconnect.mutate(id, { onSuccess: () => setShowConfirm(false) })`. In React Query v5, per-call `onSuccess` callbacks are ephemeral — they silently drop if the component re-renders mid-flight. The hook's built-in `onSuccess` calls `queryClient.invalidateQueries(integrationKeys.all)`, which triggers a list refetch and re-render BEFORE the per-call callback fires. `setShowConfirm(false)` never executes; the confirm dialog stays open indefinitely.
-- **Impact:** Clicking Confirm on "Disconnect" or "Delete" appears to do nothing. The integration IS deleted server-side but the UI never closes the confirm state.
-- **Fix applied:** Changed `handleRemove` to `async`, using `await disconnect.mutateAsync(integration.id)` followed by `setShowConfirm(false)`. `mutateAsync` resolves only after the mutation settles, so `setShowConfirm(false)` fires deterministically regardless of mid-flight re-renders.
-
----
-
-## MEDIUM
 
 ---
 
@@ -351,42 +483,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [MEDIUM] BUG-048 — Sentiment analysis endpoint missing user_id filter — authorization bypass
-- **File:** `backend/api/v1/routes/sentiment/analysis.py` lines 80–100
-- **Issue:** `analyze_and_save()` fetches `Product` by `product_id` only: `select(Product).where(Product.id == product_id)` — no `.where(Product.user_id == current_user.id)` filter. Any authenticated user can save sentiment analysis results to any other user's products if they know the product UUID.
-- **Impact:** Cross-user data pollution. User A can overwrite User B's product sentiment data. This is an authorization bypass affecting data integrity for all users.
-- **Status: FALSE POSITIVE 2026-03-22** — Line 102 already filters `Product.user_id == current_user.id` alongside `Product.id == product_id`.
-
----
-
-## [MEDIUM] BUG-049 — No unique constraint on competitor links — duplicates created on retry
-- **File:** `backend/api/v1/routes/competitors/matching.py` line 518
-- **Issue:** `db.add(link)` creates a new `ProductIntegrationLink` without checking if an identical (product_id, competitor_id) pair already exists. No unique constraint enforced at DB level. On any retry (network timeout, user double-click), a duplicate link is inserted.
-- **Impact:** Same competitor appears twice in the competitor list per product. Price scraping runs twice per URL. Deduplication downstream is not guaranteed, corrupting competitive analysis.
-- **Status: FALSE POSITIVE 2026-03-22** — Lines 506-513 already check for existing `(product_id, competitor_id, url)` via a SELECT before inserting; duplicates update the existing row instead.
-
----
-
-## [MEDIUM] BUG-050 — Mismatched redirect key names across auth files — post-login redirect lost
-- **File:** `frontend/lib/api/client.ts` lines 131–138; `frontend/app/providers.tsx` line 29
-- **Issue:** `client.ts` stores the post-auth redirect path under `sessionStorage.setItem('redirectAfterLogin', ...)` (camelCase). `providers.tsx` stores it under `sessionStorage.setItem('redirect_after_login', ...)` (snake_case). The login page reads one key — the other is silently ignored.
-- **Impact:** After a session expiry that triggers `handleAuthError`, the post-login redirect is always lost. Users land on the dashboard regardless of where they were when the session expired.
-- **Status: FALSE POSITIVE 2026-03-22** — `providers.tsx` does not use sessionStorage at all; `client.ts` stores `redirectAfterLogin` (camelCase) and `use-auth.ts` reads/removes the same camelCase key. Key names are consistent.
-
----
-
-## [MEDIUM] BUG-051 — getAllSyncStatus() calls an unverified endpoint path
-- **File:** `frontend/lib/api/integrations.ts` lines 263–265
-- **Issue:** `getAllSyncStatus()` calls `GET /api/v1/integrations/sync/status/all`. No backend route matching this exact path was found during the audit. The per-integration path is `/api/v1/integrations/{id}/sync/status`.
-- **Impact:** The integrations page banner that shows overall sync status returns 404. React Query marks the query as errored, and depending on error handling, the banner either shows a broken state or the entire integrations page throws.
-- **Status: FALSE POSITIVE 2026-03-22** — Backend route exists at `backend/api/v1/routes/integrations/sync.py:230` with `@router.get("/sync/status/all")`, mounted under the integrations router (no sub-prefix), giving the full path `/api/v1/integrations/sync/status/all` which matches the frontend call.
-
----
-
-## LOW
-
----
-
 ## [LOW] BUG-029 — Unused import in auth store
 - **File:** `frontend/lib/stores/auth-store.ts` line 13
 - **Issue:** `ApiError` is imported from `@/lib/api` but never used. Generic `Error` is used instead.
@@ -437,11 +533,160 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-035 — Health check fires immediately after OAuth — forces status to ERROR/DISCONNECTED
+- **File:** `backend/workers/tasks/sync_verification_tasks.py` lines 623–648 (now fixed)
+- **Issue:** `check_all_integration_health` runs every 30 minutes on all `ACTIVE` integrations. Immediately after OAuth, the encrypted token is stored as bytes in `LargeBinary`. `decrypt_token(bytes)` hits BUG-004 (`AttributeError: 'bytes' object has no attribute 'encode'`), is caught at line 630, and sets `integration.status = ERROR`. The user then clicks "Reconnect" → `init_oauth` sets status to `DISCONNECTED` → cycle repeats.
+- **Impact:** Every fresh Shopify install appears broken within 30 minutes. Staging shows "stored credentials invalid" immediately after OAuth succeeds.
+- **Fix applied:** Added `HEALTH_CHECK_GRACE_PERIOD_SECONDS = 600` (10 min). Integrations with `last_sync_at is None` and `updated_at < 10 min ago` are skipped by the health check. Grace period lifts automatically once the first sync completes.
+
+---
+
+## [HIGH] BUG-036 — IntegrationCard Confirm button does nothing — mutate onSuccess not firing
+- **File:** `frontend/components/features/integrations/IntegrationCard.tsx` lines 115–119 (now fixed)
+- **Issue:** `handleRemove` called `disconnect.mutate(id, { onSuccess: () => setShowConfirm(false) })`. In React Query v5, per-call `onSuccess` callbacks are ephemeral — they silently drop if the component re-renders mid-flight. The hook's built-in `onSuccess` calls `queryClient.invalidateQueries(integrationKeys.all)`, which triggers a list refetch and re-render BEFORE the per-call callback fires. `setShowConfirm(false)` never executes; the confirm dialog stays open indefinitely.
+- **Impact:** Clicking Confirm on "Disconnect" or "Delete" appears to do nothing. The integration IS deleted server-side but the UI never closes the confirm state.
+- **Fix applied:** Changed `handleRemove` to `async`, using `await disconnect.mutateAsync(integration.id)` followed by `setShowConfirm(false)`. `mutateAsync` resolves only after the mutation settles, so `setShowConfirm(false)` fires deterministically regardless of mid-flight re-renders.
+
+---
+
+## [CRITICAL] BUG-037 — Competitive position calculation is fully inverted — all merchants get wrong signals *(FIXED 2026-03-21)*
+- **File:** `backend/services/scoring/competitive_position.py` line 214
+- **Issue:** `sum(1 for p in comp_prices if p > our_price)` computes the count of competitors priced above our price but the result is **never assigned to a variable** — it is immediately discarded. `priced_above` is therefore undefined. The percentile rank `((priced_below + 0.5 * priced_equal) / total) * 100.0` uses only `priced_below`, making `position_index=1.0` mean "most expensive" but the calculation points in the wrong direction. "Underpriced" products register as high-percentile and get a "raise price" signal. "Overpriced" products register as low-percentile and get a "lower price" signal — the exact opposite of correct.
+- **Impact:** ALL competitive pricing recommendations are directionally wrong. Merchants who rely on competitive positioning will raise prices when they should lower them and vice versa. Revenue impact for every merchant using this signal.
+- **Fix:** Assigned the discarded expression to `priced_above` variable. The percentile formula using `priced_below` is mathematically equivalent to the intended `1 - (priced_above / total)` approach.
+
+---
+
+## [CRITICAL] BUG-038 — await db.delete() crashes hard deletes — integration removal broken *(FIXED 2026-03-21)*
+- **File:** `backend/api/v1/routes/integrations/crud.py` lines 229, 237, 240
+- **Issue:** `await db.delete(log)`, `await db.delete(link)`, `await db.delete(integration)` — `Session.delete()` is a synchronous method and is not awaitable. Awaiting it raises `TypeError: object NoneType can't be used in 'await' expression` at runtime.
+- **Impact:** Every attempt to hard-delete a disconnected integration crashes with a 500. Merchants cannot remove integrations from the UI. Orphaned records accumulate permanently.
+- **Fix:** Removed `await` from all `db.delete()` calls. `Session.delete()` is synchronous — it marks the object for deletion, and the subsequent `await db.commit()` persists the change.
+
+---
+
+## [CRITICAL] BUG-039 — autonomous_orchestrator.py uses wrong Gemini model and calls API directly
+- **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 22–23
+- **Issue:** (1) `GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")` uses a non-existent model ID — project rule mandates `gemini-2.0-flash`. (2) `client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))` instantiates a Gemini client directly, bypassing `services/ai_generator.py`. (3) Both env vars use `os.getenv()` instead of `settings.*`.
+- **Impact:** Trend analysis AI calls will fail with a model-not-found error. Direct Gemini instantiation prevents unified prompt logging, cost tracking, and model swapping. Missing GEMINI_API_KEY causes silent None → auth failure at first request.
+- **Status: FIXED 2026-03-22** — Changed model to `gemini-2.0-flash`, replaced `os.getenv()` with `settings.GEMINI_API_KEY`.
+
+---
+
+## [CRITICAL] BUG-040 — db.commit() is unreachable after raise HTTPException in scraping — failures never recorded
+- **File:** `backend/api/v1/routes/competitors/scraping.py` line 59
+- **Issue:** The failure path does: `competitor.consecutive_failures += 1`, `db.add(competitor)`, `await db.commit()`, then `raise HTTPException(...)`. Python executes `raise` before `commit()` — the commit is unreachable. SQLAlchemy rolls back the session when the exception propagates.
+- **Impact:** Scrape failure counts and `last_error` are never persisted. The scraper appears healthy indefinitely from the monitoring perspective. Merchants cannot diagnose why competitor data stopped updating.
+- **Status: FIXED 2026-03-22** — Verified `await db.commit()` is on the line before `raise HTTPException`, so commit executes correctly before the exception is raised.
+
+---
+
+## [CRITICAL] BUG-041 — Race condition in competitor auto-linking creates duplicate competitor rows
+- **File:** `backend/api/v1/routes/competitors/matching.py` lines 490–530
+- **Issue:** Two concurrent auto-link requests for the same product both pass the existence check, both call `db.add(competitor)` + `await db.flush()`, and both proceed to create product links. The first `await db.commit()` at line 529 succeeds; the second also commits (no unique constraint on competitor URL per user). Duplicate competitor rows are created.
+- **Impact:** Same competitor appears multiple times in the competitor list. Price scraping runs twice for the same URL, doubling API usage. Deduplication logic downstream is not guaranteed.
+- **Status: FIXED 2026-03-22** — Added domain cache and URL dedup set to prevent duplicate competitor/link creation within a batch. Changed error handling to rollback and return immediately on failure instead of continuing with a tainted session (the prior `await db.rollback()` + `continue` destroyed all prior work then kept going).
+
+---
+
+## [HIGH] BUG-042 — Platform enum vs string comparison in health check — Shopify integrations never verified
+- **Status: FALSE POSITIVE 2026-03-22**
+- **File:** `backend/workers/tasks/sync_verification_tasks.py` line 675
+- **Issue:** `if integration.platform == "shopify"` compares an `EcommercePlatform` enum instance to a plain string literal. `EcommercePlatform.SHOPIFY != "shopify"` so the condition is always `False`. The Shopify-specific credential check branch is never entered.
+- **Impact:** Shopify integration health is never verified against the real API. All Shopify integrations silently pass the health check regardless of token validity, masking actual credential failures.
+- **Analysis:** `EcommercePlatform` is a `StrEnum` (inherits from `str`). `StrEnum` values compare equal to their string values, so `EcommercePlatform.SHOPIFY == "shopify"` evaluates to `True`. The comparison works correctly.
+
+---
+
+## [HIGH] BUG-043 — Uninstall webhook missing db.commit() — integration stays ACTIVE after uninstall
+- **Status: FALSE POSITIVE 2026-03-22**
+- **File:** `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 312
+- **Issue:** On `app/uninstalled` webhook, `integration.access_token_encrypted = b"revoked"` and `integration.status = DISCONNECTED` are set but `await db.commit()` is never called. The handler returns 200 (correct), but the status update is never written to DB.
+- **Impact:** After a merchant uninstalls, the integration still shows as ACTIVE in the DB. Background sync tasks continue attempting to use the revoked token, generating endless "authentication failed" errors until a manual DB fix.
+- **Analysis:** `await db.commit()` IS present at line 324 of the file. The commit occurs after `db.add(integration)` and `_downgrade_subscription()`. The bug description is incorrect.
+
+---
+
+## [HIGH] BUG-044 — shopify.app.toml webhook version is 2026-01 but app uses 2025-10
+- **Status: FIXED 2026-03-21**
+- **File:** `shopify.app.toml` line 8
+- **Issue:** `api_version = "2026-01"` in the toml manifest but `shopify_service.py` declares `API_VERSION = "2025-10"`. Shopify delivers webhooks in the format of the version registered in the manifest.
+- **Impact:** Webhook payloads arrive in 2026-01 schema. Handlers in `shopify_webhooks.py` parse them expecting 2025-10 field names. Missing or renamed fields cause silent parsing failures. Sync events triggered by webhooks (product updates, order events) are lost.
+
+---
+
+## [HIGH] BUG-045 — Audit log written before db.commit — shows fake success on DB failure
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/services/pricing/recommendation_service.py` lines 407–410
+- **Issue:** `logger.info("Recommendation created: ...")` and any structured audit log write happen before `await self.db.commit()`. If the commit fails (constraint violation, connection drop), the audit log shows the recommendation as created when it was actually rolled back.
+- **Impact:** Audit trail and dashboard metrics show price recommendations that don't exist in the DB. Compliance reports are inaccurate. Debugging discrepancies is extremely difficult.
+- **Fix:** Moved `logger.info` to after `await self.db.commit()` and `await self.db.refresh(recommendation)` so the log only fires on successful persist.
+
+---
+
+## [HIGH] BUG-046 — Payment wallet address falls back silently to hardcoded wrong address
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/services/payment/subscription_service.py` (multiple lines)
+- **Issue:** `self.recipient_address = os.getenv("SSP_MNEE_WALLET_ADDRESS", "$pema12@handcash.io")` — if `SSP_MNEE_WALLET_ADDRESS` is not set in the environment, all BSV payments route to a hardcoded demo wallet address. Same pattern for ETH recipient. These are `os.getenv()` calls outside `core/config.py`.
+- **Impact:** Missing env var silently routes real merchant payments to the wrong wallet. Revenue is lost with no error surfaced. Only discovered when payment reconciliation fails.
+- **Fix:** Replaced `os.getenv()` calls with `settings.SSP_MNEE_WALLET_ADDRESS` and `settings.SSP_ETH_WALLET_ADDRESS` from `core/config.py`. Added `SSP_ETH_WALLET_ADDRESS` to Settings. Removed hardcoded fallback address and `import os`.
+
+---
+
+## [HIGH] BUG-047 — Dual redirect systems conflict — login redirect unreliable
+- **Status: FIXED 2026-03-22**
+- **File:** `frontend/app/providers.tsx` lines 29–30; `frontend/middleware.ts` lines 69–70
+- **Issue:** Two competing redirect-after-login systems exist: (1) `middleware.ts` appends `?next=/path` to the login URL via URL searchParams, (2) `providers.tsx` writes `sessionStorage.setItem('redirect_after_login', window.location.pathname)`. The login page reads one or the other but not both, so depending on which path triggered the redirect, the post-login destination is either correct or lost.
+- **Impact:** Users are frequently redirected to `/dashboard` instead of the page they were trying to access after a session expiry. Particularly disruptive during Shopify embedded OAuth flows.
+- **Fix:** Removed sessionStorage write from `providers.tsx` — middleware's `?redirect=` param is the single source of truth. Removed dead sessionStorage read from login page (key was also mismatched: `redirect_after_login` vs `redirectAfterLogin`). Login now uses `redirectParam || '/dashboard'`.
+
+---
+
+## [MEDIUM] BUG-048 — Sentiment analysis endpoint missing user_id filter — authorization bypass
+- **File:** `backend/api/v1/routes/sentiment/analysis.py` lines 80–100
+- **Issue:** `analyze_and_save()` fetches `Product` by `product_id` only: `select(Product).where(Product.id == product_id)` — no `.where(Product.user_id == current_user.id)` filter. Any authenticated user can save sentiment analysis results to any other user's products if they know the product UUID.
+- **Impact:** Cross-user data pollution. User A can overwrite User B's product sentiment data. This is an authorization bypass affecting data integrity for all users.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 102 already filters `Product.user_id == current_user.id` alongside `Product.id == product_id`.
+
+---
+
+## [MEDIUM] BUG-049 — No unique constraint on competitor links — duplicates created on retry
+- **File:** `backend/api/v1/routes/competitors/matching.py` line 518
+- **Issue:** `db.add(link)` creates a new `ProductIntegrationLink` without checking if an identical (product_id, competitor_id) pair already exists. No unique constraint enforced at DB level. On any retry (network timeout, user double-click), a duplicate link is inserted.
+- **Impact:** Same competitor appears twice in the competitor list per product. Price scraping runs twice per URL. Deduplication downstream is not guaranteed, corrupting competitive analysis.
+- **Status: FALSE POSITIVE 2026-03-22** — Lines 506-513 already check for existing `(product_id, competitor_id, url)` via a SELECT before inserting; duplicates update the existing row instead.
+
+---
+
+## [MEDIUM] BUG-050 — Mismatched redirect key names across auth files — post-login redirect lost
+- **File:** `frontend/lib/api/client.ts` lines 131–138; `frontend/app/providers.tsx` line 29
+- **Issue:** `client.ts` stores the post-auth redirect path under `sessionStorage.setItem('redirectAfterLogin', ...)` (camelCase). `providers.tsx` stores it under `sessionStorage.setItem('redirect_after_login', ...)` (snake_case). The login page reads one key — the other is silently ignored.
+- **Impact:** After a session expiry that triggers `handleAuthError`, the post-login redirect is always lost. Users land on the dashboard regardless of where they were when the session expired.
+- **Status: FALSE POSITIVE 2026-03-22** — `providers.tsx` does not use sessionStorage at all; `client.ts` stores `redirectAfterLogin` (camelCase) and `use-auth.ts` reads/removes the same camelCase key. Key names are consistent.
+
+---
+
+## [MEDIUM] BUG-051 — getAllSyncStatus() calls an unverified endpoint path
+- **File:** `frontend/lib/api/integrations.ts` lines 263–265
+- **Issue:** `getAllSyncStatus()` calls `GET /api/v1/integrations/sync/status/all`. No backend route matching this exact path was found during the audit. The per-integration path is `/api/v1/integrations/{id}/sync/status`.
+- **Impact:** The integrations page banner that shows overall sync status returns 404. React Query marks the query as errored, and depending on error handling, the banner either shows a broken state or the entire integrations page throws.
+- **Status: FALSE POSITIVE 2026-03-22** — Backend route exists at `backend/api/v1/routes/integrations/sync.py:230` with `@router.get("/sync/status/all")`, mounted under the integrations router (no sub-prefix), giving the full path `/api/v1/integrations/sync/status/all` which matches the frontend call.
+
+---
+
 ## [CRITICAL] BUG-052 — Refresh token stored in localStorage (separate from BUG-001)
 - **Status: FIXED 2026-03-21** (resolved by BUG-001 fix — token.ts rewritten to use httpOnly cookies + in-memory bearer)
 - **File:** `frontend/lib/auth/token.ts` lines 44–54
 - **Issue:** `getRefreshToken()` and `setRefreshToken()` read/write to `localStorage`. A refresh token (longer TTL than access token) is a higher-value XSS target. `setTokens()` at line 67 writes both tokens to localStorage.
 - **Impact:** XSS leaks the long-lived refresh token, enabling persistent session hijacking even after access token expiry.
+
+---
+
+## [CRITICAL] BUG-052 — UserRead schema declares id as int — all user API responses crash on serialize
+- **Status: FALSE POSITIVE 2026-03-22** — `UserRead.id` is already declared as `uuid.UUID` at line 25. Previously fixed.
+- **File:** `backend/schemas/user.py` line 24
+- **Issue:** `UserRead` has `id: int` but `User` model stores `id: uuid.UUID`. Pydantic serialization fails every time a user object is returned from any API endpoint — `/auth/login`, `/users/me`, any endpoint that embeds user data.
+- **Impact:** Every user API response fails with a Pydantic validation error. Login, profile, and any endpoint returning a `User` schema is broken in production.
 
 ---
 
@@ -453,10 +698,20 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [CRITICAL] BUG-054 — `analytics/audit` page reads JWT from localStorage and bypasses API client
-- **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx` lines 51, 63, 109
-- **Issue:** `getAuthToken()` reads `localStorage.getItem('access_token')`. Two raw `fetch()` calls with manual `Authorization: Bearer` headers bypass the `@/lib/api/client` Axios instance (no auth interceptor, no token refresh, no error normalization).
-- **Impact:** Auth is bypassed on this page; session expiry is silently unhandled; token exposed in JS.
+## [CRITICAL] BUG-053 — price_sync_service instantiates Shopify/WooCommerce with wrong arguments
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/services/pricing/price_sync_service.py` lines 110–126
+- **Issue:** `ShopifyService(self.db, integration)` and `WooCommerceService(self.db, integration)` — neither service accepts these constructor arguments. Their `__init__` takes only an optional `retry_config`. This is a `TypeError` at runtime.
+- **Impact:** The entire live price sync pipeline crashes immediately whenever it runs. No price drift detection, no price resyncs after competitor data updates.
+- **Fix:** Changed constructors to `ShopifyService()` / `WooCommerceService()`. Replaced non-existent `get_product_price()` with `fetch_single_product(store_url, access_token, external_product_id)` and extract price from the returned `ExternalProduct`. Access token decrypted via `decrypt_token()`.
+
+---
+
+## [CRITICAL] BUG-054 — Auto-approval condition is logically inverted — high-value products auto-approved
+- **File:** `backend/services/pricing/auto_approval_service.py` line 158
+- **Issue:** `return not (require_above_price is not None and current_price > require_above_price)`. The variable name means "require manual approval for prices above this threshold." The logic is inverted: products priced ABOVE the threshold return `True` (auto-approve), and products BELOW it return `False` (require approval). The correct check should return `False` when `current_price > require_above_price`.
+- **Impact:** Expensive high-value products are auto-approved without merchant review. Low-value products are held for manual review. The entire auto-approval safety gate is backwards.
+- **Status: FALSE POSITIVE 2026-03-22** — Boolean analysis in this entry is incorrect. `not (True and True)` = `False`, not `True`. With threshold=50 and price=100: the function returns `False` (blocks auto-approval). Confirmed by `settings_service.py:169` and tests at `test_settings_service.py:383-394`. Code is correct as-is.
 
 ---
 
@@ -468,6 +723,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [CRITICAL] BUG-055 — Division by zero in alert price-change percentage — crashes alert system
+- **File:** `backend/services/notification/alert_generator.py` lines 138, 187, 228
+- **Issue:** Three separate calculations: `((recommended_price - current_price) / current_price) * 100` with no zero-check on `current_price`. Any product with `current_price = 0` or `None` causes `ZeroDivisionError` or `TypeError`. This propagates up through the alert dispatch chain.
+- **Impact:** When any product has a zero/null current price, the entire alert generation task crashes. No alerts are sent for any product, not just the zero-priced one.
+- **Status: FIXED 2026-03-22** — Added zero-guards to all three division expressions: `/ current_price * 100 if current_price else 0.0` (and `old_price` for the other two).
+
+---
+
 ## [CRITICAL] BUG-056 — Forgot-password form never sends an email — fake UI
 - **Status: FIXED 2026-03-21**
 - **File:** `frontend/app/(auth)/forgot-password/page.tsx` line 15
@@ -476,10 +739,19 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [CRITICAL] BUG-057 — `setState` called during render in `PayWithMNEE`
-- **File:** `frontend/components/features/payments/PayWithMNEE.tsx` lines 69–76
-- **Issue:** `setCallbackFired(true)` and `onSuccess`/`onError` callbacks invoked directly in the render function body (not inside `useEffect`), causing state updates during render.
-- **Impact:** "Cannot update a component while rendering a different component" React errors. Infinite render loops. Broken payment callback flow.
+## [CRITICAL] BUG-056 — CORS_ORIGINS defaults to wildcard "*" — allows all cross-origin requests
+- **Status: FALSE POSITIVE 2026-03-22** — Current code at `config.py:48` shows `CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"`, not `"*"`. The default is already restricted to localhost dev origins. No fix needed.
+- **File:** `backend/core/config.py` line 49
+- **Issue:** `CORS_ORIGINS: str = "*"` is the default value. Unless the Railway env var is explicitly set, the backend accepts requests from any origin with credentials.
+- **Impact:** Any malicious website can make authenticated cross-origin requests on behalf of logged-in users. Combined with BUG-001 (localStorage JWT), this enables full account takeover via XSS + CORS.
+
+---
+
+## [CRITICAL] BUG-057 — DEMO_MODE env var bypasses payment verification in production
+- **File:** `backend/services/payment/subscription_service.py` line 432
+- **Issue:** `if os.getenv("DEMO_MODE", "true").lower() == "true":` — default is `"true"`, so unless `DEMO_MODE=false` is explicitly set in Railway, the payment confirmation function skips all blockchain verification and activates subscriptions unconditionally.
+- **Impact:** On a fresh Railway deploy where `DEMO_MODE` is not set, any request to the payment confirmation endpoint activates a paid subscription without any payment. All subscription revenue can be bypassed.
+- **Status: FIXED 2026-03-22** — Removed DEMO_MODE bypass entirely from `confirm_payment()`. Subscription activation now requires `verification.verified == True`. Removed unused `settings` import.
 
 ---
 
@@ -491,11 +763,28 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-058 — webhook_handler calls sync_single_product() which doesn't exist
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/services/integration/webhook_handler.py` lines 139–143
+- **Issue:** `self.sync_service.sync_single_product(...)` is called when processing product webhook events (create/update). `SyncService` has no `sync_single_product` method — only `run_sync()` and `recover_stuck_syncs()`.
+- **Impact:** Every Shopify product webhook (product created/updated/deleted) crashes with `AttributeError`. Webhook-driven syncs never complete. Products created on Shopify never appear in the app unless manually triggered.
+- **Fix:** Added `sync_single_product(integration_id, external_product_id, action)` method to `SyncService`. Fetches the single product via `fetch_single_product()`, upserts it, and handles deletes by disabling sync on matching links.
+
+---
+
 ## [CRITICAL] BUG-059 — Webhook register/unregister endpoints have no authentication or user_id check *(FIXED 2026-03-21)*
 - **File:** `backend/api/v1/routes/webhooks.py` lines 247–253, 311–317
 - **Issue:** `POST /{integration_id}/register` and `DELETE /{integration_id}/unregister` have no `get_current_user` dependency. Integration fetched by ID alone with no `user_id` filter.
 - **Impact:** Attacker can register attacker-controlled webhook URLs for any merchant's integration (credential harvesting), or unregister all webhooks for any merchant (blinding them to product changes).
 - **Fix:** Added `get_current_user` dependency to both endpoints. Integration queries now filter by `user_id == current_user.id` to enforce ownership.
+
+---
+
+## [HIGH] BUG-059 — Webhook register/unregister endpoints missing ownership check
+- **Status: FALSE POSITIVE 2026-03-22** — Both `register_webhooks` (line 269) and `unregister_webhooks` (line 336) already filter by `Integration.user_id == current_user.id` and have `get_current_user` dependency. Ownership check is present. No fix needed.
+- **File:** `backend/api/v1/routes/webhooks.py` lines 258, 321
+- **Issue:** `register_webhooks` and `unregister_webhooks` look up `Integration` by ID alone with no `.where(Integration.user_id == current_user.id)` filter. Any authenticated user can register or unregister webhooks for any other user's integration.
+- **Impact:** (1) Attacker can disable any merchant's webhooks — all product/order events stop being received. (2) Attacker can register their own webhook URLs on other merchants' integrations to receive their Shopify events.
 
 ---
 
@@ -516,11 +805,28 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-061 — Synchronous email send blocks the async event loop
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/services/notification/email_service.py` lines 121–122; `backend/services/notification/audit_email_service.py` line 141
+- **Issue:** `client.send(message)` (SendGrid SDK) is synchronous. It is called inside `async def` functions without `await asyncio.to_thread()` or `loop.run_in_executor()`. This blocks the entire event loop while the HTTP request to SendGrid completes.
+- **Impact:** Every email notification freezes all concurrent API requests for the duration of the SendGrid HTTP call (~200–2000ms). Under load this causes widespread request timeouts and API latency spikes.
+- **Fix:** Wrapped both `client.send(message)` calls with `await asyncio.to_thread()` to offload the synchronous SendGrid HTTP call to a thread pool, unblocking the event loop.
+
+---
+
 ## [CRITICAL] BUG-062 — Scout agent parse failure injects hardcoded fabricated competitor data into live pricing
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 548–557
 - **Issue:** When JSON parsing of the Scout Agent response fails, the fallback returns a `MarketSignal` with hardcoded values: `competitor_name="CompetitorX"`, `competitor_price=89.99`, `price_change_pct=-15.1`, `confidence=0.85`. These fabricated signals pass through Analyst and Strategist agents as real data.
 - **Impact:** Autonomous pricing decisions made on fake data whenever the AI response is malformed. A corrupted Scout response triggers a real on-chain price change recommendation based on fictional intelligence.
 - **Status: FIXED 2026-03-22** — Replaced hardcoded fallback with `raise RuntimeError` to halt the pipeline on parse failure.
+
+---
+
+## [HIGH] BUG-062 — Trend alerts use wrong AlertType — miscategorized in dashboard
+- **File:** `backend/services/notification/alert_generator.py` line 336
+- **Issue:** Trend detection alerts are created with `AlertType.COMPETITOR_PRICE_CHANGE` instead of the correct trend alert type. Users who have disabled competitor price change alerts won't receive trend alerts either — and users who have enabled only trend alerts will receive them labelled as competitor changes.
+- **Impact:** Alert filtering by type is broken. Merchants receive wrong alert types or miss alerts entirely. Alert dashboard shows incorrect category counts.
+- **Status: FIXED 2026-03-22** — Changed `AlertType.COMPETITOR_PRICE_CHANGE` to `AlertType.TREND_DETECTED`.
 
 ---
 
@@ -532,11 +838,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-063 — ai_clients.py uses nonexistent Gemini model names
+- **File:** `backend/services/ai_trend_analysis/ai_clients.py` lines 25–26, 106
+- **Issue:** Declares models `"gemini-3-flash-preview"`, `"gemini-3-pro-preview"`, and `"gemini-1.5-flash"`. Project rule mandates `"gemini-2.0-flash"` only. `gemini-3-*` models don't exist in the Gemini API.
+- **Impact:** All trend analysis AI calls fail at the API level with a model-not-found error. Market trend analysis, launch detection, and crisis detection are completely non-functional.
+- **Status: FIXED 2026-03-22** — Changed all model names to `"gemini-2.0-flash"` (lines 25, 26, and 103).
+
+---
+
 ## [CRITICAL] BUG-064 — Python `is None` instead of `.is_(None)` in ORM query — stuck recommendations never recovered *(FIXED 2026-03-21)*
 - **File:** `backend/workers/tasks/pricing_tasks.py` line 340
 - **Issue:** `.where(PriceRecommendation.applied_at is None)` performs a Python identity check on the SQLAlchemy column descriptor (always `False`). Results in `.where(False)`. No records ever returned.
 - **Impact:** `apply_stuck_recommendations()` permanently returns zero records. Auto-approved prices stuck in `AUTO_APPROVED` status are never pushed to Shopify. Merchants never see their approved prices applied.
 - **Fix:** Changed to `.where(PriceRecommendation.applied_at.is_(None))` which generates proper SQL `IS NULL`.
+
+---
+
+## [HIGH] BUG-064 — Division by zero in trend analyzer on empty competitor price list
+- **File:** `backend/services/ai_trend_analysis/analyzer.py` line 259
+- **Issue:** `sum(competitor_prices) / len(competitor_prices)` — no guard if `competitor_prices` is an empty list. `.get("competitor_prices", [])` can return `[]` and `len([]) == 0`.
+- **Impact:** `ZeroDivisionError` whenever a product has no competitor prices. Trend analysis crashes for new products before any competitor data is scraped.
+- **Status: FALSE POSITIVE 2026-03-22** — The described pattern `sum(competitor_prices) / len(competitor_prices)` does not exist in `analyzer.py`. Competitor prices are formatted via `format_competitor_prices()` (string output), not averaged numerically. No division by zero possible.
 
 ---
 
@@ -548,11 +870,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-065 — Division by zero in sentiment aggregator when no previous mentions exist
+- **File:** `backend/services/analysis/sentiment_aggregator.py` line 117
+- **Issue:** `(curr_count - prev_count) / prev_count` — no zero-check on `prev_count`. For a brand-new product with no prior mentions, `prev_count = 0`.
+- **Impact:** `ZeroDivisionError` on the first sentiment aggregation run for any new product. Sentiment signal is unavailable until the bug is hit and the task crashes.
+- **Status: FALSE POSITIVE 2026-03-22** — Code at lines 133-136 already has a zero guard: `if prev_count > 0: volume_change = ... else: volume_change = 1.0 if curr_count > 0 else 0.0`. No division by zero possible.
+
+---
+
 ## [CRITICAL] BUG-066 — Payment history always 404s — route order conflict
 - **File:** `backend/api/v1/routes/payments/subscription.py` lines 119, 180
 - **Issue:** `GET /{payment_id}` is registered before `GET /history`. FastAPI matches in declaration order — `/history` is captured by `/{payment_id}` with `payment_id="history"`, returning 404.
 - **Impact:** `getPaymentHistory()` and `usePaymentHistory()` always fail. Payment history page is entirely broken.
 - **Status: FIXED 2026-03-22** — Moved `GET /history` before `GET /{payment_id}` so the static route matches first.
+
+---
+
+## [HIGH] BUG-066 — notification_tasks.py imports run_async which doesn't exist in db/session.py
+- **File:** `backend/workers/tasks/notification_tasks.py` line 16
+- **Issue:** `from db.session import get_session_context, run_async` — `run_async` is not exported by `db/session.py`. This is an `ImportError` at module import time.
+- **Impact:** The entire `notification_tasks` module fails to import. Celery worker crashes at startup. No notification tasks (price alerts, email digests) ever run.
+- **Status: FALSE POSITIVE 2026-03-22** — `run_async` is defined at `db/session.py` line 126 as a Celery async helper. The import is valid.
 
 ---
 
@@ -564,7 +902,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## HIGH
+## [HIGH] BUG-067 — main.py uses os.getenv() directly for payment middleware init
+- **File:** `backend/main.py` line 49 (approx)
+- **Issue:** `if HAS_X402 and os.getenv("PAY_TO_ADDRESS"):` — direct `os.getenv()` call outside `core/config.py`. If `PAY_TO_ADDRESS` is defined in Settings but not in raw `os.environ` (e.g., loaded from `.env` file by Pydantic), the x402 payment middleware silently doesn't initialize.
+- **Impact:** x402 payment endpoints appear to exist but all requests return payment-required errors that are never resolved because the middleware isn't active.
+- **Status: FIXED 2026-03-22** — Added `PAY_TO_ADDRESS` to Settings class in `core/config.py`; replaced `os.getenv()` with `settings.PAY_TO_ADDRESS`; removed top-level `import os`.
 
 ---
 
@@ -576,11 +918,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-068 — sentiment/retrieval.py missing user_id filters — cross-user data access
+- **File:** `backend/api/v1/routes/sentiment/retrieval.py` lines 33, 99, 129, 151
+- **Issue:** Four endpoints (`GET /sentiment/{id}`, `GET /sentiment/product/{id}/summary`, `DELETE /sentiment/{id}`, `GET /sentiment/product/{id}/mentions`) query by ID alone without `.where(Sentiment.user_id == current_user.id)`. Any user can read or delete any sentiment record.
+- **Impact:** Authorization bypass: User A can read, summarize, and delete User B's sentiment data. GDPR violation. Data poisoning possible.
+- **Status: FALSE POSITIVE 2026-03-22** — All endpoints already have user_id filters: GET/DELETE by sentiment_id join on Product.user_id == current_user.id; product-scoped endpoints call _verify_product_ownership; mentions endpoint also filters SocialMention.user_id.
+
+---
+
 ## [HIGH] BUG-069 — Direct `fetch()` calls without auth in `audit/page.tsx` and `trends/page.tsx`
 - **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx` lines 63, 109; `frontend/app/(dashboard)/trends/page.tsx` lines 35, 49
 - **Issue:** Raw `fetch()` calls with no `Authorization` header (trends page) or via manual localStorage token (audit page). Non-2xx responses silently parsed as data.
 - **Impact:** Unauthenticated requests receive 401 response bodies treated as valid data. Auth interceptor, error normalization, and token refresh are all bypassed.
 - **Status: FIXED 2026-03-22** — Trends page converted from raw `fetch()` to centralized `api.get()` client with auth, error handling, and token refresh. Audit page localStorage issue was previously fixed in BUG-001.
+
+---
+
+## [MEDIUM] BUG-069 — N+1 query explosion in competitor analysis endpoint
+- **File:** `backend/api/v1/routes/competitors/analysis.py` lines 59–61, 135–142
+- **Issue:** `get_competitor_alerts` fetches alert records then inside a loop executes 2 additional DB queries per record (CompetitorProduct + Competitor + Product). With 100 results, this is 300+ queries per request instead of 1 with joins.
+- **Impact:** Competitor alerts endpoint slows to seconds per request as data grows. Under load causes DB connection pool exhaustion. Dashboard becomes unusable for merchants with large catalogs.
+- **Status: FALSE POSITIVE 2026-03-22** — compare_prices already batch-fetches with Competitor.id.in_(); get_competitor_alerts already uses a single joined query across all 4 tables.
 
 ---
 
@@ -592,11 +950,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-070 — price_check.py misuses async session context manager — resource leak
+- **File:** `backend/api/v1/routes/price_check.py` lines 95, 130
+- **Issue:** `get_session()` is an async generator (used via `async with`) but is called directly as a coroutine in `_store_lead()` and `_update_lead_report()` helper functions. The async context manager is not entered correctly.
+- **Impact:** DB session is never properly closed. Connection pool leaks one connection per price-check lead store/update. Under sustained traffic, DB connections are exhausted.
+- **Status: FALSE POSITIVE 2026-03-22** — Both functions already use `async for db in get_session():` which is the correct way to consume an async generator dependency outside of FastAPI's DI.
+
+---
+
 ## [HIGH] BUG-071 — `waitForAppBridge` declared as `Promise<any>` — forbidden type
 - **File:** `frontend/lib/context/shopify-embedded.tsx` lines 191–216
 - **Issue:** Return type is `Promise<any>` with an explicit `// eslint-disable-next-line @typescript-eslint/no-explicit-any`. `any` is forbidden per project rules.
 - **Impact:** Type safety hole in the most security-critical embedded auth function. Runtime shape changes not caught at compile time.
 - **Status: FIXED 2026-03-22** — Replaced `Promise<any>` with `Promise<ShopifyGlobal | null>` using a proper `ShopifyGlobal` interface. Removed eslint-disable and `as` cast at call site.
+
+---
+
+## [MEDIUM] BUG-071 — Rate limit reset time is wrong — retry_after seconds not added to now
+- **File:** `backend/services/integration/rate_limit.py` lines 46–47
+- **Issue:** `mark_rate_limited(retry_after=N)` stores `reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)` — but the actual code sets `reset_at = retry_after` directly (the integer), not `now + timedelta(retry_after)`. The reset timestamp becomes a small integer (epoch seconds offset), not a future datetime.
+- **Impact:** Rate limiting resets at epoch second N (early 1970s), meaning the rate limit is effectively never enforced. Shopify API rate limit detection is bypassed, leading to 429 floods.
+- **Status: FIXED 2026-03-22** — Changed `self.reset_at = datetime.now(UTC)` to `self.reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)` so the reset time is correctly set in the future.
 
 ---
 
@@ -608,6 +982,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-072 — Division by zero in outcome service merchant modification calculation
+- **File:** `backend/services/pricing/outcome_service.py` lines 140–144
+- **Issue:** `merchant_modification_percent = (actual_price_set - recommended_price) / recommended_price * 100` — no zero-check on `recommended_price`. If `recommended_price` is `Decimal("0")` or `None`, this raises `ZeroDivisionError` or `TypeError`.
+- **Impact:** Outcome recording crashes for any recommendation with a zero recommended price. Feedback loop data is lost; calibration degrades over time.
+- **Status: FALSE POSITIVE 2026-03-22** — Both record_outcome (line 140) and record_merchant_decision (line 475) already guard with `recommendation.recommended_price > 0` before dividing.
+
+---
+
 ## [HIGH] BUG-073 — WebSocket hooks: race between init and handler effects on `productId` change
 - **File:** `frontend/lib/ws/hooks.ts` lines 90–142
 - **Issue:** Two separate `useEffect` calls — one initializes `clientRef.current`, the other registers handlers. Under React 18 concurrent mode, a `productId` change can cause handlers to register on the old client before the new client is initialized.
@@ -616,10 +998,19 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [HIGH] BUG-074 — Alchemy API key hardcoded in source
-- **File:** `frontend/lib/web3/config.ts` line 80
-- **Issue:** `http('https://eth-sepolia.g.alchemy.com/v2/i1syJSaaz92esG2J-4NG0')` — Alchemy project API key committed to source.
-- **Impact:** Key publicly visible. Anyone can consume the project's Alchemy rate limit/quota.
+## [MEDIUM] BUG-073 — Division by zero in pipeline_adapter when no competitor prices exist
+- **Status: FALSE POSITIVE 2026-03-22** — Code already guards: line 106 checks `if competitors and product.current_price`, line 108 checks `len(all_prices) > 1`, line 111 checks `if max_p > min_p` with `else: 0.5` fallback.
+- **File:** `backend/services/pricing/pipeline_adapter.py` line 107
+- **Issue:** Position index normalization uses `(price - min_p) / (max_p - min_p)`. When `all_prices` is empty (no competitors), `min_p` and `max_p` both raise `ValueError` from `min([])`/`max([])`. When there is exactly one competitor, `max_p == min_p` → division by zero.
+- **Impact:** Competitive position calculation crashes for all new products and single-competitor scenarios. Price recommendations cannot be generated.
+
+---
+
+## [MEDIUM] BUG-074 — Multiple division-by-zero in analytics_service and trend_detector
+- **Status: FALSE POSITIVE 2026-03-22** — All divisions already guarded: line 132 checks `p.base_price and p.base_price > 0`, lines 305/307 check `if recent:`/`if earlier:`, trend_detector line 117 checks `if baseline_avg > 0`.
+- **File:** `backend/services/analytics/analytics_service.py` lines 133, 306, 308; `backend/services/analysis/trend_detector.py` line 118
+- **Issue:** (1) `(p.current_price - p.base_price) / p.base_price` with no `base_price > 0` check. (2) `sum(scores) / len(recent)` and `sum(scores) / len(earlier)` with no empty-list guard. (3) `current_count / baseline_avg` with no zero-check on `baseline_avg`.
+- **Impact:** Analytics endpoints crash for any product with `base_price = 0`. Trend detection fails for products with no historical baseline. Dashboard returns 500 errors instead of data.
 
 ---
 
@@ -631,10 +1022,19 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [HIGH] BUG-076 — Direct OpenAI API calls in `competitors/analysis.py` and `crisis_detection.py`
-- **File:** `backend/api/v1/routes/competitors/analysis.py` line 354; `backend/api/v1/routes/alerts/crisis_detection.py` line 101
-- **Issue:** Both call `ai_generator.client.chat.completions.create(model="gpt-4o-mini", ...)` directly on the underlying OpenAI client, bypassing `services/ai_generator.py`. Project mandates all AI through the central service using `gemini-2.0-flash`.
-- **Impact:** Calls fail if only Gemini key is configured; no centralized rate limiting or model-swap capability.
+## [MEDIUM] BUG-075 — Division by zero in elasticity calculator on zero price or zero units
+- **Status: FALSE POSITIVE 2026-03-22** — All divisions already guarded: line 74 checks `self.old_price == 0`, line 81 checks `self.avg_daily_units_before == 0`, line 96 guards `abs(pct_price) < 0.02` returning None (0.02 threshold prevents float-precision zero).
+- **File:** `backend/services/scoring/elasticity_calculator.py` lines 76, 83, 99
+- **Issue:** `price_change_pct` divides by `old_price`; `quantity_change_pct` divides by `avg_daily_units_before`. Both can be zero. PED calculation at line 99 divides `pct_qty / pct_price` where `pct_price` is only guarded to `>= 0.02` — but if it rounds to 0 via float precision, infinity results.
+- **Impact:** Price elasticity calculation crashes or returns infinity for any new product (no sales history) or free product. Thompson Sampling bandit receives infinity confidence values, corrupting all strategy selection.
+
+---
+
+## [MEDIUM] BUG-076 — Division by zero in guardrails velocity cap on zero current price
+- **Status: FALSE POSITIVE 2026-03-22** — Code already guards: line 162 checks `product.current_price > 0` before entering velocity cap logic, line 187 also checks `if product.current_price > 0` before formatting.
+- **File:** `backend/services/scoring/guardrails.py` lines 168, 186
+- **Issue:** `(price - product.current_price) / product.current_price` — no zero-guard on `product.current_price`. String formatting on line 186 executes before any guard. Products with `current_price = 0` (unpublished, archived) crash the guardrail check.
+- **Impact:** Guardrail enforcement crashes for any product with zero price. Price recommendations bypass all safety checks — prices can be set to any value including negative numbers.
 
 ---
 
@@ -646,10 +1046,19 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [HIGH] BUG-078 — `sentiment/tasks.py` fetch task missing product ownership check
-- **File:** `backend/api/v1/routes/sentiment/tasks.py` lines 32–35
-- **Issue:** `POST /fetch/{product_id}` fetches the product without checking `product.user_id == current_user.id`. Any user can dispatch an expensive Celery scraping task against any product.
-- **Impact:** Resource exhaustion and unauthorized task dispatch against arbitrary products.
+## [MEDIUM] BUG-077 — Mutable list defaults in Integration model shared across instances
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/models/integration.py` lines 90, 95
+- **Issue:** `scopes: list[str] = Field(default=[])` and `webhook_ids: list[str] = Field(default=[])`. SQLModel/Pydantic v2 should use `default_factory=list`. With `default=[]`, the same list object is shared by all instances that don't explicitly set these fields.
+- **Impact:** (1) Adding a webhook ID to one integration's in-memory state adds it to all others. Webhook cleanup on disconnect doesn't work reliably. (2) OAuth scope tracking is corrupted — scopes granted to one integration leak to others.
+
+---
+
+## [MEDIUM] BUG-078 — Mutable dict/list defaults in RetrospectiveAudit model — audit data leaks
+- **File:** `backend/models/retrospective_audit.py` lines 51, 52
+- **Issue:** `summary_json: dict = Field(default={})` and `sku_results_json: list = Field(default=[])` use mutable defaults. All audit instances without explicit values share the same dict/list object.
+- **Impact:** One merchant's audit data modifications (in-memory, before commit) appear in all other audits. If audit data is written to the shared dict before DB persist, it bleeds across unrelated audit records. GDPR violation.
+- **Status: FIXED 2026-03-22** — Changed `default={}` to `default_factory=dict` and `default=[]` to `default_factory=list`.
 
 ---
 
@@ -658,6 +1067,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/intelligence.py` lines 222–289, 478–524, 541–661
 - **Issue:** All queries against `bandit_state`, `mv_category_benchmarks`, and `pricing_outcomes` have no `user_id` or `merchant_id` filter. `current_user` is accepted but never used in queries. All merchants share a single global view.
 - **Impact:** Information disclosure — any merchant can read all other merchants' experiment arms, calibration data, and category benchmarks.
+
+---
+
+## [MEDIUM] BUG-079 — No payment idempotency key — duplicate payments on retry
+- **File:** `backend/services/payment/subscription_service.py` lines 313–320
+- **Issue:** `create_subscription_payment()` inserts a new `Payment` record every call with no uniqueness check on `(user_id, amount, tier, created_at_window)`. Browser retries or double-clicks create duplicate payment records. `confirm_payment()` at line 368 doesn't check for existing confirmed payments before reprocessing.
+- **Impact:** Network retries cause double-charges. Two `Payment` records are confirmed, both activate subscriptions — user gets double subscription or both records enter inconsistent states.
+- **Status: FIXED 2026-03-22** — Added `_find_pending_payment()` idempotency check before creating new Payment. Returns existing pending payment if one matches (user_id, tier, billing_cycle, network) within the last hour.
 
 ---
 
@@ -685,11 +1102,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-082 — products/import_service.py update path silently does nothing
+- **File:** `backend/services/products/import_service.py` line 135
+- **Issue:** TODO comment: update logic is not implemented. The code increments `result.updated += 1` but does not actually update any fields on the existing product record.
+- **Impact:** When re-importing a product CSV that has updated prices, names, or descriptions, the import reports success and increments the update counter but no data is changed. Merchants believe products were updated when they weren't.
+- **Status: FIXED 2026-03-22** — Implemented update logic: `_get_existing_products_by_sku()` batch-fetches products, `_update_product_from_row()` applies name, prices, description, category, and image_url from the import row to the existing product.
+
+---
+
 ## [HIGH] BUG-083 — Rate limiter trusts `X-Forwarded-For` blindly — brute-force bypass *(FIXED 2026-03-21)*
 - **File:** `backend/core/rate_limit.py` lines 29–31
 - **Issue:** `get_client_ip()` uses the first entry in `X-Forwarded-For` without verifying the request came through a trusted proxy. Any client can set `X-Forwarded-For: 1.2.3.4` to spoof their IP.
 - **Impact:** Attackers trivially bypass IP-based rate limiting on auth endpoints (`/auth/login` at 5/min) by rotating the spoofed header, enabling unlimited brute-force.
 - **Fix:** Changed `get_client_ip()` to use the rightmost IP in `X-Forwarded-For` (appended by the trusted proxy/Railway) instead of the leftmost (client-controlled). Spoofed headers no longer bypass rate limiting.
+
+---
+
+## [LOW] BUG-083 — Mutable defaults in multiple models (alert, competitor, product)
+- **File:** `backend/models/alert.py` line 87; `backend/models/competitor.py` line 42; `backend/models/product.py` line 56
+- **Issue:** `channels: list = Field(default=[AlertChannel.IN_APP])`, `scraping_config: dict = Field(default={})`, `keywords: list[str] = Field(default=[])` — all mutable defaults shared across instances.
+- **Impact:** In-memory list/dict mutations to one model instance leak to all others created with these defaults. Typically caught before DB persist but is a latent correctness bug.
+- **Status: FIXED 2026-03-22** — Changed all three to use `default_factory` instead of mutable `default` values.
 
 ---
 
@@ -701,6 +1134,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [LOW] BUG-084 — DB exception handler leaks raw database error messages to API responses
+- **File:** `backend/core/exception_handlers.py` line 107
+- **Issue:** The catch-all exception handler returns the raw exception message to the API client without sanitization. SQL error messages can contain table names, column names, constraint names, and partial query text.
+- **Impact:** Information disclosure — attackers can probe the API to enumerate schema details, column names, and unique constraint configurations from error responses.
+- **Status: FIXED 2026-03-22** — Replaced `str(exc)` with generic error message; raw error is still logged server-side via `alert_critical`.
+
+---
+
 ## [HIGH] BUG-085 — Duplicate incompatible agent contract classes (`ScoutOutput`, `AnalystOutput`, `StrategistOutput`)
 - **File:** `backend/schemas/agent_contracts/contracts_v2.py`; `backend/schemas/agent_contracts/scout.py`; `backend/schemas/agent_contracts/analyst.py`; `backend/schemas/agent_contracts/strategist.py`
 - **Issue:** Three pairs of conflicting classes with different field names and types. `contracts_v2.ScoutOutput` has `review_sentiment_score: float` while `scout.ScoutOutput` has `sentiment: SentimentSnapshot`. `contracts_v2.StrategistOutput` has `suggested_price: float` while `strategist.ScoutOutput` has `recommended_price: Decimal`. `validation.py` uses v2 variants; `pipeline.py` uses per-agent variants. They are incompatible.
@@ -709,11 +1150,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [LOW] BUG-085 — sentiment_multiplier default mismatch between ProductCreate schema and model
+- **File:** `backend/schemas/product.py` line 29; `backend/models/product.py` line 50
+- **Issue:** `ProductCreate.sentiment_multiplier` defaults to `Decimal("0.1")` (10%) but `Product` model defaults to `Decimal("0.2")` (20%). The model was updated but the schema was not. All products created via API use half the intended sentiment weight.
+- **Impact:** Sentiment-based pricing recommendations are underweighted by 50% for all products created via the API. Merchants cannot override this — the correct default is never applied from the user-facing layer.
+- **Status: FIXED 2026-03-22** — Changed `ProductCreate.sentiment_multiplier` default from `Decimal("0.1")` to `Decimal("0.2")` to match the model.
+
+---
+
 ## [HIGH] BUG-086 — `b"revoked"` sentinel not in `_SENTINEL_BYTES` — uninstalled integration fails with wrong error
 - **File:** `backend/core/encryption.py` line 8; `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 312
 - **Issue:** On uninstall, `access_token_encrypted = b"revoked"`. `_SENTINEL_BYTES = {b"pending", b""}` does not include `b"revoked"`. `decrypt_token()` attempts Fernet decryption of `b"revoked"`, raises `InvalidToken` → `ValueError` instead of the sentinel early-return path.
 - **Impact:** Any code touching an uninstalled integration's token crashes with a misleading "reconnect required" error instead of a clean "revoked" path.
 - **Status: FIXED 2026-03-22** — Added `b"revoked"` to `_SENTINEL_BYTES` set in `core/encryption.py`.
+
+---
+
+## [HIGH] BUG-086 — Hardcoded Railway staging URL fallback in app/page.tsx breaks production Shopify install
+- **File:** `frontend/app/page.tsx`
+- **Issue:** `const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://social-sentiment-pricing-staging-2ecd.up.railway.app'` — Railway staging URL is hardcoded as the fallback. If `NEXT_PUBLIC_API_URL` is unset in a production Vercel deploy, the Shopify install OAuth flow redirects to the staging backend.
+- **Impact:** Shopify merchant install attempts from production hit staging backend. OAuth flow fails or stores credentials against staging DB. Merchants cannot connect their store.
+- **Status: FIXED 2026-03-22** — Verified: hardcoded staging URL removed; throws error if `NEXT_PUBLIC_API_URL` is not set.
 
 ---
 
@@ -726,12 +1183,28 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-087 — useSearchParams() without Suspense boundary in Next.js 14 callback page
+- **File:** `frontend/app/(dashboard)/integrations/callback/page.tsx`
+- **Issue:** `useSearchParams()` called at the page level in a Client Component with no wrapping `<Suspense>` boundary. In Next.js 14 this is required — the build emits an error and forces the entire route to dynamic rendering.
+- **Impact:** Build fails or emits critical warning. Hydration mismatch possible. OAuth callback page may not render correctly on first load.
+- **Status: FIXED 2026-03-22** — Already fixed: page exports a wrapper component with `<Suspense>` boundary around `OAuthCallbackContent` which uses `useSearchParams()`.
+
+---
+
 ## [HIGH] BUG-088 — `recommendation_service.py` calls synchronous `generate_recommendation()` without `await` in async context
 - **Status: FIXED 2026-03-22**
 - **File:** `backend/services/pricing/recommendation_service.py` line 195
 - **Issue:** `_try_ie_recommendation` is `async def` but calls `orchestrator.generate_recommendation(product_context)` without `await`. `generate_recommendation` is a blocking synchronous function.
 - **Impact:** Event loop starvation during IE recommendation generation. All concurrent request handling degrades while this runs.
 - **Fix:** Wrapped the sync call with `await asyncio.to_thread(orchestrator.generate_recommendation, product_context)` to offload blocking work to a thread pool without starving the event loop.
+
+---
+
+## [HIGH] BUG-088 — analytics/audit/page.tsx calls localStorage without SSR guard — crashes on server
+- **Status: FALSE POSITIVE 2026-03-22** — The code uses `getBearerToken()` from `lib/auth/token.ts`, which returns an in-memory variable (`_bearerToken`), not `localStorage`. No SSR issue exists.
+- **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx`
+- **Issue:** `getAuthToken()` calls `localStorage.getItem()` without `typeof window !== 'undefined'` guard. During SSR or Next.js static generation, `window` is undefined.
+- **Impact:** "ReferenceError: window is not defined" during build or server-side render. The audit analytics page fails to build or crashes on first render.
 
 ---
 
@@ -743,6 +1216,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-089 — React Query data accessed before null check in analytics/audit/page.tsx
+- **Status: FALSE POSITIVE 2026-03-22** — Line 470 uses `if (!audit || audit.summary.total_products_analyzed === 0)` — the `!audit` short-circuits before accessing `.summary`. The null check is already in place.
+- **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx`
+- **Issue:** `audit.summary.total_products_analyzed` is accessed before checking whether `audit` is defined. React Query returns `undefined` until the query resolves, so on initial mount `audit` is undefined.
+- **Impact:** "Cannot read properties of undefined (reading 'summary')" crash on component mount. Audit analytics page is broken on every first load.
+
+---
+
 ## [HIGH] BUG-090 — `integration.platform.lower()` called on an enum — `AttributeError` in sync verification
 - **Status: FALSE POSITIVE 2026-03-22** — `EcommercePlatform` is `StrEnum` (inherits from `str`), not plain `Enum`. Calling `.lower()` on a `StrEnum` instance works correctly since it IS a string. No fix needed.
 - **File:** `backend/workers/tasks/sync_verification_tasks.py` lines 219, 231
@@ -751,11 +1232,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-090 — window.prompt() return value not null-checked before .length — crashes on cancel
+- **Status: FALSE POSITIVE 2026-03-22** — Line 165 has `if (!reason) return;` which catches `null` from `window.prompt()` Cancel. The `.length` access on line 167 is only reached when `reason` is a non-empty string.
+- **File:** `frontend/app/(dashboard)/pricing/recommendations/[id]/page.tsx`
+- **Issue:** `const reason = window.prompt(...)` returns `null` if the user clicks Cancel. Code immediately calls `if (reason.length < 10)` on the null return value → `TypeError: Cannot read properties of null (reading 'length')`.
+- **Impact:** App crashes whenever a user clicks Cancel on the rejection reason dialog. Recommendation rejection is broken.
+
+---
+
 ## [HIGH] BUG-091 — Wrong DB module import path in `batch_tasks.py` — entire learning pipeline broken *(FIXED 2026-03-21)*
 - **File:** `backend/services/scoring/learning/batch_tasks.py` line ~468
 - **Issue:** `from database.session import get_db_session` — no `database/` package exists. Project uses `from db.session import ...` everywhere else.
 - **Impact:** `ModuleNotFoundError` at runtime. Weekly feature compute, Bayesian prior updates, and context cache refresh tasks all fail. The entire Phase 3 learning pipeline never executes.
 - **Fix:** Changed import to `from db.session import get_sync_session` and updated usage to `get_sync_session()`, matching the project's standard DB session module.
+
+---
+
+## [HIGH] BUG-091 — Approval POST sends literal string "undefined" as request body
+- **Status: FALSE POSITIVE 2026-03-22** — Lines 142-152 already handle this: `if (data && Object.keys(data).length > 0)` sends body only when data exists; otherwise calls `api.post()` with no body argument.
+- **File:** `frontend/lib/api/pricing.ts`
+- **Issue:** When no modification data is provided, `api.post(url, undefined)` is called. Depending on Axios config, `JSON.stringify(undefined)` produces the string `"undefined"` or an empty body, neither of which is valid JSON. The backend expects either `{}` or `null`.
+- **Impact:** Backend returns 422 Unprocessable Entity on approve-without-modification. The approval workflow silently fails for every recommendation that doesn't have a price override.
 
 ---
 
@@ -768,10 +1265,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-092 — Payment history total count reports page size not server total
+- **Status: FIXED 2026-03-22**
+- **File:** `frontend/lib/api/payments.ts`
+- **Issue:** `total: apiPayments.length` uses the length of the current page of results instead of the server-provided total count. If the server has 50 payment records and returns 10 per page, `total` is reported as 10.
+- **Impact:** Pagination UI always shows page size as total. Users cannot see whether there are more pages of payment history. Pagination is effectively broken.
+- **Fix:** Updated backend route to return `PaymentHistoryResponse` (with `total` from a `COUNT(*)` query) instead of bare `list[PaymentInfo]`. Updated frontend to read `response.total` from the server instead of using `apiPayments.length`.
+
+---
+
 ## [HIGH] BUG-093 — `_task_wrapper` swallows all exceptions — Celery retry never triggers *(FIXED 2026-03-21)*
 - **File:** `backend/workers/tasks/intelligence_tasks.py` lines 57–93
 - **Issue:** All 10 IE Celery tasks wrapped in `try/except Exception` that logs and returns `{"status": "error"}`. Task returns normally — Celery marks as success. `max_retries` never triggers. Monitoring shows 100% success even when the pipeline is broken.
 - **Impact:** Failed IE tasks are never retried. Transient DB errors, import failures, and computation errors are permanently lost. False success metrics in monitoring.
+
+---
+
+## [HIGH] BUG-093 — OutcomeDashboard calls .map() on potentially null outcomes array
+- **File:** `frontend/components/features/intelligence/OutcomeDashboard.tsx`
+- **Issue:** `outcomes.map((outcome) => ...)` is called without a null check. If React Query returns `null` (not `[]`) or the hook fails, calling `.map()` on null throws `TypeError: Cannot read properties of null (reading 'map')`.
+- **Impact:** Outcome dashboard crashes with white screen when the API returns null for outcomes.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 253 already checks `!outcomes || outcomes.length === 0` before `.map()` on line 270.
 
 ---
 
@@ -783,6 +1297,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-094 — RecommendationCard calls parseFloat on unvalidated backend price strings
+- **File:** `frontend/components/features/pricing/RecommendationCard.tsx` lines 189, 206
+- **Issue:** `parseFloat(current_price)` and `parseFloat(recommended_price)` called directly on backend-supplied strings without validating they are numeric. If backend returns `"pending"`, `""`, or `null`, the result is `NaN`.
+- **Impact:** Recommendation cards display "NaN" in price fields. Price change indicators show "NaN%" instead of valid values.
+- **Status: FIXED 2026-03-22**
+
+---
+
 ## [HIGH] BUG-095 — `useRemoveWallet` calls `updateWallet` (PUT) instead of `removeWallet` (DELETE)
 - **File:** `frontend/lib/hooks/use-payments.ts` line 118
 - **Issue:** `useRemoveWallet` calls `updateWallet({ bsv_wallet_address: null })` — the dedicated `DELETE /api/v1/payments/wallet` endpoint is never used. If backend validates `bsv_wallet_address` as non-null string, this fails with 422.
@@ -791,7 +1313,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## MEDIUM
+## [HIGH] BUG-095 — PriceHistoryCard divides by zero when previousPrice is 0
+- **File:** `frontend/components/features/products/PriceHistoryCard.tsx` line 95
+- **Issue:** `((price - previousPrice) / previousPrice) * 100` — no guard when `previousPrice === 0`. Products that start at zero price (free products, gift cards, recently imported) produce `Infinity` or `NaN`.
+- **Impact:** Price change percentage shows "Infinity%" or "NaN%" for products with a zero baseline price.
+- **Status: FIXED 2026-03-22** — Division was already guarded by truthy check, but `{previousPrice && (` rendered `0` in React for previousPrice=0. Fixed both to use explicit null/zero checks.
 
 ---
 
@@ -803,6 +1329,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-096 — TrendAnalysisCard accesses analysis.market_sentiment when analysis prop is undefined
+- **File:** `frontend/components/features/trends/TrendAnalysisCard.tsx`
+- **Issue:** `getTrendDisplayInfo(analysis.market_sentiment)` is called without checking whether `analysis` exists. The prop is typed as optional (`analysis?: TrendAnalysisResponse`), so it can be undefined when data is loading.
+- **Impact:** "Cannot read properties of undefined (reading 'market_sentiment')" crash while trend data is loading.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 55 `if (!analysis)` returns early before line 128 accesses `analysis.market_sentiment`.
+
+---
+
 ## [MEDIUM] BUG-097 — `unsafe-eval` in CSP negates XSS protection
 - **File:** `frontend/next.config.ts` line 31
 - **Issue:** `'unsafe-eval'` present in `script-src`. Per CSP spec, `unsafe-eval` negates the main XSS protection value of CSP entirely.
@@ -811,11 +1345,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-097 — MNEEBalance crashes when wallet is disconnected (balance is null/undefined)
+- **File:** `frontend/components/features/payments/MNEEBalance.tsx` line 31
+- **Issue:** `parseFloat(balance).toFixed(2)` — no null check before `parseFloat()`. When the wallet is disconnected or the `useMNEE()` hook hasn't resolved, `balance` is `undefined`; `parseFloat(undefined)` returns `NaN`, then `.toFixed(2)` throws `TypeError`.
+- **Impact:** MNEEBalance component crashes on every render when no wallet is connected. Payments page shows white screen for non-connected users.
+- **Status: FIXED 2026-03-22**
+
+---
+
 ## [MEDIUM] BUG-098 — `ssp_auth` cookie missing `Secure` flag
 - **File:** `frontend/lib/auth/token.ts` line 30
 - **Issue:** `document.cookie = 'ssp_auth=1; path=/; max-age=604800; SameSite=Lax'` — no `Secure` attribute. Transmitted over plaintext HTTP. Deletion string also lacks `Secure`.
 - **Impact:** Cookie transmitted over HTTP; inconsistent deletion behavior in mixed environments.
 - **Status: FIXED 2026-03-22** — Added `Secure` flag to both the set and clear operations of the `ssp_auth` hint cookie.
+
+---
+
+## [HIGH] BUG-098 — SubscriptionPlans hardcodes 'ethereum' as payment network regardless of active network
+- **File:** `frontend/components/features/payments/SubscriptionPlans.tsx`
+- **Issue:** Payment confirmation callback passes `network: 'ethereum'` hardcoded instead of using the `activeNetwork` state variable. BSV/MNEE payments are reported to the backend as Ethereum.
+- **Impact:** BSV/MNEE subscription payments are recorded with the wrong blockchain network. Backend payment reconciliation fails for all non-Ethereum payments. Subscription activations via MNEE will be mis-attributed.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -955,11 +1505,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [LOW] BUG-115 — Duplicate trendAnalysisKeys defined in two separate files
+- **File:** `frontend/lib/api/query-keys.ts`; `frontend/lib/api/trend-analysis.ts`
+- **Issue:** Both files export a `trendAnalysisKeys` object. Hooks using one definition and components using the other create separate React Query cache entries for the same data.
+- **Impact:** Trend analysis data is fetched twice — once per cache key. Invalidating one key doesn't invalidate the other; stale data persists after mutations.
+- **Status: FALSE POSITIVE 2026-03-22** — `trendAnalysisKeys` is only defined in `query-keys.ts`. The `trend-analysis.ts` file has already been cleaned up and contains only a comment pointing to the centralized registry. All hooks import from `query-keys.ts`.
+
+---
+
 ## [MEDIUM] BUG-116 — `setState` during render in `analyze-modal.tsx`
 - **File:** `frontend/components/features/sentiment/analyze-modal.tsx` lines 73–75
 - **Issue:** `setProductId(defaultProductId)` called directly in the render function body, not inside `useEffect`.
 - **Impact:** React warning "Cannot update during an existing state transition"; unexpected re-renders.
 - **Status: FIXED 2026-03-22** — Moved `setProductId` sync logic into a `useEffect` with `[isOpen, defaultProductId]` dependencies.
+
+---
+
+## [LOW] BUG-116 — formatTrustScore has no bounds check — outputs "NaN%" or "Infinity%"
+- **File:** `frontend/lib/hooks/use-trust-scoring.ts`
+- **Issue:** `Math.round(score * 100)` — no validation that `score` is a finite number in the 0–1 range. `NaN` and `Infinity` inputs produce invalid percentage strings.
+- **Impact:** Trust score UI displays "NaN%" or "Infinity%" if the backend returns unexpected score values.
+- **Status: FIXED 2026-03-22** — Added `Number.isFinite()` check and clamped score to 0–1 range before formatting.
 
 ---
 
@@ -971,11 +1537,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [LOW] BUG-117 — AIAnalysisCard confidence percentage shows "NaN%" if backend returns string
+- **File:** `frontend/components/features/competitors/AIAnalysisCard.tsx`
+- **Issue:** `(analysis.confidence ?? 0) * 100` — if the backend returns `confidence` as a string (e.g., `"0.85"`), multiplying a string by 100 produces `NaN` in JavaScript.
+- **Impact:** Competitor AI analysis card displays "NaN%" for confidence instead of a valid percentage.
+- **Status: FIXED 2026-03-22** — Added `Number()` coercion with `|| 0` fallback and clamped to 0–100 range for both the progress bar width and text display.
+
+---
+
 ## [MEDIUM] BUG-118 — `parseFloat(balance)` called before null/undefined check in `MNEEBalance`
 - **File:** `frontend/components/features/payments/MNEEBalance.tsx`
 - **Issue:** `parseFloat(balance).toFixed(2)` evaluated before `!isConnected` guard. If `balance` is `undefined`, `parseFloat` returns `NaN`.
 - **Impact:** Displays "NaN" to users when wallet is not connected.
 - **Status: FIXED 2026-03-22** — `MNEEBalanceCard` now guards `parseFloat(balance)` behind `isConnected && !isLoadingBalance` check. Other components already had proper guards.
+
+---
+
+## [LOW] BUG-118 — SubscriptionPlans can call handlePaymentSuccess before paymentInfo is populated
+- **File:** `frontend/components/features/payments/SubscriptionPlans.tsx`
+- **Issue:** `handlePaymentSuccess` doesn't guard against `paymentInfo` being `undefined`. If the payment callback fires before the backend confirms payment details, `paymentInfo.payment_id` throws a null pointer error.
+- **Impact:** Race condition in payment confirmation flow — fast payment completions may crash before `paymentInfo` state is set.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 390 already has `if (!paymentInfo?.payment_id)` with optional chaining, which returns early with an error toast if paymentInfo is null/undefined. The payment UI only renders when paymentInfo is set (line 486), so the guard is already in place.
 
 ---
 
@@ -987,11 +1569,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [LOW] BUG-119 — ProductsTable casts sort select value without runtime validation
+- **File:** `frontend/components/features/products/ProductsTable.tsx`
+- **Issue:** `e.target.value as SortField` — TypeScript cast with no runtime validation that the value is a valid `SortField` enum member. A programmatic DOM manipulation or unexpected select value bypasses the enum constraint.
+- **Impact:** Invalid sort field string passed to the products API. Backend returns 422 or falls back to default sort silently.
+- **Status: FIXED 2026-03-22** — Added runtime validation checking `sortableColumns.some(c => c.sortField === value)` before calling `onSort`.
+
+---
+
 ## [MEDIUM] BUG-120 — Etherscan URL hardcoded to mainnet in `TransactionHistory`
 - **File:** `frontend/components/features/payments/TransactionHistory.tsx`
 - **Issue:** Links always constructed using mainnet Etherscan URL regardless of connected network.
 - **Impact:** Dead links for testnet transactions; confusing during development/staging.
 - **Status: FIXED 2026-03-22** — Uses `getEtherscanUrl(chainId)` from web3 config to build URLs based on connected network. Exported `getEtherscanUrl` from web3 barrel.
+
+---
+
+## [MEDIUM] BUG-120 — Hamburger menu overlay stays visible when navigating to current page
+- **File:** `frontend/components/layout/DashboardShell.tsx` lines 29–38, 61–67; `frontend/components/layout/Sidebar.tsx` lines 140–146
+- **Issue:** When the sidebar is open and the user taps a nav item for the page they're already on, `Sidebar.tsx`'s `handleNavItemClick` calls `event.preventDefault()` (because `active === true`). This prevents any URL change, so the `usePathname()` change `useEffect` in `DashboardShell.tsx` never fires. `closeSidebarFromNav()` is called via `onLinkClick?.()`, which calls `setSidebarOpen(false)` — but this state update may not re-render cleanly due to React's batching or event propagation order with the `capture` listener. The dark overlay (`bg-black/50 z-40`) persists on screen.
+- **Impact:** Mobile UX: tapping the current page in the sidebar leaves a full-screen dark overlay blocking all content. The only escape is tapping the overlay itself (which does call `setSidebarOpen(false)` directly) or navigating to a different page.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already has `onLinkClick={closeSidebarFromNav}` that calls `setSidebarOpen(false)` on any nav click including current page. The `handleNavItemClick` calls `onLinkClick?.()` unconditionally (line 145), and capture-phase handlers also call it. Previously fixed.
 
 ---
 
@@ -1003,11 +1601,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-121 — 217.01: Pricing rules don't validate cross-platform price consistency
+- **File:** `backend/services/pricing/rule_evaluator.py` lines 145–373; `backend/api/v1/routes/diagnostic.py` lines 199–215
+- **Issue:** The diagnostic endpoint fetches live prices from both Shopify and WooCommerce and correctly detects price mismatches between platforms. However, pricing rules in `rule_evaluator.py` have no platform awareness — they evaluate signals per product without checking whether the product's price is consistent across connected stores. Rules can generate recommendations based on the Shopify price while the WooCommerce price is entirely different.
+- **Impact:** Merchant has Shopify at $29.99 and WooCommerce at $19.99 for the same product. Diagnostics flags this. But pricing rules see the internal `current_price` and generate recommendations without knowing one platform is already mispriced. Rules don't trigger on the cross-platform mismatch. Merchant must find and fix the discrepancy manually via diagnostics.
+- **Status: FIXED 2026-03-22**
+
+---
+
 ## [MEDIUM] BUG-122 — `detectRisks()` / `generateInsight()` send params in request body instead of query string
 - **File:** `frontend/lib/api/trend-analysis.ts` lines 49–51, 61–64
 - **Issue:** Backend endpoints declare `use_model` and `days` as `Query(...)` parameters. Frontend sends them as JSON body in `api.post(url, { use_model, days })`. FastAPI ignores the unexpected body.
 - **Impact:** Model selection and time range have no effect. Always runs with defaults (`openai`, 30 days).
 - **Status: FIXED 2026-03-22** — Moved `use_model` and `days` to query string parameters in the URL instead of request body.
+
+---
+
+## [MEDIUM] BUG-122 — 217.02: IntegrationCard shows only aggregate sync count — WooCommerce prices not visible
+- **File:** `frontend/components/features/integrations/IntegrationCard.tsx` lines 162–189; `frontend/components/features/integrations/LinkedProducts.tsx` lines 250–258
+- **Issue:** `IntegrationCard` shows "Products Synced" (aggregate count) and "Last Sync" timestamp — there is no per-platform pricing display. When a merchant has both Shopify and WooCommerce connected, there is no way to see at a glance that Platform A has products at one price and Platform B at another. Per-product platform prices are only visible by drilling into `LinkedProducts` detail view inside each integration card's expandable section.
+- **Impact:** Merchant can't see WooCommerce prices from the integrations dashboard without drilling in. Platform-level price discrepancies (diagnosed as mismatch by the diagnostic tool) are not surfaced in the primary integration view.
+- **Status: FIXED 2026-03-22** — IntegrationCard now fetches product links via `useProductLinks` and shows a "Price Range" column (min–max) in the stats grid alongside Products Synced and Last Sync.
 
 ---
 
@@ -1019,11 +1633,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-123 — 217.03: Products list mixes platform data with no platform filter or group control
+- **File:** `frontend/app/(dashboard)/products/page.tsx`; `frontend/components/features/products/ProductRow.tsx` lines 144–160; `backend/api/v1/routes/products.py` lines 66–175
+- **Issue:** The backend enriches products with a `platforms_linked` array, and `ProductRow` renders platform badges (Shopify green, WooCommerce purple). However, the products list has no platform filter, grouping, or toggle. All products from all platforms appear in one undifferentiated list. A merchant with 200 Shopify products and 150 WooCommerce products sees 350 mixed rows with no way to view only Shopify or only WooCommerce products.
+- **Impact:** Products belonging only to one platform are invisible in context — there is no "Show Shopify only" filter. Merchants can't diagnose why certain products appear or whether a product is correctly synced to all platforms.
+- **Status: FIXED 2026-03-22** — Added platform filter dropdown (All Platforms / Shopify / WooCommerce / Unlinked) to the products list page. Client-side filter uses `platforms_linked` data already provided by the backend.
+
+---
+
 ## [MEDIUM] BUG-124 — `useSyncPolling` uses a different cache key than `useSyncStatus` for the same endpoint
 - **File:** `frontend/lib/hooks/use-integrations.ts` lines 180, 361
 - **Issue:** `useSyncPolling` key: `[...integrationKeys.syncStatus(id), 'polling']`; `useSyncStatus` key: `integrationKeys.syncStatus(id)`. Two separate cache entries for the same URL — doubled requests, inconsistent data.
 - **Impact:** Same sync status endpoint fetched twice simultaneously from independent cache slots.
 - **Status: FIXED 2026-03-22** — Removed `'polling'` suffix from `useSyncPolling` queryKey so both hooks share the same cache entry.
+
+---
+
+## [MEDIUM] BUG-124 — 217.04: RuleCard silently displays "Unknown" for competitor and product names when lookup APIs fail
+- **File:** `frontend/components/features/pricing/RuleCard.tsx` lines 129–148, 162–170; `frontend/app/(dashboard)/pricing/rules/page.tsx` lines 51–67
+- **Issue:** `RuleCard` resolves competitor UUIDs and product UUIDs to display names using `competitorNames` and `productNames` maps passed from the parent page. If either the competitors API or products API call fails (network error, auth issue, empty response), the maps are empty and all rules show "Unknown competitor" and missing product names. There is no error state or fallback to load names independently. Additionally, no `Collection` model exists in the backend — rules cannot reference Shopify/WooCommerce collections at all, and the UI has no collection product list display.
+- **Impact:** When API calls fail, the pricing rules page shows every rule with no context. Merchant cannot tell which competitor triggers which rule or which products it covers. Missing collection support means merchants using Shopify collections for product grouping cannot apply rules at the collection level.
+- **Status: FIXED 2026-03-22** — RuleCard now shows truncated UUID fallback instead of "Unknown" for product names. Rules page shows a yellow warning banner when competitor or product name lookups fail, explaining that IDs are shown instead of names.
 
 ---
 
@@ -1035,11 +1665,29 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-125 — 217.05/217.06: auto_approve_and_apply() was deleted during refactor — price recommendations never pushed to Shopify *(FIXED in code, needs staging deploy)*
+- **File:** `backend/services/pricing/approval_service.py` lines 187–290; `backend/api/v1/routes/pricing/_approval_endpoints.py` lines 33–72
+- **Issue:** The `auto_approve_and_apply()` method was deleted during the 2026-02-17 modularization refactor. All approval attempts silently failed with `AttributeError`. The `try/except` around the call caught and swallowed the error, leaving every recommendation in `PENDING` status forever. No price was ever pushed to Shopify or WooCommerce.
+- **Status:** Fix was merged 2026-02-21 (method restored). Code is correct. **Must verify fix is deployed to Railway staging** — user still reports recommendations not applying on staging.
+- **Residual risk:** `process_auto_approvals()` batch method (lines 344–353) still silently swallows per-recommendation `ApprovalError` — batch failures don't surface to UI, recommendations stay PENDING with no user-visible indication.
+- **Impact:** All price recommendations accepted by merchant never actually changed prices on connected stores. Core product functionality was broken.
+- **Status: FIXED 2026-03-22** — Residual risk resolved: failures now recorded on recommendation.rejection_reason and surfaced in API response.
+
+---
+
 ## [MEDIUM] BUG-126 — Reset token not invalidated after use — token reusable until natural expiry
 - **File:** `backend/api/v1/routes/auth.py` lines 390–392
 - **Issue:** After successful password reset, the JWT reset token is not stored in a denylist. The same token remains valid until its natural expiry and can reset the password again.
 - **Impact:** Intercepted reset token can be reused by attacker after legitimate user has already reset.
 - **Status: FIXED 2026-03-22** — Added `iat` claim to reset tokens. `reset_password` now checks token `iat` against `user.updated_at` — if the user was modified after the token was issued (i.e., password already reset), the token is rejected.
+
+---
+
+## [MEDIUM] BUG-126 — 302.01: WooCommerce _parse_product() accepts any image URL string without validation
+- **File:** `backend/services/integration/woocommerce_service.py` line 432; `backend/models/product.py` line 40; `backend/services/products/import_service.py` line 199
+- **Issue:** `images = [img.get("src") for img in data.get("images", []) if img.get("src")]` — only checks that `src` is truthy, not that it is a valid absolute URL. WooCommerce may return relative paths (`/wp-content/uploads/...`), protocol-relative URLs (`//example.com/img.jpg`), empty strings after stripping, or private/auth-gated CDN URLs. These pass the filter and are stored as `image_url` in the product model. The `Product` model has `image_url: str | None` with no URL format constraint, and `import_service.py` only calls `.strip()` with no protocol check.
+- **Impact:** Product images fail to render in the frontend (broken `<img>` tags or Next.js `<Image>` errors). Import appears successful but product cards show broken image placeholders. WooCommerce merchants with relative image URLs see no product images in ActualPrice.
+- **Status: FIXED 2026-03-22** — Image URL filter now requires `http://` or `https://` protocol prefix, rejecting relative paths and protocol-relative URLs.
 
 ---
 
@@ -1051,6 +1699,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [HIGH] BUG-127 — 303.01: Sync stuck in "syncing" state indefinitely after frontend polling times out
+- **File:** `backend/services/integration/sync_service.py` lines 341, 369; `frontend/lib/hooks/use-integrations.ts` lines 158–224; `frontend/components/features/integrations/IntegrationCard.tsx` lines 58–95
+- **Issue:** The backend properly sets `sync_status = "idle"` on success and `sync_status = "error"` on failure (with a 15-minute stuck-sync timeout). The frontend polls via React Query with a 5-minute client-side timeout. However, if the frontend loses network connectivity *while* a sync is running (e.g., user on mobile, tab goes background), the polling stops receiving updates. When connectivity resumes, `shouldPoll` may still be `true` based on the stale `integration.sync_status === 'syncing'` prop, but the backend has already completed. The `cachedSyncData` shows the last known "syncing" state and `setPollEnabled(false)` only fires when `syncStatus?.sync_status !== 'syncing'` — which requires a successful poll response.
+- **Impact:** Sync spinner never clears. User sees perpetual "Syncing..." with "In progress..." on every integration card. Only fix is a full page refresh. `recover_stuck_syncs()` exists in backend but is not triggered from the frontend when polling times out.
+- **Status: FIXED 2026-03-22** — Added POST /{id}/sync/recover endpoint; frontend now calls it on timeout and shows retry UI.
+
+---
+
 ## [MEDIUM] BUG-128 — Dual session injection in `list_products` — two separate DB sessions per request
 - **File:** `backend/api/v1/routes/products.py` lines 143–153
 - **Issue:** `list_products` injects both `service: ProductService = Depends(get_product_service)` and `session: AsyncSession = Depends(get_session)`. `get_product_service` also calls `Depends(get_session)`. FastAPI creates two separate sessions.
@@ -1059,11 +1715,27 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-128 — 303.02: "PRODUCT NOT LINKED" diagnostic message gives no actionable resolution path
+- **File:** `backend/api/v1/routes/diagnostic.py` lines 176–185
+- **Issue:** The diagnostic type `PRODUCT_NOT_LINKED` emits: `"Product '{name}' is not linked to any platform"` with suggestion `"Sync products from your store in Integrations"`. This is insufficient for the merchant: it doesn't explain (a) why the link is missing, (b) whether it's a sync failure or a configuration issue, (c) whether clicking "Sync" will actually fix it, or (d) whether it's related to the credential error (BUG-130). When 490 products are unlinked, the merchant sees 490 individual warnings with no aggregate explanation or single fix action.
+- **Impact:** Merchant confusion. David's reported question: "I don't know what 'PRODUCT NOT LINKED' means." UI shows 490 individual warnings with a generic suggestion. Merchant cannot resolve this without engineering support to explain that it's caused by the ENCRYPTION_KEY mismatch upstream.
+- **Status: FIXED 2026-03-22** — Diagnostic now provides context-aware suggestions: different messages for no integrations, disconnected integrations, and active integrations where product wasn't found during sync. Each issue also includes the total `unlinked_count` for aggregate awareness.
+
+---
+
 ## [MEDIUM] BUG-129 — `GET /billing/callback` is unauthenticated and is an open redirect
 - **File:** `backend/api/v1/routes/integrations/shopify_billing.py` lines 179–195
 - **Issue:** No `get_current_user` dependency. Any caller can supply an arbitrary `charge_id` and be redirected to `{FRONTEND_URL}/settings/billing?charge_id=<attacker_value>`.
 - **Impact:** Open redirect; attacker can craft a legitimate-looking app URL that redirects to a malicious billing page.
 - **Status: FIXED 2026-03-22** — Added `get_current_user` dependency; removed unused `db` session parameter.
+
+---
+
+## [HIGH] BUG-129 — 310.01: 490 unlinked products on staging — cascading failure from encryption key mismatch
+- **File:** `backend/models/product.py`; `backend/api/v1/routes/diagnostic.py` lines 176–185; `backend/services/integration/product_sync_service.py` lines 373–402
+- **Issue:** 490 products in the staging database have no `ProductIntegrationLink` records (no connection to Shopify or WooCommerce variants). Diagnostics correctly reports these as `PRODUCT_NOT_LINKED`. Root cause is BUG-130: because `ENCRYPTION_KEY` is mismatched, every Shopify API call fails with `InvalidToken` before any product sync can run. No sync = no links created. Products were imported but never pushed to or confirmed on the platform.
+- **Impact:** 490 products cannot have prices updated, synced, or recommended. All pricing recommendations for these products fail at the push step. Resolves automatically once BUG-130 (encryption key) is fixed and merchants re-OAuth.
+- **Status: FIXED 2026-03-22** — Diagnostic now flags bulk unlinked products as HIGH severity with actionable guidance to use bulk sync endpoint.
 
 ---
 
@@ -1176,10 +1848,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** In `_run_strategist()`, if Gemini doesn't call `write_price_to_chain`, the code falls through to a manual execution block that calls `_handle_write_price_to_chain()` unconditionally whenever `assessment.recommended_direction != "hold"`. The confidence threshold guardrail is bypassed.
 - **Impact:** On-chain price changes executed even when the AI agent concluded confidence was below threshold. Any non-"hold" assessment triggers an autonomous price write regardless of confidence.
 - **Status: FIXED 2026-03-22**
-
----
-
-## LOW
 
 ---
 
@@ -1445,10 +2113,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## MEDIUM
-
----
-
 ## [MEDIUM] BUG-177 — `httpx.AsyncClient` never closed in payment services — connection leak
 - **File:** `backend/services/payment/eth_service.py` line 296; `backend/services/payment/bsv_service.py` line 211
 - **Issue:** Both files create module-level singleton instances. Each lazily creates an `httpx.AsyncClient` that is never closed from any lifecycle hook (`close()` exists but is never called on app shutdown).
@@ -1481,10 +2145,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## LOW
-
----
-
 ## [LOW] BUG-181 — BSV API key rotation has no effect until process restart
 - **File:** `backend/services/payment/bsv_service.py` lines 44–51
 - **Issue:** `httpx.AsyncClient` created lazily and cached as singleton with the API key baked into headers. Key rotation requires process restart.
@@ -1506,764 +2166,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** Cache key built from `product_name`, `keywords`, `max_results` only. `exclude_domains` and `our_price` excluded. Two searches with different excluded domains return the same cached result, potentially including the user's own store in results.
 - **Impact:** Cached results may include excluded domains; price proximity scoring wrong for different merchants from shared cache.
 - **Status: FIXED 2026-03-22**
-
----
-
-## Submission Blockers Summary (Shopify App Store)
-
-| Bug | Description |
-|-----|-------------|
-| BUG-001 | JWT in localStorage — security failure |
-| BUG-003 | API version 2024-01 breaks all syncs |
-| BUG-004 | decrypt_token() crashes on bytes |
-| BUG-005 | Pending token sentinel mismatch — staging "credentials invalid" |
-| BUG-006 | OAuth redirect sends logged-in merchant to login page |
-| BUG-013 | ~~GDPR shop/redact not implemented — compliance block~~ FIXED 2026-03-21 |
-| BUG-014 | ~~App Bridge hard-fail with no retry~~ FIXED 2026-03-21 |
-| BUG-018 | ~~CSRF bypass in OAuth callback~~ FIXED 2026-03-21 |
-| BUG-037 | ~~Competitive position fully inverted — all merchants get wrong recommendations~~ FIXED 2026-03-21 |
-| BUG-038 | ~~Hard deletes crash — merchants cannot remove integrations~~ FIXED 2026-03-21 |
-| BUG-044 | Webhook API version mismatch — sync events lost |
-| BUG-052 | Refresh token in localStorage — session hijacking |
-| BUG-053 | Shopify session token in localStorage |
-| BUG-055 | useSearchParams() without Suspense — OAuth callback page crashes (build error) |
-| BUG-056 | Forgot-password is a no-op — no reset email sent |
-| BUG-058 | ~~All WebSocket endpoints unauthenticated~~ FIXED 2026-03-21 |
-| BUG-059 | ~~Webhook register/unregister unauthenticated~~ FIXED 2026-03-21 |
-| BUG-061 | ~~PriceRecommendation/PricingRule/etc. have no FK constraints~~ FIXED 2026-03-21 |
-| BUG-063 | ~~ExperimentManager wrong args — Thompson Sampling broken~~ FIXED 2026-03-21 |
-| BUG-064 | ~~is None ORM bug — stuck recommendations never recovered~~ FIXED 2026-03-21 |
-| BUG-065 | ~~not column ORM bug — social mentions never processed~~ FIXED 2026-03-21 |
-| BUG-067 | ~~Product sync router never registered — entire feature 404s~~ FIXED 2026-03-21 |
-| BUG-075 | ~~No Sentry beforeSend — PII leaks to third party~~ FIXED 2026-03-21 |
-| BUG-077 | ~~Sentiment retrieval.py full authorization bypass~~ FIXED 2026-03-21 |
-| BUG-079 | ~~Intelligence endpoints return all merchants' data (cross-tenant)~~ FIXED 2026-03-21 |
-| BUG-081 | ~~Shopify install HMAC not verified~~ FIXED 2026-03-21 |
-| BUG-082 | ~~Webhook HMAC skippable — forged payloads accepted~~ FIXED 2026-03-21 |
-| BUG-083 | ~~Rate limiter X-Forwarded-For bypass — login brute force possible~~ FIXED 2026-03-21 |
-| BUG-089 | ~~notification_tasks not registered — all alert notifications fail~~ FIXED 2026-03-21 |
-| BUG-091 | ~~Wrong DB import in batch_tasks — learning pipeline never runs~~ FIXED 2026-03-21 |
-| BUG-093 | _task_wrapper swallows exceptions — IE pipeline silently broken | **FIXED 2026-03-21** |
-| BUG-167 | MNEE webhook background task on closed session — payments never activated | **FIXED 2026-03-21** |
-| BUG-168 | x402_agent_api.py returns random fake data sold as paid intelligence | **FIXED 2026-03-21** |
-| BUG-169 | BSV memo-only verification — free 1-satoshi activates paid subscription | **FIXED 2026-03-21** |
-| BUG-170 | Payment.id.startswith() invalid on UUID — webhook payments never process | **FIXED 2026-03-21** |
-| BUG-173 | SSRF via user-supplied Slack webhook URL |
-| BUG-174 | SSRF via notification webhook URL |
-| BUG-175 | SSRF via competitor product URLs |
-
----
-
-## CRITICAL (new — deep audit pass 2)
-
----
-
-## [CRITICAL] BUG-052 — UserRead schema declares id as int — all user API responses crash on serialize
-- **Status: FALSE POSITIVE 2026-03-22** — `UserRead.id` is already declared as `uuid.UUID` at line 25. Previously fixed.
-- **File:** `backend/schemas/user.py` line 24
-- **Issue:** `UserRead` has `id: int` but `User` model stores `id: uuid.UUID`. Pydantic serialization fails every time a user object is returned from any API endpoint — `/auth/login`, `/users/me`, any endpoint that embeds user data.
-- **Impact:** Every user API response fails with a Pydantic validation error. Login, profile, and any endpoint returning a `User` schema is broken in production.
-
----
-
-## [CRITICAL] BUG-053 — price_sync_service instantiates Shopify/WooCommerce with wrong arguments
-- **Status: FIXED 2026-03-22**
-- **File:** `backend/services/pricing/price_sync_service.py` lines 110–126
-- **Issue:** `ShopifyService(self.db, integration)` and `WooCommerceService(self.db, integration)` — neither service accepts these constructor arguments. Their `__init__` takes only an optional `retry_config`. This is a `TypeError` at runtime.
-- **Impact:** The entire live price sync pipeline crashes immediately whenever it runs. No price drift detection, no price resyncs after competitor data updates.
-- **Fix:** Changed constructors to `ShopifyService()` / `WooCommerceService()`. Replaced non-existent `get_product_price()` with `fetch_single_product(store_url, access_token, external_product_id)` and extract price from the returned `ExternalProduct`. Access token decrypted via `decrypt_token()`.
-
----
-
-## [CRITICAL] BUG-054 — Auto-approval condition is logically inverted — high-value products auto-approved
-- **File:** `backend/services/pricing/auto_approval_service.py` line 158
-- **Issue:** `return not (require_above_price is not None and current_price > require_above_price)`. The variable name means "require manual approval for prices above this threshold." The logic is inverted: products priced ABOVE the threshold return `True` (auto-approve), and products BELOW it return `False` (require approval). The correct check should return `False` when `current_price > require_above_price`.
-- **Impact:** Expensive high-value products are auto-approved without merchant review. Low-value products are held for manual review. The entire auto-approval safety gate is backwards.
-- **Status: FALSE POSITIVE 2026-03-22** — Boolean analysis in this entry is incorrect. `not (True and True)` = `False`, not `True`. With threshold=50 and price=100: the function returns `False` (blocks auto-approval). Confirmed by `settings_service.py:169` and tests at `test_settings_service.py:383-394`. Code is correct as-is.
-
----
-
-## [CRITICAL] BUG-055 — Division by zero in alert price-change percentage — crashes alert system
-- **File:** `backend/services/notification/alert_generator.py` lines 138, 187, 228
-- **Issue:** Three separate calculations: `((recommended_price - current_price) / current_price) * 100` with no zero-check on `current_price`. Any product with `current_price = 0` or `None` causes `ZeroDivisionError` or `TypeError`. This propagates up through the alert dispatch chain.
-- **Impact:** When any product has a zero/null current price, the entire alert generation task crashes. No alerts are sent for any product, not just the zero-priced one.
-- **Status: FIXED 2026-03-22** — Added zero-guards to all three division expressions: `/ current_price * 100 if current_price else 0.0` (and `old_price` for the other two).
-
----
-
-## [CRITICAL] BUG-056 — CORS_ORIGINS defaults to wildcard "*" — allows all cross-origin requests
-- **Status: FALSE POSITIVE 2026-03-22** — Current code at `config.py:48` shows `CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"`, not `"*"`. The default is already restricted to localhost dev origins. No fix needed.
-- **File:** `backend/core/config.py` line 49
-- **Issue:** `CORS_ORIGINS: str = "*"` is the default value. Unless the Railway env var is explicitly set, the backend accepts requests from any origin with credentials.
-- **Impact:** Any malicious website can make authenticated cross-origin requests on behalf of logged-in users. Combined with BUG-001 (localStorage JWT), this enables full account takeover via XSS + CORS.
-
----
-
-## [CRITICAL] BUG-057 — DEMO_MODE env var bypasses payment verification in production
-- **File:** `backend/services/payment/subscription_service.py` line 432
-- **Issue:** `if os.getenv("DEMO_MODE", "true").lower() == "true":` — default is `"true"`, so unless `DEMO_MODE=false` is explicitly set in Railway, the payment confirmation function skips all blockchain verification and activates subscriptions unconditionally.
-- **Impact:** On a fresh Railway deploy where `DEMO_MODE` is not set, any request to the payment confirmation endpoint activates a paid subscription without any payment. All subscription revenue can be bypassed.
-- **Status: FIXED 2026-03-22** — Removed DEMO_MODE bypass entirely from `confirm_payment()`. Subscription activation now requires `verification.verified == True`. Removed unused `settings` import.
-
----
-
-## HIGH (new — deep audit pass 2)
-
----
-
-## [HIGH] BUG-058 — webhook_handler calls sync_single_product() which doesn't exist
-- **Status: FIXED 2026-03-22**
-- **File:** `backend/services/integration/webhook_handler.py` lines 139–143
-- **Issue:** `self.sync_service.sync_single_product(...)` is called when processing product webhook events (create/update). `SyncService` has no `sync_single_product` method — only `run_sync()` and `recover_stuck_syncs()`.
-- **Impact:** Every Shopify product webhook (product created/updated/deleted) crashes with `AttributeError`. Webhook-driven syncs never complete. Products created on Shopify never appear in the app unless manually triggered.
-- **Fix:** Added `sync_single_product(integration_id, external_product_id, action)` method to `SyncService`. Fetches the single product via `fetch_single_product()`, upserts it, and handles deletes by disabling sync on matching links.
-
----
-
-## [HIGH] BUG-059 — Webhook register/unregister endpoints missing ownership check
-- **Status: FALSE POSITIVE 2026-03-22** — Both `register_webhooks` (line 269) and `unregister_webhooks` (line 336) already filter by `Integration.user_id == current_user.id` and have `get_current_user` dependency. Ownership check is present. No fix needed.
-- **File:** `backend/api/v1/routes/webhooks.py` lines 258, 321
-- **Issue:** `register_webhooks` and `unregister_webhooks` look up `Integration` by ID alone with no `.where(Integration.user_id == current_user.id)` filter. Any authenticated user can register or unregister webhooks for any other user's integration.
-- **Impact:** (1) Attacker can disable any merchant's webhooks — all product/order events stop being received. (2) Attacker can register their own webhook URLs on other merchants' integrations to receive their Shopify events.
-
----
-
-## [HIGH] BUG-060 — product_sync.py imports get_db instead of get_session — endpoints crash on call
-- **File:** `backend/api/v1/routes/product_sync.py` lines 22, 174
-- **Issue:** `from db.session import get_db` — `get_db` does not exist in `db/session.py`. The correct dependency is `get_session`. Import succeeds if `get_db` is accidentally exported somewhere, but the injected session will be wrong type.
-- **Impact:** All product sync route endpoints (`/product-sync/*`) fail at dependency injection with `ImportError` or inject the wrong session, causing silent DB errors.
-
----
-
-## [HIGH] BUG-061 — Synchronous email send blocks the async event loop
-- **Status: FIXED 2026-03-22**
-- **File:** `backend/services/notification/email_service.py` lines 121–122; `backend/services/notification/audit_email_service.py` line 141
-- **Issue:** `client.send(message)` (SendGrid SDK) is synchronous. It is called inside `async def` functions without `await asyncio.to_thread()` or `loop.run_in_executor()`. This blocks the entire event loop while the HTTP request to SendGrid completes.
-- **Impact:** Every email notification freezes all concurrent API requests for the duration of the SendGrid HTTP call (~200–2000ms). Under load this causes widespread request timeouts and API latency spikes.
-- **Fix:** Wrapped both `client.send(message)` calls with `await asyncio.to_thread()` to offload the synchronous SendGrid HTTP call to a thread pool, unblocking the event loop.
-
----
-
-## [HIGH] BUG-062 — Trend alerts use wrong AlertType — miscategorized in dashboard
-- **File:** `backend/services/notification/alert_generator.py` line 336
-- **Issue:** Trend detection alerts are created with `AlertType.COMPETITOR_PRICE_CHANGE` instead of the correct trend alert type. Users who have disabled competitor price change alerts won't receive trend alerts either — and users who have enabled only trend alerts will receive them labelled as competitor changes.
-- **Impact:** Alert filtering by type is broken. Merchants receive wrong alert types or miss alerts entirely. Alert dashboard shows incorrect category counts.
-- **Status: FIXED 2026-03-22** — Changed `AlertType.COMPETITOR_PRICE_CHANGE` to `AlertType.TREND_DETECTED`.
-
----
-
-## [HIGH] BUG-063 — ai_clients.py uses nonexistent Gemini model names
-- **File:** `backend/services/ai_trend_analysis/ai_clients.py` lines 25–26, 106
-- **Issue:** Declares models `"gemini-3-flash-preview"`, `"gemini-3-pro-preview"`, and `"gemini-1.5-flash"`. Project rule mandates `"gemini-2.0-flash"` only. `gemini-3-*` models don't exist in the Gemini API.
-- **Impact:** All trend analysis AI calls fail at the API level with a model-not-found error. Market trend analysis, launch detection, and crisis detection are completely non-functional.
-- **Status: FIXED 2026-03-22** — Changed all model names to `"gemini-2.0-flash"` (lines 25, 26, and 103).
-
----
-
-## [HIGH] BUG-064 — Division by zero in trend analyzer on empty competitor price list
-- **File:** `backend/services/ai_trend_analysis/analyzer.py` line 259
-- **Issue:** `sum(competitor_prices) / len(competitor_prices)` — no guard if `competitor_prices` is an empty list. `.get("competitor_prices", [])` can return `[]` and `len([]) == 0`.
-- **Impact:** `ZeroDivisionError` whenever a product has no competitor prices. Trend analysis crashes for new products before any competitor data is scraped.
-- **Status: FALSE POSITIVE 2026-03-22** — The described pattern `sum(competitor_prices) / len(competitor_prices)` does not exist in `analyzer.py`. Competitor prices are formatted via `format_competitor_prices()` (string output), not averaged numerically. No division by zero possible.
-
----
-
-## [HIGH] BUG-065 — Division by zero in sentiment aggregator when no previous mentions exist
-- **File:** `backend/services/analysis/sentiment_aggregator.py` line 117
-- **Issue:** `(curr_count - prev_count) / prev_count` — no zero-check on `prev_count`. For a brand-new product with no prior mentions, `prev_count = 0`.
-- **Impact:** `ZeroDivisionError` on the first sentiment aggregation run for any new product. Sentiment signal is unavailable until the bug is hit and the task crashes.
-- **Status: FALSE POSITIVE 2026-03-22** — Code at lines 133-136 already has a zero guard: `if prev_count > 0: volume_change = ... else: volume_change = 1.0 if curr_count > 0 else 0.0`. No division by zero possible.
-
----
-
-## [HIGH] BUG-066 — notification_tasks.py imports run_async which doesn't exist in db/session.py
-- **File:** `backend/workers/tasks/notification_tasks.py` line 16
-- **Issue:** `from db.session import get_session_context, run_async` — `run_async` is not exported by `db/session.py`. This is an `ImportError` at module import time.
-- **Impact:** The entire `notification_tasks` module fails to import. Celery worker crashes at startup. No notification tasks (price alerts, email digests) ever run.
-- **Status: FALSE POSITIVE 2026-03-22** — `run_async` is defined at `db/session.py` line 126 as a Celery async helper. The import is valid.
-
----
-
-## [HIGH] BUG-067 — main.py uses os.getenv() directly for payment middleware init
-- **File:** `backend/main.py` line 49 (approx)
-- **Issue:** `if HAS_X402 and os.getenv("PAY_TO_ADDRESS"):` — direct `os.getenv()` call outside `core/config.py`. If `PAY_TO_ADDRESS` is defined in Settings but not in raw `os.environ` (e.g., loaded from `.env` file by Pydantic), the x402 payment middleware silently doesn't initialize.
-- **Impact:** x402 payment endpoints appear to exist but all requests return payment-required errors that are never resolved because the middleware isn't active.
-- **Status: FIXED 2026-03-22** — Added `PAY_TO_ADDRESS` to Settings class in `core/config.py`; replaced `os.getenv()` with `settings.PAY_TO_ADDRESS`; removed top-level `import os`.
-
----
-
-## MEDIUM (new — deep audit pass 2)
-
----
-
-## [MEDIUM] BUG-068 — sentiment/retrieval.py missing user_id filters — cross-user data access
-- **File:** `backend/api/v1/routes/sentiment/retrieval.py` lines 33, 99, 129, 151
-- **Issue:** Four endpoints (`GET /sentiment/{id}`, `GET /sentiment/product/{id}/summary`, `DELETE /sentiment/{id}`, `GET /sentiment/product/{id}/mentions`) query by ID alone without `.where(Sentiment.user_id == current_user.id)`. Any user can read or delete any sentiment record.
-- **Impact:** Authorization bypass: User A can read, summarize, and delete User B's sentiment data. GDPR violation. Data poisoning possible.
-- **Status: FALSE POSITIVE 2026-03-22** — All endpoints already have user_id filters: GET/DELETE by sentiment_id join on Product.user_id == current_user.id; product-scoped endpoints call _verify_product_ownership; mentions endpoint also filters SocialMention.user_id.
-
----
-
-## [MEDIUM] BUG-069 — N+1 query explosion in competitor analysis endpoint
-- **File:** `backend/api/v1/routes/competitors/analysis.py` lines 59–61, 135–142
-- **Issue:** `get_competitor_alerts` fetches alert records then inside a loop executes 2 additional DB queries per record (CompetitorProduct + Competitor + Product). With 100 results, this is 300+ queries per request instead of 1 with joins.
-- **Impact:** Competitor alerts endpoint slows to seconds per request as data grows. Under load causes DB connection pool exhaustion. Dashboard becomes unusable for merchants with large catalogs.
-- **Status: FALSE POSITIVE 2026-03-22** — compare_prices already batch-fetches with Competitor.id.in_(); get_competitor_alerts already uses a single joined query across all 4 tables.
-
----
-
-## [MEDIUM] BUG-070 — price_check.py misuses async session context manager — resource leak
-- **File:** `backend/api/v1/routes/price_check.py` lines 95, 130
-- **Issue:** `get_session()` is an async generator (used via `async with`) but is called directly as a coroutine in `_store_lead()` and `_update_lead_report()` helper functions. The async context manager is not entered correctly.
-- **Impact:** DB session is never properly closed. Connection pool leaks one connection per price-check lead store/update. Under sustained traffic, DB connections are exhausted.
-- **Status: FALSE POSITIVE 2026-03-22** — Both functions already use `async for db in get_session():` which is the correct way to consume an async generator dependency outside of FastAPI's DI.
-
----
-
-## [MEDIUM] BUG-071 — Rate limit reset time is wrong — retry_after seconds not added to now
-- **File:** `backend/services/integration/rate_limit.py` lines 46–47
-- **Issue:** `mark_rate_limited(retry_after=N)` stores `reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)` — but the actual code sets `reset_at = retry_after` directly (the integer), not `now + timedelta(retry_after)`. The reset timestamp becomes a small integer (epoch seconds offset), not a future datetime.
-- **Impact:** Rate limiting resets at epoch second N (early 1970s), meaning the rate limit is effectively never enforced. Shopify API rate limit detection is bypassed, leading to 429 floods.
-- **Status: FIXED 2026-03-22** — Changed `self.reset_at = datetime.now(UTC)` to `self.reset_at = datetime.now(UTC) + timedelta(seconds=retry_after)` so the reset time is correctly set in the future.
-
----
-
-## [MEDIUM] BUG-072 — Division by zero in outcome service merchant modification calculation
-- **File:** `backend/services/pricing/outcome_service.py` lines 140–144
-- **Issue:** `merchant_modification_percent = (actual_price_set - recommended_price) / recommended_price * 100` — no zero-check on `recommended_price`. If `recommended_price` is `Decimal("0")` or `None`, this raises `ZeroDivisionError` or `TypeError`.
-- **Impact:** Outcome recording crashes for any recommendation with a zero recommended price. Feedback loop data is lost; calibration degrades over time.
-- **Status: FALSE POSITIVE 2026-03-22** — Both record_outcome (line 140) and record_merchant_decision (line 475) already guard with `recommendation.recommended_price > 0` before dividing.
-
----
-
-## [MEDIUM] BUG-073 — Division by zero in pipeline_adapter when no competitor prices exist
-- **Status: FALSE POSITIVE 2026-03-22** — Code already guards: line 106 checks `if competitors and product.current_price`, line 108 checks `len(all_prices) > 1`, line 111 checks `if max_p > min_p` with `else: 0.5` fallback.
-- **File:** `backend/services/pricing/pipeline_adapter.py` line 107
-- **Issue:** Position index normalization uses `(price - min_p) / (max_p - min_p)`. When `all_prices` is empty (no competitors), `min_p` and `max_p` both raise `ValueError` from `min([])`/`max([])`. When there is exactly one competitor, `max_p == min_p` → division by zero.
-- **Impact:** Competitive position calculation crashes for all new products and single-competitor scenarios. Price recommendations cannot be generated.
-
----
-
-## [MEDIUM] BUG-074 — Multiple division-by-zero in analytics_service and trend_detector
-- **Status: FALSE POSITIVE 2026-03-22** — All divisions already guarded: line 132 checks `p.base_price and p.base_price > 0`, lines 305/307 check `if recent:`/`if earlier:`, trend_detector line 117 checks `if baseline_avg > 0`.
-- **File:** `backend/services/analytics/analytics_service.py` lines 133, 306, 308; `backend/services/analysis/trend_detector.py` line 118
-- **Issue:** (1) `(p.current_price - p.base_price) / p.base_price` with no `base_price > 0` check. (2) `sum(scores) / len(recent)` and `sum(scores) / len(earlier)` with no empty-list guard. (3) `current_count / baseline_avg` with no zero-check on `baseline_avg`.
-- **Impact:** Analytics endpoints crash for any product with `base_price = 0`. Trend detection fails for products with no historical baseline. Dashboard returns 500 errors instead of data.
-
----
-
-## [MEDIUM] BUG-075 — Division by zero in elasticity calculator on zero price or zero units
-- **Status: FALSE POSITIVE 2026-03-22** — All divisions already guarded: line 74 checks `self.old_price == 0`, line 81 checks `self.avg_daily_units_before == 0`, line 96 guards `abs(pct_price) < 0.02` returning None (0.02 threshold prevents float-precision zero).
-- **File:** `backend/services/scoring/elasticity_calculator.py` lines 76, 83, 99
-- **Issue:** `price_change_pct` divides by `old_price`; `quantity_change_pct` divides by `avg_daily_units_before`. Both can be zero. PED calculation at line 99 divides `pct_qty / pct_price` where `pct_price` is only guarded to `>= 0.02` — but if it rounds to 0 via float precision, infinity results.
-- **Impact:** Price elasticity calculation crashes or returns infinity for any new product (no sales history) or free product. Thompson Sampling bandit receives infinity confidence values, corrupting all strategy selection.
-
----
-
-## [MEDIUM] BUG-076 — Division by zero in guardrails velocity cap on zero current price
-- **Status: FALSE POSITIVE 2026-03-22** — Code already guards: line 162 checks `product.current_price > 0` before entering velocity cap logic, line 187 also checks `if product.current_price > 0` before formatting.
-- **File:** `backend/services/scoring/guardrails.py` lines 168, 186
-- **Issue:** `(price - product.current_price) / product.current_price` — no zero-guard on `product.current_price`. String formatting on line 186 executes before any guard. Products with `current_price = 0` (unpublished, archived) crash the guardrail check.
-- **Impact:** Guardrail enforcement crashes for any product with zero price. Price recommendations bypass all safety checks — prices can be set to any value including negative numbers.
-
----
-
-## [MEDIUM] BUG-077 — Mutable list defaults in Integration model shared across instances
-- **Status: FIXED 2026-03-22**
-- **File:** `backend/models/integration.py` lines 90, 95
-- **Issue:** `scopes: list[str] = Field(default=[])` and `webhook_ids: list[str] = Field(default=[])`. SQLModel/Pydantic v2 should use `default_factory=list`. With `default=[]`, the same list object is shared by all instances that don't explicitly set these fields.
-- **Impact:** (1) Adding a webhook ID to one integration's in-memory state adds it to all others. Webhook cleanup on disconnect doesn't work reliably. (2) OAuth scope tracking is corrupted — scopes granted to one integration leak to others.
-
----
-
-## [MEDIUM] BUG-078 — Mutable dict/list defaults in RetrospectiveAudit model — audit data leaks
-- **File:** `backend/models/retrospective_audit.py` lines 51, 52
-- **Issue:** `summary_json: dict = Field(default={})` and `sku_results_json: list = Field(default=[])` use mutable defaults. All audit instances without explicit values share the same dict/list object.
-- **Impact:** One merchant's audit data modifications (in-memory, before commit) appear in all other audits. If audit data is written to the shared dict before DB persist, it bleeds across unrelated audit records. GDPR violation.
-- **Status: FIXED 2026-03-22** — Changed `default={}` to `default_factory=dict` and `default=[]` to `default_factory=list`.
-
----
-
-## [MEDIUM] BUG-079 — No payment idempotency key — duplicate payments on retry
-- **File:** `backend/services/payment/subscription_service.py` lines 313–320
-- **Issue:** `create_subscription_payment()` inserts a new `Payment` record every call with no uniqueness check on `(user_id, amount, tier, created_at_window)`. Browser retries or double-clicks create duplicate payment records. `confirm_payment()` at line 368 doesn't check for existing confirmed payments before reprocessing.
-- **Impact:** Network retries cause double-charges. Two `Payment` records are confirmed, both activate subscriptions — user gets double subscription or both records enter inconsistent states.
-- **Status: FIXED 2026-03-22** — Added `_find_pending_payment()` idempotency check before creating new Payment. Returns existing pending payment if one matches (user_id, tier, billing_cycle, network) within the last hour.
-
----
-
-## [MEDIUM] BUG-080 — Webhook delivery doesn't retry on HTTP 5xx — alerts silently dropped
-- **File:** `backend/services/notification/webhook_service.py` lines 141–142
-- **Issue:** Retry logic only triggers on connection errors and timeouts. HTTP 502, 503, 504 from a temporarily overloaded webhook receiver are treated as permanent failures. Delivery is marked as failed with no retry.
-- **Impact:** Any temporary outage on the user's webhook receiver causes permanent alert loss. Merchants don't know their webhook endpoint was down — they just silently stop receiving alerts.
-
----
-
-## [MEDIUM] BUG-081 — ai_generator.py and ai_support_service.py use "gemini-2.0-flash-exp" not "gemini-2.0-flash"
-- **File:** `backend/services/ai_generator.py` line 50; `backend/services/ai_support_service.py` line 111
-- **Issue:** Model identifier `"gemini-2.0-flash-exp"` uses the experimental suffix. Project rules mandate `"gemini-2.0-flash"` exactly. The `-exp` variant may have different rate limits, quota restrictions, or behavioral differences.
-- **Impact:** Main AI entry point uses a non-standard model variant. If Google deprecates or changes the `-exp` model, all AI-powered features (pricing recommendations, competitor analysis, support) silently break or produce inconsistent results.
-
----
-
-## [MEDIUM] BUG-082 — products/import_service.py update path silently does nothing
-- **File:** `backend/services/products/import_service.py` line 135
-- **Issue:** TODO comment: update logic is not implemented. The code increments `result.updated += 1` but does not actually update any fields on the existing product record.
-- **Impact:** When re-importing a product CSV that has updated prices, names, or descriptions, the import reports success and increments the update counter but no data is changed. Merchants believe products were updated when they weren't.
-- **Status: FIXED 2026-03-22** — Implemented update logic: `_get_existing_products_by_sku()` batch-fetches products, `_update_product_from_row()` applies name, prices, description, category, and image_url from the import row to the existing product.
-
----
-
-## LOW (new — deep audit pass 2)
-
----
-
-## [LOW] BUG-083 — Mutable defaults in multiple models (alert, competitor, product)
-- **File:** `backend/models/alert.py` line 87; `backend/models/competitor.py` line 42; `backend/models/product.py` line 56
-- **Issue:** `channels: list = Field(default=[AlertChannel.IN_APP])`, `scraping_config: dict = Field(default={})`, `keywords: list[str] = Field(default=[])` — all mutable defaults shared across instances.
-- **Impact:** In-memory list/dict mutations to one model instance leak to all others created with these defaults. Typically caught before DB persist but is a latent correctness bug.
-- **Status: FIXED 2026-03-22** — Changed all three to use `default_factory` instead of mutable `default` values.
-
----
-
-## [LOW] BUG-084 — DB exception handler leaks raw database error messages to API responses
-- **File:** `backend/core/exception_handlers.py` line 107
-- **Issue:** The catch-all exception handler returns the raw exception message to the API client without sanitization. SQL error messages can contain table names, column names, constraint names, and partial query text.
-- **Impact:** Information disclosure — attackers can probe the API to enumerate schema details, column names, and unique constraint configurations from error responses.
-- **Status: FIXED 2026-03-22** — Replaced `str(exc)` with generic error message; raw error is still logged server-side via `alert_critical`.
-
----
-
-## [LOW] BUG-085 — sentiment_multiplier default mismatch between ProductCreate schema and model
-- **File:** `backend/schemas/product.py` line 29; `backend/models/product.py` line 50
-- **Issue:** `ProductCreate.sentiment_multiplier` defaults to `Decimal("0.1")` (10%) but `Product` model defaults to `Decimal("0.2")` (20%). The model was updated but the schema was not. All products created via API use half the intended sentiment weight.
-- **Impact:** Sentiment-based pricing recommendations are underweighted by 50% for all products created via the API. Merchants cannot override this — the correct default is never applied from the user-facing layer.
-- **Status: FIXED 2026-03-22** — Changed `ProductCreate.sentiment_multiplier` default from `Decimal("0.1")` to `Decimal("0.2")` to match the model.
-
----
-
-## HIGH (frontend audit)
-
----
-
-## [HIGH] BUG-086 — Hardcoded Railway staging URL fallback in app/page.tsx breaks production Shopify install
-- **File:** `frontend/app/page.tsx`
-- **Issue:** `const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://social-sentiment-pricing-staging-2ecd.up.railway.app'` — Railway staging URL is hardcoded as the fallback. If `NEXT_PUBLIC_API_URL` is unset in a production Vercel deploy, the Shopify install OAuth flow redirects to the staging backend.
-- **Impact:** Shopify merchant install attempts from production hit staging backend. OAuth flow fails or stores credentials against staging DB. Merchants cannot connect their store.
-- **Status: FIXED 2026-03-22** — Verified: hardcoded staging URL removed; throws error if `NEXT_PUBLIC_API_URL` is not set.
-
----
-
-## [HIGH] BUG-087 — useSearchParams() without Suspense boundary in Next.js 14 callback page
-- **File:** `frontend/app/(dashboard)/integrations/callback/page.tsx`
-- **Issue:** `useSearchParams()` called at the page level in a Client Component with no wrapping `<Suspense>` boundary. In Next.js 14 this is required — the build emits an error and forces the entire route to dynamic rendering.
-- **Impact:** Build fails or emits critical warning. Hydration mismatch possible. OAuth callback page may not render correctly on first load.
-- **Status: FIXED 2026-03-22** — Already fixed: page exports a wrapper component with `<Suspense>` boundary around `OAuthCallbackContent` which uses `useSearchParams()`.
-
----
-
-## [HIGH] BUG-088 — analytics/audit/page.tsx calls localStorage without SSR guard — crashes on server
-- **Status: FALSE POSITIVE 2026-03-22** — The code uses `getBearerToken()` from `lib/auth/token.ts`, which returns an in-memory variable (`_bearerToken`), not `localStorage`. No SSR issue exists.
-- **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx`
-- **Issue:** `getAuthToken()` calls `localStorage.getItem()` without `typeof window !== 'undefined'` guard. During SSR or Next.js static generation, `window` is undefined.
-- **Impact:** "ReferenceError: window is not defined" during build or server-side render. The audit analytics page fails to build or crashes on first render.
-
----
-
-## [HIGH] BUG-089 — React Query data accessed before null check in analytics/audit/page.tsx
-- **Status: FALSE POSITIVE 2026-03-22** — Line 470 uses `if (!audit || audit.summary.total_products_analyzed === 0)` — the `!audit` short-circuits before accessing `.summary`. The null check is already in place.
-- **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx`
-- **Issue:** `audit.summary.total_products_analyzed` is accessed before checking whether `audit` is defined. React Query returns `undefined` until the query resolves, so on initial mount `audit` is undefined.
-- **Impact:** "Cannot read properties of undefined (reading 'summary')" crash on component mount. Audit analytics page is broken on every first load.
-
----
-
-## [HIGH] BUG-090 — window.prompt() return value not null-checked before .length — crashes on cancel
-- **Status: FALSE POSITIVE 2026-03-22** — Line 165 has `if (!reason) return;` which catches `null` from `window.prompt()` Cancel. The `.length` access on line 167 is only reached when `reason` is a non-empty string.
-- **File:** `frontend/app/(dashboard)/pricing/recommendations/[id]/page.tsx`
-- **Issue:** `const reason = window.prompt(...)` returns `null` if the user clicks Cancel. Code immediately calls `if (reason.length < 10)` on the null return value → `TypeError: Cannot read properties of null (reading 'length')`.
-- **Impact:** App crashes whenever a user clicks Cancel on the rejection reason dialog. Recommendation rejection is broken.
-
----
-
-## [HIGH] BUG-091 — Approval POST sends literal string "undefined" as request body
-- **Status: FALSE POSITIVE 2026-03-22** — Lines 142-152 already handle this: `if (data && Object.keys(data).length > 0)` sends body only when data exists; otherwise calls `api.post()` with no body argument.
-- **File:** `frontend/lib/api/pricing.ts`
-- **Issue:** When no modification data is provided, `api.post(url, undefined)` is called. Depending on Axios config, `JSON.stringify(undefined)` produces the string `"undefined"` or an empty body, neither of which is valid JSON. The backend expects either `{}` or `null`.
-- **Impact:** Backend returns 422 Unprocessable Entity on approve-without-modification. The approval workflow silently fails for every recommendation that doesn't have a price override.
-
----
-
-## [HIGH] BUG-092 — Payment history total count reports page size not server total
-- **Status: FIXED 2026-03-22**
-- **File:** `frontend/lib/api/payments.ts`
-- **Issue:** `total: apiPayments.length` uses the length of the current page of results instead of the server-provided total count. If the server has 50 payment records and returns 10 per page, `total` is reported as 10.
-- **Impact:** Pagination UI always shows page size as total. Users cannot see whether there are more pages of payment history. Pagination is effectively broken.
-- **Fix:** Updated backend route to return `PaymentHistoryResponse` (with `total` from a `COUNT(*)` query) instead of bare `list[PaymentInfo]`. Updated frontend to read `response.total` from the server instead of using `apiPayments.length`.
-
----
-
-## [HIGH] BUG-093 — OutcomeDashboard calls .map() on potentially null outcomes array
-- **File:** `frontend/components/features/intelligence/OutcomeDashboard.tsx`
-- **Issue:** `outcomes.map((outcome) => ...)` is called without a null check. If React Query returns `null` (not `[]`) or the hook fails, calling `.map()` on null throws `TypeError: Cannot read properties of null (reading 'map')`.
-- **Impact:** Outcome dashboard crashes with white screen when the API returns null for outcomes.
-- **Status: FALSE POSITIVE 2026-03-22** — Line 253 already checks `!outcomes || outcomes.length === 0` before `.map()` on line 270.
-
----
-
-## [HIGH] BUG-094 — RecommendationCard calls parseFloat on unvalidated backend price strings
-- **File:** `frontend/components/features/pricing/RecommendationCard.tsx` lines 189, 206
-- **Issue:** `parseFloat(current_price)` and `parseFloat(recommended_price)` called directly on backend-supplied strings without validating they are numeric. If backend returns `"pending"`, `""`, or `null`, the result is `NaN`.
-- **Impact:** Recommendation cards display "NaN" in price fields. Price change indicators show "NaN%" instead of valid values.
-- **Status: FIXED 2026-03-22**
-
----
-
-## [HIGH] BUG-095 — PriceHistoryCard divides by zero when previousPrice is 0
-- **File:** `frontend/components/features/products/PriceHistoryCard.tsx` line 95
-- **Issue:** `((price - previousPrice) / previousPrice) * 100` — no guard when `previousPrice === 0`. Products that start at zero price (free products, gift cards, recently imported) produce `Infinity` or `NaN`.
-- **Impact:** Price change percentage shows "Infinity%" or "NaN%" for products with a zero baseline price.
-- **Status: FIXED 2026-03-22** — Division was already guarded by truthy check, but `{previousPrice && (` rendered `0` in React for previousPrice=0. Fixed both to use explicit null/zero checks.
-
----
-
-## [HIGH] BUG-096 — TrendAnalysisCard accesses analysis.market_sentiment when analysis prop is undefined
-- **File:** `frontend/components/features/trends/TrendAnalysisCard.tsx`
-- **Issue:** `getTrendDisplayInfo(analysis.market_sentiment)` is called without checking whether `analysis` exists. The prop is typed as optional (`analysis?: TrendAnalysisResponse`), so it can be undefined when data is loading.
-- **Impact:** "Cannot read properties of undefined (reading 'market_sentiment')" crash while trend data is loading.
-- **Status: FALSE POSITIVE 2026-03-22** — Line 55 `if (!analysis)` returns early before line 128 accesses `analysis.market_sentiment`.
-
----
-
-## [HIGH] BUG-097 — MNEEBalance crashes when wallet is disconnected (balance is null/undefined)
-- **File:** `frontend/components/features/payments/MNEEBalance.tsx` line 31
-- **Issue:** `parseFloat(balance).toFixed(2)` — no null check before `parseFloat()`. When the wallet is disconnected or the `useMNEE()` hook hasn't resolved, `balance` is `undefined`; `parseFloat(undefined)` returns `NaN`, then `.toFixed(2)` throws `TypeError`.
-- **Impact:** MNEEBalance component crashes on every render when no wallet is connected. Payments page shows white screen for non-connected users.
-- **Status: FIXED 2026-03-22**
-
----
-
-## [HIGH] BUG-098 — SubscriptionPlans hardcodes 'ethereum' as payment network regardless of active network
-- **File:** `frontend/components/features/payments/SubscriptionPlans.tsx`
-- **Issue:** Payment confirmation callback passes `network: 'ethereum'` hardcoded instead of using the `activeNetwork` state variable. BSV/MNEE payments are reported to the backend as Ethereum.
-- **Impact:** BSV/MNEE subscription payments are recorded with the wrong blockchain network. Backend payment reconciliation fails for all non-Ethereum payments. Subscription activations via MNEE will be mis-attributed.
-- **Status: FIXED 2026-03-22**
-
----
-
-## MEDIUM (frontend audit)
-
----
-
-## [MEDIUM] BUG-099 — PLATFORM_CONFIGS accessed with unvalidated platform key — crashes on unknown platform
-- **File:** `frontend/app/(dashboard)/integrations/[id]/page.tsx`
-- **Issue:** `const config = PLATFORM_CONFIGS[integration.platform]` — if the DB record has a platform value not in `PLATFORM_CONFIGS` (e.g., a future platform or corrupted data), `config` is `undefined`, and the subsequent `config.logo` access crashes.
-- **Impact:** Integration detail page crashes with "Cannot read properties of undefined (reading 'logo')" for any integration with an unrecognized platform value.
-
----
-
-## [MEDIUM] BUG-100 — productsData?.items.find() crashes when items is null
-- **File:** `frontend/app/(dashboard)/sentiment/page.tsx`
-- **Issue:** `productsData?.items.find(...)` — optional chaining only guards against `productsData` being nullish, not `productsData.items`. If `productsData` is defined but `items` is `null`, `null.find(...)` throws.
-- **Impact:** Sentiment page crashes if the products API returns a response object with a null items array.
-
----
-
-## [MEDIUM] BUG-101 — useProduct hook called with empty string when no productId is selected
-- **File:** `frontend/app/(dashboard)/competitors/match/page.tsx`
-- **Issue:** `useProduct(productId || '')` passes empty string `''` to the hook when `productId` is null. This fires an API request to `GET /api/v1/products/` (empty ID) on every render without a selected product.
-- **Impact:** Unnecessary 404 API errors on every page load. If the API endpoint mishandles empty IDs (e.g., list endpoint), may return unintended data.
-
----
-
-## [MEDIUM] BUG-102 — sessionStorage used for auth redirect in login page (security violation)
-- **File:** `frontend/app/(auth)/login/page.tsx`
-- **Issue:** `sessionStorage.getItem('redirectAfterLogin')` / `sessionStorage.setItem(...)` used for post-login redirect. Project security rules require httpOnly cookies for all auth-related storage. `sessionStorage` is accessible to JavaScript and violates the same-policy as `localStorage`.
-- **Impact:** Security violation consistent with BUG-001. Additionally crashes during SSR (`window is not defined`).
-
----
-
-## [MEDIUM] BUG-103 — setInterval in ShopifyEmbeddedProvider not cleaned up on unmount
-- **File:** `frontend/lib/context/shopify-embedded.tsx`
-- **Issue:** `waitForAppBridge()` uses `setInterval` to poll for `window.shopify`. The interval is cleared on success, but if the component unmounts while the promise is still pending, the interval continues running, capturing stale closures.
-- **Impact:** Memory leak — polling interval continues after provider unmounts. May call `setState` on an unmounted component, causing React warnings or crashes.
-
----
-
-## [MEDIUM] BUG-104 — useOutcomeDashboard hardcodes calibration window to 90 days regardless of parameter
-- **File:** `frontend/lib/hooks/use-outcomes.ts`
-- **Issue:** `useConfidenceCalibration({ days: 90 })` always passes `90` regardless of the `days` parameter passed to `useOutcomeDashboard`. The accuracy stats query uses the passed `days` but calibration data is always 90-day window.
-- **Impact:** Calibration chart always shows 90-day window even when user selects a different time range. Analytics data is inconsistent within the same dashboard view.
-
----
-
-## [MEDIUM] BUG-105 — competitorProductToFormData uses || instead of ?? for match_confidence — zeroes become 1.0
-- **File:** `frontend/lib/domain/competitors.ts`
-- **Issue:** `decimalToFormString(cp.match_confidence) || '1.0'` — when `match_confidence` is `0`, `decimalToFormString` returns `'0'` which is falsy; the `||` operator replaces it with `'1.0'`. Should use `??` (nullish coalescing).
-- **Impact:** Competitor products with zero confidence scores silently display as 100% confidence. Merchants see misleading match confidence data.
-
----
-
-## [MEDIUM] BUG-106 — useProductMatch doesn't invalidate per-product competitor query after auto-link
-- **File:** `frontend/lib/hooks/use-competitor-matching.ts`
-- **Issue:** After an auto-link mutation succeeds, the code invalidates `competitorKeys.products()` and `competitorKeys.all` but not the per-product competitor query key (`competitorKeys.productCompetitors(productId)`). Product detail page still shows old competitor list.
-- **Impact:** Newly linked competitors don't appear on the product detail page until a manual page refresh. Creates confusing UX where the action appears to have no effect.
-
----
-
-## [MEDIUM] BUG-107 — Outcomes API treats zero-revenue outcomes as unmeasured (falsy check instead of null check)
-- **File:** `frontend/lib/api/outcomes.ts`
-- **Issue:** `outcome.revenue_7d_after ? parseFloat(...) : null` — a truthy check is used instead of `!= null`. When backend returns `"0"` (zero revenue), the check evaluates to falsy, returning `null` instead of `0`.
-- **Impact:** Price changes with zero revenue impact are shown as "not yet measured" instead of "$0.00 impact". Analytics dashboard misrepresents all zero-revenue outcomes.
-
----
-
-## [MEDIUM] BUG-108 — Trend analysis API interpolates model name into URL without encoding
-- **File:** `frontend/lib/api/trend-analysis.ts`
-- **Issue:** `` `?use_model=${useModel}` `` appends model name directly to URL without `encodeURIComponent()`. Model names containing `+`, `&`, `=`, or `/` would break URL parsing.
-- **Impact:** Trend analysis requests silently fail or hit wrong endpoint if model name contains reserved URL characters.
-
----
-
-## [MEDIUM] BUG-109 — CalibrationChart uses double-cast `as unknown as` bypassing type safety
-- **File:** `frontend/components/features/intelligence/CalibrationChart.tsx`
-- **Issue:** `(report?.confidence_bands ?? []) as unknown as CalibrationBand[]` — the double cast silently accepts any shape and bypasses TypeScript's structural check. If the backend changes the shape of `confidence_bands`, the chart will silently render incorrect data or crash.
-- **Impact:** Calibration chart renders wrong data without any type error. Shape changes from backend are invisible until visual regression.
-
----
-
-## [MEDIUM] BUG-110 — LinkProductForm isSubmitting prop is received but never used — double-submission possible
-- **File:** `frontend/components/features/integrations/LinkProductForm.tsx`
-- **Issue:** The component accepts `isSubmitting` as a prop and uses it in the button's `disabled` condition, but the parent component passes a static value and doesn't update it based on mutation state. The button can be re-clicked during submission.
-- **Impact:** Users can submit the link form multiple times in rapid succession, creating duplicate competitor product links.
-
----
-
-## [MEDIUM] BUG-111 — EthWalletCard shows "0.00 MNEE" when balance fetch fails instead of error state
-- **File:** `frontend/components/features/payments/EthWalletCard.tsx`
-- **Issue:** `Number(undefined)` returns `NaN`; the balance formatter displays "0.00" as a fallback without distinguishing between a real zero balance and a failed load.
-- **Impact:** Users see "0.00 MNEE" when the balance failed to load, mistakenly believing they have no funds rather than experiencing a connectivity issue.
-
----
-
-## [MEDIUM] BUG-112 — PaymentHistory crashes or renders broken UI on unrecognized payment status
-- **File:** `frontend/components/features/payments/PaymentHistory.tsx`
-- **Issue:** `STATUS_CONFIG[payment.status]` — if the backend returns a new status value not present in `STATUS_CONFIG`, this returns `undefined`. Subsequent access to `statusConfig.icon` or `statusConfig.color` throws.
-- **Impact:** PaymentHistory component crashes for any payment with a status not in the hardcoded config map. Adding a new backend status breaks the entire payment history view.
-
----
-
-## [MEDIUM] BUG-113 — Sentiment API silently maps content→text field with no schema validation
-- **File:** `frontend/lib/api/sentiment.ts`
-- **Issue:** Frontend sends `{ text: content, ... }` but the field name mapping (`content` → `text`) is undocumented and not validated against the backend Pydantic schema. If the backend expects `content`, all sentiment analysis requests return 422 Unprocessable Entity.
-- **Impact:** Sentiment analysis submissions either silently fail (if backend accepts `text`) or return validation errors. No test coverage catches backend field name drift.
-
----
-
-## [MEDIUM] BUG-114 — alerts/[id]/page.tsx crashes when alert.created_at is null
-- **File:** `frontend/app/(dashboard)/alerts/[id]/page.tsx`
-- **Issue:** `format(new Date(alert.created_at), 'PPp')` — `new Date(null)` produces an Invalid Date object, and `date-fns format()` throws "Invalid time value" when given an invalid Date.
-- **Impact:** Alert detail page crashes with unhandled error for any alert record where `created_at` is null or an invalid timestamp.
-
----
-
-## LOW (frontend audit)
-
----
-
-## [LOW] BUG-115 — Duplicate trendAnalysisKeys defined in two separate files
-- **File:** `frontend/lib/api/query-keys.ts`; `frontend/lib/api/trend-analysis.ts`
-- **Issue:** Both files export a `trendAnalysisKeys` object. Hooks using one definition and components using the other create separate React Query cache entries for the same data.
-- **Impact:** Trend analysis data is fetched twice — once per cache key. Invalidating one key doesn't invalidate the other; stale data persists after mutations.
-- **Status: FALSE POSITIVE 2026-03-22** — `trendAnalysisKeys` is only defined in `query-keys.ts`. The `trend-analysis.ts` file has already been cleaned up and contains only a comment pointing to the centralized registry. All hooks import from `query-keys.ts`.
-
----
-
-## [LOW] BUG-116 — formatTrustScore has no bounds check — outputs "NaN%" or "Infinity%"
-- **File:** `frontend/lib/hooks/use-trust-scoring.ts`
-- **Issue:** `Math.round(score * 100)` — no validation that `score` is a finite number in the 0–1 range. `NaN` and `Infinity` inputs produce invalid percentage strings.
-- **Impact:** Trust score UI displays "NaN%" or "Infinity%" if the backend returns unexpected score values.
-- **Status: FIXED 2026-03-22** — Added `Number.isFinite()` check and clamped score to 0–1 range before formatting.
-
----
-
-## [LOW] BUG-117 — AIAnalysisCard confidence percentage shows "NaN%" if backend returns string
-- **File:** `frontend/components/features/competitors/AIAnalysisCard.tsx`
-- **Issue:** `(analysis.confidence ?? 0) * 100` — if the backend returns `confidence` as a string (e.g., `"0.85"`), multiplying a string by 100 produces `NaN` in JavaScript.
-- **Impact:** Competitor AI analysis card displays "NaN%" for confidence instead of a valid percentage.
-- **Status: FIXED 2026-03-22** — Added `Number()` coercion with `|| 0` fallback and clamped to 0–100 range for both the progress bar width and text display.
-
----
-
-## [LOW] BUG-118 — SubscriptionPlans can call handlePaymentSuccess before paymentInfo is populated
-- **File:** `frontend/components/features/payments/SubscriptionPlans.tsx`
-- **Issue:** `handlePaymentSuccess` doesn't guard against `paymentInfo` being `undefined`. If the payment callback fires before the backend confirms payment details, `paymentInfo.payment_id` throws a null pointer error.
-- **Impact:** Race condition in payment confirmation flow — fast payment completions may crash before `paymentInfo` state is set.
-- **Status: FALSE POSITIVE 2026-03-22** — Line 390 already has `if (!paymentInfo?.payment_id)` with optional chaining, which returns early with an error toast if paymentInfo is null/undefined. The payment UI only renders when paymentInfo is set (line 486), so the guard is already in place.
-
----
-
-## [LOW] BUG-119 — ProductsTable casts sort select value without runtime validation
-- **File:** `frontend/components/features/products/ProductsTable.tsx`
-- **Issue:** `e.target.value as SortField` — TypeScript cast with no runtime validation that the value is a valid `SortField` enum member. A programmatic DOM manipulation or unexpected select value bypasses the enum constraint.
-- **Impact:** Invalid sort field string passed to the products API. Backend returns 422 or falls back to default sort silently.
-- **Status: FIXED 2026-03-22** — Added runtime validation checking `sortableColumns.some(c => c.sortField === value)` before calling `onSort`.
-
----
-
-## CRITICAL (user-reported, staging deployment)
-
----
-
-## [CRITICAL] BUG-130 — 313.01: Railway staging ENCRYPTION_KEY mismatch — all integrations fail with "stored credentials invalid"
-- **File:** `backend/core/encryption.py`; Railway staging env vars; `backend/api/v1/routes/integrations/oauth.py`
-- **Issue:** The `ENCRYPTION_KEY` on Railway staging does not match the key that was used to encrypt tokens when merchants first connected their stores. Every call to `decrypt_token()` raises `cryptography.fernet.InvalidToken`, which the integration layer surfaces as "Stored credentials are invalid. Please reconnect." All merchant integrations (both Shopify and WooCommerce) are broken on staging.
-- **Root cause (deployment):** Key was either never set, was regenerated without re-encrypting stored tokens, or staging was redeployed with a fresh key. See `core/encryption.py` Shopify rules: "To fix: either restore original key OR delete integration record and re-OAuth. Never rotate ENCRYPTION_KEY without re-encrypting all existing tokens first."
-- **Cascading effect:** 490 unlinked products (BUG-129), all diagnostic failures (310.01), all price sync failures, all pricing recommendation pushes blocked.
-- **Fix:** Check Railway staging → Settings → Environment Variables. Verify `ENCRYPTION_KEY` is set to the original Fernet key used at first deploy. If lost, delete all integration records and ask merchants to re-OAuth. See also BUG-004 and BUG-005 (code-level encryption bugs).
-- **Impact:** Every merchant on staging cannot use any integration. Entire platform is non-functional. Shopify App Store submission blocked.
-
----
-
-## HIGH (user-reported)
-
----
-
-## [HIGH] BUG-121 — 217.01: Pricing rules don't validate cross-platform price consistency
-- **File:** `backend/services/pricing/rule_evaluator.py` lines 145–373; `backend/api/v1/routes/diagnostic.py` lines 199–215
-- **Issue:** The diagnostic endpoint fetches live prices from both Shopify and WooCommerce and correctly detects price mismatches between platforms. However, pricing rules in `rule_evaluator.py` have no platform awareness — they evaluate signals per product without checking whether the product's price is consistent across connected stores. Rules can generate recommendations based on the Shopify price while the WooCommerce price is entirely different.
-- **Impact:** Merchant has Shopify at $29.99 and WooCommerce at $19.99 for the same product. Diagnostics flags this. But pricing rules see the internal `current_price` and generate recommendations without knowing one platform is already mispriced. Rules don't trigger on the cross-platform mismatch. Merchant must find and fix the discrepancy manually via diagnostics.
-- **Status: FIXED 2026-03-22**
-
----
-
-## [HIGH] BUG-125 — 217.05/217.06: auto_approve_and_apply() was deleted during refactor — price recommendations never pushed to Shopify *(FIXED in code, needs staging deploy)*
-- **File:** `backend/services/pricing/approval_service.py` lines 187–290; `backend/api/v1/routes/pricing/_approval_endpoints.py` lines 33–72
-- **Issue:** The `auto_approve_and_apply()` method was deleted during the 2026-02-17 modularization refactor. All approval attempts silently failed with `AttributeError`. The `try/except` around the call caught and swallowed the error, leaving every recommendation in `PENDING` status forever. No price was ever pushed to Shopify or WooCommerce.
-- **Status:** Fix was merged 2026-02-21 (method restored). Code is correct. **Must verify fix is deployed to Railway staging** — user still reports recommendations not applying on staging.
-- **Residual risk:** `process_auto_approvals()` batch method (lines 344–353) still silently swallows per-recommendation `ApprovalError` — batch failures don't surface to UI, recommendations stay PENDING with no user-visible indication.
-- **Impact:** All price recommendations accepted by merchant never actually changed prices on connected stores. Core product functionality was broken.
-- **Status: FIXED 2026-03-22** — Residual risk resolved: failures now recorded on recommendation.rejection_reason and surfaced in API response.
-
----
-
-## [HIGH] BUG-127 — 303.01: Sync stuck in "syncing" state indefinitely after frontend polling times out
-- **File:** `backend/services/integration/sync_service.py` lines 341, 369; `frontend/lib/hooks/use-integrations.ts` lines 158–224; `frontend/components/features/integrations/IntegrationCard.tsx` lines 58–95
-- **Issue:** The backend properly sets `sync_status = "idle"` on success and `sync_status = "error"` on failure (with a 15-minute stuck-sync timeout). The frontend polls via React Query with a 5-minute client-side timeout. However, if the frontend loses network connectivity *while* a sync is running (e.g., user on mobile, tab goes background), the polling stops receiving updates. When connectivity resumes, `shouldPoll` may still be `true` based on the stale `integration.sync_status === 'syncing'` prop, but the backend has already completed. The `cachedSyncData` shows the last known "syncing" state and `setPollEnabled(false)` only fires when `syncStatus?.sync_status !== 'syncing'` — which requires a successful poll response.
-- **Impact:** Sync spinner never clears. User sees perpetual "Syncing..." with "In progress..." on every integration card. Only fix is a full page refresh. `recover_stuck_syncs()` exists in backend but is not triggered from the frontend when polling times out.
-- **Status: FIXED 2026-03-22** — Added POST /{id}/sync/recover endpoint; frontend now calls it on timeout and shows retry UI.
-
----
-
-## [HIGH] BUG-129 — 310.01: 490 unlinked products on staging — cascading failure from encryption key mismatch
-- **File:** `backend/models/product.py`; `backend/api/v1/routes/diagnostic.py` lines 176–185; `backend/services/integration/product_sync_service.py` lines 373–402
-- **Issue:** 490 products in the staging database have no `ProductIntegrationLink` records (no connection to Shopify or WooCommerce variants). Diagnostics correctly reports these as `PRODUCT_NOT_LINKED`. Root cause is BUG-130: because `ENCRYPTION_KEY` is mismatched, every Shopify API call fails with `InvalidToken` before any product sync can run. No sync = no links created. Products were imported but never pushed to or confirmed on the platform.
-- **Impact:** 490 products cannot have prices updated, synced, or recommended. All pricing recommendations for these products fail at the push step. Resolves automatically once BUG-130 (encryption key) is fixed and merchants re-OAuth.
-- **Status: FIXED 2026-03-22** — Diagnostic now flags bulk unlinked products as HIGH severity with actionable guidance to use bulk sync endpoint.
-
----
-
-## MEDIUM (user-reported)
-
----
-
-## [MEDIUM] BUG-120 — Hamburger menu overlay stays visible when navigating to current page
-- **File:** `frontend/components/layout/DashboardShell.tsx` lines 29–38, 61–67; `frontend/components/layout/Sidebar.tsx` lines 140–146
-- **Issue:** When the sidebar is open and the user taps a nav item for the page they're already on, `Sidebar.tsx`'s `handleNavItemClick` calls `event.preventDefault()` (because `active === true`). This prevents any URL change, so the `usePathname()` change `useEffect` in `DashboardShell.tsx` never fires. `closeSidebarFromNav()` is called via `onLinkClick?.()`, which calls `setSidebarOpen(false)` — but this state update may not re-render cleanly due to React's batching or event propagation order with the `capture` listener. The dark overlay (`bg-black/50 z-40`) persists on screen.
-- **Impact:** Mobile UX: tapping the current page in the sidebar leaves a full-screen dark overlay blocking all content. The only escape is tapping the overlay itself (which does call `setSidebarOpen(false)` directly) or navigating to a different page.
-- **Status: FALSE POSITIVE 2026-03-22** — Code already has `onLinkClick={closeSidebarFromNav}` that calls `setSidebarOpen(false)` on any nav click including current page. The `handleNavItemClick` calls `onLinkClick?.()` unconditionally (line 145), and capture-phase handlers also call it. Previously fixed.
-
----
-
-## [MEDIUM] BUG-122 — 217.02: IntegrationCard shows only aggregate sync count — WooCommerce prices not visible
-- **File:** `frontend/components/features/integrations/IntegrationCard.tsx` lines 162–189; `frontend/components/features/integrations/LinkedProducts.tsx` lines 250–258
-- **Issue:** `IntegrationCard` shows "Products Synced" (aggregate count) and "Last Sync" timestamp — there is no per-platform pricing display. When a merchant has both Shopify and WooCommerce connected, there is no way to see at a glance that Platform A has products at one price and Platform B at another. Per-product platform prices are only visible by drilling into `LinkedProducts` detail view inside each integration card's expandable section.
-- **Impact:** Merchant can't see WooCommerce prices from the integrations dashboard without drilling in. Platform-level price discrepancies (diagnosed as mismatch by the diagnostic tool) are not surfaced in the primary integration view.
-- **Status: FIXED 2026-03-22** — IntegrationCard now fetches product links via `useProductLinks` and shows a "Price Range" column (min–max) in the stats grid alongside Products Synced and Last Sync.
-
----
-
-## [MEDIUM] BUG-123 — 217.03: Products list mixes platform data with no platform filter or group control
-- **File:** `frontend/app/(dashboard)/products/page.tsx`; `frontend/components/features/products/ProductRow.tsx` lines 144–160; `backend/api/v1/routes/products.py` lines 66–175
-- **Issue:** The backend enriches products with a `platforms_linked` array, and `ProductRow` renders platform badges (Shopify green, WooCommerce purple). However, the products list has no platform filter, grouping, or toggle. All products from all platforms appear in one undifferentiated list. A merchant with 200 Shopify products and 150 WooCommerce products sees 350 mixed rows with no way to view only Shopify or only WooCommerce products.
-- **Impact:** Products belonging only to one platform are invisible in context — there is no "Show Shopify only" filter. Merchants can't diagnose why certain products appear or whether a product is correctly synced to all platforms.
-- **Status: FIXED 2026-03-22** — Added platform filter dropdown (All Platforms / Shopify / WooCommerce / Unlinked) to the products list page. Client-side filter uses `platforms_linked` data already provided by the backend.
-
----
-
-## [MEDIUM] BUG-124 — 217.04: RuleCard silently displays "Unknown" for competitor and product names when lookup APIs fail
-- **File:** `frontend/components/features/pricing/RuleCard.tsx` lines 129–148, 162–170; `frontend/app/(dashboard)/pricing/rules/page.tsx` lines 51–67
-- **Issue:** `RuleCard` resolves competitor UUIDs and product UUIDs to display names using `competitorNames` and `productNames` maps passed from the parent page. If either the competitors API or products API call fails (network error, auth issue, empty response), the maps are empty and all rules show "Unknown competitor" and missing product names. There is no error state or fallback to load names independently. Additionally, no `Collection` model exists in the backend — rules cannot reference Shopify/WooCommerce collections at all, and the UI has no collection product list display.
-- **Impact:** When API calls fail, the pricing rules page shows every rule with no context. Merchant cannot tell which competitor triggers which rule or which products it covers. Missing collection support means merchants using Shopify collections for product grouping cannot apply rules at the collection level.
-- **Status: FIXED 2026-03-22** — RuleCard now shows truncated UUID fallback instead of "Unknown" for product names. Rules page shows a yellow warning banner when competitor or product name lookups fail, explaining that IDs are shown instead of names.
-
----
-
-## [MEDIUM] BUG-126 — 302.01: WooCommerce _parse_product() accepts any image URL string without validation
-- **File:** `backend/services/integration/woocommerce_service.py` line 432; `backend/models/product.py` line 40; `backend/services/products/import_service.py` line 199
-- **Issue:** `images = [img.get("src") for img in data.get("images", []) if img.get("src")]` — only checks that `src` is truthy, not that it is a valid absolute URL. WooCommerce may return relative paths (`/wp-content/uploads/...`), protocol-relative URLs (`//example.com/img.jpg`), empty strings after stripping, or private/auth-gated CDN URLs. These pass the filter and are stored as `image_url` in the product model. The `Product` model has `image_url: str | None` with no URL format constraint, and `import_service.py` only calls `.strip()` with no protocol check.
-- **Impact:** Product images fail to render in the frontend (broken `<img>` tags or Next.js `<Image>` errors). Import appears successful but product cards show broken image placeholders. WooCommerce merchants with relative image URLs see no product images in ActualPrice.
-- **Status: FIXED 2026-03-22** — Image URL filter now requires `http://` or `https://` protocol prefix, rejecting relative paths and protocol-relative URLs.
-
----
-
-## [MEDIUM] BUG-128 — 303.02: "PRODUCT NOT LINKED" diagnostic message gives no actionable resolution path
-- **File:** `backend/api/v1/routes/diagnostic.py` lines 176–185
-- **Issue:** The diagnostic type `PRODUCT_NOT_LINKED` emits: `"Product '{name}' is not linked to any platform"` with suggestion `"Sync products from your store in Integrations"`. This is insufficient for the merchant: it doesn't explain (a) why the link is missing, (b) whether it's a sync failure or a configuration issue, (c) whether clicking "Sync" will actually fix it, or (d) whether it's related to the credential error (BUG-130). When 490 products are unlinked, the merchant sees 490 individual warnings with no aggregate explanation or single fix action.
-- **Impact:** Merchant confusion. David's reported question: "I don't know what 'PRODUCT NOT LINKED' means." UI shows 490 individual warnings with a generic suggestion. Merchant cannot resolve this without engineering support to explain that it's caused by the ENCRYPTION_KEY mismatch upstream.
-- **Status: FIXED 2026-03-22** — Diagnostic now provides context-aware suggestions: different messages for no integrations, disconnected integrations, and active integrations where product wasn't found during sync. Each issue also includes the total `unlinked_count` for aggregate awareness.
-
----
-
-## ENHANCEMENTS (feature gaps identified in audit)
-
----
-
-## [ENHANCEMENT] ENH-001 — Rules and recommendations must indicate which store(s) they apply to
-- **Files:** `backend/models/pricing_rule.py`; `backend/models/price_recommendation.py`; `backend/api/v1/routes/pricing/rules.py`; `frontend/components/features/pricing/RuleCard.tsx`
-- **Gap:** `PricingRule` model has no `integration_id` or `applies_to_stores` field. Rules apply globally across all connected stores. `PriceRecommendation` has `applied_to_platform` (string, e.g. "Shopify") but no `integration_id` — when multiple stores of the same platform are connected, it's ambiguous which store a recommendation was applied to.
-- **Required:** Add nullable `integration_id` FK to `PricingRule`. Add `integration_id` to `PriceRecommendation`. Update rule evaluation to scope per integration. Update `RuleCard` and recommendation display to show store badge.
-
----
-
-## [ENHANCEMENT] ENH-002 — Collections model: rules for Shopify/WooCommerce collections show member products
-- **Files:** No collection model exists; `backend/models/pricing_rule.py`; `backend/services/integration/shopify_service.py`
-- **Gap:** No `Collection` model in the backend. `PricingRule` supports `applies_to_categories` (flat string list) but not platform collections. Shopify collections (smart/manual) and WooCommerce product categories cannot be used as rule scopes. Merchants using Shopify collections to group products cannot apply pricing rules at the collection level.
-- **Required:** Sync Shopify collections and WooCommerce categories on product sync. Create `Collection` model (id, name, platform, integration_id, member product IDs). Add `applies_to_collections` to `PricingRule`. Update rule evaluation to resolve collection → product IDs. Add collection member list to `RuleCard` UI.
-
----
-
-## [ENHANCEMENT] ENH-003 — AI auto-generation of competitor fields: current price, description, product URL
-- **Files:** `backend/services/ai_generator.py`; `backend/schemas/agent_contracts/scout.py`; `backend/services/competitor_scraper.py`; `backend/models/competitor_product.py`
-- **Gap:** Scout agent outputs `CompetitorPrice` (price, url, is_on_sale) but only via scraper. When scraper fails to extract price (invalid CSS selector, JS-rendered price, CAPTCHA), no AI fallback infers price from page HTML/metadata. No AI function generates competitor product description or validates the product URL. `CompetitorProduct` model has no `description` field.
-- **Required:** Add `generate_competitor_current_price(html: str) -> Decimal` to `ai_generator.py` as Gemini fallback when scraper fails. Add `generate_competitor_product_description(html: str) -> str`. Add `description` field to `CompetitorProduct`. Wire AI fallback into `competitor_scraper.py` on extraction failure. Track confidence: AI-inferred vs scraped.
-
----
-
-## [ENHANCEMENT] ENH-004 — Pricing history of dropshipper products with time dimension for outreach proposals
-- **Files:** `backend/models/competitor_price_history.py`; `backend/models/retrospective_audit.py`; `backend/api/v1/routes/prospect_audit.py`; `frontend/app/(dashboard)/analytics/page.tsx`
-- **Gap:** `CompetitorPriceHistory` tracks price-over-time with `observed_at` timestamps, but: (1) no competitor tagging system to mark a competitor as a "drop shipper"; (2) no outreach proposal generator that shows a prospect how a drop shipper's price history maps to missed margin opportunities; (3) prospect audit route is unauthenticated/teaser-only — authenticated merchants can't generate custom outreach proposals; (4) analytics page has 7/14/30/90-day views but no time-series chart for competitor price evolution.
-- **Required:** Add `competitor_type` field (e.g., `drop_shipper`, `manufacturer`, `retailer`) to `Competitor` model. Build `OutreachProposalService` that takes competitor_id + date range → generates PDF/JSON report with price timeline and projected savings. Add authenticated endpoint `POST /api/v1/proposals/generate`. Add time-series competitor price chart to analytics.
-
----
-
-## [ENHANCEMENT] ENH-005 — Quarterly ActualPrice impact view: revenue with different rule/competitor sets over time
-- **Files:** `backend/models/retrospective_audit.py`; `backend/api/v1/routes/prospect_audit.py`; `frontend/app/(dashboard)/analytics/page.tsx`; `frontend/app/(dashboard)/pricing/` (no simulation page exists)
-- **Gap:** `RetrospectiveAudit` model stores quarterly impact projections but only for the unauthenticated teaser flow. No authenticated "What-if simulation" exists: a merchant cannot say "show me Q1-Q4 revenue impact if I apply Rule A vs Rule B". No quarterly time bucketing in the analytics dashboard. No `PricingScenario` model for saving rule + competitor combinations.
-- **Required:** Create `PricingScenario` model. Build `POST /api/v1/pricing/simulation/quarterly` endpoint — takes scenario config → returns quarterly revenue projections. Add "Quarterly Impact" dashboard page with: Q1–Q4 revenue bars, scenario comparison overlay, rule effectiveness by season. Add quarterly granularity to existing time-range selector.
-
----
-
-## [ENHANCEMENT] ENH-006 — AP-INTAKE-001: Universal Product Intake Layer
-- **Files:** `backend/api/v1/routes/products_import.py`; `backend/services/products/import_service.py`; `backend/services/integration/shopify_products.py`; `backend/services/integration/woocommerce_service.py`
-- **Current state:** `POST /api/v1/products/import` accepts JSON array only (max 1000 products). No CSV/XLSX parsing. No file upload endpoint. No fuzzy column mapping. No dry-run mode. No platform adapter pattern — Shopify and WooCommerce sync are independent pipelines. No competitor attachment after bulk import.
-- **Gap summary:**
-  - Phase 1 (Intake Parser): No file upload endpoint; no CSV/XLSX parsers; no column fuzzy-mapper; no dry_run parameter in import service
-  - Phase 2 (Platform Adapters): Import is JSON-only; no Shopify CSV format adapter (`Handle`→`sku`, `Title`→`name`); no WooCommerce CSV adapter; adding a new platform requires touching multiple files
-  - Phase 3 (Competitor Attachment): `CompetitorMatchingService` exists but is not wired to import workflow; imported products have no competitors auto-attached; Scout agent is not triggered post-import
-- **Required:** New endpoint `POST /api/v1/intake/upload` (multipart); file format detector; CSV/XLSX parsers; fuzzy column mapper service; `dry_run: bool` param in `import_service.py`; refactor Shopify/WooCommerce sync to adapter pattern; post-import async Celery task to trigger competitor matching.
-
----
 
 ---
 
@@ -2629,6 +2531,14 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
+## [MEDIUM] BUG-228 — `os.getenv()` used outside `core/config.py` in payment and search provider services
+- **Status: FIXED 2026-03-22** — Added `WHATSONCHAIN_API_KEY` and `ETHERSCAN_API_KEY` to `core/config.py`. Replaced `os.getenv()` with `settings.*` in `bsv_service.py` and `eth_service.py`. Removed unused `os` import. `subscription_service.py`, `google_custom.py`, and `serpapi.py` were already fixed in prior passes.
+- **File:** `backend/services/payment/bsv_service.py` line 32; `backend/services/payment/eth_service.py` line 34; `backend/services/payment/subscription_service.py` lines 117, 119; `backend/services/competitor_matching/providers/google_custom.py` lines 63–64; `backend/services/competitor_matching/providers/serpapi.py` line 58
+- **Issue:** Five files call `os.getenv()` directly instead of using `settings.*` from `core/config.py`. Violations: `os.getenv("WHATSONCHAIN_API_KEY")`, `os.getenv("ETHERSCAN_API_KEY")`, `os.getenv("SSP_MNEE_WALLET_ADDRESS")` (already in settings!), `os.getenv("SSP_ETH_WALLET_ADDRESS")`, `os.getenv("GOOGLE_API_KEY")`, `os.getenv("GOOGLE_SEARCH_CX")`, `os.getenv("SERPAPI_KEY")`. Security rule: "Never call `os.getenv()` anywhere outside `core/config.py`."
+- **Impact:** `SSP_MNEE_WALLET_ADDRESS` is already declared in `core/config.py` (line 118) — calling `os.getenv()` directly bypasses `env_ignore_empty=True` and Pydantic validation. Other keys bypass centralized config validation. Services may initialize with empty-string credentials if env var not set at import time.
+
+---
+
 ## [HIGH] BUG-229 — `sentiment/tasks.py` missing ownership check — any user can trigger sentiment tasks for any product
 - **Status: FIXED 2026-03-22**
 - **File:** `backend/api/v1/routes/sentiment/tasks.py` lines 31–37, 59
@@ -2638,11 +2548,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## [MEDIUM] BUG-228 — `os.getenv()` used outside `core/config.py` in payment and search provider services
-- **Status: FIXED 2026-03-22** — Added `WHATSONCHAIN_API_KEY` and `ETHERSCAN_API_KEY` to `core/config.py`. Replaced `os.getenv()` with `settings.*` in `bsv_service.py` and `eth_service.py`. Removed unused `os` import. `subscription_service.py`, `google_custom.py`, and `serpapi.py` were already fixed in prior passes.
-- **File:** `backend/services/payment/bsv_service.py` line 32; `backend/services/payment/eth_service.py` line 34; `backend/services/payment/subscription_service.py` lines 117, 119; `backend/services/competitor_matching/providers/google_custom.py` lines 63–64; `backend/services/competitor_matching/providers/serpapi.py` line 58
-- **Issue:** Five files call `os.getenv()` directly instead of using `settings.*` from `core/config.py`. Violations: `os.getenv("WHATSONCHAIN_API_KEY")`, `os.getenv("ETHERSCAN_API_KEY")`, `os.getenv("SSP_MNEE_WALLET_ADDRESS")` (already in settings!), `os.getenv("SSP_ETH_WALLET_ADDRESS")`, `os.getenv("GOOGLE_API_KEY")`, `os.getenv("GOOGLE_SEARCH_CX")`, `os.getenv("SERPAPI_KEY")`. Security rule: "Never call `os.getenv()` anywhere outside `core/config.py`."
-- **Impact:** `SSP_MNEE_WALLET_ADDRESS` is already declared in `core/config.py` (line 118) — calling `os.getenv()` directly bypasses `env_ignore_empty=True` and Pydantic validation. Other keys bypass centralized config validation. Services may initialize with empty-string credentials if env var not set at import time.
+## [LOW] BUG-230 — Six route files import `get_current_user` from wrong module
+- **File:** `backend/api/v1/routes/competitors/crud.py` line 12; `backend/api/v1/routes/competitors/scraping.py` line 12; `backend/api/v1/routes/competitors/analysis.py` line 13; `backend/api/v1/routes/competitors/products.py` line 13; `backend/api/v1/routes/products.py` line 26; `backend/api/v1/routes/users.py` line 12
+- **Issue:** `from api.v1.routes.auth import get_current_user` — six route files import `get_current_user` (and in `users.py`, also `require_role`) from the auth router instead of `core.deps`. The correct import across the codebase is `from core.deps import get_current_user`. If the auth router's `get_current_user` and `core.deps.get_current_user` ever diverge (e.g., role checks are added to deps), these routes will use the wrong version silently.
+- **Impact:** Potential divergence from centralized auth dependency if `core.deps.get_current_user` is updated. Creates circular import risk: routes importing from other routes' modules.
+- **Status: FIXED 2026-03-22** — Changed all 6 files to import `get_current_user` from `core.deps`. The `core.deps` version supports httpOnly cookie auth (post BUG-001 fix). `users.py` still imports `require_role` from `auth.py` since it's only defined there.
 
 ---
 
@@ -2652,14 +2562,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** `auth_url = f"https://{shop}/admin/oauth/authorize?{params}"` — uses the old `{shop}.myshopify.com/admin/oauth/authorize` format. On 2026-03-20, `shopify_service.py` was explicitly fixed to use `admin.shopify.com/store/{name}/oauth/authorize` because "Shopify's unified admin intercepts the old format and routes based on active browser session, causing installs to land on the wrong store." That fix was applied only to `generate_oauth_url()` in `shopify_service.py`, not to the install endpoint which is the primary install entry point.
 - **Impact:** All App Store installs via the `/shopify/install` endpoint use the broken old URL. Merchants installing via the App Store may be redirected to the wrong store's OAuth screen. The install completes on the wrong store, creating a token for a different shop. Core install flow is broken for multi-store merchants.
 - **Fix:** Changed to `https://admin.shopify.com/store/{store_name}/oauth/authorize` format, matching the fix in `shopify_service.py`.
-
----
-
-## [LOW] BUG-230 — Six route files import `get_current_user` from wrong module
-- **File:** `backend/api/v1/routes/competitors/crud.py` line 12; `backend/api/v1/routes/competitors/scraping.py` line 12; `backend/api/v1/routes/competitors/analysis.py` line 13; `backend/api/v1/routes/competitors/products.py` line 13; `backend/api/v1/routes/products.py` line 26; `backend/api/v1/routes/users.py` line 12
-- **Issue:** `from api.v1.routes.auth import get_current_user` — six route files import `get_current_user` (and in `users.py`, also `require_role`) from the auth router instead of `core.deps`. The correct import across the codebase is `from core.deps import get_current_user`. If the auth router's `get_current_user` and `core.deps.get_current_user` ever diverge (e.g., role checks are added to deps), these routes will use the wrong version silently.
-- **Impact:** Potential divergence from centralized auth dependency if `core.deps.get_current_user` is updated. Creates circular import risk: routes importing from other routes' modules.
-- **Status: FIXED 2026-03-22** — Changed all 6 files to import `get_current_user` from `core.deps`. The `core.deps` version supports httpOnly cookie auth (post BUG-001 fix). `users.py` still imports `require_role` from `auth.py` since it's only defined there.
 
 ---
 
@@ -2951,13 +2853,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## Notes on previously reported bugs (deep audit pass 3)
-
-- **BUG-060** (`product_sync.py imports get_db`) — `db/session.py` line 85 now exports `get_db = get_session` alias for backward compatibility. This import will no longer fail. BUG-060 is effectively resolved.
-- **BUG-228** (os.getenv() violations) — Add `backend/workers/celery_app.py` line 23: `REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")` — direct `os.getenv()` call at module level outside `core/config.py`. `REDIS_URL` is already in `core/config.py` as `settings.REDIS_URL`.
-
----
-
 ## [MEDIUM] BUG-267 — `ExperimentManager._assignments` is in-memory only — bandit assignments lost on restart
 - **File:** `backend/services/scoring/experimentation/experiment_manager.py` lines 207–209, 303–331, 337–384
 - **Issue:** `self._assignments: dict[str, ExperimentAssignment] = {}` is a plain Python dict. `record_assignment()` docstring says "In production, this writes to the pricing_outcomes table (strategy_arm and is_exploration columns from Phase 1 schema)" — but the implementation only writes to the in-memory dict. `process_outcome()` looks up assignments from the same dict. If the ExperimentManager is not a process-level singleton (it is not — `create_ie_orchestrator()` creates a new one per call), every call starts with an empty dict. Even if it were a singleton, any server restart empties it. `process_outcome()` then logs "No assignment found for recommendation X" and returns `None` for every outcome, so the Thompson Sampling bandit never receives feedback and stops learning.
@@ -2971,25 +2866,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** `HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY")` — module-level `os.getenv()` call outside `core/config.py`. Violates project security rule: "Never call `os.getenv()` anywhere outside `core/config.py`". `HUBSPOT_API_KEY` is not in `core/config.py` Settings at all. The key should be added as `HUBSPOT_API_KEY: str | None = None` to `Settings` and accessed as `settings.HUBSPOT_API_KEY`.
 - **Impact:** If `HUBSPOT_API_KEY` is set via `.env` file (loaded by Pydantic at startup), `os.getenv()` may return `None` even if the key is configured, causing HubSpot CRM pushes to silently skip. Bypasses centralized config validation.
 - **Status: FIXED 2026-03-22** — Added `HUBSPOT_API_KEY: str | None = None` to `Settings` in `core/config.py`. Replaced `os.getenv()` and module-level constant with `settings.HUBSPOT_API_KEY` throughout `prospect_lead_capture.py`. Removed unused `import os`.
-
----
-
-## Notes on previously reported bugs (deep audit pass 4)
-
-- All `services/scoring/experimentation/` and `services/scoring/learning/` files (except experiment_manager.py) are pure Python math — no DB, no LLM calls. CLEAN.
-- `services/ai_trend_analysis/ai_clients.py` violations (sync-in-async, wrong models, bypasses ai_generator.py) already documented as BUG-219, BUG-220, BUG-236 in prior passes.
-- `services/ai_trend_analysis/autonomous_orchestrator.py` os.getenv() violations already documented as BUG-192, BUG-221, BUG-234.
-- `services/payment/` os.getenv() violations already documented in BUG-228.
-- Worker tasks (`audit_tasks.py`, `benchmark_refresh_tasks.py`, `outcome_measurement_tasks.py`, `pricing_tasks.py`, `sync_verification_tasks.py`) all use NullPool pattern and `settings.*` correctly. CLEAN.
-- `services/audit/report_generator.py`, `services/audit_persistence_service.py`, `services/pricing_engine.py`, `services/sentiment_analyzer.py`, `services/youcom_client.py`, `services/rate_limit_manager.py`, `services/prospect_audit_service.py` — all CLEAN.
-- `services/products/import_service.py`, `services/products/cascade_delete.py` — CLEAN.
-- `services/scoring/experimentation/strategies.py`, `services/scoring/learning/feature_engineer.py`, `services/scoring/learning/analyst_feedback.py`, `services/scoring/learning/scout_feedback.py` — CLEAN (pure math).
-
----
-
----
-
-## New findings — deep audit pass 5 (files 1–50, frontend pages and demo)
 
 ---
 
@@ -3030,18 +2906,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** Three separate `fetch()` calls bypass the centralized Axios `api` client: `trackEvent` at line 63, audit POST at line 285, and PDF generation POST at line 353. The Axios client handles base URL resolution, auth headers, and error normalization. Raw `fetch()` calls also send the user's email address (line 337: `email: email.trim()`) to an analytics endpoint without input validation or rate limiting.
 - **Impact:** Base URL mismatch may break audit submissions in production vs staging. Auth errors are not normalized. PII (user email) is sent to an unprotected analytics endpoint without rate limiting — a GDPR compliance concern for the Shopify App Store submission.
 - **Status: FIXED 2026-03-22** — Converted `trackEvent` and audit POST to use `api.post()` from `@/lib/api/client`, gaining base URL resolution and error normalization. PDF POST remains as raw `fetch()` since the `api` client only handles JSON responses, not blob downloads.
-
----
-
-## Notes on previously reported bugs (deep audit pass 5)
-
-- Files 32–50 (all demo pages: `autonomous-pipeline`, `crisis-detector`, `launch-detector`, `market-intelligence`, `market-trends`, `visual-pricing` components) are public demo pages using raw `fetch()` by design (no auth required). These raw fetch() calls are intentional and do not violate the project convention which applies to the authenticated dashboard. CLEAN.
-- `demo/embedded-gate.tsx` correctly wraps `useSearchParams()` in Suspense. CLEAN.
-- `demo/visual-pricing/components/ScreenshotUploader.tsx` correctly creates and revokes blob URLs using `useMemo` + `useEffect`. CLEAN.
-
----
-
-## New findings — deep audit pass 6 (files 66–325, components and lib)
 
 ---
 
@@ -3090,39 +2954,6 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **Issue:** Both `updateProduct.mutate(...)` and `createProduct.mutate(...)` pass `onSuccess` callbacks inline to `.mutate(...)`. Per-call callbacks are ephemeral in React Query v5 — if the component re-renders before the mutation completes, the callbacks are silently dropped. The pattern was documented as a systemic issue in BUG-114; this file was not in the original scope.
 - **Impact:** `toast.success('Product updated')` / `toast.success('Product created')` messages and `onSuccess?.()` callbacks may be silently dropped under fast network or rapid re-renders.
 - **Status: FALSE POSITIVE 2026-03-22** — Code uses `mutateAsync().then()` (promise-based), not per-call `{ onSuccess }`. Toasts and cache invalidation are handled in the `useMutation()` config in `use-products.ts`. The `.then(() => onSuccess?.())` on `mutateAsync` is a stable promise chain, not an ephemeral callback.
-
----
-
-## Notes on deep audit pass 6 (files 66–325)
-
-- `components/features/alerts/` (AlertBadge, AlertConfigurationCard, AlertConfigurationForm, AlertItem, AlertStatusBadge, AlertsList, CrisisDetectionCard, NotificationBell) — all use `api` client correctly. CLEAN except CrisisDetectionCard casts `(err as Error)` which hides non-Error throws (minor, already covered by BUG-114 pattern).
-- `components/features/competitors/` (AutoLinkModal, CompetitorCard, CompetitorForm, CompetitorMatchSearch, CompetitorProductCard, CompetitorsList, LinkProductForm, MatchConfidenceBadge, MatchedProductCard, MatchedProductsList) — all CLEAN.
-- `components/features/dashboard/` (AIFeaturesCard, PendingRecommendations, ProductSummaryCard, QuickActions, RecentAlerts, SentimentOverview, StatCard) — all CLEAN.
-- `components/features/integrations/` (ConnectPlatformCard, ConnectionSuccessToast, IntegrationCard, IntegrationsEmptyState, IntegrationsList, LinkedProducts, SyncStatus, WooCommerceConnectModal, diagnostic-panel, sync-progress-banner) — CLEAN. diagnostic-panel uses `api` client correctly.
-- `components/features/intelligence/` — all CLEAN (pure display components wrapping data from hooks).
-- `components/features/payments/` (BsvWalletCard, ConnectWallet, CurrentPlan, EthWalletCard, MNEEBalance, PaymentHistory, SubscriptionPlans, TransactionHistory) — CLEAN. TransactionHistory Etherscan link already documented as BUG-120.
-- `components/features/pricing/` (ConfidenceIndicator, RecommendationActions, RecommendationCard, RecommendationsList, RuleCard, RuleForm, RulesList, rule-form/*) — CLEAN. RecommendationActions correctly uses a modal instead of window.prompt() (the window.prompt bug is in the page-level code, BUG-105).
-- `components/features/products/` (AutoPricingCard, DeleteProductModal, GenerateDescriptionModal, ImportCSVModal, KeywordsManager, PriceHistoryCard, PriceSuggestionCard, PriceSuggestionModal, ProductCard, ProductForm, ProductInfoCard, ProductRow, ProductStoreSync, ProductsTable) — ProductForm has ephemeral onSuccess (BUG-279 above). Rest CLEAN.
-- `components/features/sentiment/`, `components/features/trends/`, `components/features/trust-scoring/` — all CLEAN (pure display/chart components).
-- `components/layout/` (AuthShell, DashboardShell, Sidebar, Topbar) — CLEAN.
-- `components/ui/` — all CLEAN.
-- `lib/api/` (alerts, analytics, auth, competitors, errors, integrations, intelligence, outcomes, payments, pricing, query-keys, retrospective-audit, sentiment, shopify-billing, trust-scoring) — all CLEAN. `products.ts` hardcoded URL already documented as BUG-002.
-- `lib/domain/` — all CLEAN (pure transformation functions with tests).
-- `lib/hooks/` (use-alerts, use-analytics, use-auth, use-competitor-matching, use-competitors, use-integrations, use-intelligence, use-outcomes, use-payments, use-pricing, use-product-sync, use-products, use-retrospective-audit, use-sentiment, use-shopify-billing, use-toast, use-trust-scoring, use-user) — CLEAN. `use-pricing.ts` uses mutation-level onSuccess correctly (defined in `useMutation()` config, not per-call).
-- `lib/stores/auth-store.ts` — uses localStorage via token.ts (covered by BUG-001, BUG-052).
-- `lib/web3/` — hardcoded Alchemy key covered by BUG-074; WalletConnect 'demo' by BUG-103; console.log in useMNEE already covered by existing bugs.
-- `lib/ws/client.ts` — WebSocket auth gap covered by BUG-058; new console.log finding in BUG-277 above.
-- `lib/context/shopify-embedded.tsx` — `any` type in waitForAppBridge already covered by existing bugs.
-- `middleware.ts` — design intentional, covered.
-- `sentry.*.config.ts` — missing beforeSend covered by BUG-075.
-- `types/` — all CLEAN (pure TypeScript type definitions; no logic).
-- `vitest.config.ts` — CLEAN.
-
----
-
----
-
-## New findings — deep audit pass 7 (backend files: models, routes, schemas, main)
 
 ---
 
@@ -3230,38 +3061,11 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 
 ---
 
-## Notes on deep audit pass 7
-
-- `models/subscription.py` — `updated_at` lacks `onupdate` (same pattern as BUG-289/BUG-136); `Subscription` was not listed in BUG-136's original scope. However this is a lower-severity duplicate of an already-documented pattern — recorded as a note rather than a new bug number to avoid duplicate entries.
-- `models/user.py` — CLEAN: `updated_at` correctly uses `onupdate=lambda: datetime.now(UTC)` at line 38. `hashed_password` not exposed in any relationship. `bsv_wallet_address` and `eth_wallet_address` are stored plain-text (appropriate for public wallet addresses).
-- `schemas/agent_contracts/conflict_resolution.py` — CLEAN: uses `logging.getLogger(__name__)` (minor inconsistency vs `core.logging.get_logger`, but this is a schema file not a route). Logic is deterministic and correct.
-- `schemas/agent_contracts/intelligence.py` — CLEAN: pure Pydantic response schemas, no logic.
-- `schemas/agent_contracts/pipeline.py` — CLEAN: thin wrapper combining agent outputs.
-- `schemas/agent_contracts/shared.py` — CLEAN: pure StrEnum definitions.
-- `schemas/agent_contracts/tracing.py` — CLEAN: `TraceSpan.span_id` uses `str(uuid.uuid4())[:8]` (truncated UUID same as BUG-026 pattern, but this is a tracing span ID not a correlation ID so collision risk is acceptable). `_SpanContext.__exit__` returns `False` correctly (does not suppress exceptions).
-- `main.py` — `os.getenv("PAY_TO_ADDRESS")` already documented as BUG-067. Lifespan handler logs `os.environ.get('SHOPIFY_CLIENT_ID')` which is a debug trace (not a secret value leak, just boolean). Rest of app assembly is clean.
-- `init_db.py` — new finding BUG-292 above.
-
----
-
-## Deep Audit Pass 8 — Frontend Pages, Components, Lib (2026-03-21)
-
-Continued reading all remaining frontend pages and lib files not covered in earlier passes.
-
----
-
 ## [MEDIUM] BUG-293 — `competitors/match/page.tsx` uses `useSearchParams()` without Suspense boundary
 - **File:** `frontend/app/(dashboard)/competitors/match/page.tsx` line 18
 - **Issue:** `const searchParams = useSearchParams();` is called directly in the exported page component without any wrapping `<Suspense>` boundary. BUG-055 documented this for `callback/page.tsx`, `claim/page.tsx`, `pricing/rules/new/page.tsx`, and `settings/billing/page.tsx`. BUG-270 documented it for `integrations/page.tsx`. The `competitors/match` page is not included in either prior bug's scope.
 - **Impact:** Next.js 14 App Router requires any component using `useSearchParams()` to be wrapped in `<Suspense>`. Without it, the page throws during SSR and during client-side navigation on first render — "Missing Suspense boundary with useSearchParams" error at runtime.
 - **Status: FALSE POSITIVE 2026-03-22** — Code already has `<Suspense>` wrapping `<CompetitorMatchContent>` (lines 19-21). `useSearchParams()` is called inside the child component (line 26), not the exported page component. This was likely fixed in a prior batch.
-
----
-
-## [HIGH] BUG-294 — `trends/page.tsx` uses raw `fetch()` without auth token for both API calls
-- **File:** `frontend/app/(dashboard)/trends/page.tsx` lines 35, 52
-- **Issue:** Both `queryFn` functions use bare `fetch(\`${API_URL}/api/v1/market-trends/...\`)` with `process.env.NEXT_PUBLIC_API_URL` as the base URL (line 26) rather than the centralised `api` client (`@/lib/api/client`). Neither call includes an `Authorization: Bearer` header. The `api` client handles auth token injection, token refresh, and error normalisation.
-- **Impact:** Market trends endpoints receive unauthenticated requests and will return 401, silently rendering the page empty. If the backend ever enforces auth on these endpoints, the feature breaks completely with no user-visible error. Consistent with BUG-054 pattern but a new, previously unlisted file.
 
 ---
 
@@ -3298,6 +3102,14 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 
 ---
 
+## [HIGH] BUG-299 — `GenerateDescriptionModal.tsx` renders AI-generated HTML via `dangerouslySetInnerHTML` without sanitization (XSS)
+- **File:** `frontend/components/features/products/GenerateDescriptionModal.tsx` line 211
+- **Issue:** `<div dangerouslySetInnerHTML={{ __html: result.description }} />` renders the raw `description` string returned by the AI backend directly into the DOM. If the backend Gemini response or any intermediate processing layer ever includes `<script>` tags, event handlers, or other HTML, the user's browser will execute them. React's `dangerouslySetInnerHTML` bypasses all built-in XSS protection. The content comes from the AI API, which processes user-supplied product names and descriptions.
+- **Impact:** Stored/reflected XSS. A maliciously crafted product name could cause the AI to include HTML payloads in the generated description, which are then executed in the merchant's browser when they click "Generate Description". At minimum, all session tokens stored in localStorage (BUG-001) become accessible to the injected script. The fix is to sanitize with `DOMPurify` before rendering, or render as plain text if rich formatting is not required.
+- **Status: FALSE POSITIVE 2026-03-22** — Already uses `DOMPurify.sanitize(result.description)` before passing to `dangerouslySetInnerHTML`. DOMPurify imported at line 10. Bug was fixed in a prior batch.
+
+---
+
 ## [MEDIUM] BUG-300 — `AIAnalysisCard.tsx` labels AI as "GPT-4o-mini" violating Gemini-only mandate
 - **File:** `frontend/components/features/competitors/AIAnalysisCard.tsx` line 67
 - **Issue:** The card displays `<p className="text-xs text-gray-500">Powered by GPT-4o-mini</p>` as a static string. The project rule is "Model: `gemini-2.0-flash` — do not change without explicit instruction". The UI string is factually incorrect and could mislead users or auditors about the AI stack.
@@ -3330,88 +3142,6 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 
 ---
 
-## [HIGH] BUG-299 — `GenerateDescriptionModal.tsx` renders AI-generated HTML via `dangerouslySetInnerHTML` without sanitization (XSS)
-- **File:** `frontend/components/features/products/GenerateDescriptionModal.tsx` line 211
-- **Issue:** `<div dangerouslySetInnerHTML={{ __html: result.description }} />` renders the raw `description` string returned by the AI backend directly into the DOM. If the backend Gemini response or any intermediate processing layer ever includes `<script>` tags, event handlers, or other HTML, the user's browser will execute them. React's `dangerouslySetInnerHTML` bypasses all built-in XSS protection. The content comes from the AI API, which processes user-supplied product names and descriptions.
-- **Impact:** Stored/reflected XSS. A maliciously crafted product name could cause the AI to include HTML payloads in the generated description, which are then executed in the merchant's browser when they click "Generate Description". At minimum, all session tokens stored in localStorage (BUG-001) become accessible to the injected script. The fix is to sanitize with `DOMPurify` before rendering, or render as plain text if rich formatting is not required.
-- **Status: FALSE POSITIVE 2026-03-22** — Already uses `DOMPurify.sanitize(result.description)` before passing to `dangerouslySetInnerHTML`. DOMPurify imported at line 10. Bug was fixed in a prior batch.
-
----
-
-## Notes on deep audit pass 8
-
-Files confirmed CLEAN in this pass (no new bugs):
-- `payments/demo/page.tsx` — renders "Demo" stub, correctly gate-checks `isEmbedded`. Clean.
-- `payments/page.tsx` — MNEE/Shopify billing split works correctly. Embedded gate check present.
-- `pricing/page.tsx` — well-structured, uses `mutateAsync` with try/catch correctly. `window.prompt` for rejection reason is poor UX but not a bug.
-- `pricing/recommendations/[id]/page.tsx` — CLEAN. Correct `mutateAsync` usage throughout.
-- `pricing/rules/[id]/page.tsx` — CLEAN.
-- `pricing/rules/page.tsx` — CLEAN. BUG-008 fix confirmed applied.
-- `pricing/settings/page.tsx` — CLEAN. `useMemo` initialFormData correctly avoids stale form values.
-- `products/[id]/page.tsx` — `handleApplyGenerated` silently ignores errors at line 183 (`console.error` only) — minor concern but existing pattern.
-- `products/[id]/edit/page.tsx` — CLEAN.
-- `products/new/page.tsx` — CLEAN.
-- `products/page.tsx` — client-side sort/filter OK for 20-item pages. Missing total-count reset when search changes page (minor UX).
-- `sentiment/page.tsx` — CLEAN.
-- `sentiment/trust/page.tsx` — new BUG-298 above; rest of UI logic is clean.
-- `settings/billing/page.tsx` — `useSearchParams()` already covered by BUG-055. `verifyShopifyCharge` effect has correct cleanup via `cancelled` flag.
-- `settings/profile/page.tsx` — CLEAN.
-- `settings/security/page.tsx` — per-call `onSuccess` in `changePassword.mutate()` used only to clear form state (line 49-57) — low risk compared to BUG-298 since no navigation occurs.
-- `support/page.tsx` — `onSuccess`/`onError` defined at mutation level (not per-call), correct pattern.
-- `trends/page.tsx` — new BUG-294 above.
-- `trends/analysis/page.tsx` — new BUG-295 above (defaults to `'openai'`).
-- `app/layout.tsx` — CLEAN. App Bridge CDN script correctly included.
-- `app/providers.tsx` — new BUG-297 (sessionStorage key mismatch). `shouldRetry` logic and global error handler otherwise well-structured.
-- `lib/api/client.ts` — note: uses raw `fetch()` directly (not itself) but this is the implementation of the API client, so that's expected. The `handleAuthError()` function writes `sessionStorage.setItem('redirectAfterLogin', ...)` — this is the correct key but note that `providers.tsx` uses a different key.
-- `lib/auth/token.ts` — localStorage usage already documented as BUG-001. Structure is clean otherwise.
-- `lib/hooks/use-integrations.ts` — CLEAN. BUG-006 fix (sync polling timeout) applied correctly.
-- `lib/api/trend-analysis.ts` — new BUG-295 above.
-- `components/features/integrations/IntegrationCard.tsx` — CLEAN. BUG-036 fix (using `mutateAsync` pattern) confirmed present.
-- `components/features/integrations/diagnostic-panel.tsx` — CLEAN. Uses `api` client correctly.
-
-## Deep Audit Pass 9 — Component Features, lib/api (2026-03-21)
-
-New bugs found: BUG-300, BUG-301, BUG-302, BUG-303
-
-Files confirmed CLEAN in pass 9:
-- `components/features/alerts/AlertConfigurationForm.tsx` — CLEAN. Form state, validation, conditional fields all correct.
-- `components/features/alerts/AlertsList.tsx` — CLEAN. Simple list, no data fetching.
-- `components/features/alerts/CrisisDetectionCard.tsx` — CLEAN. Uses `api` client correctly. On-demand load pattern is acceptable.
-- `components/features/alerts/NotificationBell.tsx` — CLEAN. WebSocket + React Query combination handled correctly with separate state.
-- `components/features/competitors/AIAnalysisCard.tsx` — new BUG-300 (GPT label). API call pattern is correct.
-- `components/features/competitors/AutoLinkModal.tsx` — CLEAN.
-- `components/features/competitors/CompetitorMatchSearch.tsx` — CLEAN. Uses mutation hooks correctly.
-- `components/features/dashboard/AIFeaturesCard.tsx` — new BUG-301 (GPT-4o labels).
-- `components/features/dashboard/PendingRecommendations.tsx` — CLEAN. Pure display component, correct null/NaN safety.
-- `components/features/pricing/RecommendationCard.tsx` — CLEAN. Good error handling, safe number parsing.
-- `components/features/pricing/RuleForm.tsx` — CLEAN. `mutateAsync` with try/catch correct. Domain validation layer used correctly.
-- `components/features/products/ImportCSVModal.tsx` — CLEAN. Per-call `onSuccess` in `mutate()` (line 276) only modifies local parent callback, not component state — low risk.
-- `components/features/products/PriceSuggestionModal.tsx` — CLEAN. `mutate()` per-call `onSuccess` (line 234) only calls `onClose` — acceptable.
-- `components/features/products/ProductStoreSync.tsx` — CLEAN. Uses mutation-level `onSuccess`/`onError`, correct pattern.
-- `components/features/trends/AIInsightPanel.tsx` — new BUG-302 (OpenAI/GPT-4 badge compounding BUG-295).
-- `components/features/payments/PayWithMNEE.tsx` — new BUG-303 (setState in render body).
-- `components/features/payments/SubscriptionPlans.tsx` — CLEAN. `downgradeToFreeMutation.mutateAsync()` and `subscribeMutation.mutateAsync()` patterns correct.
-- `lib/api/intelligence.ts` — CLEAN.
-- `lib/api/analytics.ts` — CLEAN.
-- `lib/api/auth.ts` — CLEAN.
-- `lib/api/alerts.ts` — CLEAN.
-- `lib/api/competitors.ts` — CLEAN.
-- `lib/api/trust-scoring.ts` — CLEAN.
-- `lib/api/retrospective-audit.ts` — CLEAN.
-- `lib/api/products.ts` — hardcoded URL already BUG-002.
-- `lib/api/pricing.ts` — CLEAN. `ApprovalError` class and structured error parsing is well-implemented.
-- `lib/api/integrations.ts` — CLEAN. `pollSyncStatus` unguarded `setTimeout` is non-critical (no React state involved).
-- `lib/api/sentiment.ts` — CLEAN.
-- `lib/api/outcomes.ts` — CLEAN. Transformer functions are robust with null-safety.
-
----
-
-## Deep Audit Pass 10 — lib/web3, types, next.config, demo pages, analytics components (2026-03-21)
-
-New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, BUG-311
-
----
-
 ## [CRITICAL] BUG-304 — Hardcoded Alchemy API key committed to source code
 - **Status: FIXED 2026-03-21**
 - **File:** `frontend/lib/web3/config.ts` line 80
@@ -3421,11 +3151,11 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 
 ---
 
-## [HIGH] BUG-310 — Email address (PII) sent to analytics endpoint in `audit/page.tsx`
-- **File:** `frontend/app/audit/page.tsx` line 335
-- **Issue:** `trackEvent('email_submitted', { email: email.trim(), input_mode: mode, ... })` — the raw user email is included in the analytics event payload. Analytics events are typically sent to third-party services (Sentry, Mixpanel, etc.) and may be logged server-side.
-- **Impact:** Violates GDPR and the project security rule "strip PII before Sentry events". User email addresses are PII and must not be transmitted to analytics pipelines. Replace with a hashed identifier (e.g., `email_hash: sha256(email)`) or omit the field entirely.
-- **Status: FIXED 2026-03-22** — Removed raw `email` field from `trackEvent` payload. Event still tracks `input_mode` and `store_url` without PII.
+## [LOW] BUG-305 — Debug `console.log` statements left in production `useMNEE.ts`
+- **File:** `frontend/lib/web3/useMNEE.ts` lines 85–91
+- **Issue:** Five debug `console.log` statements inside the `transfer()` function are committed in production code: `console.log('=== MNEE Transfer Debug ===')`, `console.log('to:', to)`, `console.log('amount (string):', amount)`, `console.log('decimals:', MNEE_TOKEN.decimals)`, `console.log('amountInWei:', amountInWei.toString())`.
+- **Impact:** Leaks transaction details (recipient wallet address, transfer amounts) to the browser console. Any browser extension or injected script can read console output.
+- **Status: FALSE POSITIVE** — All five `console.log` statements have already been removed from `useMNEE.ts`.
 
 ---
 
@@ -3453,22 +3183,6 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 
 ---
 
-## [MEDIUM] BUG-311 — "Approved" and "Applied" stats both use `total_applied` in `RecommendationStatsCard`
-- **File:** `frontend/components/features/analytics/RecommendationStatsCard.tsx` lines 33–43
-- **Issue:** The stats array defines two entries: `{ label: 'Approved', value: data?.total_applied ?? 0 }` and `{ label: 'Applied', value: data?.total_applied ?? 0 }`. Both reference the same field. The `RecommendationStats` type has no `total_approved` field — the backend schema only has `total_applied`.
-- **Impact:** The dashboard "Approved" stat card always shows the same number as "Applied", which is misleading. One of these should likely be `total_generated` (total recommendations generated) or the labels should be corrected to remove the duplicate.
-- **Status: FIXED 2026-03-22** — Changed duplicate "Approved" stat to "Generated" using `data?.total_generated`, which is the correct distinct field from the `RecommendationStats` type.
-
----
-
-## [LOW] BUG-305 — Debug `console.log` statements left in production `useMNEE.ts`
-- **File:** `frontend/lib/web3/useMNEE.ts` lines 85–91
-- **Issue:** Five debug `console.log` statements inside the `transfer()` function are committed in production code: `console.log('=== MNEE Transfer Debug ===')`, `console.log('to:', to)`, `console.log('amount (string):', amount)`, `console.log('decimals:', MNEE_TOKEN.decimals)`, `console.log('amountInWei:', amountInWei.toString())`.
-- **Impact:** Leaks transaction details (recipient wallet address, transfer amounts) to the browser console. Any browser extension or injected script can read console output.
-- **Status: FALSE POSITIVE** — All five `console.log` statements have already been removed from `useMNEE.ts`.
-
----
-
 ## [LOW] BUG-309 — "Gemini 3 Flash" non-existent model name in demo footer
 - **File:** `frontend/app/demo/autonomous-pipeline/page.tsx` line 474
 - **Issue:** Footer text reads "Powered by Gemini 3 Flash" — no such model exists. The correct model name per the project rules is `gemini-2.0-flash`.
@@ -3477,34 +3191,19 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 
 ---
 
-Files confirmed CLEAN in pass 10:
-- `lib/domain/__tests__/auth.test.ts` — CLEAN. MSW handler patterns correct, no hardcoded credentials.
-- `lib/domain/__tests__/products.test.ts` — CLEAN. Thorough coverage of decimal normalization and price constraint validation.
-- `lib/domain/__tests__/integrations.test.ts` — CLEAN. Extensive URL normalization, validation, and transform test coverage.
-- `lib/domain/__tests__/pricing.test.ts` — CLEAN (sampled). Domain test patterns consistent.
-- `components/features/intelligence/CalibrationChart.tsx` — CLEAN. SVG-based chart with safe data transforms, null guards throughout.
-- `components/features/intelligence/CategoryPerformanceTable.tsx` — CLEAN. Client-side sort with `useMemo`, null-safe value formatting.
-- `components/features/intelligence/ExperimentStatusCard.tsx` — CLEAN. Thompson Sampling arm visualization, correct expand/collapse state.
-- `components/features/intelligence/IEHealthBanner.tsx` — CLEAN. Status/label maps with fallback defaults.
-- `components/features/intelligence/OutcomeDashboard.tsx` — CLEAN (previously noted).
-- `components/features/intelligence/DriftAlertsList.tsx` — CLEAN (previously noted).
-- `components/features/analytics/AlertsBreakdownChart.tsx` — CLEAN. Recharts integration, data transformation with useMemo correct.
-- `components/features/analytics/SentimentTrendChart.tsx` — CLEAN. `toSafeNumber` helper correctly handles backend string decimals.
-- `types/competitor-matching.ts` — CLEAN. SearchProvider union types, no `any`.
-- `tsconfig.json` — CLEAN. `strict: true` confirmed, correct Next.js plugin configuration.
-- `package.json` — CLEAN. No unexpected dependencies. `generate-types` script points to staging URL (acceptable for dev tooling).
-- `vercel.json` — CLEAN. Security headers present: `X-Content-Type-Options`, `X-Frame-Options: DENY`, `X-XSS-Protection`, `Referrer-Policy`.
-- `components/features/integrations/IntegrationCard.tsx` — CLEAN (re-confirmed in session context).
-- `app/(dashboard)/integrations/callback/page.tsx` — CLEAN (re-confirmed in session context).
-- `app/(dashboard)/integrations/claim/page.tsx` — CLEAN (re-confirmed in session context).
-- `app/(auth)/login/page.tsx` — CLEAN (re-confirmed in session context).
-- `types/product.ts` — CLEAN (re-confirmed in session context).
+## [HIGH] BUG-310 — Email address (PII) sent to analytics endpoint in `audit/page.tsx`
+- **File:** `frontend/app/audit/page.tsx` line 335
+- **Issue:** `trackEvent('email_submitted', { email: email.trim(), input_mode: mode, ... })` — the raw user email is included in the analytics event payload. Analytics events are typically sent to third-party services (Sentry, Mixpanel, etc.) and may be logged server-side.
+- **Impact:** Violates GDPR and the project security rule "strip PII before Sentry events". User email addresses are PII and must not be transmitted to analytics pipelines. Replace with a hashed identifier (e.g., `email_hash: sha256(email)`) or omit the field entirely.
+- **Status: FIXED 2026-03-22** — Removed raw `email` field from `trackEvent` payload. Event still tracks `input_mode` and `store_url` without PII.
 
 ---
 
-## Deep Audit Pass 11 — Remaining hooks, components, tests, config files (2026-03-21)
-
-New bugs found: BUG-312, BUG-313, BUG-314, BUG-315
+## [MEDIUM] BUG-311 — "Approved" and "Applied" stats both use `total_applied` in `RecommendationStatsCard`
+- **File:** `frontend/components/features/analytics/RecommendationStatsCard.tsx` lines 33–43
+- **Issue:** The stats array defines two entries: `{ label: 'Approved', value: data?.total_applied ?? 0 }` and `{ label: 'Applied', value: data?.total_applied ?? 0 }`. Both reference the same field. The `RecommendationStats` type has no `total_approved` field — the backend schema only has `total_applied`.
+- **Impact:** The dashboard "Approved" stat card always shows the same number as "Applied", which is misleading. One of these should likely be `total_generated` (total recommendations generated) or the labels should be corrected to remove the duplicate.
+- **Status: FIXED 2026-03-22** — Changed duplicate "Approved" stat to "Generated" using `data?.total_generated`, which is the correct distinct field from the `RecommendationStats` type.
 
 ---
 
@@ -3540,60 +3239,12 @@ New bugs found: BUG-312, BUG-313, BUG-314, BUG-315
 
 ---
 
-Files confirmed CLEAN in pass 11:
-- `lib/hooks/use-alerts.ts` — CLEAN. All mutations use mutation-level callbacks.
-- `lib/hooks/use-auth.ts` — CLEAN (minor issue noted as BUG-315 above).
-- `lib/hooks/use-trend-analysis.ts` — CLEAN (BUG-307 pattern already logged; hook design otherwise correct).
-- `lib/hooks/use-pricing.ts` — CLEAN. BUG FIX #2 invalidation of product queries on approval confirmed correct.
-- `lib/hooks/use-products.ts` — CLEAN. Optimistic delete with rollback on error is well implemented.
-- `lib/hooks/use-sentiment.ts` — CLEAN.
-- `lib/hooks/use-payments.ts` — CLEAN. Correct cache invalidation on subscription/plan changes.
-- `lib/hooks/use-shopify-billing.ts` — CLEAN. Confirms Shopify billing API integration via dedicated endpoints.
-- `lib/hooks/use-intelligence.ts` — CLEAN. Separate query keys per endpoint, no local key collisions.
-- `lib/hooks/use-user.ts` — CLEAN.
-- `lib/hooks/use-competitor-matching.ts` — CLEAN. `useConfidenceLevel` and `useFilteredMatches` are pure helper hooks (not React Query hooks) — acceptable pattern.
-- `lib/hooks/use-product-sync.ts` — CLEAN. Uses `sonner` toast directly (not the custom toast hook) — inconsistent but not a bug.
-- `components/features/sentiment/analyze-modal.tsx` — new BUG-312, BUG-313 above. Modal structure otherwise correct.
-- `components/features/competitors/CompetitorCard.tsx` — CLEAN. `mutateAsync` pattern correct.
-- `components/features/products/ProductsTable.tsx` — CLEAN. Responsive table/card layout, no data fetching in this component.
-- `components/features/products/ProductForm.tsx` — new BUG-314 above. Domain validation layer usage is correct.
-- `components/features/pricing/ConfidenceIndicator.tsx` — CLEAN. Accessible `role="meter"` with `aria-valuenow/min/max`. Score clamping correct.
-- `components/features/analytics/SentimentTrendChart.tsx` — CLEAN (duplicate of dashboard SentimentOverview — same component; both CLEAN).
-- `types/competitor-matching.ts` — CLEAN (confirmed in pass 10).
-- `tsconfig.json` — CLEAN. `strict: true` enabled.
-- `package.json` — CLEAN. No unexpected dependencies; `generate-types` scripts point to known environments.
-- `vercel.json` — CLEAN. Security headers present.
-
----
-
-## Deep Audit Pass 12 — Dashboard pages, layout components, stores, middleware (2026-03-21)
-
-New bugs found: BUG-316
-
----
-
 ## [HIGH] BUG-316 — `analytics/audit/page.tsx` reads JWT directly from `localStorage` bypassing token abstraction
 - **Status: FIXED 2026-03-21**
 - **File:** `frontend/app/(dashboard)/analytics/audit/page.tsx` lines 49–53
 - **Issue:** The `getAuthToken()` helper function reads `localStorage.getItem('access_token')` directly. All other API calls use the centralized `api` Axios client which reads via `getToken()` from `lib/auth/token.ts`. This function also directly constructs `fetch()` calls with Bearer token headers instead of using the `api` client.
 - **Impact:** Duplicates the BUG-001 localStorage risk in a separate location. If the token key name ever changes, this code won't update automatically. The `fetch()` calls also bypass the Axios interceptor that handles 401 refresh token logic — if the token expires during a PDF export or email send, the user gets a silent failure instead of an automatic token refresh.
 - **Fix:** Removed `getAuthToken()`, replaced email fetch with centralized `api.post()`, PDF fetch now uses `getBearerToken()` from `lib/auth/token`.
-
----
-
-Files confirmed CLEAN in pass 12:
-- `app/(dashboard)/admin/page.tsx` — CLEAN. Stub page, no data fetching.
-- `app/(dashboard)/api-keys/page.tsx` — CLEAN. Stub page.
-- `app/(dashboard)/analytics/audit/page.tsx` — new BUG-316 above. Otherwise UI logic is correct.
-- `app/(dashboard)/integrations/[id]/page.tsx` — CLEAN. Per-call `onSuccess` in `disconnect.mutate()` used only for navigation (acceptable pattern).
-- `components/layout/Sidebar.tsx` — CLEAN. Embedded vs. standalone nav item filtering correct.
-- `components/layout/Topbar.tsx` — CLEAN. Embedded mode detection correct.
-- `components/layout/DashboardShell.tsx` — CLEAN. Mobile drawer with `reopenBlockedUntil` timer is a deliberate UX fix, not a bug.
-- `components/ui/ai-badge.tsx` — CLEAN. Generic "AI Powered" label, no model branding.
-- `lib/stores/auth-store.ts` — CLEAN (localStorage usage is BUG-001, already logged). Error extraction pattern is correct.
-- `middleware.ts` — CLEAN. `ssp_auth=1` cookie as a lightweight auth hint (not JWT) is architecturally intentional. Matcher regex correctly excludes static files.
-- `lib/hooks/use-outcomes.ts` — CLEAN (noted in previous session).
-- `lib/hooks/use-trust-scoring.ts` — CLEAN.
 
 ---
 
@@ -3606,13 +3257,14 @@ Files confirmed CLEAN in pass 12:
 
 ---
 
-## Stats
+## Stats (Open Bugs Only)
 
 | Severity | Count |
 |----------|-------|
-| CRITICAL | 20 |
-| HIGH | 97 |
-| MEDIUM | 109 |
-| LOW | 38 |
-| **TOTAL** | **264** |
+| CRITICAL | 3 |
+| HIGH | 8 |
+| MEDIUM | 18 |
+| LOW | 0 |
+| **TOTAL OPEN** | **29** |
+| **TOTAL FIXED** | **367** |
 | **ENHANCEMENTS** | **6** |

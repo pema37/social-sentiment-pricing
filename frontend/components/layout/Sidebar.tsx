@@ -28,6 +28,7 @@ import {
   TrendingUp,
   LogOut,
   ShieldCheck,
+  Camera,
   CreditCard,
   SearchX,
 } from 'lucide-react';
@@ -64,6 +65,7 @@ const pricingItems: NavItem[] = [
   { label: 'Recommendations', href: '/pricing', icon: DollarSign },
   { label: 'Rules', href: '/pricing/rules', icon: Sliders },
   { label: 'Pricing Settings', href: '/pricing/settings', icon: ListChecks },
+  { label: 'Visual Pricing', href: '/pricing/visual', icon: Camera },
   // Standalone: show MNEE payments
   { label: 'Payments (MNEE)', href: '/payments', icon: Wallet, standaloneOnly: true },
   // Embedded: show Shopify billing link instead

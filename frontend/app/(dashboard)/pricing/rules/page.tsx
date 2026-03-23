@@ -221,7 +221,7 @@ export default function PricingRulesPage() {
       {hasLookupErrors && (
         <Card padding="sm" className="bg-yellow-50 border-yellow-200 mb-4">
           <div className="flex items-center gap-2 text-yellow-800 text-sm">
-            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>
               Could not load {isCompetitorsError && isProductsError ? 'competitor and product' : isCompetitorsError ? 'competitor' : 'product'} names.
               Rules may show truncated IDs instead of names.

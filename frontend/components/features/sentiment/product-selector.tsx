@@ -17,7 +17,7 @@ export const ProductSelector = memo(function ProductSelector({ value, onChange, 
         id="product-selector"
         value={value || ''}
         onChange={(e) => onChange(e.target.value || null)}
-        className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 min-w-[180px]"
+        className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 min-w-45"
         disabled={isLoading}
         aria-busy={isLoading}
       >

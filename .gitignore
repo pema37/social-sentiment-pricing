@@ -126,4 +126,7 @@ backend/backend__CLAUDE.md
 frontend/frontend__CLAUDE.md
 .claude/
 BUGS.md
+BUGS_REORG.md
+reorganize_bugs.py
+
 

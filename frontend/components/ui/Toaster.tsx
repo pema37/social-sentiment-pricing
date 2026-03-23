@@ -52,7 +52,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
     <div
       className={`
         ${config.bg} ${config.border}
-        border rounded-lg shadow-lg p-4 min-w-[320px] max-w-[420px]
+        border rounded-lg shadow-lg p-4 min-w-[320px] max-w-105
         transform transition-all duration-150 ease-out
         ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
       `}
