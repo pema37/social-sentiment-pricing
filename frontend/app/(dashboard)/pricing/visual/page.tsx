@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Camera } from "lucide-react";
-import { api } from "@/lib/api/client";
+import { useProducts } from "@/lib/hooks/use-products";
 import { AgentMessage, AgentKey, PricingRecommendation, AnalysisStatus } from "@/components/features/pricing/visual/types";
 import { ScreenshotUploader } from "@/components/features/pricing/visual/ScreenshotUploader";
 import { AgentStream } from "@/components/features/pricing/visual/AgentStream";
@@ -20,6 +20,24 @@ export default function VisualPricingPage() {
   const [activeAgent, setActiveAgent] = useState<AgentKey | null>(null);
   const [recommendation, setRecommendation] = useState<PricingRecommendation | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch merchant's real products
+  const { data: productsData, isLoading: productsLoading } = useProducts({
+    page: 1,
+    page_size: 100,
+  });
+  const products = productsData?.items ?? [];
+
+  // When a product is selected pre-fill name and price
+  const handleProductSelect = (productId: string) => {
+    if (!productId) return;
+    const selected = products.find((p) => p.id === productId);
+    if (!selected) return;
+    setProductName(selected.name ?? "");
+    setProductPrice(
+      String(selected.current_price ?? selected.base_price ?? "")
+    );
+  };
 
   const handleAnalyze = async () => {
     if (!screenshot || !productName || !productPrice) {
@@ -41,7 +59,6 @@ export default function VisualPricingPage() {
       formData.append("product_currency", productCurrency);
       formData.append("product_features", productFeatures);
 
-      // Use fetch directly for SSE streaming — Axios does not support streaming
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const response = await fetch(`${baseUrl}/api/v1/visual-pricing/analyze`, {
         method: "POST",
@@ -152,6 +169,42 @@ export default function VisualPricingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Column - Input */}
         <div className="space-y-6">
+
+          {/* Optional product pre-fill */}
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <label className="block text-sm font-medium mb-2">
+              Pre-fill from your catalog{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
+            {productsLoading ? (
+              <div className="w-full rounded-lg border bg-background px-4 py-3 text-sm text-muted-foreground">
+                Loading products...
+              </div>
+            ) : products.length === 0 ? (
+              <div className="w-full rounded-lg border bg-background px-4 py-3 text-sm text-muted-foreground">
+                No products found — sync your store first
+              </div>
+            ) : (
+              <select
+                onChange={(e) => handleProductSelect(e.target.value)}
+                disabled={isAnalyzing}
+                defaultValue=""
+                className="w-full rounded-lg border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="">— Select a product to pre-fill —</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.sku ? ` (${p.sku})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Selecting a product fills in the name and price below automatically
+            </p>
+          </div>
+
           <div>
             <h2 className="text-base font-semibold mb-4">1. Upload Competitor Screenshot</h2>
             <ScreenshotUploader
@@ -275,6 +328,5 @@ export default function VisualPricingPage() {
     </div>
   );
 }
-
 
 
