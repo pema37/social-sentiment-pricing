@@ -133,6 +133,8 @@ class Settings(BaseSettings):
     MNEE_WEBHOOK_SECRET: str = ""
     SSP_MNEE_WALLET_ADDRESS: str = ""  # Your BSV receiving address
     SSP_ETH_WALLET_ADDRESS: str = ""  # Your ETH receiving address
+    WHATSONCHAIN_API_KEY: str = ""  # WhatsOnChain API key for BSV verification
+    ETHERSCAN_API_KEY: str = ""  # Etherscan API key for ETH verification
 
     # ===================
     # x402 Payment Middleware

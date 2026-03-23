@@ -5,11 +5,11 @@ Verifies MNEE payments on BSV network using WhatsOnChain API.
 """
 
 import logging
-import os
 from datetime import datetime
 
 import httpx
 
+from core.config import settings
 from schemas.payment import TransactionVerification
 from services.payment.base import PaymentVerificationService
 
@@ -29,7 +29,7 @@ class BSVPaymentService(PaymentVerificationService):
     """
 
     def __init__(self):
-        self.api_key = os.getenv("WHATSONCHAIN_API_KEY", "")
+        self.api_key = settings.WHATSONCHAIN_API_KEY
         self._client: httpx.AsyncClient | None = None
 
     @property

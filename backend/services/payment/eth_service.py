@@ -5,11 +5,11 @@ Verifies MNEE ERC-20 token payments on Ethereum mainnet using Etherscan API.
 """
 
 import logging
-import os
 from datetime import datetime
 
 import httpx
 
+from core.config import settings
 from schemas.payment import TransactionVerification
 from services.payment.base import PaymentVerificationService
 
@@ -31,7 +31,7 @@ class EthereumPaymentService(PaymentVerificationService):
     """
 
     def __init__(self):
-        self.api_key = os.getenv("ETHERSCAN_API_KEY", "")
+        self.api_key = settings.ETHERSCAN_API_KEY
         self.mnee_contract = MNEE_CONTRACT_ADDRESS.lower()
         self._client: httpx.AsyncClient | None = None
 

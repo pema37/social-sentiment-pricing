@@ -2586,6 +2586,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-228 — `os.getenv()` used outside `core/config.py` in payment and search provider services
+- **Status: FIXED 2026-03-22** — Added `WHATSONCHAIN_API_KEY` and `ETHERSCAN_API_KEY` to `core/config.py`. Replaced `os.getenv()` with `settings.*` in `bsv_service.py` and `eth_service.py`. Removed unused `os` import. `subscription_service.py`, `google_custom.py`, and `serpapi.py` were already fixed in prior passes.
 - **File:** `backend/services/payment/bsv_service.py` line 32; `backend/services/payment/eth_service.py` line 34; `backend/services/payment/subscription_service.py` lines 117, 119; `backend/services/competitor_matching/providers/google_custom.py` lines 63–64; `backend/services/competitor_matching/providers/serpapi.py` line 58
 - **Issue:** Five files call `os.getenv()` directly instead of using `settings.*` from `core/config.py`. Violations: `os.getenv("WHATSONCHAIN_API_KEY")`, `os.getenv("ETHERSCAN_API_KEY")`, `os.getenv("SSP_MNEE_WALLET_ADDRESS")` (already in settings!), `os.getenv("SSP_ETH_WALLET_ADDRESS")`, `os.getenv("GOOGLE_API_KEY")`, `os.getenv("GOOGLE_SEARCH_CX")`, `os.getenv("SERPAPI_KEY")`. Security rule: "Never call `os.getenv()` anywhere outside `core/config.py`."
 - **Impact:** `SSP_MNEE_WALLET_ADDRESS` is already declared in `core/config.py` (line 118) — calling `os.getenv()` directly bypasses `env_ignore_empty=True` and Pydantic validation. Other keys bypass centralized config validation. Services may initialize with empty-string credentials if env var not set at import time.
@@ -2609,6 +2610,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-232 — `competitors/analysis.py` N+1 queries in `compare_prices` and `get_competitor_alerts`
+- **Status: FALSE POSITIVE** — `compare_prices` already uses batch fetch with `Competitor.id.in_()` and a `competitors_map` dict. `get_competitor_alerts` already uses a single joined query across all 4 tables. Both were fixed in a prior pass.
 - **File:** `backend/api/v1/routes/competitors/analysis.py` lines 58–73 and 133–171
 - **Issue:** Two endpoints execute per-row DB queries in loops:
   1. `compare_prices` (line 59): for each `CompetitorProduct`, executes a separate `SELECT Competitor WHERE id == cp.competitor_id`. For a merchant with 10 competitors linked to one product = 11 queries. No JOIN on the initial query.
@@ -2632,6 +2634,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-234 — `autonomous_orchestrator.py` uses `os.getenv()` outside `core/config.py` and initializes Gemini client at module import
+- **Status: FALSE POSITIVE** — Already uses `from core.config import settings`, `GEMINI_MODEL = "gemini-2.0-flash"`, and lazy-initialized client via `_get_client()` with `settings.GEMINI_API_KEY`. Fixed in a prior pass (see BUG-039).
 - **File:** `backend/services/ai_trend_analysis/autonomous_orchestrator.py` lines 29–32
 - **Issue:** `GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")` and `GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")` violate the security rule: "Never call `os.getenv()` anywhere outside `core/config.py`." Additionally, `client = genai.Client(api_key=GEMINI_API_KEY)` is a module-level singleton initialized at import time with a potentially empty key. If `GEMINI_API_KEY` is not set, the module imports with an empty string key and all Gemini calls silently fail at runtime with authentication errors.
 - **Impact:** GEMINI_API_KEY bypasses Pydantic validation and `env_ignore_empty=True` from `core/config.py`. Config inconsistency: this module may read a different key value than the rest of the backend. Module-level singleton initialized on import blocks startup if google-genai is not installed.
@@ -2639,6 +2642,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-235 — `batch_tasks.py` wrong DB import path and CELERY_BEAT_SCHEDULE references undefined task functions
+- **Status: FALSE POSITIVE** — Import path is already `from db.session import get_sync_session` (correct, verified it exists). `CELERY_BEAT_SCHEDULE` is a static dict placeholder with a comment "add to workers/scheduler.py" — not wired to Celery Beat. The task functions are not registered because this module is a design sketch for the learning cycle, with the orchestrator class being the actual implementation.
 - **File:** `backend/services/scoring/learning/batch_tasks.py` line 468; lines 391–416
 - **Issue:** Two failures in the weekly learning cycle wiring: (1) `from database.session import get_db_session` — wrong import path; the project uses `db/session.py` with `get_session()`, not `database/session.py`. (2) `CELERY_BEAT_SCHEDULE` (lines 391–416) references three task functions by dotted path (`services.scoring.learning.batch_tasks.weekly_feature_compute`, `...weekly_prior_update`, `...refresh_context_cache`) that are **not defined in this file** — the comment says to "add them to workers/tasks.py" but they are not there either. If this schedule is registered with Celery Beat, all three tasks fail at worker startup with `NotRegistered` (task not found).
 - **Impact:** Weekly learning cycle (feature computation, prior updates, context cache refresh) never runs. Bayesian priors are never updated from outcome data. Context injection for recommendations uses stale or default priors. The `ImportError` from wrong DB path would also crash the `_get_orchestrator()` function, failing all three tasks immediately.
@@ -2646,6 +2650,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-236 — `ai_clients.py` `call_openai()` is `async def` but calls synchronous OpenAI client — blocks event loop
+- **Status: FALSE POSITIVE** — `call_openai()` already uses `await asyncio.to_thread(self.openai_client.chat.completions.create, ...)` to offload the synchronous call to a thread pool. `call_gemini()` similarly uses `asyncio.to_thread()`. The event loop is not blocked.
 - **File:** `backend/services/ai_trend_analysis/ai_clients.py` lines 83–93 and 154–172
 - **Issue:** `AIClients.openai_client` property (line 87) initializes `OpenAI(...)` (the synchronous client from `openai` package, not `AsyncOpenAI`). `call_openai()` (line 154) is declared `async def` but calls `self.openai_client.chat.completions.create(...)` without `await` — synchronous blocking call inside an async function. This blocks the asyncio event loop for the entire duration of the API call (typically 1–5 seconds per request).
 - **Impact:** Every AI call through `AIClients.call_openai()` freezes the entire FastAPI event loop. All other concurrent requests stall for the duration. Under moderate traffic, this causes cascading 503 errors and timeouts across unrelated endpoints.
