@@ -42,8 +42,12 @@ class BSVPaymentService(PaymentVerificationService):
         return True
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None:
+        """Get or create HTTP client. Recreates if API key has changed."""
+        current_key = settings.WHATSONCHAIN_API_KEY
+        if self._client is None or current_key != self.api_key:
+            if self._client is not None:
+                await self._client.aclose()
+            self.api_key = current_key
             headers = {}
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"

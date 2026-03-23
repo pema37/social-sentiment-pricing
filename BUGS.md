@@ -1355,6 +1355,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/benchmark_refresh_tasks.py`
 - **Issue:** `text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}")` interpolates `view_name` directly. Currently safe (hardcoded list), but pattern would become an SQL injection vector if the view list were ever made dynamic.
 - **Impact:** No active risk; latent SQL injection if `MATERIALIZED_VIEWS` is extended via config or DB-stored values.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1362,6 +1363,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/middleware.py` lines 40–45
 - **Issue:** `client_ip` logged at INFO level for every request. In EU/GDPR contexts, IP addresses are personal data. Structured logs go to Railway/stdout without PII scrubbing.
 - **Impact:** Potential GDPR compliance issue for EU-based merchants.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1487,6 +1489,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/payment/bsv_service.py` lines 44–51
 - **Issue:** `httpx.AsyncClient` created lazily and cached as singleton with the API key baked into headers. Key rotation requires process restart.
 - **Impact:** API key rotation silently ineffective for BSV service until restart.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1494,6 +1497,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/notification/email_service.py` lines 122, 63
 - **Issue:** `response = client.send(message)` — SendGrid client's `send()` is a synchronous blocking call inside an `async` function. No `asyncio.to_thread()` or `run_in_executor()` used.
 - **Impact:** Each email notification blocks the FastAPI event loop for 100–500ms. Degrades all concurrent request handling.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `await asyncio.to_thread(client.send, message)` at line 124.
 
 ---
 
@@ -1501,6 +1505,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/competitor_matching/service.py` lines 494–502
 - **Issue:** Cache key built from `product_name`, `keywords`, `max_results` only. `exclude_domains` and `our_price` excluded. Two searches with different excluded domains return the same cached result, potentially including the user's own store in results.
 - **Impact:** Cached results may include excluded domains; price proximity scoring wrong for different merchants from shared cache.
+- **Status: FIXED 2026-03-22**
 
 ---
 

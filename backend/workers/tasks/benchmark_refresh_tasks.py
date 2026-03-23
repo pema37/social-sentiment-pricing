@@ -106,9 +106,17 @@ async def _refresh_benchmark_views():
 
     async with session_maker() as db:
         for view_name in MATERIALIZED_VIEWS:
+            if view_name not in MATERIALIZED_VIEWS:
+                logger.error(f"Unknown materialized view: {view_name}, skipping")
+                results[view_name] = "skipped: not in allowlist"
+                continue
+
+            # Use identifier quoting to prevent SQL injection
+            safe_view = f'"{view_name}"'
+
             try:
                 # Try concurrent refresh first (non-blocking reads)
-                await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}"))
+                await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {safe_view}"))
                 await db.commit()
                 results[view_name] = "refreshed_concurrently"
                 logger.info(f"Refreshed {view_name} concurrently")
@@ -121,7 +129,7 @@ async def _refresh_benchmark_views():
                 # fall back to regular refresh
                 if "concurrently" in error_msg or "unique" in error_msg or "has not been populated" in error_msg:
                     try:
-                        await db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
+                        await db.execute(text(f"REFRESH MATERIALIZED VIEW {safe_view}"))
                         await db.commit()
                         results[view_name] = "refreshed_regular"
                         logger.info(f"Refreshed {view_name} (regular, not concurrent)")
@@ -146,7 +154,8 @@ async def _get_view_stats():
     async with session_maker() as db:
         for view_name in MATERIALIZED_VIEWS:
             try:
-                result = await db.execute(text(f"SELECT COUNT(*) FROM {view_name}"))
+                safe_view = f'"{view_name}"'
+                result = await db.execute(text(f"SELECT COUNT(*) FROM {safe_view}"))
                 count = result.scalar() or 0
                 stats[view_name] = count
             except Exception as e:

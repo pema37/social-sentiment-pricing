@@ -499,6 +499,8 @@ class CompetitorMatchingService:
             request.product_name.lower(),
             ",".join(sorted(request.keywords)),
             str(request.max_results),
+            ",".join(sorted(request.exclude_domains)),
+            str(request.our_price) if request.our_price is not None else "",
         ]
         key_string = "|".join(key_parts)
         return hashlib.md5(key_string.encode()).hexdigest()

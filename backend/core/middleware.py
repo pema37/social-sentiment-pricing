@@ -36,8 +36,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         client_ip = request.client.host if request.client else "unknown"
 
-        # Log request
-        logger.info(
+        # Log request (client_ip at DEBUG only — GDPR treats IPs as personal data)
+        logger.debug(
             "Request started",
             method=method,
             path=path,
