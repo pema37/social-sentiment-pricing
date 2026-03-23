@@ -2147,6 +2147,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/products/page.tsx`; `frontend/components/features/products/ProductRow.tsx` lines 144–160; `backend/api/v1/routes/products.py` lines 66–175
 - **Issue:** The backend enriches products with a `platforms_linked` array, and `ProductRow` renders platform badges (Shopify green, WooCommerce purple). However, the products list has no platform filter, grouping, or toggle. All products from all platforms appear in one undifferentiated list. A merchant with 200 Shopify products and 150 WooCommerce products sees 350 mixed rows with no way to view only Shopify or only WooCommerce products.
 - **Impact:** Products belonging only to one platform are invisible in context — there is no "Show Shopify only" filter. Merchants can't diagnose why certain products appear or whether a product is correctly synced to all platforms.
+- **Status: FIXED 2026-03-22** — Added platform filter dropdown (All Platforms / Shopify / WooCommerce / Unlinked) to the products list page. Client-side filter uses `platforms_linked` data already provided by the backend.
 
 ---
 
@@ -2154,6 +2155,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/pricing/RuleCard.tsx` lines 129–148, 162–170; `frontend/app/(dashboard)/pricing/rules/page.tsx` lines 51–67
 - **Issue:** `RuleCard` resolves competitor UUIDs and product UUIDs to display names using `competitorNames` and `productNames` maps passed from the parent page. If either the competitors API or products API call fails (network error, auth issue, empty response), the maps are empty and all rules show "Unknown competitor" and missing product names. There is no error state or fallback to load names independently. Additionally, no `Collection` model exists in the backend — rules cannot reference Shopify/WooCommerce collections at all, and the UI has no collection product list display.
 - **Impact:** When API calls fail, the pricing rules page shows every rule with no context. Merchant cannot tell which competitor triggers which rule or which products it covers. Missing collection support means merchants using Shopify collections for product grouping cannot apply rules at the collection level.
+- **Status: FIXED 2026-03-22** — RuleCard now shows truncated UUID fallback instead of "Unknown" for product names. Rules page shows a yellow warning banner when competitor or product name lookups fail, explaining that IDs are shown instead of names.
 
 ---
 
@@ -2161,6 +2163,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/woocommerce_service.py` line 432; `backend/models/product.py` line 40; `backend/services/products/import_service.py` line 199
 - **Issue:** `images = [img.get("src") for img in data.get("images", []) if img.get("src")]` — only checks that `src` is truthy, not that it is a valid absolute URL. WooCommerce may return relative paths (`/wp-content/uploads/...`), protocol-relative URLs (`//example.com/img.jpg`), empty strings after stripping, or private/auth-gated CDN URLs. These pass the filter and are stored as `image_url` in the product model. The `Product` model has `image_url: str | None` with no URL format constraint, and `import_service.py` only calls `.strip()` with no protocol check.
 - **Impact:** Product images fail to render in the frontend (broken `<img>` tags or Next.js `<Image>` errors). Import appears successful but product cards show broken image placeholders. WooCommerce merchants with relative image URLs see no product images in ActualPrice.
+- **Status: FIXED 2026-03-22** — Image URL filter now requires `http://` or `https://` protocol prefix, rejecting relative paths and protocol-relative URLs.
 
 ---
 
@@ -2168,6 +2171,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/diagnostic.py` lines 176–185
 - **Issue:** The diagnostic type `PRODUCT_NOT_LINKED` emits: `"Product '{name}' is not linked to any platform"` with suggestion `"Sync products from your store in Integrations"`. This is insufficient for the merchant: it doesn't explain (a) why the link is missing, (b) whether it's a sync failure or a configuration issue, (c) whether clicking "Sync" will actually fix it, or (d) whether it's related to the credential error (BUG-130). When 490 products are unlinked, the merchant sees 490 individual warnings with no aggregate explanation or single fix action.
 - **Impact:** Merchant confusion. David's reported question: "I don't know what 'PRODUCT NOT LINKED' means." UI shows 490 individual warnings with a generic suggestion. Merchant cannot resolve this without engineering support to explain that it's caused by the ENCRYPTION_KEY mismatch upstream.
+- **Status: FIXED 2026-03-22** — Diagnostic now provides context-aware suggestions: different messages for no integrations, disconnected integrations, and active integrations where product wasn't found during sync. Each issue also includes the total `unlinked_count` for aggregate awareness.
 
 ---
 
@@ -2914,6 +2918,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/prospect_lead_capture.py` line 19
 - **Issue:** `HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY")` — module-level `os.getenv()` call outside `core/config.py`. Violates project security rule: "Never call `os.getenv()` anywhere outside `core/config.py`". `HUBSPOT_API_KEY` is not in `core/config.py` Settings at all. The key should be added as `HUBSPOT_API_KEY: str | None = None` to `Settings` and accessed as `settings.HUBSPOT_API_KEY`.
 - **Impact:** If `HUBSPOT_API_KEY` is set via `.env` file (loaded by Pydantic at startup), `os.getenv()` may return `None` even if the key is configured, causing HubSpot CRM pushes to silently skip. Bypasses centralized config validation.
+- **Status: FIXED 2026-03-22** — Added `HUBSPOT_API_KEY: str | None = None` to `Settings` in `core/config.py`. Replaced `os.getenv()` and module-level constant with `settings.HUBSPOT_API_KEY` throughout `prospect_lead_capture.py`. Removed unused `import os`.
 
 ---
 

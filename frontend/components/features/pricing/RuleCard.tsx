@@ -133,7 +133,7 @@ export function RuleCard({
     }
     if (applies_to_products?.length) {
       const names = applies_to_products
-        .map((pid) => productNames[pid] || 'Unknown')
+        .map((pid) => productNames[pid] || pid.slice(0, 8) + '…')
         .slice(0, 3);
       const remaining = applies_to_products.length - 3;
       if (remaining > 0) {

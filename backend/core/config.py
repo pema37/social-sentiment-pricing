@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     PAGERDUTY_KEY: str | None = None  # PagerDuty integration key
 
     # ===================
+    # CRM
+    # ===================
+    HUBSPOT_API_KEY: str | None = None
+
+    # ===================
     # Feature Flags
     # ===================
     # Must be explicitly set to True in env; never defaults to True in production.

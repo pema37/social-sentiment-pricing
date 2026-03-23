@@ -8,15 +8,13 @@ Environment variables:
   HUBSPOT_API_KEY — HubSpot private app access token
 """
 
-import os
-
 import httpx
 
+from core.config import settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY")
 HUBSPOT_CONTACTS_URL = "https://api.hubapi.com/crm/v3/objects/contacts"
 
 
@@ -44,7 +42,7 @@ async def capture_lead(
     )
 
     # Push to HubSpot if configured
-    if not HUBSPOT_API_KEY:
+    if not settings.HUBSPOT_API_KEY:
         logger.debug("HUBSPOT_API_KEY not set — skipping CRM push")
         return True
 
@@ -62,7 +60,7 @@ async def capture_lead(
             resp = await client.post(
                 HUBSPOT_CONTACTS_URL,
                 headers={
-                    "Authorization": f"Bearer {HUBSPOT_API_KEY}",
+                    "Authorization": f"Bearer {settings.HUBSPOT_API_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={"properties": properties},
@@ -79,7 +77,7 @@ async def capture_lead(
                     update_resp = await client.patch(
                         f"{HUBSPOT_CONTACTS_URL}/{existing_id}",
                         headers={
-                            "Authorization": f"Bearer {HUBSPOT_API_KEY}",
+                            "Authorization": f"Bearer {settings.HUBSPOT_API_KEY}",
                             "Content-Type": "application/json",
                         },
                         json={"properties": properties},

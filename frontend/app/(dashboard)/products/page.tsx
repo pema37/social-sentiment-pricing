@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Upload } from 'lucide-react';
+import { Plus, Search, Upload, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -82,6 +82,9 @@ export default function ProductsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Platform filter state
+  const [platformFilter, setPlatformFilter] = useState<'all' | 'shopify' | 'woocommerce' | 'unlinked'>('all');
+
   // Sorting state (default: by name ascending, like WooCommerce)
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: 'name',
@@ -100,10 +103,18 @@ export default function ProductsPage() {
     search: debouncedSearch || undefined,
   });
 
-  // Sort products (client-side, page already filtered by server)
-  const sortedProducts = useMemo(() => {
-    return sortProducts(data?.items ?? [], sortConfig);
-  }, [data?.items, sortConfig]);
+  // Filter by platform, then sort (client-side, page already filtered by server)
+  const filteredAndSorted = useMemo(() => {
+    let items = data?.items ?? [];
+    if (platformFilter !== 'all') {
+      items = items.filter((p) => {
+        const linked = p.platforms_linked ?? [];
+        if (platformFilter === 'unlinked') return linked.length === 0;
+        return linked.some((pl) => pl.platform.toLowerCase() === platformFilter);
+      });
+    }
+    return sortProducts(items, sortConfig);
+  }, [data?.items, sortConfig, platformFilter]);
 
   // Handle sort toggle
   const handleSort = (field: SortField) => {
@@ -177,6 +188,23 @@ export default function ProductsPage() {
               className="pl-10"
             />
           </div>
+          {/* Platform filter */}
+          <div className="flex items-center gap-1">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <select
+              value={platformFilter}
+              onChange={(e) => {
+                setPlatformFilter(e.target.value as typeof platformFilter);
+                setPage(1);
+              }}
+              className="text-sm border border-gray-200 rounded-md px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Platforms</option>
+              <option value="shopify">Shopify</option>
+              <option value="woocommerce">WooCommerce</option>
+              <option value="unlinked">Unlinked</option>
+            </select>
+          </div>
           {/* Sort indicator badge */}
           {sortConfig.field && (
             <div className="text-sm text-gray-500 flex items-center gap-1">
@@ -194,7 +222,7 @@ export default function ProductsPage() {
 
       {/* Table with sorting */}
       <ProductsTable
-        products={sortedProducts}
+        products={filteredAndSorted}
         isLoading={isLoading}
         error={error}
         emptyMessage={search ? 'Try a different search term' : 'Add your first product to get started'}

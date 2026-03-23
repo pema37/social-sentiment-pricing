@@ -429,7 +429,11 @@ class WooCommerceService(EcommerceService):
                 # Variable products will need separate API calls to fetch variation details
                 pass
 
-        images = [img.get("src") for img in data.get("images", []) if img.get("src")]
+        images = [
+            img.get("src")
+            for img in data.get("images", [])
+            if img.get("src") and img.get("src", "").startswith(("https://", "http://"))
+        ]
 
         price, compare_at = None, None
         if data.get("sale_price"):

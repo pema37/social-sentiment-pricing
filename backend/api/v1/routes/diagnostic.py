@@ -176,13 +176,25 @@ async def check_integration_health(
             )
         elif data["total_platforms"] == 0:
             unlinked_products.append(product_id)
+            # Build actionable context: check if there are any active integrations
+            has_active = any(i.status == IntegrationStatus.ACTIVE for i in integrations)
+            has_disconnected = any(i.status != IntegrationStatus.ACTIVE for i in integrations)
+            if not integrations:
+                suggestion = "No store connected yet. Go to Integrations > Connect Store to link your Shopify or WooCommerce store, then sync products."
+            elif has_disconnected and not has_active:
+                suggestion = "Your store integration is disconnected — reconnect it on the Integrations page, then re-sync products to restore links."
+            elif has_active:
+                suggestion = "Your store is connected but this product was not found during sync. Try re-syncing from Integrations > Sync Products. If the product exists only in ActualPrice, manually link it or re-import from your store."
+            else:
+                suggestion = "Sync products from your store in Integrations."
             issues.append(
                 {
                     "type": "PRODUCT_NOT_LINKED",
                     "severity": "MEDIUM",
                     "message": f"Product '{data['product_name']}' is not linked to any platform",
                     "product_id": product_id,
-                    "suggestion": "Sync products from your store in Integrations",
+                    "suggestion": suggestion,
+                    "unlinked_count": None,  # populated below
                 }
             )
         elif data["active_push_targets"] < data["total_platforms"]:
@@ -215,6 +227,12 @@ async def check_integration_health(
                             "difference": round(diff, 2),
                         }
                     )
+
+    # Populate aggregate unlinked count on each PRODUCT_NOT_LINKED issue
+    unlinked_total = len(unlinked_products)
+    for issue in issues:
+        if issue["type"] == "PRODUCT_NOT_LINKED":
+            issue["unlinked_count"] = unlinked_total
 
     # Bulk unlinked products: if many products are unlinked, flag as HIGH severity
     # with actionable guidance (likely a systemic issue like encryption key mismatch)

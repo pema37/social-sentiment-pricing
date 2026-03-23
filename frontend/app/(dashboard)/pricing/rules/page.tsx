@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sliders, Plus, RefreshCw } from 'lucide-react';
+import { Sliders, Plus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -43,10 +43,12 @@ export default function PricingRulesPage() {
   } = usePricingRules();
 
   // Fetch competitors for name resolution
-  const { data: competitorsData } = useCompetitors({ page_size: 100 });
+  const { data: competitorsData, isError: isCompetitorsError } = useCompetitors({ page_size: 100 });
 
   // FIX BUG-008: Fetch products for name resolution
-  const { data: productsData } = useProducts({ page_size: 200 });
+  const { data: productsData, isError: isProductsError } = useProducts({ page_size: 200 });
+
+  const hasLookupErrors = isCompetitorsError || isProductsError;
 
   // Build competitor ID → name map
   const competitorNames = useMemo(() => {
@@ -214,6 +216,19 @@ export default function PricingRulesPage() {
           </p>
         </Card>
       </div>
+
+      {/* Lookup failure warning */}
+      {hasLookupErrors && (
+        <Card padding="sm" className="bg-yellow-50 border-yellow-200 mb-4">
+          <div className="flex items-center gap-2 text-yellow-800 text-sm">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>
+              Could not load {isCompetitorsError && isProductsError ? 'competitor and product' : isCompetitorsError ? 'competitor' : 'product'} names.
+              Rules may show truncated IDs instead of names.
+            </span>
+          </div>
+        </Card>
+      )}
 
       {/* Rules List */}
       {isLoading ? (
