@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.deps import get_current_user
+from core.logging import get_logger
 from models.user import User
 from schemas.trust_scoring import (
     AdjustedSentimentStats,
@@ -57,6 +58,8 @@ from services.trust_scoring import (
     get_trust_scoring_service,
     is_bot_username,
 )
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/trust", tags=["Trust Scoring"])
 
@@ -174,7 +177,7 @@ async def score_authors_batch(
                 )
             )
         except Exception:
-            # Log error but continue with other authors
+            logger.warning(f"Failed to score author {author_req.author_id}", exc_info=True)
             continue
 
     return BatchAuthorScoreResponse(
@@ -283,6 +286,7 @@ async def analyze_content_batch(
                 )
             )
         except Exception:
+            logger.warning(f"Failed to analyze content {content_req.content_id}", exc_info=True)
             continue
 
     return BatchContentAnalysisResponse(

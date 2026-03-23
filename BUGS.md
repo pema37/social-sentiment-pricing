@@ -3110,6 +3110,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/prospect_analytics.py` (`ProspectAuditEvent` model)
 - **Issue:** The `ProspectAuditEvent` model stores `email: str | None` as unencrypted plain text in the database column, while `ip_hash: str | None` is documented as "hashed IP for privacy". The email field is used for tracking funnel events tied to identifiable individuals. Shopify App Store submission requires GDPR compliance.
 - **Impact:** PII (email addresses) stored in plain text in the `prospect_audit_events` table. GDPR requires pseudonymisation or encryption for personal data. Inconsistent privacy handling in the same model is a compliance red flag.
+- **Status: FIXED 2026-03-22** — Email is now SHA-256 hashed (truncated to 16 chars) before storage, same pattern as `ip_hash`. Unique email counts still work since `COUNT(DISTINCT email_hash)` is equivalent.
 
 ---
 
@@ -3117,6 +3118,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/prospect_analytics.py` (`get_funnel_metrics` handler)
 - **Issue:** The funnel metrics endpoint issues 6 separate `SELECT COUNT(*) WHERE event_type = ?` queries plus 2 separate `SELECT COUNT(DISTINCT email) WHERE event_type = ?` queries — 8 round-trips total — to compute what a single `SELECT event_type, COUNT(*), COUNT(DISTINCT email) GROUP BY event_type` query would return in one round-trip.
 - **Impact:** 8× unnecessary database round-trips per dashboard load. Under high concurrency this multiplies connection pool pressure. Latency scales with query count rather than data volume.
+- **Status: FIXED 2026-03-22** — Replaced 8 sequential queries with a single `GROUP BY event_type` aggregation that returns counts, distinct store_urls, and distinct emails in one round-trip.
 
 ---
 
@@ -3124,6 +3126,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/trust_scoring.py` lines ~176 and ~285
 - **Issue:** `score_authors_batch` and `analyze_content_batch` both iterate items inside `try: ... except: continue` with no exception type specified. This catches `BaseException`, including `SystemExit`, `KeyboardInterrupt`, and `GeneratorExit`. No logging occurs on failure — each failed item is silently skipped with no trace.
 - **Impact:** Individual batch item failures are completely invisible. `KeyboardInterrupt` during a batch run will be caught and suppressed, preventing clean shutdown. Real errors (e.g., DB disconnect, token decode failure) are swallowed, leaving callers with silently partial results and no error signal.
+- **Status: FIXED 2026-03-22** — Note: code already uses `except Exception:` (not bare `except:`), so BaseException/KeyboardInterrupt/SystemExit are NOT caught — that part of the bug description was false. Fixed the real issue: added `logger.warning(..., exc_info=True)` to both batch loops so failures are no longer silent.
 
 ---
 
@@ -3138,6 +3141,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/payment.py` lines 80–82
 - **Issue:** `updated_at` is defined as `Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))` with only a `default` (set at INSERT time). There is no `onupdate=` argument. This means `updated_at` is written once at creation and never changes when the payment record is updated. `Payment.status`, `txid`, `error_message`, and `confirmed_at` are all mutable fields. The `User` model (`models/user.py`) correctly uses `onupdate=lambda: datetime.now(UTC)`.
 - **Impact:** `updated_at` always reflects creation time regardless of how many status transitions occurred. Audit queries like "payments updated in the last 24h" return incorrect results. Payment status history cannot be reconstructed from timestamps.
+- **Status: FIXED 2026-03-22** — Added `onupdate=lambda: datetime.now(UTC)` to `Payment.updated_at` column definition, matching the `User` model pattern. No migration needed — `onupdate` is handled at the ORM level.
 
 ---
 
@@ -3189,6 +3193,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/app/(dashboard)/competitors/match/page.tsx` line 18
 - **Issue:** `const searchParams = useSearchParams();` is called directly in the exported page component without any wrapping `<Suspense>` boundary. BUG-055 documented this for `callback/page.tsx`, `claim/page.tsx`, `pricing/rules/new/page.tsx`, and `settings/billing/page.tsx`. BUG-270 documented it for `integrations/page.tsx`. The `competitors/match` page is not included in either prior bug's scope.
 - **Impact:** Next.js 14 App Router requires any component using `useSearchParams()` to be wrapped in `<Suspense>`. Without it, the page throws during SSR and during client-side navigation on first render — "Missing Suspense boundary with useSearchParams" error at runtime.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already has `<Suspense>` wrapping `<CompetitorMatchContent>` (lines 19-21). `useSearchParams()` is called inside the child component (line 26), not the exported page component. This was likely fixed in a prior batch.
 
 ---
 

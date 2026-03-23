@@ -91,18 +91,23 @@ async def track_event(
     if request.event_type not in VALID_EVENTS:
         return TrackEventResponse(ok=False)
 
-    # Hash IP for privacy (don't store raw IPs)
+    # Hash IP and email for privacy (don't store raw PII)
     import hashlib
 
     client_ip = req.client.host if req.client else "unknown"
     ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
+
+    # Hash email the same way as IP — never store raw email PII
+    email_hash = None
+    if request.email:
+        email_hash = hashlib.sha256(request.email.lower().strip().encode()).hexdigest()[:16]
 
     user_agent = req.headers.get("user-agent", "")[:500]
 
     event = ProspectAuditEvent(
         event_type=request.event_type,
         store_url=request.store_url,
-        email=request.email,
+        email=email_hash,
         input_mode=request.input_mode,
         products_found=request.products_found,
         estimated_impact=request.estimated_impact,
@@ -134,32 +139,31 @@ async def get_funnel_metrics(
     """
     since = datetime.now(UTC) - timedelta(days=days)
 
-    async def count_events(event_type: str) -> int:
-        result = await session.execute(
-            select(func.count(ProspectAuditEvent.id))
-            .where(ProspectAuditEvent.event_type == event_type)
-            .where(ProspectAuditEvent.created_at >= since)
+    # Single aggregation query instead of 8 sequential round-trips
+    result = await session.execute(
+        select(
+            ProspectAuditEvent.event_type,
+            func.count(ProspectAuditEvent.id),
+            func.count(func.distinct(ProspectAuditEvent.store_url)),
+            func.count(func.distinct(ProspectAuditEvent.email)),
         )
-        return result.scalar_one()
+        .where(ProspectAuditEvent.created_at >= since)
+        .group_by(ProspectAuditEvent.event_type)
+    )
+    rows = {row[0]: row for row in result.all()}
 
-    async def count_unique(column, event_type: str) -> int:
-        result = await session.execute(
-            select(func.count(func.distinct(column)))
-            .where(ProspectAuditEvent.event_type == event_type)
-            .where(ProspectAuditEvent.created_at >= since)
-            .where(column.isnot(None))
-        )
-        return result.scalar_one()
+    def get_count(event_type: str) -> int:
+        return rows[event_type][1] if event_type in rows else 0
 
-    page_views = await count_events("page_view")
-    started = await count_events("audit_started")
-    completed = await count_events("audit_completed")
-    emails = await count_events("email_submitted")
-    pdfs = await count_events("pdf_downloaded")
-    demos = await count_events("demo_clicked")
+    page_views = get_count("page_view")
+    started = get_count("audit_started")
+    completed = get_count("audit_completed")
+    emails = get_count("email_submitted")
+    pdfs = get_count("pdf_downloaded")
+    demos = get_count("demo_clicked")
 
-    unique_stores = await count_unique(ProspectAuditEvent.store_url, "audit_started")
-    unique_emails = await count_unique(ProspectAuditEvent.email, "email_submitted")
+    unique_stores = rows["audit_started"][2] if "audit_started" in rows else 0
+    unique_emails = rows["email_submitted"][3] if "email_submitted" in rows else 0
 
     def rate(num: int, denom: int) -> str:
         if denom == 0:
