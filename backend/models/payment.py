@@ -100,7 +100,7 @@ class Payment(PaymentBase, table=True):
 
             try:
                 return json.loads(self.metadata_json)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 return None
         return None
 

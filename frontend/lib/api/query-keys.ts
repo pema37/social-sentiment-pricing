@@ -68,6 +68,7 @@ export const integrationKeys = {
   list: (params?: Record<string, unknown>) => [...integrationKeys.lists(), params] as const,
   details: () => [...integrationKeys.all, 'detail'] as const,
   detail: (id: string) => [...integrationKeys.details(), id] as const,
+  allSyncStatus: () => [...integrationKeys.all, 'sync-status'] as const,
   syncStatus: (id: string) => [...integrationKeys.all, 'sync-status', id] as const,
   linkedProducts: (id: string) => [...integrationKeys.all, 'links', id] as const,
 };

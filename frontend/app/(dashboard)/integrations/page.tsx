@@ -13,6 +13,7 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIntegrations } from '@/lib/hooks/use-integrations';
 import { getAllSyncStatus } from '@/lib/api/integrations';
+import { integrationKeys } from '@/lib/api/query-keys';
 import { SectionHeader } from '@/components/ui';
 import { IntegrationsList } from '@/components/features/integrations/IntegrationsList';
 import { ConnectPlatformCard } from '@/components/features/integrations/ConnectPlatformCard';
@@ -46,7 +47,7 @@ function IntegrationsContent() {
   
   // ========== Sync status polling ==========
   const { data: syncStatus } = useQuery({
-    queryKey: ['all-sync-status'],
+    queryKey: integrationKeys.allSyncStatus(),
     queryFn: getAllSyncStatus,
     refetchInterval: (query) => {
       // Poll every 2s while syncing, every 30s otherwise

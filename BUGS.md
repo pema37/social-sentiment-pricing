@@ -2939,6 +2939,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/payments/webhook.py` line 171
 - **Issue:** `select(Payment).where(Payment.id.startswith(payment_id_prefix))` — `Payment.id` is a PostgreSQL UUID column. `.startswith()` generates a `LIKE` query which requires the UUID to be cast to text first. The 8-character prefix from the memo provides very low collision probability, but this is not exact matching. PostgreSQL's behavior for `UUID LIKE` is dialect-dependent.
 - **Impact:** Could fail with `psycopg2.errors.UndefinedFunction` (LIKE on UUID) or silently cast. Correct approach: use full UUID in memo or parse prefix to UUID range query. Low probability of matching wrong payment.
+- **Status: FALSE POSITIVE** — Code already uses `cast(Payment.id, String).startswith(payment_id_prefix)` with proper `cast()` to String, preventing the PostgreSQL UUID LIKE error.
 
 ---
 
@@ -2946,6 +2947,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/price_check.py` lines 56–77
 - **Issue:** `_rate_limit_store` is a module-level dict (in-memory). In multi-worker deployments (Gunicorn 4 workers, Railway multiple instances), each worker has its own dict. A single IP can make 4×10=40 requests per hour instead of the intended 10. The slow-path AI pipeline is the expensive operation being rate-limited.
 - **Impact:** Rate limit is under-enforced in production. Malicious scraping of the public audit funnel is possible at 4× the intended limit. Should use Redis-backed rate limiting.
+- **Status: FALSE POSITIVE** — Already refactored to Redis-backed rate limiter with `_get_redis()` (lazy-init Redis client using `settings.REDIS_URL`), with in-memory fallback only when Redis is unavailable.
 
 ---
 
@@ -3011,6 +3013,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/integrations/page.tsx` line 32
 - **Issue:** `queryKey: ['all-sync-status']` is hardcoded as an inline array rather than using the `integrationKeys` factory from `lib/api/query-keys.ts`. This key collides with nothing but is invisible to invalidation calls that go through `integrationKeys.all`.
 - **Impact:** After mutations that invalidate `integrationKeys.all`, the sync-status query is not invalidated and shows stale data. Stale sync status persists until the stale time expires.
+- **Status: FIXED 2026-03-22** — Added `allSyncStatus()` key to `integrationKeys` factory in `query-keys.ts`, updated `integrations/page.tsx` to use `integrationKeys.allSyncStatus()` instead of hardcoded `['all-sync-status']`.
 
 ---
 
@@ -3191,6 +3194,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/payment.py` lines 101–104
 - **Issue:** `get_metadata()` catches JSON parsing failures with `except:` (no exception type), which catches `BaseException`. Should be `except (json.JSONDecodeError, ValueError):`.
 - **Impact:** Any unexpected exception during JSON parsing (including `MemoryError`, `SystemExit`) is caught and returns `None` silently, masking serious errors.
+- **Status: FIXED 2026-03-22** — Changed bare `except:` to `except (json.JSONDecodeError, ValueError):`.
 
 ---
 
@@ -3461,6 +3465,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/lib/web3/useMNEE.ts` lines 85–91
 - **Issue:** Five debug `console.log` statements inside the `transfer()` function are committed in production code: `console.log('=== MNEE Transfer Debug ===')`, `console.log('to:', to)`, `console.log('amount (string):', amount)`, `console.log('decimals:', MNEE_TOKEN.decimals)`, `console.log('amountInWei:', amountInWei.toString())`.
 - **Impact:** Leaks transaction details (recipient wallet address, transfer amounts) to the browser console. Any browser extension or injected script can read console output.
+- **Status: FALSE POSITIVE** — All five `console.log` statements have already been removed from `useMNEE.ts`.
 
 ---
 
@@ -3468,6 +3473,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/app/demo/autonomous-pipeline/page.tsx` line 474
 - **Issue:** Footer text reads "Powered by Gemini 3 Flash" — no such model exists. The correct model name per the project rules is `gemini-2.0-flash`.
 - **Impact:** Incorrect product branding. Minor but confusing to users/reviewers during Shopify App Store submission.
+- **Status: FIXED 2026-03-22** — Changed "Gemini 3 Flash" to "Gemini 2.0 Flash".
 
 ---
 

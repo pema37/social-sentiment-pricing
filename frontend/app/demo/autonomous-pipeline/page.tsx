@@ -471,7 +471,7 @@ export default function AutonomousPipelinePage() {
       <footer className="border-t border-zinc-800 mt-12 py-6">
         <div className="max-w-6xl mx-auto px-4 flex items-center justify-between text-xs text-zinc-600">
           <span>ActualPrice — Autonomous Dynamic Pricing for the Decentralized Economy</span>
-          <span>VETROX AGENTIC 3.0 · Track 3: The Hand · Powered by Gemini 3 Flash</span>
+          <span>VETROX AGENTIC 3.0 · Track 3: The Hand · Powered by Gemini 2.0 Flash</span>
         </div>
       </footer>
     </div>
