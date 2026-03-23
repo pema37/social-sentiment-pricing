@@ -87,7 +87,7 @@ class AlertConfiguration(SQLModel, table=True):
     conditions: dict = Field(default_factory=dict, sa_column=Column(JSONB))
 
     # Delivery settings
-    channels: list[AlertChannel] = Field(default=[AlertChannel.IN_APP], sa_column=Column(ARRAY(String)))
+    channels: list[AlertChannel] = Field(default_factory=lambda: [AlertChannel.IN_APP], sa_column=Column(ARRAY(String)))
 
     # Channel-specific settings
     # Example: {"email": "user@example.com", "slack_webhook": "https://..."}

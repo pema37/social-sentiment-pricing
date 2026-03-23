@@ -26,7 +26,7 @@ class ProductCreate(BaseModel):
     cost: Decimal | None = Field(default=None, ge=0, description="Cost to acquire/produce")
     min_price: Decimal | None = Field(default=None, gt=0)
     max_price: Decimal | None = Field(default=None, gt=0)
-    sentiment_multiplier: Decimal = Field(default=Decimal("0.1"), ge=0, le=1)
+    sentiment_multiplier: Decimal = Field(default=Decimal("0.2"), ge=0, le=1)
     auto_pricing_enabled: bool = False
     keywords: list[str] = []
 

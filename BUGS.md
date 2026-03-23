@@ -431,6 +431,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 185
 - **Issue:** `app.get("admin_graphql_api_id", "")` result is extracted but discarded. Should be logged with the webhook event for tracing.
 - **Impact:** Billing webhook events can't be correlated to Shopify subscription IDs in logs.
+- **Status: FIXED 2026-03-22** — Assigned result to `app_subscription_id` variable and included it in the log message.
 
 ---
 
@@ -1795,6 +1796,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/alert.py` line 87; `backend/models/competitor.py` line 42; `backend/models/product.py` line 56
 - **Issue:** `channels: list = Field(default=[AlertChannel.IN_APP])`, `scraping_config: dict = Field(default={})`, `keywords: list[str] = Field(default=[])` — all mutable defaults shared across instances.
 - **Impact:** In-memory list/dict mutations to one model instance leak to all others created with these defaults. Typically caught before DB persist but is a latent correctness bug.
+- **Status: FIXED 2026-03-22** — Changed all three to use `default_factory` instead of mutable `default` values.
 
 ---
 
@@ -1802,6 +1804,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/core/exception_handlers.py` line 107
 - **Issue:** The catch-all exception handler returns the raw exception message to the API client without sanitization. SQL error messages can contain table names, column names, constraint names, and partial query text.
 - **Impact:** Information disclosure — attackers can probe the API to enumerate schema details, column names, and unique constraint configurations from error responses.
+- **Status: FIXED 2026-03-22** — Replaced `str(exc)` with generic error message; raw error is still logged server-side via `alert_critical`.
 
 ---
 
@@ -1809,6 +1812,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/schemas/product.py` line 29; `backend/models/product.py` line 50
 - **Issue:** `ProductCreate.sentiment_multiplier` defaults to `Decimal("0.1")` (10%) but `Product` model defaults to `Decimal("0.2")` (20%). The model was updated but the schema was not. All products created via API use half the intended sentiment weight.
 - **Impact:** Sentiment-based pricing recommendations are underweighted by 50% for all products created via the API. Merchants cannot override this — the correct default is never applied from the user-facing layer.
+- **Status: FIXED 2026-03-22** — Changed `ProductCreate.sentiment_multiplier` default from `Decimal("0.1")` to `Decimal("0.2")` to match the model.
 
 ---
 
@@ -2045,6 +2049,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/query-keys.ts`; `frontend/lib/api/trend-analysis.ts`
 - **Issue:** Both files export a `trendAnalysisKeys` object. Hooks using one definition and components using the other create separate React Query cache entries for the same data.
 - **Impact:** Trend analysis data is fetched twice — once per cache key. Invalidating one key doesn't invalidate the other; stale data persists after mutations.
+- **Status: FALSE POSITIVE 2026-03-22** — `trendAnalysisKeys` is only defined in `query-keys.ts`. The `trend-analysis.ts` file has already been cleaned up and contains only a comment pointing to the centralized registry. All hooks import from `query-keys.ts`.
 
 ---
 

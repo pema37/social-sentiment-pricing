@@ -182,11 +182,11 @@ async def handle_subscription_update(
 
     shop_domain = x_shopify_shop_domain
     app_sub = payload.get("app_subscription", {})
-    app_sub.get("admin_graphql_api_id", "")
+    app_subscription_id = app_sub.get("admin_graphql_api_id", "")
     new_status = app_sub.get("status", "").upper()
     plan_name = app_sub.get("name", "")
 
-    logger.info(f"Billing webhook: subscriptions_update shop={shop_domain} status={new_status} plan={plan_name}")
+    logger.info(f"Billing webhook: subscriptions_update shop={shop_domain} status={new_status} plan={plan_name} subscription_id={app_subscription_id}")
 
     if not shop_domain:
         logger.warning("subscriptions_update webhook missing X-Shopify-Shop-Domain")

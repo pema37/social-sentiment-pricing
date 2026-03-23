@@ -104,7 +104,7 @@ async def database_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=503,
         content={
-            "error": str(exc),
+            "error": "A database error occurred. Please try again later.",
             "correlation_id": correlation_id,
         },
     )

@@ -53,7 +53,7 @@ class Product(SQLModel, table=True):
     # Users should explicitly opt-in to automatic price changes
     auto_pricing_enabled: bool = Field(default=False)
 
-    keywords: list[str] = Field(default=[], sa_column=Column(JSONB))
+    keywords: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),

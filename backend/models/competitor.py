@@ -39,7 +39,7 @@ class Competitor(SQLModel, table=True):
     description: str | None = Field(default=None, sa_column=Column(Text))
 
     # Scraping configuration (CSS selectors, XPath, API endpoints, etc.)
-    scraping_config: dict = Field(default={}, sa_column=Column(JSON))
+    scraping_config: dict = Field(default_factory=dict, sa_column=Column(JSON))
 
     # Tracking status
     is_active: bool = Field(default=True, index=True)
