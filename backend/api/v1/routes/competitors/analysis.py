@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.v1.routes.auth import get_current_user
+from core.deps import get_current_user
 from db.session import get_session
 from models.competitor import Competitor
 from models.competitor_price_history import CompetitorPriceHistory

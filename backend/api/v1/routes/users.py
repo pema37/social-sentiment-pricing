@@ -9,7 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.v1.routes.auth import get_current_user, require_role
+from api.v1.routes.auth import require_role
+from core.deps import get_current_user
 from core.rate_limit import AUTH_RATE_LIMIT, WRITE_RATE_LIMIT, limiter
 from core.security import hash_password, verify_password
 from db.session import get_session

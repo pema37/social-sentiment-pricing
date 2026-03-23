@@ -2581,6 +2581,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/notification_tasks.py` line 97
 - **Issue:** `NotificationDispatcher()` is instantiated but the return value is not assigned to a variable. The dispatcher object is immediately garbage collected without being used. All actual dispatch calls go through individually-instantiated `EmailService`, `SlackService`, and `WebhookService` objects.
 - **Impact:** Dead code. No functional impact — notifications still get sent. But the `NotificationDispatcher` import is wasted and suggests incomplete refactoring.
+- **Status: FALSE POSITIVE** — `dispatcher = NotificationDispatcher()` on line 142 IS assigned and used: `webhook_service = dispatcher.webhook_service` (line 143), which is used for webhook dispatch on line 201.
 
 ---
 
@@ -2588,6 +2589,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/scoring/competitive_position.py` line 214
 - **Issue:** `sum(1 for p in comp_prices if p > our_price)` — this evaluates a sum but does not assign it to a variable. The value is computed then immediately discarded. The variable that should have received this value (`priced_above`) is referenced in the comment but never populated.
 - **Impact:** No data quality issue — the formula still works correctly because `percentile_rank` uses `priced_below` and `priced_equal` (lines 220–221). But the `priced_above` count is silently lost. The comment above says "competitors priced above us" drives the formula, but the actual calculation uses `priced_below`. Minor inconsistency with the architecture doc formula.
+- **Status: FALSE POSITIVE** — Line 214 already has `priced_above = sum(...)` properly assigned. This was fixed as part of BUG-037.
 
 ---
 
@@ -2657,6 +2659,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/crud.py` line 12; `backend/api/v1/routes/competitors/scraping.py` line 12; `backend/api/v1/routes/competitors/analysis.py` line 13; `backend/api/v1/routes/competitors/products.py` line 13; `backend/api/v1/routes/products.py` line 26; `backend/api/v1/routes/users.py` line 12
 - **Issue:** `from api.v1.routes.auth import get_current_user` — six route files import `get_current_user` (and in `users.py`, also `require_role`) from the auth router instead of `core.deps`. The correct import across the codebase is `from core.deps import get_current_user`. If the auth router's `get_current_user` and `core.deps.get_current_user` ever diverge (e.g., role checks are added to deps), these routes will use the wrong version silently.
 - **Impact:** Potential divergence from centralized auth dependency if `core.deps.get_current_user` is updated. Creates circular import risk: routes importing from other routes' modules.
+- **Status: FIXED 2026-03-22** — Changed all 6 files to import `get_current_user` from `core.deps`. The `core.deps` version supports httpOnly cookie auth (post BUG-001 fix). `users.py` still imports `require_role` from `auth.py` since it's only defined there.
 
 ---
 
@@ -2736,6 +2739,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/health.py` lines 151-182
 - **Issue:** `POST /health/test-alert` is blocked in production (`ENVIRONMENT == "production"` check) but returns a 200 with `{"error": "Not available in production"}` rather than 403. In non-production environments, the endpoint has no auth — any anonymous caller can trigger test alerts to all configured channels (Slack, email, PagerDuty). Response also leaks that the endpoint exists in production.
 - **Impact:** Spam/noise in alert channels from anonymous traffic in staging. Production endpoint existence disclosed via 200 response body instead of 403/404.
+- **Status: FIXED 2026-03-22** — Added `Depends(get_current_user)` for authentication. Production check now raises `HTTPException(403)` instead of returning 200.
 
 ---
 
@@ -2775,6 +2779,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/products_import.py` lines 98-168
 - **Issue:** 15+ `logger.info("🔍 IMPORT DEBUG: ...")` calls log internal state (user ID, product names, prices, DB commit status) in every import request. This is marked with a comment "Remove after fixing the issue" but was never removed.
 - **Impact:** Sensitive product data (names, prices, SKUs) appears in production logs on every bulk import call. Noisy logs obscure real errors. `logger.info` on every loop iteration for up to 1000 products generates excessive log volume.
+- **Status: FALSE POSITIVE** — No emoji debug logging exists in current code. The debug lines were already removed in a prior fix.
 
 ---
 

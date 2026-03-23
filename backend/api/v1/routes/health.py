@@ -6,12 +6,13 @@ Health check endpoints for monitoring and orchestration.
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.deps import get_current_user
 from core.logging import get_logger
 from db.session import get_session
 
@@ -149,10 +150,13 @@ async def detailed_health_check(session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/test-alert")
-async def test_alert(severity: str = "info"):
-    """Test alerting system (dev only)."""
+async def test_alert(severity: str = "info", current_user=Depends(get_current_user)):
+    """Test alerting system (dev only). Requires authentication."""
     if settings.ENVIRONMENT == "production":
-        return {"error": "Not available in production"}
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not available in production",
+        )
 
     from core.alerting import AlertSeverity, send_alert
 
