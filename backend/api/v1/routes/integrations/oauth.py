@@ -9,6 +9,10 @@ FIXED (2026-03-08): Permanent install flow fix:
 - Embedded installs (host param present) → billing page
 - Direct installs while logged in (user_id set, no host) → integrations page
 - Direct installs while logged out (user_id None) → login page with claim redirect
+
+FIXED (2026-03-22): Post-OAuth redirect fix:
+- Embedded installs (host param present) → integrations page (was billing)
+- Merchants should land on /integrations after successful OAuth, not /settings/billing
 - Added /claim endpoint to attach orphaned integrations to authenticated users
 
 FIXED (2026-03-13): init_oauth now allows reconnect from ERROR state.
@@ -202,7 +206,7 @@ async def oauth_callback(
     OAuth callback — three install paths:
 
     1. Embedded App Store install (host param present):
-       → billing page (Shopify compliance requirement)
+       → integrations page with connected=true
 
     2. Direct install URL, merchant was logged in (user_id set, no host):
        → /integrations?connected=true (integration is fully linked)
@@ -319,14 +323,15 @@ async def oauth_callback(
     # =========================================================================
 
     if host:
-        # Path 1: Embedded App Store install — billing required by Shopify
+        # Path 1: Embedded App Store install — redirect to integrations page
         logger.info(
             f"oauth_callback: Path 1 (embedded) for integration {integration.id} "
             f"user_id={integration.user_id}"
         )
         success_url = (
-            f"{settings.FRONTEND_URL}/settings/billing"
-            f"?shop={shop}&host={host}&installed=true&integration_id={integration.id}"
+            f"{settings.FRONTEND_URL}/integrations"
+            f"?shop={shop}&host={host}&connected=true&integration_id={integration.id}"
+            f"&platform={integration.platform.value}"
         )
 
     elif integration.user_id is not None:
@@ -451,8 +456,9 @@ async def claim_integration(
     permanently orphaned with no way to recover without manual DB intervention.
 
     Now: claim works for any orphaned integration (user_id=None) that has a
-    real token (not the b"pending" placeholder). Status is preserved so the
-    merchant can see the real state and reconnect if needed.
+    real token (not the b"pending" placeholder). Status is set to ACTIVE
+    on claim — the token was already validated during OAuth, so there's no
+    reason to leave the integration in DISCONNECTED state.
     """
     stmt = select(Integration).where(
         Integration.id == integration_id,
@@ -476,13 +482,14 @@ async def claim_integration(
         )
 
     integration.user_id = current_user.id
+    integration.status = IntegrationStatus.ACTIVE
+    integration.error_message = None
     integration.updated_at = datetime.now(UTC)
     db.add(integration)
     await db.commit()
 
     logger.info(
-        f"Integration {integration_id} claimed by user {current_user.id} "
-        f"(status={integration.status.value})"
+        f"Integration {integration_id} claimed and activated by user {current_user.id}"
     )
 
     return {

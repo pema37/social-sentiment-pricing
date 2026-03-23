@@ -3597,6 +3597,15 @@ Files confirmed CLEAN in pass 12:
 
 ---
 
+## [MEDIUM] BUG-317 — Post-OAuth redirect sends merchant to Settings/Billing instead of Integrations page
+- **Status: FIXED 2026-03-22**
+- **File:** `backend/api/v1/routes/integrations/oauth.py` lines 321–330
+- **Issue:** After successful Shopify OAuth for embedded installs (Path 1, `host` param present), the redirect URL pointed to `/settings/billing` instead of `/integrations`. Merchants landed on the billing page after connecting their store.
+- **Impact:** Confusing post-install UX — merchants expected to see their integration status after connecting but were sent to billing instead.
+- **Fix:** Changed Path 1 redirect from `/settings/billing?shop=...&host=...&installed=true` to `/integrations?shop=...&host=...&connected=true&platform=shopify`, matching the same query param pattern used by Path 2 (direct authenticated installs).
+
+---
+
 ## Stats
 
 | Severity | Count |
