@@ -40,15 +40,15 @@ async def check_database(session: AsyncSession) -> dict[str, Any]:
         }
 
 
-def check_redis_sync() -> dict[str, Any]:
-    """Check Redis connectivity (sync version)."""
+async def check_redis() -> dict[str, Any]:
+    """Check Redis connectivity (non-blocking)."""
     try:
-        import redis
+        import redis.asyncio as aioredis
 
         start = datetime.now(UTC)
-        r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
-        r.ping()
-        r.close()
+        r = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
+        await r.ping()
+        await r.aclose()
         latency_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return {
             "status": "healthy",
@@ -93,7 +93,7 @@ async def liveness_probe():
 async def readiness_probe(session: AsyncSession = Depends(get_session)):
     """Kubernetes readiness probe."""
     db_check = await check_database(session)
-    redis_check = check_redis_sync()
+    redis_check = await check_redis()
 
     db_healthy = db_check.get("status") == "healthy"
 
@@ -116,7 +116,7 @@ async def readiness_probe(session: AsyncSession = Depends(get_session)):
 async def detailed_health_check(session: AsyncSession = Depends(get_session)):
     """Detailed health check."""
     db_check = await check_database(session)
-    redis_check = check_redis_sync()
+    redis_check = await check_redis()
 
     db_healthy = db_check.get("status") == "healthy"
     redis_healthy = redis_check.get("status") == "healthy"

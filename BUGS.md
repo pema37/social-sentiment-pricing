@@ -2327,6 +2327,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/products.py` line 283
 - **Issue:** `"total": len(history)` returns the count of records returned (capped by the `limit` query param), not the total available records in the DB. Pagination callers can't compute correct page counts.
 - **Impact:** Frontend pagination for competitor price history shows wrong total; users may not know more pages exist.
+- **Status: FIXED 2026-03-22** — Added a separate `SELECT COUNT(*)` query (without LIMIT) to return the true total count for pagination. The `total` field now reflects all matching records in the DB, not just the returned page.
 
 ---
 
@@ -2390,6 +2391,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/pricing/outcome_measurement.py` lines 207–210
 - **Issue:** `len(result.scalars().all())` — loads ALL `RecommendationOutcome` rows for each `MeasurementStatus` value to count them in Python. Should use `SELECT COUNT(*)` via `func.count()`.
 - **Impact:** Monitoring task loads entire outcomes table into memory repeatedly; degrades as outcomes table grows.
+- **Status: FIXED 2026-03-22** — Replaced per-status `SELECT *` + `len()` with a single `GROUP BY measurement_status` query using `func.count()`. One query instead of N.
 
 ---
 
@@ -2405,6 +2407,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/health.py` lines 43–61
 - **Issue:** `check_redis_sync()` is a sync function that creates a blocking Redis connection (`redis.from_url(...)`, `.ping()`). It's called directly from async FastAPI route handlers (`/ready`, `/detailed`) without `run_in_executor`, blocking the asyncio event loop during the connection+ping.
 - **Impact:** Every health check call stalls the event loop; under load, this delays concurrent API requests by the Redis RTT.
+- **Status: FIXED 2026-03-22** — Replaced sync `check_redis_sync()` with async `check_redis()` using `redis.asyncio` (`aioredis`). Callers now `await check_redis()`.
 
 ---
 
@@ -2462,6 +2465,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/shopify_billing_webhooks.py` line 185
 - **Issue:** `app_sub.get("admin_graphql_api_id", "")` is a bare expression — the return value is never assigned to a variable. The intent was almost certainly `gid = app_sub.get("admin_graphql_api_id", "")`.
 - **Impact:** The GraphQL admin ID is silently discarded; any downstream code that was meant to use `gid` either fails or uses an uninitialized variable. Dead code increases maintenance confusion.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 185 already reads `app_subscription_id = app_sub.get("admin_graphql_api_id", "")` — the value is assigned to a variable and used in the log line on line 189.
 
 ---
 
@@ -2495,6 +2499,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ai_generator.py` line 50
 - **Issue:** `self.gemini_model_name = "gemini-2.0-flash-exp"` — project rules mandate `gemini-2.0-flash`. The `-exp` experimental variant may have different availability, rate limits, and response characteristics than the stable model.
 - **Impact:** If the experimental model is deprecated or removed by Google, all AI generation silently fails. Response quality and availability guarantees differ from the stable model required by project contracts.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 52 already reads `self.gemini_model_name = "gemini-2.0-flash"` — the correct stable model is in use.
 
 ---
 

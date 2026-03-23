@@ -24,6 +24,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func as sa_func
 from sqlmodel import select
 
 from models.recommendation_outcome import (
@@ -203,11 +204,20 @@ class OutcomeMeasurementService:
     async def get_measurement_stats(self) -> dict:
         """Get counts by measurement status. Useful for monitoring dashboards."""
 
-        stats = {}
-        for status in MeasurementStatus:
-            stmt = select(RecommendationOutcome).where(RecommendationOutcome.measurement_status == status.value)
-            result = await self.db.execute(stmt)
-            stats[status.value] = len(result.scalars().all())
+        stmt = (
+            select(
+                RecommendationOutcome.measurement_status,
+                sa_func.count().label("cnt"),
+            )
+            .group_by(RecommendationOutcome.measurement_status)
+        )
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        stats = {status.value: 0 for status in MeasurementStatus}
+        for row in rows:
+            if row.measurement_status in stats:
+                stats[row.measurement_status] = row.cnt
 
         return stats
 

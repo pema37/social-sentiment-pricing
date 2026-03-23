@@ -250,6 +250,15 @@ async def get_competitor_product_price_history(
     # Calculate date cutoff
     cutoff_date = datetime.now(UTC) - timedelta(days=days)
 
+    # Get total count (before limit) for correct pagination
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(CompetitorPriceHistory)
+        .where(CompetitorPriceHistory.competitor_product_id == competitor_product_id)
+        .where(CompetitorPriceHistory.observed_at >= cutoff_date)
+    )
+    total_count = count_result.scalar() or 0
+
     # Fetch price history
     history_result = await db.execute(
         select(CompetitorPriceHistory)
@@ -279,7 +288,7 @@ async def get_competitor_product_price_history(
             }
             for record in history
         ],
-        "total": len(history),
+        "total": total_count,
         "competitor_product_id": str(competitor_product_id),
         "days": days,
     }
