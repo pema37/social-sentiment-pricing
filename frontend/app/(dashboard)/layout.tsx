@@ -6,7 +6,7 @@
  *
  * Two auth paths:
  * 1. Embedded (Shopify Admin iframe) → App Bridge session token, no login redirect
- * 2. Standalone (direct browser)     → JWT from localStorage, redirect to /login if missing
+ * 2. Standalone (direct browser)     → JWT from httpOnly cookie, redirect to /login if missing
  *
  * Updated Feb 21, 2026 — Shopify App Store compliance
  */

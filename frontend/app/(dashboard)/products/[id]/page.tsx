@@ -6,8 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Edit, Trash2, AlertCircle, RefreshCw, Sparkles, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useProduct } from '@/lib/hooks/use-products';
-import { productsApi } from '@/lib/api';
+import { useProduct, useUpdateProduct } from '@/lib/hooks/use-products';
+import type { UpdateProductRequest } from '@/types';
 import {
   ProductInfoCard,
   AutoPricingCard,
@@ -144,8 +144,8 @@ export default function ProductDetailPage() {
     data: product,
     isLoading,
     error,
-    refetch,
   } = useProduct(productId);
+  const { mutateAsync: updateProduct } = useUpdateProduct();
 
   // Scroll to top on page load
   useEffect(() => {
@@ -176,8 +176,7 @@ export default function ProductDetailPage() {
       // For now, they're available in the modal for copy/paste
       
       if (Object.keys(updateData).length > 0) {
-        await productsApi.update(productId, updateData);
-        refetch();
+        await updateProduct({ id: productId, data: updateData as UpdateProductRequest });
       }
     } catch (err) {
       console.error('Failed to update product:', err);
