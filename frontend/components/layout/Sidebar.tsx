@@ -31,6 +31,7 @@ import {
   Camera,
   CreditCard,
   SearchX,
+  ShieldAlert,
 } from 'lucide-react';
 
 // ─── Nav item type ───────────────────────────────────────────────────
@@ -57,6 +58,7 @@ const navItems: NavItem[] = [
   { label: 'Sentiment', href: '/sentiment', icon: MessageSquare },
   { label: 'Trust Scoring', href: '/sentiment/trust', icon: ShieldCheck },
   { label: 'Alerts', href: '/alerts', icon: Bell },
+  { label: 'Crisis Detector', href: '/alerts/crisis', icon: ShieldAlert },
   { label: 'AI Support', href: '/support', icon: Sparkles },
   { label: 'Market Trends', href: '/trends', icon: TrendingUp },
 ];
