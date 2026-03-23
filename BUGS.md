@@ -391,6 +391,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/stores/auth-store.ts` line 13
 - **Issue:** `ApiError` is imported from `@/lib/api` but never used. Generic `Error` is used instead.
 - **Impact:** Minor dead code. No runtime impact.
+- **Status: FALSE POSITIVE 2026-03-22** — `ApiError` is used in `getErrorMessage()` at line 30.
 
 ---
 
@@ -398,6 +399,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/integration/shopify_service.py` lines 222–223
 - **Issue:** `refresh_access_token()` always returns `False` silently. Correct for Shopify (tokens don't expire), but callers from WooCommerce integration that expect `True` on refresh will silently fail.
 - **Impact:** If a shared interface is used for token refresh across providers, WooCommerce reconnect logic may be skipped.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -405,6 +407,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/context/shopify-embedded.tsx` line 115
 - **Issue:** `console.error` statements with stack traces appear in browser console in production.
 - **Impact:** Technical details exposed in production console. Low risk but noisy.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -412,6 +415,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/celery_app.py` line 49
 - **Issue:** `task_time_limit=300` (5 minutes). Not configurable via env. Large merchant catalogs with 1000+ products may exceed this on initial sync.
 - **Impact:** Sync tasks killed mid-run. Partial syncs with no recovery — products left in inconsistent state.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -419,6 +423,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/models/price_recommendation.py` lines 62–63
 - **Issue:** No validator ensures `valid_until > datetime.utcnow()` at creation. System clock issues or misconfigured Celery beat tasks could create already-expired recommendations.
 - **Impact:** Recommendations immediately filtered as expired without any error. Pricing queue appears empty.
+- **Status: FIXED 2026-03-22**
 
 ---
 

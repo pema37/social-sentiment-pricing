@@ -112,7 +112,9 @@ export function ShopifyEmbeddedProvider({ children }: Props) {
       return token;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Session token acquisition failed';
-      console.error('[ShopifyEmbedded] Token error:', message);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[ShopifyEmbedded] Token error:', message);
+      }
       setSessionError(message);
       return null;
     }

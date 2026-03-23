@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Column, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.types import JSON
+from pydantic import field_validator
 from sqlmodel import Field, SQLModel
 
 
@@ -62,6 +63,16 @@ class PriceRecommendation(SQLModel, table=True):
     valid_until: datetime = Field(
         description="Recommendation expires if not acted on", sa_column=Column(DateTime(timezone=True), nullable=False)
     )
+
+    @field_validator("valid_until")
+    @classmethod
+    def valid_until_must_be_future(cls, v: datetime) -> datetime:
+        now = datetime.now(UTC)
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=UTC)
+        if v <= now:
+            raise ValueError("valid_until must be a future date")
+        return v
 
     # Review tracking
     reviewed_by: UUID | None = Field(default=None, sa_column=Column(PG_UUID(as_uuid=True), nullable=True))

@@ -220,6 +220,14 @@ class ShopifyService(
             return OAuthResult(success=False, error=str(e))
 
     async def refresh_access_token(self, store_url: str, refresh_token: str) -> OAuthResult:
+        """No-op for Shopify: offline access tokens do not expire.
+
+        Shopify offline tokens are valid until the merchant uninstalls the app
+        or the token is explicitly revoked. This method exists to satisfy the
+        shared integration interface. Callers (e.g. WooCommerce token-refresh
+        logic) should check the returned ``success`` flag and fall back to
+        re-authentication when it is ``False``.
+        """
         return OAuthResult(success=False, error="Shopify tokens don't expire")
 
     # ================================================================

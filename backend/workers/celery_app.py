@@ -47,8 +47,8 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=300,  # 5 minutes max per task
-    task_soft_time_limit=270,  # Soft limit 30 seconds before hard limit
+    task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "300")),  # default 5 min
+    task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "270")),  # default 4.5 min
     worker_prefetch_multiplier=1,  # Fetch one task at a time (better for long tasks)
     task_acks_late=True,  # Acknowledge after task completion (safer)
 )
