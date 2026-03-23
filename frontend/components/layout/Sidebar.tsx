@@ -33,6 +33,7 @@ import {
   SearchX,
   ShieldAlert,
   Rocket,
+  Bot,
 } from 'lucide-react';
 
 // ─── Nav item type ───────────────────────────────────────────────────
@@ -69,6 +70,7 @@ const pricingItems: NavItem[] = [
   { label: 'Rules', href: '/pricing/rules', icon: Sliders },
   { label: 'Pricing Settings', href: '/pricing/settings', icon: ListChecks },
   { label: 'Visual Pricing', href: '/pricing/visual', icon: Camera },
+  { label: 'Autonomous', href: '/pricing/autonomous', icon: Bot },
   // Standalone: show MNEE payments
   { label: 'Payments (MNEE)', href: '/payments', icon: Wallet, standaloneOnly: true },
   // Embedded: show Shopify billing link instead
