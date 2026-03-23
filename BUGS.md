@@ -3241,6 +3241,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/components/features/competitors/AIAnalysisCard.tsx` line 67
 - **Issue:** The card displays `<p className="text-xs text-gray-500">Powered by GPT-4o-mini</p>` as a static string. The project rule is "Model: `gemini-2.0-flash` — do not change without explicit instruction". The UI string is factually incorrect and could mislead users or auditors about the AI stack.
 - **Impact:** Branding inconsistency / misleading label. Shopify app review may question the model identification.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 66 already reads "Powered by Gemini 2.0 Flash". Fixed in a prior batch.
 
 ---
 
@@ -3248,6 +3249,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/components/features/dashboard/AIFeaturesCard.tsx` lines 28, 86-87, 124
 - **Issue:** The card shows a `GPT-4o` badge (line 86-87) and the footer states "Powered by OpenAI GPT-4o-mini" (line 124). The `aiFeatures` array also describes "AI Sentiment" as "GPT-powered analysis" (line 28). All three references are incorrect — the backend uses Gemini 2.0 Flash exclusively.
 - **Impact:** False advertising of the AI provider. Multiple incorrect model references visible on the main dashboard.
+- **Status: FALSE POSITIVE 2026-03-22** — All three references already corrected: line 28 says "AI-powered analysis", line 86 says "Gemini 2.0", line 124 says "Powered by Google Gemini 2.0 Flash". Fixed in a prior batch.
 
 ---
 
@@ -3255,6 +3257,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/components/features/trends/AIInsightPanel.tsx` line 65
 - **Issue:** `<Badge variant="info">{insight.model_used === 'openai' ? 'GPT-4' : 'Gemini'}</Badge>` — the badge can display "GPT-4" if the `model_used` field from the backend is `'openai'`. Given BUG-295 (trend analysis defaults to `'openai'`), this label will display "GPT-4" in practice.
 - **Impact:** Compounding error with BUG-295: the wrong model is called and then the UI correctly reports "GPT-4" — but this is still a violation of the Gemini-only mandate since neither should happen.
+- **Status: FALSE POSITIVE 2026-03-22** — Badge already shows hardcoded "Gemini 2.0 Flash" instead of the conditional. Fixed in a prior batch.
 
 ---
 
@@ -3262,6 +3265,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/components/features/payments/PayWithMNEE.tsx` lines 69-76
 - **Issue:** `setCallbackFired(true)` and `onSuccess(transferHash)` / `onError(transferError)` are called unconditionally in the component's render body (not inside a `useEffect`). During a render where `paymentStep === 'success'` and `!callbackFired`, `setCallbackFired(true)` is called — which schedules another render — which again evaluates the condition — potentially causing a render loop. React's strict mode will surface this immediately. The `!callbackFired` guard mitigates the loop but calling `setState` during render is an anti-pattern that violates React rules.
 - **Impact:** React warning in strict mode, risk of state race conditions, potential infinite re-render loop if `callbackFired` state update batching behaves unexpectedly. `onSuccess`/`onError` callbacks may fire multiple times if the component re-renders before state update is committed.
+- **Status: FIXED 2026-03-22** — Moved `setCallbackFired` and callback invocations into a `useEffect` with proper dependency array.
 
 ---
 
@@ -3367,6 +3371,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/types/sentiment.ts` lines 88, 113
 - **Issue:** Line 88 has a type comment `// Use GPT-4o-mini for analysis` on the `use_ai` field. Line 113 defines `analyzed_by: 'vader' | 'openai' | 'gemini' | 'hybrid'` — explicitly including `'openai'` as a valid response value.
 - **Impact:** Violates the Gemini-only mandate. The comment incorrectly documents GPT-4o-mini as the intended model. The union type means the frontend type system accepts and propagates `'openai'` as a valid analyzer label, compounding BUG-295 (trend analysis defaults to openai) and BUG-302 (UI renders "GPT-4" badge for openai responses).
+- **Status: FIXED 2026-03-22** — Comment updated to "Gemini 2.0 Flash". Removed `'openai'` from `analyzed_by` union type.
 
 ---
 

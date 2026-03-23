@@ -85,7 +85,7 @@ export interface AnalyzeRequest {
   source?: SentimentSource;
   author?: string | null;
   url?: string | null;
-  use_ai?: boolean;  // Use GPT-4o-mini for analysis
+  use_ai?: boolean;  // Use Gemini 2.0 Flash for analysis
 }
 
 /**
@@ -110,7 +110,7 @@ export interface AnalyzeResponse {
   topics?: string[];
   is_sarcastic?: boolean;
   ai_powered?: boolean;
-  analyzed_by?: 'vader' | 'openai' | 'gemini' | 'hybrid';
+  analyzed_by?: 'vader' | 'gemini' | 'hybrid';
   created_at?: string;
 }
 

@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { useMNEE } from '@/lib/web3'
 
@@ -65,16 +65,17 @@ export function PayWithMNEE({
   
   const paymentStep = getPaymentState()
   
-  // Fire callbacks only once
-  if (paymentStep === 'success' && transferHash && onSuccess && !callbackFired) {
-    setCallbackFired(true)
-    onSuccess(transferHash)
-  }
-  
-  if (paymentStep === 'error' && transferError && onError && !callbackFired) {
-    setCallbackFired(true)
-    onError(transferError)
-  }
+  // Fire callbacks only once via useEffect (not in render body)
+  useEffect(() => {
+    if (paymentStep === 'success' && transferHash && onSuccess && !callbackFired) {
+      setCallbackFired(true)
+      onSuccess(transferHash)
+    }
+    if (paymentStep === 'error' && transferError && onError && !callbackFired) {
+      setCallbackFired(true)
+      onError(transferError)
+    }
+  }, [paymentStep, transferHash, transferError, onSuccess, onError, callbackFired])
   
   const handlePay = () => {
     if (!isConnected || !hasEnoughBalance) return
