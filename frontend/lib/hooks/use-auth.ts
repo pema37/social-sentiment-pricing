@@ -44,13 +44,20 @@ export function useLogin() {
       queryClient.invalidateQueries({ queryKey: authKeys.user() });
       
       // Check for redirect path (set when session expired)
-      const redirectPath = typeof window !== 'undefined' 
-        ? sessionStorage.getItem('redirectAfterLogin') 
+      const redirectPath = typeof window !== 'undefined'
+        ? sessionStorage.getItem('redirectAfterLogin')
         : null;
-      
+
+      // Also check URL ?redirect param (set by middleware redirect)
+      const urlRedirect = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('redirect')
+        : null;
+
       if (redirectPath) {
         sessionStorage.removeItem('redirectAfterLogin');
         router.push(redirectPath);
+      } else if (urlRedirect && urlRedirect.startsWith('/')) {
+        router.push(urlRedirect);
       } else {
         router.push('/dashboard');
       }

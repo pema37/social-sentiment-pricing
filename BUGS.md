@@ -2131,6 +2131,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/layout/DashboardShell.tsx` lines 29–38, 61–67; `frontend/components/layout/Sidebar.tsx` lines 140–146
 - **Issue:** When the sidebar is open and the user taps a nav item for the page they're already on, `Sidebar.tsx`'s `handleNavItemClick` calls `event.preventDefault()` (because `active === true`). This prevents any URL change, so the `usePathname()` change `useEffect` in `DashboardShell.tsx` never fires. `closeSidebarFromNav()` is called via `onLinkClick?.()`, which calls `setSidebarOpen(false)` — but this state update may not re-render cleanly due to React's batching or event propagation order with the `capture` listener. The dark overlay (`bg-black/50 z-40`) persists on screen.
 - **Impact:** Mobile UX: tapping the current page in the sidebar leaves a full-screen dark overlay blocking all content. The only escape is tapping the overlay itself (which does call `setSidebarOpen(false)` directly) or navigating to a different page.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already has `onLinkClick={closeSidebarFromNav}` that calls `setSidebarOpen(false)` on any nav click including current page. The `handleNavItemClick` calls `onLinkClick?.()` unconditionally (line 145), and capture-phase handlers also call it. Previously fixed.
 
 ---
 
@@ -2138,6 +2139,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/integrations/IntegrationCard.tsx` lines 162–189; `frontend/components/features/integrations/LinkedProducts.tsx` lines 250–258
 - **Issue:** `IntegrationCard` shows "Products Synced" (aggregate count) and "Last Sync" timestamp — there is no per-platform pricing display. When a merchant has both Shopify and WooCommerce connected, there is no way to see at a glance that Platform A has products at one price and Platform B at another. Per-product platform prices are only visible by drilling into `LinkedProducts` detail view inside each integration card's expandable section.
 - **Impact:** Merchant can't see WooCommerce prices from the integrations dashboard without drilling in. Platform-level price discrepancies (diagnosed as mismatch by the diagnostic tool) are not surfaced in the primary integration view.
+- **Status: FIXED 2026-03-22** — IntegrationCard now fetches product links via `useProductLinks` and shows a "Price Range" column (min–max) in the stats grid alongside Products Synced and Last Sync.
 
 ---
 
@@ -3457,6 +3459,7 @@ New bugs found: BUG-312, BUG-313, BUG-314, BUG-315
 - **File:** `frontend/components/features/sentiment/analyze-modal.tsx` lines 73–75
 - **Issue:** The `if (isOpen && defaultProductId && defaultProductId !== productId) { setProductId(defaultProductId); }` block runs unconditionally during the render function body. Calling `setState` during render is an anti-pattern — it causes React to immediately re-render the component before painting, which can cause a render loop if the condition doesn't settle. This is the same pattern flagged in BUG-303 (`PayWithMNEE.tsx`).
 - **Impact:** React warning in strict mode: "Cannot update a component from inside the function body of a different component." Potential infinite re-render loop if `defaultProductId` keeps changing. The correct fix is to move this into a `useEffect(..., [isOpen, defaultProductId])`.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `useEffect` at lines 73–77. Previously fixed.
 
 ---
 
@@ -3464,6 +3467,7 @@ New bugs found: BUG-312, BUG-313, BUG-314, BUG-315
 - **File:** `frontend/components/features/products/ProductForm.tsx` lines 206–209 and 216–219
 - **Issue:** `updateProduct.mutate(...)` and `createProduct.mutate(...)` both pass per-call `onSuccess` callbacks that call `toast.success(...)`. However, `useUpdateProduct` and `useCreateProduct` hooks already have mutation-level `onSuccess` handlers that call `toast.success(...)`. When the mutation succeeds, both fire: the hook-level toast and the per-call toast.
 - **Impact:** Users see duplicate success toasts on every product create/update. Per-call `onSuccess` in `mutate()` is also fragile in React Query v5 (ephemeral, may not fire if component unmounts during the mutation). The per-call callbacks should only handle navigation (`onSuccess?.()`) and the toast should remain only at the mutation hook level.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses `mutateAsync().then(() => onSuccess?.())` with no per-call toast. Previously fixed.
 
 ---
 
@@ -3471,6 +3475,7 @@ New bugs found: BUG-312, BUG-313, BUG-314, BUG-315
 - **File:** `frontend/lib/hooks/use-auth.ts` line 59; `frontend/lib/api/client.ts` (handleAuthError)
 - **Issue:** `use-auth.ts` reads `sessionStorage.getItem('redirectAfterLogin')` and removes it after redirect. `lib/api/client.ts`'s `handleAuthError()` writes the redirect path to `sessionStorage.setItem('redirectAfterLogin', ...)`. This is the same key — but `login/page.tsx` also reads `searchParams.get('redirect')` and uses that with priority. So there are two redirect mechanisms: the `?redirect=` URL param (set by middleware) and the `sessionStorage` key (set by auth interceptor). The `useLogin` hook in `use-auth.ts` only checks `sessionStorage` — it does not read the `?redirect` URL param. The `login/page.tsx` `LoginForm` does check the `?redirect` param and calls `router.push(redirectParam)`. However, `useLogin` hook (used in the auth store) navigates to `/dashboard` unconditionally if no `sessionStorage` key is found, even if a `?redirect` URL param is present.
 - **Impact:** If a user follows a middleware-generated redirect URL like `/login?redirect=/integrations/claim?...`, the auth store's `login()` function will redirect to `/dashboard` instead of honoring the `?redirect` param — losing the Shopify install flow context. The `login/page.tsx` component does check the param correctly via `useAuthStore`, so this only fails if `useLogin()` hook is used directly.
+- **Status: FIXED 2026-03-22** — `useLogin()` onSuccess now checks URL `?redirect` param as fallback after sessionStorage, with relative-path-only validation to prevent open redirects.
 
 ---
 

@@ -19,15 +19,16 @@
  * This is the recommended pattern per React docs for "synchronizing with external systems".
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Trash2 } from 'lucide-react';
 import { Integration, PLATFORM_CONFIGS } from '@/types/integration';
-import { 
-  useDisconnectIntegration, 
-  useTriggerSync, 
+import {
+  useDisconnectIntegration,
+  useTriggerSync,
   useSyncStatus,
   useInitOAuth,
+  useProductLinks,
 } from '@/lib/hooks/use-integrations';
 import { Button } from '@/components/ui';
 import { formatRelativeTime } from '@/lib/utils';
@@ -109,6 +110,17 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     ?? cachedSyncData?.last_sync_at 
     ?? integration.last_sync_at;
 
+  // Fetch linked products for price range summary
+  const { data: productLinksData } = useProductLinks(integration.id);
+  const priceRange = useMemo(() => {
+    if (!productLinksData?.links?.length) return null;
+    const prices = productLinksData.links
+      .map((l) => l.external_price)
+      .filter((p): p is number => p !== null && p > 0);
+    if (prices.length === 0) return null;
+    return { min: Math.min(...prices), max: Math.max(...prices), count: prices.length };
+  }, [productLinksData?.links]);
+
   // Check if this is a disconnected/invalid integration
   const isDisconnected = integration.status === 'disconnected';
 
@@ -167,7 +179,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
       </div>
 
       {/* Stats */}
-      <div className="mt-4 grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+      <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
         <div>
           <p className="text-sm text-gray-500">Products Synced</p>
           <p className="text-lg font-semibold text-gray-900">
@@ -178,6 +190,18 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
               </span>
             ) : (
               displayProductsSynced
+            )}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Price Range</p>
+          <p className="text-sm font-medium text-gray-900">
+            {priceRange ? (
+              priceRange.min === priceRange.max
+                ? `$${priceRange.min.toFixed(2)}`
+                : `$${priceRange.min.toFixed(2)} – $${priceRange.max.toFixed(2)}`
+            ) : (
+              <span className="text-gray-400">—</span>
             )}
           </p>
         </div>
