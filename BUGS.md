@@ -3208,6 +3208,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/lib/api/trend-analysis.ts` lines 27, 36, 47, 59; `frontend/lib/hooks/use-trend-analysis.ts` lines 87, 120, 145; `frontend/app/(dashboard)/trends/analysis/page.tsx` line 59
 - **Issue:** `runTrendAnalysis` defaults `use_model` to `'openai'` (line 27). `analyzeProductOpportunity`, `detectRisks`, and `generateInsight` all default `useModel` to `'openai'` (lines 36, 47, 59). The hook parameter types allow `'openai' | 'gemini'`. The page `handleRefreshAll` passes `useModel: 'openai'` as a hardcoded literal (line 59 of `analysis/page.tsx`). Project rules mandate: "Model: `gemini-2.0-flash` — do not change without explicit instruction."
 - **Impact:** All AI trend analysis features call OpenAI by default, bypassing the Gemini integration entirely. Responses may differ in quality, cost, and format from what the app is designed around. The `use_model: 'openai'` payload is sent to the backend which routes to the wrong provider.
+- **Status: FALSE POSITIVE 2026-03-22** — All defaults in `trend-analysis.ts` are already `'gemini'` (lines 27, 36, 47, 59). Page `handleRefreshAll` passes `useModel: 'gemini'` (line 79). Bug was fixed in a prior batch.
 
 ---
 
@@ -3216,6 +3217,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/app/(dashboard)/settings/notifications/page.tsx` lines 68-76
 - **Issue:** `handleSave` sets `isSaving` to `true`, waits `1000ms` via `await new Promise(resolve => setTimeout(resolve, 1000))`, then sets `isSaving` to `false` and shows a success toast — without calling any API endpoint. The notification preferences are held in local React state and are lost on page refresh.
 - **Impact:** Users believe their notification preferences are saved (green toast displayed) but they are silently discarded. This is the same stub pattern as BUG-056 (forgot-password). The `DigestOption` sub-component also maintains its own independent toggle state (line 196: `const [selected, setSelected] = useState(value === 'weekly')`) that is entirely disconnected from the parent's `settings` state and from the non-existent API.
+- **Status: FALSE POSITIVE 2026-03-22** — `handleSave` now uses `useCreateAlertConfiguration`/`useUpdateAlertConfiguration` with `mutateAsync` to persist via real API calls. `DigestOption` refactored to receive `selected`/`onSelect` props from parent. Bug was fixed in a prior batch.
 
 ---
 
@@ -3223,6 +3225,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/app/providers.tsx` line 29; `frontend/lib/api/client.ts` line 136; `frontend/app/(auth)/login/page.tsx` line 45
 - **Issue:** `providers.tsx` `handleAuthFailure()` stores the redirect path as `sessionStorage.setItem('redirect_after_login', window.location.pathname)` (key: `redirect_after_login`). `client.ts` `handleAuthError()` stores it as `sessionStorage.setItem('redirectAfterLogin', currentPath)` (key: `redirectAfterLogin`). The login page reads `sessionStorage.getItem('redirectAfterLogin')` (key: `redirectAfterLogin`). The `providers.tsx` redirect-after-login path is therefore stored under a key that is never read — when a session expires mid-session and the global `handleAuthFailure` runs, the user is redirected to `/login` but after signing in is always sent to `/dashboard` instead of where they were.
 - **Impact:** Users whose session expires while navigating the app are redirected to `/login` and after re-login always land on `/dashboard`, losing their place. The redirect-after-login feature only works correctly when the `client.ts` path (direct 401 from API call) is triggered, not the `providers.tsx` path (QueryCache global error handler).
+- **Status: FIXED 2026-03-22** — `providers.tsx` no longer uses sessionStorage (fixed in prior batch). `client.ts` `handleAuthError()` now passes redirect path as URL param (`?redirect=`) instead of orphaned sessionStorage write, matching login page's `searchParams.get('redirect')` reader.
 
 ---
 
@@ -3230,6 +3233,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/app/(dashboard)/sentiment/trust/page.tsx` lines 202-209, 315-319, 414-419
 - **Issue:** All three tab components (`AuthorScoringTab`, `ContentAnalysisTab`, `QuickSpamCheckTab`) call `mutate({...}, { onSuccess: (data) => setResult(data) })`. In React Query v5, per-call callbacks passed to `.mutate()` are ephemeral — if the component unmounts (e.g., user switches tabs) before the mutation resolves, the `onSuccess` callback is dropped and `setResult` is never called. The result state remains `null`.
 - **Impact:** If the user clicks "Score Author", immediately switches to the "Content Analysis" tab while the request is in-flight, then switches back, the result is never displayed even on success. The pattern is consistent with BUG-114 and BUG-233 but was not previously documented for this file.
+- **Status: FALSE POSITIVE 2026-03-22** — All three tabs now use `mutateAsync` with try/catch and `setResult(data)` inline, not per-call `onSuccess` in `.mutate()`. Bug was fixed in a prior batch.
 
 ---
 
@@ -3265,6 +3269,7 @@ Continued reading all remaining frontend pages and lib files not covered in earl
 - **File:** `frontend/components/features/products/GenerateDescriptionModal.tsx` line 211
 - **Issue:** `<div dangerouslySetInnerHTML={{ __html: result.description }} />` renders the raw `description` string returned by the AI backend directly into the DOM. If the backend Gemini response or any intermediate processing layer ever includes `<script>` tags, event handlers, or other HTML, the user's browser will execute them. React's `dangerouslySetInnerHTML` bypasses all built-in XSS protection. The content comes from the AI API, which processes user-supplied product names and descriptions.
 - **Impact:** Stored/reflected XSS. A maliciously crafted product name could cause the AI to include HTML payloads in the generated description, which are then executed in the merchant's browser when they click "Generate Description". At minimum, all session tokens stored in localStorage (BUG-001) become accessible to the injected script. The fix is to sanitize with `DOMPurify` before rendering, or render as plain text if rich formatting is not required.
+- **Status: FALSE POSITIVE 2026-03-22** — Already uses `DOMPurify.sanitize(result.description)` before passing to `dangerouslySetInnerHTML`. DOMPurify imported at line 10. Bug was fixed in a prior batch.
 
 ---
 

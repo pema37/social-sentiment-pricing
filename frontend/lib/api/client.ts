@@ -129,8 +129,7 @@ function handleAuthError() {
   
   const currentPath = window.location.pathname;
   if (currentPath !== '/login' && currentPath !== '/register') {
-    sessionStorage.setItem('redirectAfterLogin', currentPath);
-    window.location.href = '/login?expired=true';
+    window.location.href = `/login?expired=true&redirect=${encodeURIComponent(currentPath)}`;
   }
 }
 
