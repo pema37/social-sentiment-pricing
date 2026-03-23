@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Bot } from "lucide-react";
+import { useProducts } from "@/lib/hooks/use-products";
 
 interface AgentEvent {
   agent: string;
@@ -80,7 +81,7 @@ const AGENT_CONFIG = {
 } as const;
 
 const DEFAULT_CONFIG: PipelineConfig = {
-  product_id: "demo-product-001",
+  product_id: "",
   current_price: 99.99,
   product_category: "electronics",
   cost_basis: 45.0,
@@ -154,6 +155,28 @@ export default function AutonomousPipelinePage() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Fetch merchant's real products
+  const { data: productsData, isLoading: productsLoading } = useProducts({
+    page: 1,
+    page_size: 100,
+  });
+  const products = productsData?.items ?? [];
+
+  // When a product is selected from dropdown, auto-fill price and category
+  const handleProductSelect = (productId: string) => {
+    const selected = products.find((p) => p.id === productId);
+    if (!selected) {
+      setConfig((c) => ({ ...c, product_id: productId }));
+      return;
+    }
+    setConfig((c) => ({
+      ...c,
+      product_id: selected.id,
+      current_price: Number(selected.current_price ?? selected.base_price ?? c.current_price),
+      product_category: selected.category ?? c.product_category,
+    }));
+  };
+
   useEffect(() => {
     eventsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [events]);
@@ -187,7 +210,8 @@ export default function AutonomousPipelinePage() {
     });
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    const url = `${baseUrl}/api/v1/autonomous/stream/${config.product_id}?${params}`;
+    const productId = config.product_id || "demo-product-001";
+    const url = `${baseUrl}/api/v1/autonomous/stream/${productId}?${params}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -258,17 +282,47 @@ export default function AutonomousPipelinePage() {
           <div className="rounded-lg border bg-card p-4">
             <h2 className="font-semibold mb-4 text-sm">⚙️ Pipeline Configuration</h2>
             <div className="space-y-3">
+
+              {/* Product Dropdown — replaces free-text product_id */}
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Product ID</label>
-                <input
-                  type="text"
-                  value={config.product_id}
-                  onChange={(e) => setConfig((c) => ({ ...c, product_id: e.target.value }))}
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Select Product
+                </label>
+                {productsLoading ? (
+                  <div className="w-full rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                    Loading products...
+                  </div>
+                ) : products.length === 0 ? (
+                  <div className="w-full rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                    No products found — sync your store first
+                  </div>
+                ) : (
+                  <select
+                    value={config.product_id}
+                    onChange={(e) => handleProductSelect(e.target.value)}
+                    disabled={status === "running"}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                  >
+                    <option value="">— Select a product —</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                        {p.sku ? ` (${p.sku})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {config.product_id && (
+                  <p className="mt-1 text-xs text-muted-foreground font-mono truncate">
+                    ID: {config.product_id}
+                  </p>
+                )}
               </div>
+
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Current Price ($)</label>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Current Price ($)
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -295,7 +349,9 @@ export default function AutonomousPipelinePage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Cost Basis ($)</label>
+                  <label className="text-xs text-muted-foreground block mb-1">
+                    Cost Basis ($)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -307,7 +363,9 @@ export default function AutonomousPipelinePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Margin Floor (%)</label>
+                  <label className="text-xs text-muted-foreground block mb-1">
+                    Margin Floor (%)
+                  </label>
                   <input
                     type="number"
                     step="0.5"
@@ -328,7 +386,8 @@ export default function AutonomousPipelinePage() {
               {status !== "running" ? (
                 <button
                   onClick={runPipeline}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+                  disabled={!config.product_id}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   🚀 Run Autonomous Pipeline
                 </button>
@@ -366,14 +425,16 @@ export default function AutonomousPipelinePage() {
                   >
                     <span>{cfg.icon}</span>
                     <div className="flex-1">
-                      <div className={`font-medium ${isActive ? cfg.color : "text-muted-foreground"}`}>
+                      <div
+                        className={`font-medium ${
+                          isActive ? cfg.color : "text-muted-foreground"
+                        }`}
+                      >
                         {cfg.label}
                       </div>
                       <div className="text-muted-foreground/60">{cfg.description}</div>
                     </div>
-                    <div className="text-muted-foreground/40">
-                      {cfg.thinkingLevel}
-                    </div>
+                    <div className="text-muted-foreground/40">{cfg.thinkingLevel}</div>
                   </div>
                 );
               })}
@@ -406,7 +467,8 @@ export default function AutonomousPipelinePage() {
                   <div className="text-4xl mb-3">🤖</div>
                   <p className="text-base font-medium">No human prompting required</p>
                   <p className="text-sm mt-1 text-muted-foreground">
-                    Click &quot;Run Autonomous Pipeline&quot; to trigger the agents.
+                    Select a product and click &quot;Run Autonomous Pipeline&quot; to trigger
+                    the agents.
                     <br />
                     In production, this runs on a schedule — 24/7, zero intervention.
                   </p>
@@ -433,6 +495,5 @@ export default function AutonomousPipelinePage() {
     </div>
   );
 }
-
 
 
