@@ -1,233 +1,405 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, Sparkles, RefreshCw, Filter } from 'lucide-react';
-import { AIBadge } from '@/components/ui/ai-badge';
-import { api } from '@/lib/api/client';
+import { useState, useRef } from "react";
+import Image from "next/image";
+import { TrendingUp } from "lucide-react";
+import {
+  TREND_AGENTS,
+  THOUGHT_LABELS,
+  DIRECTION_STYLES,
+  SIMULATE_OPTIONS,
+  CATEGORY_OPTIONS,
+} from "@/components/features/trends/market/constants";
+import type {
+  TrendAgent,
+  StreamEvent,
+  SimulateTrend,
+  Forecast,
+  MarketData,
+  ThoughtType,
+} from "@/components/features/trends/market/types";
 
-interface TrendingProduct {
-  rank: number;
-  name: string;
-  category: string;
-  price_range: string;
-  trend_score: number;
-  sentiment: string;
-  source: string;
-  reason: string;
+interface AgentOutput {
+  agent: TrendAgent;
+  content: string;
+  thoughtType?: ThoughtType;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  icon: string;
-}
+export default function MarketTrendsPage() {
+  const [product, setProduct] = useState("Wireless Earbuds");
+  const [category, setCategory] = useState("electronics");
+  const [simulateTrend, setSimulateTrend] = useState<SimulateTrend>("neutral");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [outputs, setOutputs] = useState<AgentOutput[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [activeAgent, setActiveAgent] = useState<TrendAgent | null>(null);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [marketData, setMarketData] = useState<MarketData | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-export default function TrendsPage() {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
-  // Fetch categories
-  const { data: categoriesData } = useQuery({
-    queryKey: ['trend-categories'],
-    queryFn: () => api.get<{ categories: Category[] }>('/api/v1/market-trends/categories'),
-  });
-
-  // Fetch trends
-  const {
-    data: trendsData,
-    isLoading,
-    refetch,
-    isFetching
-  } = useQuery({
-    queryKey: ['market-trends', selectedCategory],
-    queryFn: () => {
-      const params: Record<string, string | number | boolean> = { limit: 10 };
-      if (selectedCategory) params.category = selectedCategory;
-      return api.get<{ trends: TrendingProduct[]; ai_summary?: string; generated_at?: string }>(
-        '/api/v1/market-trends/trends',
-        params,
-      );
-    },
-  });
-
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
-      case 'positive': return 'text-green-600 bg-green-50';
-      case 'negative': return 'text-red-600 bg-red-50';
-      default: return 'text-gray-600 bg-gray-50';
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
     }
   };
 
-  const getTrendScoreColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-yellow-500';
-    return 'bg-gray-400';
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const runAnalysis = async () => {
+    setIsRunning(true);
+    setOutputs([]);
+    setForecast(null);
+    setMarketData(null);
+    abortRef.current = new AbortController();
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      let response: Response;
+
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append("product", product);
+        formData.append("category", category);
+        formData.append("simulate_trend", simulateTrend);
+        formData.append("image", imageFile);
+
+        response = await fetch(`${baseUrl}/api/v1/trends-visual/analyze/stream`, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          signal: abortRef.current.signal,
+        });
+      } else {
+        const params = new URLSearchParams({
+          product,
+          category,
+          simulate_trend: simulateTrend,
+        });
+        response = await fetch(
+          `${baseUrl}/api/v1/trends-visual/analyze/stream?${params}`,
+          {
+            credentials: "include",
+            signal: abortRef.current.signal,
+          }
+        );
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error("No reader");
+
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event: StreamEvent = JSON.parse(line.slice(6));
+
+            if (event.done) {
+              if (event.metadata?.market_data)
+                setMarketData(event.metadata.market_data);
+              break;
+            }
+            if (event.error) throw new Error(event.error);
+
+            if (event.agent && event.content) {
+              setActiveAgent(event.agent as TrendAgent);
+              setOutputs((prev) => [
+                ...prev,
+                {
+                  agent: event.agent as TrendAgent,
+                  content: event.content!,
+                  thoughtType: event.thought_type || undefined,
+                },
+              ]);
+            }
+
+            if (event.metadata?.forecast) {
+              setForecast(event.metadata.forecast);
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) {
+              console.error("SSE parse error:", e);
+            } else {
+              throw e;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        console.error("Analysis failed:", e);
+      }
+    } finally {
+      setIsRunning(false);
+      setActiveAgent(null);
+    }
+  };
+
+  const stopAnalysis = () => {
+    abortRef.current?.abort();
+    setIsRunning(false);
+  };
+
+  const forecastStyle = forecast
+    ? DIRECTION_STYLES[forecast.direction] || DIRECTION_STYLES.stable
+    : null;
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <TrendingUp className="h-5 w-5 text-primary" />
+        </div>
         <div>
-          <h1 className="text-2xl font-bold text-[#111827] flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-purple-600" />
-            Market Trends
-            <AIBadge />
-          </h1>
-          <p className="text-[#6B7280] mt-1">
-            AI-analyzed trending products across e-commerce platforms
+          <h1 className="text-2xl font-bold">Market Trends</h1>
+          <p className="text-sm text-muted-foreground">
+            AI-powered market trend analysis with multimodal support
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/trends/analysis"
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-          >
-            <Sparkles className="h-4 w-4" />
-            AI Analysis
-          </Link>
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1F2937] text-white rounded-lg hover:bg-[#374151] disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
       </div>
 
-      {/* Category Filters */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter className="h-4 w-4 text-[#6B7280]" />
-          <span className="text-sm text-[#6B7280]">Filter by category:</span>
+      {/* Controls */}
+      <div className="rounded-lg border bg-card p-6">
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Product Name</label>
+            <input
+              type="text"
+              value={product}
+              onChange={(e) => setProduct(e.target.value)}
+              className="w-full rounded-lg border bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              disabled={isRunning}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full rounded-lg border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              disabled={isRunning}
+            >
+              {CATEGORY_OPTIONS.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Simulate Trend</label>
+            <select
+              value={simulateTrend}
+              onChange={(e) => setSimulateTrend(e.target.value as SimulateTrend)}
+              className="w-full rounded-lg border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              disabled={isRunning}
+            >
+              {SIMULATE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+
+        {/* Image Upload */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">
+            Trend Chart Image{" "}
+            <span className="text-muted-foreground font-normal">(optional)</span>
+          </label>
+          <div className="flex gap-4 items-start">
+            <div className="flex-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={handleImageChange}
+                className="w-full rounded-lg border bg-background px-4 py-2 text-sm text-muted-foreground disabled:opacity-50"
+                disabled={isRunning}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Upload Google Trends, sales charts, or any trend visualization
+              </p>
+            </div>
+            {imagePreview && (
+              <div className="relative h-20 w-20 shrink-0">
+                <Image
+                  src={imagePreview}
+                  alt="Preview"
+                  fill
+                  className="object-cover rounded border"
+                  unoptimized
+                />
+                <button
+                  onClick={clearImage}
+                  className="absolute -top-2 -right-2 bg-destructive hover:bg-destructive/90 rounded-full w-5 h-5 text-xs text-white z-10 transition-colors"
+                  disabled={isRunning}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end">
           <button
-            onClick={() => setSelectedCategory(null)}
-            className={`px-3 py-2 rounded-full text-sm transition-all ${
-              !selectedCategory
-                ? 'bg-[#1F2937] text-white'
-                : 'bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#374151]'
+            onClick={isRunning ? stopAnalysis : runAnalysis}
+            className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isRunning
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : "bg-primary text-primary-foreground hover:bg-primary/90"
             }`}
           >
-            🔥 All Trending
+            {isRunning ? "Stop" : "Analyze Trends"}
           </button>
-          {categoriesData?.categories?.map((cat: Category) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-2 rounded-full text-sm transition-all ${
-                selectedCategory === cat.id
-                  ? 'bg-[#1F2937] text-white'
-                  : 'bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#374151]'
-              }`}
-            >
-              {cat.icon} {cat.name}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* AI Summary */}
-      {trendsData?.ai_summary && (
-        <div className="mb-6 p-4 bg-linear-to-r from-purple-50 to-blue-50 border border-purple-100 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-purple-600" />
-            <span className="text-sm font-medium text-purple-700">AI Market Summary</span>
-          </div>
-          <p className="text-[#374151]">{trendsData.ai_summary}</p>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {isLoading && (
-        <div className="flex items-center justify-center h-64">
-          <div className="flex items-center gap-3 text-purple-600">
-            <Sparkles className="h-5 w-5 animate-pulse" />
-            <span>AI is analyzing market trends...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Trends Grid */}
-      {!isLoading && trendsData?.trends && (
-        <div className="grid gap-4">
-          {trendsData.trends.map((trend: TrendingProduct) => (
+      {/* Agent Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        {(Object.keys(TREND_AGENTS) as TrendAgent[]).map((key) => {
+          const agent = TREND_AGENTS[key];
+          const isActive = activeAgent === key;
+          return (
             <div
-              key={trend.rank}
-              className="p-4 bg-white border border-[#E5E7EB] rounded-lg hover:shadow-md transition-shadow"
+              key={key}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                isActive
+                  ? `${agent.borderActive} ${agent.bgActive}`
+                  : "border-border bg-card"
+              }`}
             >
-              <div className="flex items-start gap-4">
-                {/* Rank Badge */}
-                <div className="shrink-0 w-10 h-10 bg-[#1F2937] text-white rounded-full flex items-center justify-center font-bold">
-                  #{trend.rank}
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{agent.name}</span>
+                {isActive && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+                  </span>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">{agent.description}</div>
+            </div>
+          );
+        })}
+      </div>
 
-                {/* Product Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-semibold text-[#111827] truncate">
-                      {trend.name}
-                    </h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getSentimentColor(trend.sentiment)}`}>
-                      {trend.sentiment}
-                    </span>
-                  </div>
-                  
-                  <p className="text-sm text-[#6B7280] mb-2">{trend.reason}</p>
-                  
-                  <div className="flex flex-wrap items-center gap-3 text-sm">
-                    <span className="text-[#374151] font-medium">{trend.price_range}</span>
-                    <span className="text-[#6B7280]">•</span>
-                    <span className="text-[#6B7280]">Source: {trend.source}</span>
-                    <span className="text-[#6B7280]">•</span>
-                    <span className="text-[#6B7280] capitalize">{trend.category.replace('_', ' ')}</span>
-                  </div>
-                </div>
-
-                {/* Trend Score */}
-                <div className="shrink-0 text-right">
-                  <div className="text-2xl font-bold text-[#111827]">{trend.trend_score}</div>
-                  <div className="text-xs text-[#6B7280]">Trend Score</div>
-                  <div className="mt-1 w-16 h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${getTrendScoreColor(trend.trend_score)} rounded-full`}
-                      style={{ width: `${trend.trend_score}%` }}
-                    />
-                  </div>
-                </div>
+      {/* Forecast Result */}
+      {forecast && forecastStyle && (
+        <div className={`p-4 rounded-lg border ${forecastStyle.bg} ${forecastStyle.border}`}>
+          <div className="grid grid-cols-4 gap-4 text-center">
+            <div>
+              <div className="text-sm text-muted-foreground">Direction</div>
+              <div className={`text-lg font-bold ${forecastStyle.text} uppercase`}>
+                {forecast.direction.replace("_", " ")}
               </div>
             </div>
-          ))}
+            <div>
+              <div className="text-sm text-muted-foreground">Confidence</div>
+              <div className="text-lg font-bold">{forecast.confidence}%</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Action</div>
+              <div className="text-lg font-bold">{forecast.recommended_action}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Timeframe</div>
+              <div className="text-lg font-bold">{forecast.timeframe}</div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Empty State */}
-      {!isLoading && (!trendsData?.trends || trendsData.trends.length === 0) && (
-        <div className="flex flex-col items-center justify-center h-64 text-[#6B7280]">
-          <TrendingUp className="h-12 w-12 mb-4 opacity-50" />
-          <p>No trending products found</p>
-          <button
-            onClick={() => refetch()}
-            className="mt-4 text-purple-600 hover:underline"
-          >
-            Try refreshing
-          </button>
+      {/* Market Data Summary */}
+      {marketData && (
+        <div className="p-4 rounded-lg border bg-card">
+          <div className="text-sm text-muted-foreground mb-2">Market Data Used</div>
+          <div className="grid grid-cols-5 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Sentiment:</span>{" "}
+              <span className="font-medium">{marketData.sentiment_score}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Volume:</span>{" "}
+              <span className="font-medium">{marketData.volume_24h.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">7d Change:</span>{" "}
+              <span className={`font-medium ${marketData.price_change_7d >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {marketData.price_change_7d >= 0 ? "+" : ""}
+                {marketData.price_change_7d}%
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Mentions:</span>{" "}
+              <span className="font-medium">{marketData.social_mentions}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Competition:</span>{" "}
+              <span className="font-medium capitalize">{marketData.competitor_activity}</span>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Generated At */}
-      {trendsData?.generated_at && (
-        <p className="mt-6 text-center text-xs text-[#9CA3AF]">
-          Generated at {new Date(trendsData.generated_at).toLocaleString()}
-        </p>
-      )}
+      {/* Output Stream */}
+      <div className="rounded-lg border bg-card p-6 min-h-48">
+        <h2 className="text-base font-semibold mb-4">Analysis Stream</h2>
+        {outputs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Run analysis to see market trend insights...
+          </p>
+        ) : (
+          <div className="space-y-2 font-mono text-sm max-h-96 overflow-y-auto">
+            {outputs.map((o, i) => {
+              const agentInfo = TREND_AGENTS[o.agent];
+              const thought = o.thoughtType
+                ? THOUGHT_LABELS[o.thoughtType]
+                : null;
+              return (
+                <div key={i} className="flex gap-2">
+                  <span className={`${agentInfo?.labelColor || "text-muted-foreground"} font-semibold shrink-0`}>
+                    [{agentInfo?.name.split(" ")[0] || o.agent}]
+                  </span>
+                  {thought && (
+                    <span className={`${thought.color} shrink-0`}>
+                      [{thought.label}]
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">{o.content}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
 
 
 
