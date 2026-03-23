@@ -1275,6 +1275,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/index.ts` lines 3–4, 13–14
 - **Issue:** Named exports on lines 3–4 plus `export * from './client'` and `export * from './auth'` on lines 13–14 re-export the same symbols.
 - **Impact:** TypeScript allows but static analysis flags as duplicate exports; any future name collision causes silent compile error.
+- **Status: FIXED 2026-03-22** — Removed duplicate `export *` barrel re-exports for modules already exported by name. Kept named exports only.
 
 ---
 
@@ -1282,6 +1283,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-competitor-matching.ts` lines 219–277
 - **Issue:** Both call no hooks and take plain arguments. Named with `use` prefix, triggering React lint rules unnecessarily.
 - **Impact:** Misleading naming; potential false-positive lint noise from rules-of-hooks.
+- **Status: FIXED 2026-03-22** — Renamed to `getConfidenceLevel` and `getFilteredMatches`. No callers to update (unused exports).
 
 ---
 
@@ -1289,6 +1291,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/auth.py` lines 384–388
 - **Issue:** Password length validated manually in route handler with `if len(payload.new_password) < 8` instead of via Pydantic field validator on the schema. Inconsistent with `register` endpoint.
 - **Impact:** Validation bypassed if schema reused elsewhere without this route.
+- **Status: FIXED 2026-03-22** — Added `Field(..., min_length=8)` to `ResetPasswordRequest.new_password` in schema; removed inline length check from route handler.
 
 ---
 
@@ -1296,6 +1299,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/integrations/crud.py` lines 252–263
 - **Issue:** `unregister_webhooks` only called when `status == ACTIVE`. `PAUSED` and `ERROR` integrations are soft-deleted without webhook unregistration.
 - **Impact:** Ghost webhooks continue firing against disconnected integration endpoints.
+- **Status: FIXED 2026-03-22** — Expanded condition to `status in (ACTIVE, PAUSED, ERROR)` so webhooks are unregistered for all non-disconnected integrations.
 
 ---
 
@@ -1303,6 +1307,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/pricing/settings.py` line 107
 - **Issue:** `days: int = Query(default=30, le=365)` — no `ge=1` lower bound. `days=0` or negative values produce invalid date arithmetic.
 - **Impact:** Potential division-by-zero or empty result set for zero/negative day window.
+- **Status: FIXED 2026-03-22** — Added `ge=1` constraint to `days` Query parameter.
 
 ---
 

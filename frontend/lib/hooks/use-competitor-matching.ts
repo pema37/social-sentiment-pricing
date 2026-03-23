@@ -214,9 +214,9 @@ export function useClearMatchCache() {
 // ============================================
 
 /**
- * Hook to get confidence level info
+ * Get confidence level info based on score
  */
-export function useConfidenceLevel(score: number): {
+export function getConfidenceLevel(score: number): {
   level: 'high' | 'medium' | 'low';
   color: string;
   label: string;
@@ -233,7 +233,7 @@ export function useConfidenceLevel(score: number): {
 /**
  * Filter and sort matched products
  */
-export function useFilteredMatches(
+export function getFilteredMatches(
   products: MatchedProduct[] | undefined,
   options?: {
     minConfidence?: number;

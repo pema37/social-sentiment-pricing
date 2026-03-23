@@ -464,12 +464,6 @@ async def reset_password(
             detail="Invalid or expired reset token",
         )
 
-    if len(payload.new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters",
-        )
-
     user.hashed_password = hash_password(payload.new_password)
     session.add(user)
     await session.commit()

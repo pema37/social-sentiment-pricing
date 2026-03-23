@@ -105,7 +105,7 @@ async def update_settings(
 @router.get("/stats")
 async def get_pricing_stats(
     request: Request,
-    days: int = Query(default=30, le=365),
+    days: int = Query(default=30, ge=1, le=365),
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):

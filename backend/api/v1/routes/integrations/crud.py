@@ -249,7 +249,7 @@ async def disconnect_integration(
     # ═══════════════════════════════════════════════════════════════════════════
     # ACTIVE/PAUSED: Soft delete - unregister webhooks and mark as disconnected
     # ═══════════════════════════════════════════════════════════════════════════
-    if integration.status == IntegrationStatus.ACTIVE:
+    if integration.status in (IntegrationStatus.ACTIVE, IntegrationStatus.PAUSED, IntegrationStatus.ERROR):
         try:
             webhook_service = WebhookRegistrationService(db)
             await webhook_service.unregister_webhooks(integration.id)
