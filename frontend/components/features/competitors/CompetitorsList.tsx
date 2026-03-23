@@ -10,6 +10,7 @@ interface CompetitorsListProps {
   error?: Error | null;
   onEdit: (competitor: Competitor) => void;
   onAdd: () => void;
+  onRetry?: () => void;
 }
 
 export function CompetitorsList({
@@ -18,6 +19,7 @@ export function CompetitorsList({
   error,
   onEdit,
   onAdd,
+  onRetry,
 }: CompetitorsListProps) {
   if (isLoading) {
     return (
@@ -70,12 +72,14 @@ export function CompetitorsList({
           <span className="text-yellow-600 text-sm">
             ⚠️ Failed to refresh data. Showing cached results.
           </span>
-          <button 
-            onClick={() => window.location.reload()}
-            className="text-yellow-700 text-sm underline hover:no-underline ml-auto"
-          >
-            Retry
-          </button>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="text-yellow-700 text-sm underline hover:no-underline ml-auto"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
       

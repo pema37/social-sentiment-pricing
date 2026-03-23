@@ -145,7 +145,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
     }
   }, [disconnect, integration.id]);
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     active: 'bg-green-100 text-green-800',
     error: 'bg-red-100 text-red-800',
     paused: 'bg-yellow-100 text-yellow-800',
@@ -172,7 +172,7 @@ export function IntegrationCard({ integration }: IntegrationCardProps) {
           </div>
         </div>
         <span
-          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${statusColors[integration.status]}`}
+          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${statusColors[integration.status] ?? 'bg-gray-100 text-gray-800'}`}
         >
           {integration.status}
         </span>

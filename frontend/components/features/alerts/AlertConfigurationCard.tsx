@@ -3,10 +3,11 @@
 
 import { useState } from 'react';
 import { Trash2, Pencil } from 'lucide-react';
-import { 
-  useUpdateAlertConfiguration, 
-  useDeleteAlertConfiguration 
+import {
+  useUpdateAlertConfiguration,
+  useDeleteAlertConfiguration
 } from '@/lib/hooks/use-alerts';
+import { useToast } from '@/lib/hooks/use-toast';
 import type { AlertConfiguration, AlertChannel } from '@/types';
 
 interface AlertConfigurationCardProps {
@@ -32,15 +33,16 @@ const channelLabels: Record<AlertChannel, string> = {
 
 export function AlertConfigurationCard({ configuration, onEdit }: AlertConfigurationCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const toast = useToast();
+
   const updateConfig = useUpdateAlertConfiguration();
   const deleteConfig = useDeleteAlertConfiguration();
 
   const handleToggleActive = () => {
-    updateConfig.mutate({
-      id: configuration.id,
-      data: { is_active: !configuration.is_active },
-    });
+    updateConfig.mutate(
+      { id: configuration.id, data: { is_active: !configuration.is_active } },
+      { onError: () => toast.error('Failed to update alert configuration') },
+    );
   };
 
   const handleDelete = async () => {
@@ -49,6 +51,8 @@ export function AlertConfigurationCard({ configuration, onEdit }: AlertConfigura
     setIsDeleting(true);
     try {
       await deleteConfig.mutateAsync(configuration.id);
+    } catch {
+      toast.error('Failed to delete alert configuration');
     } finally {
       setIsDeleting(false);
     }

@@ -200,7 +200,6 @@ export function useInvalidateSubscription() {
   
   return () => {
     queryClient.invalidateQueries({ queryKey: paymentKeys.subscription() });
-    queryClient.refetchQueries({ queryKey: paymentKeys.subscription() });
   };
 }
 

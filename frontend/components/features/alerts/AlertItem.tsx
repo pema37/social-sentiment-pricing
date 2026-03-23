@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { AlertBadge } from './AlertBadge';
 import { AlertStatusBadge } from './AlertStatusBadge';
 import { useAcknowledgeAlert, useResolveAlert } from '@/lib/hooks/use-alerts';
+import { useToast } from '@/lib/hooks/use-toast';
 import type { Alert } from '@/types';
 
 interface AlertItemProps {
@@ -23,16 +24,21 @@ const alertTypeLabels: Record<string, string> = {
 export function AlertItem({ alert }: AlertItemProps) {
   const acknowledgeAlert = useAcknowledgeAlert();
   const resolveAlert = useResolveAlert();
+  const toast = useToast();
 
   const isPending = alert.status === 'pending';
   const isAcknowledged = alert.status === 'acknowledged';
 
   const handleAcknowledge = () => {
-    acknowledgeAlert.mutate(alert.id);
+    acknowledgeAlert.mutate(alert.id, {
+      onError: () => toast.error('Failed to acknowledge alert'),
+    });
   };
 
   const handleResolve = () => {
-    resolveAlert.mutate(alert.id);
+    resolveAlert.mutate(alert.id, {
+      onError: () => toast.error('Failed to resolve alert'),
+    });
   };
 
   return (

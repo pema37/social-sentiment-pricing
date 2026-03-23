@@ -19,7 +19,7 @@ export default function CompetitorsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
 
-  const { data, isLoading, error } = useCompetitors();
+  const { data, isLoading, error, refetch } = useCompetitors();
   const createCompetitor = useCreateCompetitor();
   const updateCompetitor = useUpdateCompetitor();
 
@@ -130,6 +130,7 @@ export default function CompetitorsPage() {
         error={error as Error | null}
         onEdit={handleEdit}
         onAdd={() => setShowForm(true)}
+        onRetry={() => refetch()}
       />
 
       {/* Create/Edit Form Modal */}

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Globe, Trash2, Pencil, ExternalLink } from 'lucide-react';
 import { useDeleteCompetitor } from '@/lib/hooks/use-competitors';
+import { useToast } from '@/lib/hooks/use-toast';
 import type { Competitor } from '@/types';
 
 interface CompetitorCardProps {
@@ -15,6 +16,7 @@ interface CompetitorCardProps {
 export function CompetitorCard({ competitor, onEdit }: CompetitorCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const deleteCompetitor = useDeleteCompetitor();
+  const toast = useToast();
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${competitor.name}"? This will also remove all linked products.`)) {
@@ -24,6 +26,8 @@ export function CompetitorCard({ competitor, onEdit }: CompetitorCardProps) {
     setIsDeleting(true);
     try {
       await deleteCompetitor.mutateAsync(competitor.id);
+    } catch {
+      toast.error('Failed to delete competitor');
     } finally {
       setIsDeleting(false);
     }
