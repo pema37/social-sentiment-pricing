@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Globe } from "lucide-react";
+import { useProducts } from "@/lib/hooks/use-products";
 import { AGENT_CONFIG, THOUGHT_LABELS, CURRENCY_OPTIONS } from "@/components/features/analytics/market-intelligence/constants";
 import type {
   AgentMessage,
@@ -28,6 +29,23 @@ export default function MarketIntelligencePage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const streamEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch merchant's real products
+  const { data: productsData, isLoading: productsLoading } = useProducts({
+    page: 1,
+    page_size: 100,
+  });
+  const products = productsData?.items ?? [];
+
+  // When a product is selected pre-fill name, price, and category
+  const handleProductSelect = (productId: string) => {
+    if (!productId) return;
+    const selected = products.find((p) => p.id === productId);
+    if (!selected) return;
+    setProductName(selected.name ?? "");
+    setCurrentPrice(String(selected.current_price ?? selected.base_price ?? ""));
+    setCategory(selected.category ?? "");
+  };
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -192,6 +210,42 @@ export default function MarketIntelligencePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Column - Input */}
         <div className="space-y-6">
+
+          {/* Optional product pre-fill */}
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <label className="block text-sm font-medium mb-2">
+              Pre-fill from your catalog{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
+            {productsLoading ? (
+              <div className="w-full rounded-lg border bg-background px-4 py-3 text-sm text-muted-foreground">
+                Loading products...
+              </div>
+            ) : products.length === 0 ? (
+              <div className="w-full rounded-lg border bg-background px-4 py-3 text-sm text-muted-foreground">
+                No products found — sync your store first
+              </div>
+            ) : (
+              <select
+                onChange={(e) => handleProductSelect(e.target.value)}
+                disabled={isAnalyzing}
+                defaultValue=""
+                className="w-full rounded-lg border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="">— Select a product to pre-fill —</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.sku ? ` (${p.sku})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Selecting a product fills in name, price, and category below automatically
+            </p>
+          </div>
+
           <div className="rounded-lg border bg-card p-6">
             <h2 className="text-base font-semibold mb-4">Product Details</h2>
             <div className="space-y-4">
@@ -313,12 +367,9 @@ export default function MarketIntelligencePage() {
             )}
           </div>
 
-          {/* Sources */}
           {sources.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold mb-3">
-                Sources ({sources.length})
-              </h3>
+              <h3 className="text-sm font-semibold mb-3">Sources ({sources.length})</h3>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {sources.map((src, i) => (
                   <a
@@ -503,6 +554,5 @@ export default function MarketIntelligencePage() {
     </div>
   );
 }
-
 
 
