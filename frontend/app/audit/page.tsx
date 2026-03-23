@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { api } from '@/lib/api/client';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -60,11 +61,8 @@ function trackEvent(
     estimated_impact?: string;
   }
 ) {
-  fetch(`${API_BASE}/api/v1/prospect/analytics/event`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event_type: eventType, ...data }),
-  }).catch(() => {}); // Fire and forget — never block UI
+  api.post('/api/v1/prospect/analytics/event', { event_type: eventType, ...data })
+    .catch(() => {}); // Fire and forget — never block UI
 }
 
 function fmtCurrency(val: string | number): string {
@@ -282,26 +280,12 @@ export default function FreeAuditPage() {
         body = { products };
       }
 
-      const resp = await fetch(`${API_BASE}/api/v1/prospect/audit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
       trackEvent('audit_started', {
         input_mode: mode,
         store_url: mode === 'url' ? storeUrl.trim() : undefined,
       });
 
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        if (resp.status === 429) {
-          throw new Error('Too many requests. Please wait a minute and try again.');
-        }
-        throw new Error(data.detail || `Something went wrong (error ${resp.status}).`);
-      }
-
-      const data: AuditTeaser = await resp.json();
+      const data = await api.post<AuditTeaser>('/api/v1/prospect/audit', body);
       setTeaser(data);
 
       trackEvent('audit_completed', {

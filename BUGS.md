@@ -2859,6 +2859,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/alerts/management.py` lines 88–118
 - **Issue:** `get_alert_stats` runs one `SELECT COUNT(*)` per `AlertSeverity` enum value (typically 4 queries) and then one per `AlertType` enum value (typically 6+ queries). Should be a single `SELECT severity, COUNT(*) … GROUP BY severity` and `SELECT alert_type, COUNT(*) … GROUP BY alert_type`.
 - **Impact:** Dashboard stats endpoint makes 10+ sequential DB round-trips instead of 2. Degrades dashboard load time; worsens under traffic.
+- **Status: FIXED 2026-03-22** — Replaced per-enum loops with two `GROUP BY` queries: one for severity counts, one for alert_type counts. Reduces 10+ DB round-trips to 2.
 
 ---
 
@@ -2960,6 +2961,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/sentiment/trust/page.tsx` lines 206–210, 319–321, 416–418
 - **Issue:** Per-call `onSuccess` callbacks passed to `.mutate({ ..., onSuccess: ... })` are ephemeral in React Query v5. If the component re-renders between mutation start and completion, the callbacks are dropped silently. BUG-114 documents this pattern; this file is not listed in the existing bug's scope.
 - **Impact:** Toast notifications and cache invalidations inside `onSuccess` callbacks are silently dropped when rapid user interaction or background re-renders occur mid-mutation. Success feedback may not appear and related data may remain stale.
+- **Status: FIXED 2026-03-22** — Replaced all three `.mutate({ onSuccess })` calls with `.mutateAsync()` + `try/catch`. Result is set via `setResult(data)` after awaiting the promise, ensuring stable callback execution regardless of re-renders.
 
 ---
 
@@ -2967,6 +2969,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/audit/page.tsx` lines 63, 285, 353
 - **Issue:** Three separate `fetch()` calls bypass the centralized Axios `api` client: `trackEvent` at line 63, audit POST at line 285, and PDF generation POST at line 353. The Axios client handles base URL resolution, auth headers, and error normalization. Raw `fetch()` calls also send the user's email address (line 337: `email: email.trim()`) to an analytics endpoint without input validation or rate limiting.
 - **Impact:** Base URL mismatch may break audit submissions in production vs staging. Auth errors are not normalized. PII (user email) is sent to an unprotected analytics endpoint without rate limiting — a GDPR compliance concern for the Shopify App Store submission.
+- **Status: FIXED 2026-03-22** — Converted `trackEvent` and audit POST to use `api.post()` from `@/lib/api/client`, gaining base URL resolution and error normalization. PDF POST remains as raw `fetch()` since the `api` client only handles JSON responses, not blob downloads.
 
 ---
 
@@ -2994,6 +2997,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/trends/analysis/page.tsx` lines 44–54
 - **Issue:** Three event handlers — `handleApplyOpportunity`, `handleDismissOpportunity`, and `handleAcknowledgeRisk` — contain only `console.log(...)` calls with no actual API call or state update. They are passed as callbacks to child components that call them when merchants click "Apply" or "Dismiss".
 - **Impact:** Merchant pricing opportunity and risk acknowledgement actions silently do nothing. Clicking "Apply" or "Dismiss" has no effect beyond a console log, making the entire AI analysis workflow non-functional.
+- **Status: FALSE POSITIVE 2026-03-22** — All three handlers are already implemented: `handleApplyOpportunity` navigates to the product page via `router.push()`, `handleDismissOpportunity` filters the opportunity from local state, `handleAcknowledgeRisk` filters the risk from local state. All show toast feedback.
 
 ---
 

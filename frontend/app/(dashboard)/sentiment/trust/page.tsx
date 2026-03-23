@@ -196,17 +196,20 @@ function AuthorScoringTab() {
 
   const scoreAuthor = useScoreAuthor();
 
-  const handleScore = () => {
+  const handleScore = async () => {
     if (!authorId || !username) return;
-    
-    scoreAuthor.mutate({
-      author_id: authorId,
-      username,
-      source,
-      follower_count: followerCount ? parseInt(followerCount) : undefined,
-    }, {
-      onSuccess: (data) => setResult(data),
-    });
+
+    try {
+      const data = await scoreAuthor.mutateAsync({
+        author_id: authorId,
+        username,
+        source,
+        follower_count: followerCount ? parseInt(followerCount) : undefined,
+      });
+      setResult(data);
+    } catch {
+      // Error state handled by React Query mutation
+    }
   };
 
   return (
@@ -309,16 +312,19 @@ function ContentAnalysisTab() {
 
   const analyzeContent = useAnalyzeContent();
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!text) return;
-    
-    analyzeContent.mutate({
-      content_id: contentId || `content_${Date.now()}`,
-      text,
-      author_username: authorUsername || undefined,
-    }, {
-      onSuccess: (data) => setResult(data),
-    });
+
+    try {
+      const data = await analyzeContent.mutateAsync({
+        content_id: contentId || `content_${Date.now()}`,
+        text,
+        author_username: authorUsername || undefined,
+      });
+      setResult(data);
+    } catch {
+      // Error state handled by React Query mutation
+    }
   };
 
   return (
@@ -408,15 +414,18 @@ function QuickSpamCheckTab() {
 
   const checkSpam = useQuickSpamCheck();
 
-  const handleCheck = () => {
+  const handleCheck = async () => {
     if (!text) return;
-    
-    checkSpam.mutate({
-      text,
-      username: username || undefined,
-    }, {
-      onSuccess: (data) => setResult(data),
-    });
+
+    try {
+      const data = await checkSpam.mutateAsync({
+        text,
+        username: username || undefined,
+      });
+      setResult(data);
+    } catch {
+      // Error state handled by React Query mutation
+    }
   };
 
   return (

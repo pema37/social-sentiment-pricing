@@ -85,37 +85,31 @@ async def get_alert_stats(
     unread_count = unread_result.scalar() or 0
 
     severity_counts: dict[str, int] = {}
-    for sev in AlertSeverity:
-        try:
-            sev_value = sev.value if hasattr(sev, "value") else str(sev)
-            sev_result = await session.execute(
-                select(func.count(Alert.id)).where(
-                    Alert.user_id == current_user.id,
-                    Alert.status == AlertStatus.PENDING,
-                    Alert.severity == sev,
-                )
-            )
-            count = sev_result.scalar() or 0
-            severity_counts[sev_value] = count
-        except Exception:
-            continue
+    sev_result = await session.execute(
+        select(Alert.severity, func.count(Alert.id))
+        .where(
+            Alert.user_id == current_user.id,
+            Alert.status == AlertStatus.PENDING,
+        )
+        .group_by(Alert.severity)
+    )
+    for sev, count in sev_result.all():
+        sev_value = sev.value if hasattr(sev, "value") else str(sev)
+        severity_counts[sev_value] = count
 
     type_counts: dict[str, int] = {}
-    for at in AlertType:
-        try:
-            at_value = at.value if hasattr(at, "value") else str(at)
-            type_result = await session.execute(
-                select(func.count(Alert.id)).where(
-                    Alert.user_id == current_user.id,
-                    Alert.status == AlertStatus.PENDING,
-                    Alert.alert_type == at,
-                )
-            )
-            count = type_result.scalar() or 0
-            if count > 0:
-                type_counts[at_value] = count
-        except Exception:
-            continue
+    type_result = await session.execute(
+        select(Alert.alert_type, func.count(Alert.id))
+        .where(
+            Alert.user_id == current_user.id,
+            Alert.status == AlertStatus.PENDING,
+        )
+        .group_by(Alert.alert_type)
+    )
+    for at, count in type_result.all():
+        at_value = at.value if hasattr(at, "value") else str(at)
+        if count > 0:
+            type_counts[at_value] = count
 
     cutoff = datetime.now(UTC) - timedelta(hours=24)
     recent_result = await session.execute(
