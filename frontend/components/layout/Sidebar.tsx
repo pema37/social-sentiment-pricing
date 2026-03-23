@@ -32,6 +32,7 @@ import {
   CreditCard,
   SearchX,
   ShieldAlert,
+  Rocket,
 } from 'lucide-react';
 
 // ─── Nav item type ───────────────────────────────────────────────────
@@ -54,7 +55,7 @@ const navItems: NavItem[] = [
   { label: 'Pricing Audit', href: '/analytics/audit', icon: SearchX },
   { label: 'Products', href: '/products', icon: Package },
   { label: 'Integrations', href: '/integrations', icon: Plug },
-  { label: 'Competitors', href: '/competitors', icon: Users },
+  { label: 'Launch Detector', href: '/competitors/launches', icon: Rocket },
   { label: 'Sentiment', href: '/sentiment', icon: MessageSquare },
   { label: 'Trust Scoring', href: '/sentiment/trust', icon: ShieldCheck },
   { label: 'Alerts', href: '/alerts', icon: Bell },
