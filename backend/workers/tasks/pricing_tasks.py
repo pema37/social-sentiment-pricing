@@ -279,16 +279,21 @@ async def _check_competitor_prices():
 
         logger.info(f"Checking {len(competitor_products)} competitor products")
 
+        # Batch load all related products in one query
+        product_ids = {cp.product_id for cp in competitor_products if cp.product_id}
+        if product_ids:
+            products_result = await db.execute(select(Product).where(Product.id.in_(product_ids)))
+            products_map = {p.id: p for p in products_result.scalars().all()}
+        else:
+            products_map = {}
+
         significant_changes = 0
 
         for cp in competitor_products:
             if not cp.current_price or not cp.product_id:
                 continue
 
-            # Get our product
-            product_stmt = select(Product).where(Product.id == cp.product_id)
-            result = await db.execute(product_stmt)
-            our_product = result.scalars().first()
+            our_product = products_map.get(cp.product_id)
 
             if not our_product or not our_product.current_price:
                 continue

@@ -2755,6 +2755,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/analytics/analytics_service.py` lines 130–175
 - **Issue:** For each product, the loop executes: (1) a query for latest sentiment, (2) a query for 24h mention count, (3) a query for pending recommendation count — 3 round-trips per product. For a user with 50 products (Starter plan limit) this generates 150 DB queries per dashboard load.
 - **Impact:** Dashboard analytics endpoint is 30–150× slower than necessary. Under concurrent users, connection pool exhaustion from N+1 queries causes request failures. Each query adds ~1–5 ms latency; 150 queries = 150–750 ms added overhead per request.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses 3 batch queries with `.in_(product_ids)`: (1) latest sentiment subquery+join, (2) mention count grouped by product, (3) pending recommendation count grouped by product. No per-product loop queries exist.
 
 ---
 
@@ -2762,6 +2763,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/services/ingestion/reddit_service.py` lines 48–75 (`_collect_real_data`) and line 115 (`health_check`)
 - **Issue:** PRAW (`praw.Reddit`) is a synchronous library. `_collect_real_data()` calls `self.reddit.subreddit("all").search(keyword, limit=limit, sort="new")` synchronously inside `async def`, and `health_check()` calls `list(self.reddit.subreddit("python").hot(limit=1))` synchronously inside `async def`. No `asyncio.to_thread()` wrapper.
 - **Impact:** Each Reddit API call (typically 300–1000 ms) blocks the entire asyncio event loop. Sentiment ingestion tasks called from async contexts freeze all concurrent API requests for the duration. Under high ingestion frequency, this causes cascading timeouts across unrelated endpoints.
+- **Status: FIXED 2026-03-22** — Extracted synchronous PRAW search into `_search_sync()` method, wrapped with `asyncio.to_thread()` in `_collect_real_data()`. `health_check()` also wrapped with `asyncio.to_thread()`.
 
 ---
 
@@ -2777,6 +2779,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/workers/tasks/pricing_tasks.py` lines 284–303
 - **Issue:** `for cp in competitor_products:` loop executes `select(Product).where(Product.id == cp.product_id)` once per competitor product. For 1000 competitor records, this is 1000 separate DB round-trips.
 - **Impact:** `check_competitor_prices` Celery task becomes slow and connection-pool-exhausting at scale. With 1000 competitor products × ~2 ms per query = ~2 seconds of sequential DB I/O. Should use a single join query to load all products in one round-trip.
+- **Status: FIXED 2026-03-22** — Replaced per-iteration query with a single batch `select(Product).where(Product.id.in_(product_ids))` before the loop, storing results in a `products_map` dict for O(1) lookups.
 
 ---
 
@@ -2824,6 +2827,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/competitors/analysis.py` lines 133–141
 - **Issue:** For each `CompetitorPriceHistory` record returned by the initial query, the handler executes 3 separate SELECT statements: (1) `CompetitorProduct`, (2) `Competitor`, (3) `Product`. With 50 alert records, this is 151 DB queries per request.
 - **Impact:** `/competitors/alerts` degrades severely as price history grows. Should use a single JOIN query to load all related data.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses a single 4-way JOIN query: `select(CompetitorPriceHistory, CompetitorProduct, Competitor, Product).join(...).join(...).join(...)`. All related data is loaded in one query and destructured in the `for h, cp, competitor, product in rows` loop.
 
 ---
 
@@ -2831,6 +2835,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/alerts/crisis_detection.py` lines 150–168
 - **Issue:** For every active product, the endpoint runs 2 separate queries: (1) recent period sentiment, (2) previous period sentiment. For a user with 500 products (Enterprise), this is 1001 DB queries per crisis scan.
 - **Impact:** Crisis detection endpoint becomes very slow at scale. Should use a single query with date range partitioned in SQL.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already uses 2 batch queries with `.where(Sentiment.product_id.in_(product_ids))`: one for recent period and one for previous period, with results stored in `recent_by_product` and `previous_by_product` dicts.
 
 ---
 

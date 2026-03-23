@@ -1,6 +1,7 @@
 # backend/services/ingestion/reddit_service.py
 
 
+import asyncio
 from datetime import UTC, datetime
 
 from core.config import settings
@@ -45,11 +46,16 @@ class RedditCollector(BaseCollector):
             return self._generate_mock_data(keywords, limit)
         return await self._collect_real_data(keywords, limit)
 
+    def _search_sync(self, keyword: str, limit: int):
+        """Run synchronous PRAW search in a thread-safe way."""
+        return list(self.reddit.subreddit("all").search(keyword, limit=limit, sort="new"))
+
     async def _collect_real_data(self, keywords: list[str], limit: int) -> list[CollectedMention]:
         mentions = []
         for keyword in keywords:
             try:
-                for submission in self.reddit.subreddit("all").search(keyword, limit=limit, sort="new"):
+                submissions = await asyncio.to_thread(self._search_sync, keyword, limit)
+                for submission in submissions:
                     mention = CollectedMention(
                         source=SocialSource.REDDIT,
                         source_id=submission.id,
@@ -112,7 +118,7 @@ class RedditCollector(BaseCollector):
         if self.mock_mode or self.reddit is None:
             return True
         try:
-            list(self.reddit.subreddit("test").hot(limit=1))
+            await asyncio.to_thread(lambda: list(self.reddit.subreddit("test").hot(limit=1)))
             return True
         except Exception:
             return False
