@@ -2658,6 +2658,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-237 — `signal_processor.py` `_get_viral_signals` runs identical DB query 5 times — wrong viral sentiment
+- **Status: FALSE POSITIVE** — The code at lines 175–190 runs a single query to get the latest sentiment, not a loop of 5 identical queries. No `for _post in top_posts[:5]:` loop exists.
 - **File:** `backend/services/pricing/signal_processor.py` lines 175–190
 - **Issue:** `for _post in top_posts[:5]:` loop body executes `select(Sentiment).where(Sentiment.product_id == product_id).order_by(Sentiment.analyzed_at.desc()).limit(1)` — the exact same query — 5 times. The loop variable `_post` (prefixed `_` to indicate intentionally unused) is never referenced inside the loop. The query always returns the same single latest sentiment record for the product. Result: `sentiments` list contains up to 5 identical values; `viral_sentiment` is just that single value repeated. Correct intent was to query sentiment for each viral post's specific content.
 - **Impact:** (1) 5 identical DB round-trips per invocation — pure waste. (2) `viral_sentiment` calculation is incorrect — always equals the single most-recent product sentiment rather than the average sentiment across viral posts. This corrupts the urgency scoring signal for viral content events.
@@ -2696,6 +2697,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-242 — `crisis_detection.py` uses `timezone` without importing it — NameError at runtime
+- **Status: FALSE POSITIVE** — Line 4 already imports `timezone`: `from datetime import datetime, timedelta, timezone`.
 - **File:** `backend/api/v1/routes/crisis_detection.py` line 20
 - **Issue:** `generate_mock_data()` uses `timezone.utc` but the import is `from datetime import datetime, timedelta` — `timezone` is never imported. Calling `/crisis/analyze/stream` with mock data (no `simulate_crisis` flag) or with `simulate_crisis=True` triggers `generate_mock_data()`, which immediately raises `NameError: name 'timezone' is not defined`.
 - **Impact:** The entire `/crisis/analyze/stream` endpoint fails at runtime. The SSE stream sends an error event and closes immediately.
@@ -2703,6 +2705,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-243 — `autonomous_pipeline.py` calls Gemini directly, violating project rule and using wrong model
+- **Status: FALSE POSITIVE** — Lines 183-189 already use `ai_generator._generate()` from `services/ai_generator.py` and report model as `"gemini-2.0-flash"`. No direct `genai.Client()` call exists.
 - **File:** `backend/api/v1/routes/autonomous_pipeline.py` lines 178-188
 - **Issue:** `GET /autonomous/health` creates a `genai.Client()` and calls `generate_content()` directly — bypassing `services/ai_generator.py` which is required for ALL AI calls per project rule. Model used is `gemini-3-flash-preview` which does not exist (correct model: `gemini-2.0-flash`). The same violation exists in the `AutonomousOrchestrator` service itself (BUG-234 already documented).
 - **Impact:** Health check will always fail with `google.api_core.exceptions.NotFound` (model not found), reporting `status: "degraded"`. Direct AI calls bypass central logging, error handling, and rate limiting in `ai_generator.py`.
@@ -2733,6 +2736,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-247 — `openai_sentiment.py` calls OpenAI directly, bypassing `services/ai_generator.py`
+- **Status: FIXED 2026-03-22** — Removed direct `AsyncOpenAI` import/instantiation. Now routes all AI calls through `ai_generator._generate()` via lazy import. Replaced `print()` with `logger.error()`.
 - **File:** `backend/services/openai_sentiment.py` lines 7, 19–21, 70–75
 - **Issue:** Imports `from openai import AsyncOpenAI` and instantiates `self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)` directly. Calls `self.client.chat.completions.create(model="gpt-4o-mini", ...)` bypassing the required central AI gateway in `services/ai_generator.py`. Also uses `print()` instead of `logger` for error output at lines 101 and 105.
 - **Impact:** AI calls bypass centralized logging, error handling, rate limiting, and model governance. `print()` errors are invisible in production log aggregators (Sentry, structured JSON logs). Direct OpenAI usage violates project rule that all AI calls route through `services/ai_generator.py`.
@@ -2740,6 +2744,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 ---
 
 ## [MEDIUM] BUG-248 — `email_service.py` and `audit_email_service.py` make synchronous SendGrid HTTP calls inside `async def` — blocks event loop
+- **Status: FALSE POSITIVE** — Both files already use `await asyncio.to_thread(client.send, message)` to wrap the synchronous SendGrid call.
 - **File:** `backend/services/notification/email_service.py` line 122; `backend/services/notification/audit_email_service.py` line 141
 - **Issue:** `send_alert_email()` and `send_audit_pdf()` are `async def` functions but call `client.send(message)` (synchronous SendGrid SDK HTTP call) without `await` or `asyncio.to_thread()`. This is a blocking network call inside the event loop.
 - **Impact:** Each email send blocks the asyncio event loop for the duration of the HTTP request (typically 200–800 ms). Under any alert volume, this stalls all other concurrent requests. Notification delivery latency degrades entire API response times.

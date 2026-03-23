@@ -4,24 +4,26 @@ import asyncio
 import json
 from decimal import Decimal
 
-from openai import AsyncOpenAI
+from core.logging import get_logger
 
-from core.config import settings
+logger = get_logger(__name__)
 
 
 class OpenAISentimentAnalyzer:
     """
-    Sentiment analysis using OpenAI GPT-4o-mini.
+    Sentiment analysis using AI (routed through ai_generator).
     More accurate than VADER for nuanced text, sarcasm, and context.
     """
 
-    def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
-        self.model = "gpt-4o-mini"
+    def _get_generator(self):
+        """Lazy import to avoid circular dependency at module load."""
+        from services.ai_generator import ai_generator
+
+        return ai_generator
 
     def is_available(self) -> bool:
-        """Check if OpenAI is configured."""
-        return self.client is not None
+        """Check if AI service is configured."""
+        return self._get_generator().is_available()
 
     async def analyze(self, text: str, context: str | None = None) -> dict:
         """
@@ -40,8 +42,9 @@ class OpenAISentimentAnalyzer:
                 "is_sarcastic": bool
             }
         """
-        if not self.client:
-            raise ValueError("OpenAI API key not configured")
+        generator = self._get_generator()
+        if not generator.is_available():
+            raise ValueError("No AI API key configured")
 
         system_prompt = """You are a sentiment analysis system for e-commerce products.
 Analyze social media posts about products and brands.
@@ -67,14 +70,14 @@ The three scores (positive, negative, neutral) should roughly sum to 1.0."""
             user_message += f"\n\nContext: {context}"
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
+            response_text, provider = await generator._generate(
+                system_prompt=system_prompt,
+                user_message=user_message,
                 temperature=0.1,
                 max_tokens=300,
             )
 
-            result_text = response.choices[0].message.content.strip()
+            result_text = response_text.strip()
 
             # Parse JSON response
             # Handle potential markdown code blocks
@@ -98,11 +101,11 @@ The three scores (positive, negative, neutral) should roughly sum to 1.0."""
             }
 
         except json.JSONDecodeError as e:
-            print(f"Failed to parse OpenAI response: {e}")
+            logger.error(f"Failed to parse AI response: {e}")
             # Return neutral fallback
             return self._fallback_response()
         except Exception as e:
-            print(f"OpenAI API error: {e}")
+            logger.error(f"AI API error: {e}")
             return self._fallback_response()
 
     async def analyze_batch(self, texts: list[str], max_concurrent: int = 10) -> list[dict]:
