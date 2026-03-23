@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import Image from "next/image";
 import { Rocket } from "lucide-react";
+import { useCompetitors } from "@/lib/hooks/use-competitors";
+import { useProducts } from "@/lib/hooks/use-products";
 import {
   LAUNCH_AGENTS,
   THOUGHT_LABELS,
@@ -21,8 +23,8 @@ interface AgentOutput {
 }
 
 export default function LaunchDetectorPage() {
-  const [competitor, setCompetitor] = useState("Apple");
-  const [yourProduct, setYourProduct] = useState("Galaxy S24");
+  const [competitor, setCompetitor] = useState("");
+  const [yourProduct, setYourProduct] = useState("");
   const [simulateLaunch, setSimulateLaunch] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -32,6 +34,21 @@ export default function LaunchDetectorPage() {
   const [threatLevel, setThreatLevel] = useState<ThreatLevel | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Fetch merchant's saved competitors
+  const { data: competitorsData, isLoading: competitorsLoading } = useCompetitors({
+    page: 1,
+    page_size: 100,
+    is_active: true,
+  });
+  const competitors = competitorsData?.items ?? [];
+
+  // Fetch merchant's own products
+  const { data: productsData, isLoading: productsLoading } = useProducts({
+    page: 1,
+    page_size: 100,
+  });
+  const products = productsData?.items ?? [];
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -50,6 +67,7 @@ export default function LaunchDetectorPage() {
   };
 
   const runAnalysis = async () => {
+    if (!competitor.trim() || !yourProduct.trim()) return;
     setIsRunning(true);
     setOutputs([]);
     setThreatLevel(null);
@@ -147,6 +165,8 @@ export default function LaunchDetectorPage() {
     ? THREAT_STYLES[threatLevel] || THREAT_STYLES.medium
     : null;
 
+  const canRun = competitor.trim() && yourProduct.trim() && !isRunning;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -165,25 +185,63 @@ export default function LaunchDetectorPage() {
       {/* Controls */}
       <div className="rounded-lg border bg-card p-6">
         <div className="grid grid-cols-2 gap-4 mb-4">
+
+          {/* Competitor dropdown */}
           <div>
-            <label className="block text-sm font-medium mb-2">Competitor Name</label>
-            <input
-              type="text"
-              value={competitor}
-              onChange={(e) => setCompetitor(e.target.value)}
-              className="w-full rounded-lg border bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              disabled={isRunning}
-            />
+            <label className="block text-sm font-medium mb-2">Competitor</label>
+            {competitorsLoading ? (
+              <div className="w-full rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+                Loading competitors...
+              </div>
+            ) : competitors.length === 0 ? (
+              <div className="w-full rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+                No competitors saved — add some first
+              </div>
+            ) : (
+              <select
+                value={competitor}
+                onChange={(e) => setCompetitor(e.target.value)}
+                disabled={isRunning}
+                className="w-full rounded-lg border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="">— Select a competitor —</option>
+                {competitors.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                    {c.website ? ` · ${c.website}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
+
+          {/* Your product dropdown */}
           <div>
             <label className="block text-sm font-medium mb-2">Your Product</label>
-            <input
-              type="text"
-              value={yourProduct}
-              onChange={(e) => setYourProduct(e.target.value)}
-              className="w-full rounded-lg border bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              disabled={isRunning}
-            />
+            {productsLoading ? (
+              <div className="w-full rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+                Loading products...
+              </div>
+            ) : products.length === 0 ? (
+              <div className="w-full rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+                No products found — sync your store first
+              </div>
+            ) : (
+              <select
+                value={yourProduct}
+                onChange={(e) => setYourProduct(e.target.value)}
+                disabled={isRunning}
+                className="w-full rounded-lg border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="">— Select your product —</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                    {p.sku ? ` (${p.sku})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -239,7 +297,8 @@ export default function LaunchDetectorPage() {
           <div className="flex-1" />
           <button
             onClick={isRunning ? stopAnalysis : runAnalysis}
-            className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${
+            disabled={!isRunning && !canRun}
+            className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isRunning
                 ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 : "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -294,7 +353,7 @@ export default function LaunchDetectorPage() {
         <h2 className="text-base font-semibold mb-4">Analysis Stream</h2>
         {outputs.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Run analysis to detect competitor launches...
+            Select a competitor and product, then run analysis to detect launches...
           </p>
         ) : (
           <div className="space-y-2 font-mono text-sm max-h-96 overflow-y-auto">
@@ -325,6 +384,5 @@ export default function LaunchDetectorPage() {
     </div>
   );
 }
-
 
 
