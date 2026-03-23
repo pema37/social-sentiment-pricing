@@ -390,7 +390,9 @@ export function getTrustScoreBgColor(score: number): string {
  * Format trust score as percentage
  */
 export function formatTrustScore(score: number): string {
-  return `${Math.round(score * 100)}%`;
+  if (!Number.isFinite(score)) return '0%';
+  const clamped = Math.max(0, Math.min(1, score));
+  return `${Math.round(clamped * 100)}%`;
 }
 
 

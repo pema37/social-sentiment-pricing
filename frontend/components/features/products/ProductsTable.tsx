@@ -215,8 +215,9 @@ function MobileSort({ sortConfig, onSort }: MobileSortProps) {
       <select
         value={sortConfig?.field || ''}
         onChange={(e) => {
-          if (e.target.value) {
-            onSort(e.target.value as SortField);
+          const value = e.target.value;
+          if (value && sortableColumns.some(c => c.sortField === value)) {
+            onSort(value as SortField);
           }
         }}
         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"

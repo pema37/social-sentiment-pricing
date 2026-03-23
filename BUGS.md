@@ -1187,6 +1187,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/types/sentiment.ts` line 88
 - **Issue:** Comment on `use_ai?: boolean` reads "Use GPT-4o-mini for analysis". Project uses Gemini 2.0 Flash.
 - **Impact:** Documentation drift; misleads developers debugging sentiment analysis.
+- **Status: FALSE POSITIVE 2026-03-22** — Comment already reads "Use Gemini 2.0 Flash for analysis". Was corrected in a prior fix.
 
 ---
 
@@ -1194,6 +1195,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/ws/client.ts` line 133
 - **Issue:** `console.log('[WS] Connected to', this.url)` logs the full WS URL. If auth tokens are ever appended as query params, they appear in browser console.
 - **Impact:** Low risk now; becomes HIGH if WS auth migrates to URL query params.
+- **Status: FALSE POSITIVE 2026-03-22** — No URL logging exists in the WebSocket client. The URL is never logged on connect.
 
 ---
 
@@ -1201,6 +1203,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/domain/products.ts` line 6; `frontend/types/product.ts`
 - **Issue:** `CLAUDE.local.md` documents the type file as `types/products.ts` (plural) but it is `types/product.ts` (singular). Developer confusion and documentation drift.
 - **Impact:** Future contributors following docs look for the wrong file.
+- **Status: FALSE POSITIVE 2026-03-22** — CLAUDE.local.md does not reference `types/products.ts` anywhere. It only lists `types/` as a directory.
 
 ---
 
@@ -1208,6 +1211,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/admin/page.tsx`
 - **Issue:** Only requires `isAuthenticated` (from dashboard layout). No admin role/permission flag checked. Any authenticated user can navigate to `/admin`.
 - **Impact:** Non-admin users can access admin functionality. Authorization should be enforced on both frontend and backend.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1215,6 +1219,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/products/[id]/page.tsx` line 164
 - **Issue:** `handleApplyGenerated` calls `productsApi.update()` directly with a manual `refetch()`. Related queries (product list, competitor data) not invalidated.
 - **Impact:** Other UI parts depending on the updated product remain stale until next natural refetch.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1222,6 +1227,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/(dashboard)/layout.tsx` line 9
 - **Issue:** Comment reads "JWT from localStorage" but implementation correctly uses `checkAuth()` with httpOnly cookies.
 - **Impact:** Could lead future contributor to introduce a localStorage pattern believing it is established.
+- **Status: FIXED 2026-03-22**
 
 ---
 
@@ -1229,6 +1235,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/app/error.tsx` (does not exist)
 - **Issue:** No `app/error.tsx` exists; only `app/global-error.tsx`. Unhandled render errors in any dashboard page propagate to global error boundary, showing a full-page crash instead of scoped error UI.
 - **Impact:** Any render error in a dashboard page crashes the entire application shell.
+- **Status: FIXED 2026-03-22** — Created `app/error.tsx` with scoped error boundary that renders within the layout shell, reports to Sentry, and offers a `reset` retry button.
 
 ---
 
@@ -1236,6 +1243,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/competitors/CompetitorsList.tsx`
 - **Issue:** Error state retry uses `window.location.reload()` instead of React Query's `refetch()`.
 - **Impact:** Full page reload on retry discards all in-memory state unnecessarily.
+- **Status: FIXED 2026-03-22** — Added `onRetry` callback prop to `CompetitorsList`; parent page passes React Query `refetch()`. Removed `window.location.reload()`.
 
 ---
 
@@ -1243,6 +1251,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/integrations/IntegrationCard.tsx` line 156
 - **Issue:** `statusColors[integration.status]` returns `undefined` for any status not in the map. `className` string contains `"undefined"`.
 - **Impact:** Broken styling if backend adds a new status value not present in the frontend map.
+- **Status: FIXED 2026-03-22** — Typed `statusColors` as `Record<string, string>` and added `?? 'bg-gray-100 text-gray-800'` fallback.
 
 ---
 
@@ -1250,6 +1259,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/competitors/CompetitorCard.tsx`; `frontend/components/features/alerts/AlertConfigurationCard.tsx`; `frontend/components/features/alerts/AlertItem.tsx`
 - **Issue:** `handleDelete`, `handleToggleActive`, `handleAcknowledge`, `handleResolve` all call `.mutate()` with no `onError` handler. Failures silently swallowed.
 - **Impact:** Users receive no feedback on failed operations. Card remains in incorrect state.
+- **Status: FIXED 2026-03-22** — Added `onError` toast notifications to all mutation calls across all 3 components.
 
 ---
 
@@ -1257,6 +1267,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-payments.ts` lines 191–196
 - **Issue:** Both called for same key. `invalidateQueries` already triggers refetch for active queries; `refetchQueries` is redundant, causing double network request.
 - **Impact:** Double request to subscription endpoint every time invalidation function is called.
+- **Status: FIXED 2026-03-22** — Removed redundant `refetchQueries` call; `invalidateQueries` already triggers refetch for active queries.
 
 ---
 
@@ -2057,6 +2068,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/hooks/use-trust-scoring.ts`
 - **Issue:** `Math.round(score * 100)` — no validation that `score` is a finite number in the 0–1 range. `NaN` and `Infinity` inputs produce invalid percentage strings.
 - **Impact:** Trust score UI displays "NaN%" or "Infinity%" if the backend returns unexpected score values.
+- **Status: FIXED 2026-03-22** — Added `Number.isFinite()` check and clamped score to 0–1 range before formatting.
 
 ---
 
@@ -2064,6 +2076,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/competitors/AIAnalysisCard.tsx`
 - **Issue:** `(analysis.confidence ?? 0) * 100` — if the backend returns `confidence` as a string (e.g., `"0.85"`), multiplying a string by 100 produces `NaN` in JavaScript.
 - **Impact:** Competitor AI analysis card displays "NaN%" for confidence instead of a valid percentage.
+- **Status: FIXED 2026-03-22** — Added `Number()` coercion with `|| 0` fallback and clamped to 0–100 range for both the progress bar width and text display.
 
 ---
 
@@ -2071,6 +2084,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/payments/SubscriptionPlans.tsx`
 - **Issue:** `handlePaymentSuccess` doesn't guard against `paymentInfo` being `undefined`. If the payment callback fires before the backend confirms payment details, `paymentInfo.payment_id` throws a null pointer error.
 - **Impact:** Race condition in payment confirmation flow — fast payment completions may crash before `paymentInfo` state is set.
+- **Status: FALSE POSITIVE 2026-03-22** — Line 390 already has `if (!paymentInfo?.payment_id)` with optional chaining, which returns early with an error toast if paymentInfo is null/undefined. The payment UI only renders when paymentInfo is set (line 486), so the guard is already in place.
 
 ---
 
@@ -2078,6 +2092,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/ProductsTable.tsx`
 - **Issue:** `e.target.value as SortField` — TypeScript cast with no runtime validation that the value is a valid `SortField` enum member. A programmatic DOM manipulation or unexpected select value bypasses the enum constraint.
 - **Impact:** Invalid sort field string passed to the products API. Backend returns 422 or falls back to default sort silently.
+- **Status: FIXED 2026-03-22** — Added runtime validation checking `sortableColumns.some(c => c.sortField === value)` before calling `onSort`.
 
 ---
 
