@@ -37,21 +37,21 @@ export type ConfidenceLevel = 'low' | 'medium' | 'high' | 'very_high';
 export interface TrendAnalysisRequest {
   days?: number;
   product_ids?: string[];
-  use_model?: 'openai' | 'gemini';
+  use_model?: 'gemini';
 }
 
 export interface ProductOpportunityRequest {
   product_id: string;
-  use_model?: 'openai' | 'gemini';
+  use_model?: 'gemini';
 }
 
 export interface RiskDetectionRequest {
-  use_model?: 'openai' | 'gemini';
+  use_model?: 'gemini';
 }
 
 export interface InsightGenerationRequest {
   days?: number;
-  use_model?: 'openai' | 'gemini';
+  use_model?: 'gemini';
 }
 
 // ============================================

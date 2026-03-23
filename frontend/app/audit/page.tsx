@@ -317,7 +317,6 @@ export default function FreeAuditPage() {
     setPdfLoading(true);
 
     trackEvent('email_submitted', {
-      email: email.trim(),
       input_mode: mode,
       store_url: mode === 'url' ? storeUrl.trim() : undefined,
     });

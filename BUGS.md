@@ -3364,6 +3364,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/app/audit/page.tsx` line 335
 - **Issue:** `trackEvent('email_submitted', { email: email.trim(), input_mode: mode, ... })` — the raw user email is included in the analytics event payload. Analytics events are typically sent to third-party services (Sentry, Mixpanel, etc.) and may be logged server-side.
 - **Impact:** Violates GDPR and the project security rule "strip PII before Sentry events". User email addresses are PII and must not be transmitted to analytics pipelines. Replace with a hashed identifier (e.g., `email_hash: sha256(email)`) or omit the field entirely.
+- **Status: FIXED 2026-03-22** — Removed raw `email` field from `trackEvent` payload. Event still tracks `input_mode` and `store_url` without PII.
 
 ---
 
@@ -3379,6 +3380,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/types/trend-analysis.ts`
 - **Issue:** Multiple request interfaces (`TrendAnalysisRequest`, `ProductOpportunityRequest`, `RiskDetectionRequest`, `InsightGenerationRequest`) include `use_model?: 'openai' | 'gemini'`. This explicitly permits requesting the OpenAI model.
 - **Impact:** Violates the Gemini-only mandate. Any caller passing `use_model: 'openai'` will route requests to OpenAI. Combined with BUG-295 (the API layer defaults to `'openai'`), this means OpenAI is both the default and a type-legal option — both should only be `'gemini'`.
+- **Status: FIXED 2026-03-22** — Changed all 4 request interfaces to `use_model?: 'gemini'`, removing the `'openai'` option.
 
 ---
 
@@ -3386,6 +3388,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/next.config.ts` `images.remotePatterns`
 - **Issue:** Both `{ protocol: 'https', hostname: '**' }` and `{ protocol: 'http', hostname: '**' }` are configured. This allows the Next.js image optimizer to proxy images from any host, including the `http://` wildcard which allows cleartext traffic.
 - **Impact:** The Next.js image allowlist security feature is completely disabled. Attackers who can influence image URLs (e.g. via stored product image URLs) can force the server to act as a proxy for arbitrary external content, including potentially malicious hosts. At minimum the `http` wildcard should be removed; ideally allowlist specific known hosts.
+- **Status: FALSE POSITIVE 2026-03-22** — Code uses specific domain wildcards (`*.myshopify.com`, `cdn.shopify.com`, `*.railway.app`), not `**` catch-all patterns. No `http` protocol entries present. These are appropriate Shopify/Railway domain allowlists.
 
 ---
 
@@ -3393,6 +3396,7 @@ New bugs found: BUG-304, BUG-305, BUG-306, BUG-307, BUG-308, BUG-309, BUG-310, B
 - **File:** `frontend/components/features/analytics/RecommendationStatsCard.tsx` lines 33–43
 - **Issue:** The stats array defines two entries: `{ label: 'Approved', value: data?.total_applied ?? 0 }` and `{ label: 'Applied', value: data?.total_applied ?? 0 }`. Both reference the same field. The `RecommendationStats` type has no `total_approved` field — the backend schema only has `total_applied`.
 - **Impact:** The dashboard "Approved" stat card always shows the same number as "Applied", which is misleading. One of these should likely be `total_generated` (total recommendations generated) or the labels should be corrected to remove the duplicate.
+- **Status: FIXED 2026-03-22** — Changed duplicate "Approved" stat to "Generated" using `data?.total_generated`, which is the correct distinct field from the `RecommendationStats` type.
 
 ---
 
@@ -3445,6 +3449,7 @@ New bugs found: BUG-312, BUG-313, BUG-314, BUG-315
 - **File:** `frontend/components/features/sentiment/analyze-modal.tsx` line 123
 - **Issue:** The AI toggle description label displayed to users reads: `"GPT-4o-mini for more accurate results"`. This is user-visible UI text, not a type comment.
 - **Impact:** Actively misleads users about which AI model powers the app. Violates the Gemini-only mandate and is inconsistent with the project's branding. Any Shopify App Store reviewer seeing this screen will see OpenAI branding.
+- **Status: FALSE POSITIVE 2026-03-22** — Code already reads "Gemini 2.0 Flash for more accurate results" at line 125. Previously fixed.
 
 ---
 

@@ -29,8 +29,8 @@ export function RecommendationStatsCard({ days = 30 }: RecommendationStatsCardPr
       bgColor: 'bg-amber-50',
     },
     {
-      label: 'Approved',
-      value: data?.total_applied ?? 0,
+      label: 'Generated',
+      value: data?.total_generated ?? 0,
       icon: CheckCircle,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
