@@ -12,72 +12,23 @@ Endpoints:
   GET  /api/v1/prospect/analytics/metrics   — Get funnel metrics (auth required)
 """
 
-import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, DateTime, String, Text, func, select
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import Field as SQLField
-from sqlmodel import SQLModel
 
 from core.deps import get_current_user
 from core.logging import get_logger
 from core.rate_limit import limiter
 from db.session import get_session
+from models.prospect_audit_event import ProspectAuditEvent
 from models.user import User
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/prospect/analytics", tags=["Prospect Analytics"])
-
-
-# ── Model ─────────────────────────────────────────────────────
-
-
-class ProspectAuditEvent(SQLModel, table=True):
-    """Tracks prospect audit funnel events."""
-
-    __tablename__ = "prospect_audit_events"
-
-    id: uuid.UUID = SQLField(
-        default_factory=uuid.uuid4,
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
-    )
-    event_type: str = SQLField(
-        sa_column=Column(String(50), nullable=False, index=True),
-    )
-    store_url: str | None = SQLField(
-        default=None,
-        sa_column=Column(String(500), nullable=True),
-    )
-    email: str | None = SQLField(
-        default=None,
-        sa_column=Column(String(255), nullable=True),
-    )
-    input_mode: str | None = SQLField(
-        default=None,
-        sa_column=Column(String(10), nullable=True),
-    )
-    products_found: int | None = SQLField(default=None)
-    estimated_impact: str | None = SQLField(
-        default=None,
-        sa_column=Column(String(50), nullable=True),
-    )
-    ip_hash: str | None = SQLField(
-        default=None,
-        sa_column=Column(String(64), nullable=True),
-    )
-    user_agent: str | None = SQLField(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-    )
-    created_at: datetime = SQLField(
-        default_factory=lambda: datetime.now(UTC),
-        sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
-    )
 
 
 # ── Schemas ───────────────────────────────────────────────────

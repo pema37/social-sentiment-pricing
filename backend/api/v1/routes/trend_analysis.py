@@ -311,32 +311,34 @@ async def get_quick_stats(
         else:
             sentiment_trend = TrendDirection.STABLE
 
-        # Get mention counts
+        # Get mention counts using COUNT(*) instead of loading all objects
+        from sqlalchemy import func as sa_func
+
         result = await db.execute(
-            select(SocialMention)
+            select(sa_func.count(SocialMention.id))
             .where(SocialMention.product_id.in_(product_ids))
             .where(SocialMention.created_at >= today_start)
         )
-        mentions_today = result.scalars().all()
+        mentions_today_count = result.scalar_one()
 
         result = await db.execute(
-            select(SocialMention)
+            select(sa_func.count(SocialMention.id))
             .where(SocialMention.product_id.in_(product_ids))
             .where(SocialMention.created_at >= week_ago)
         )
-        mentions_7d = result.scalars().all()
+        mentions_7d_count = result.scalar_one()
 
         result = await db.execute(
-            select(SocialMention)
+            select(sa_func.count(SocialMention.id))
             .where(SocialMention.product_id.in_(product_ids))
             .where(SocialMention.created_at >= two_weeks_ago)
             .where(SocialMention.created_at < week_ago)
         )
-        mentions_prev_7d = result.scalars().all()
+        mentions_prev_7d_count = result.scalar_one()
 
         # Calculate volume change
-        if mentions_prev_7d:
-            volume_change = ((len(mentions_7d) - len(mentions_prev_7d)) / len(mentions_prev_7d)) * 100
+        if mentions_prev_7d_count:
+            volume_change = ((mentions_7d_count - mentions_prev_7d_count) / mentions_prev_7d_count) * 100
         else:
             volume_change = 0
 
@@ -364,8 +366,8 @@ async def get_quick_stats(
             current_sentiment=round(current_sentiment, 2),
             sentiment_trend=sentiment_trend,
             sentiment_change_7d=round(sentiment_change, 2),
-            mentions_today=len(mentions_today),
-            mentions_7d=len(mentions_7d),
+            mentions_today=mentions_today_count,
+            mentions_7d=mentions_7d_count,
             volume_change_percent=round(volume_change, 1),
             active_opportunities=0,
             potential_revenue_impact="$0",

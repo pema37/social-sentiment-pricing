@@ -12,6 +12,7 @@ from models.price_recommendation import PriceRecommendation, RecommendationStatu
 from models.pricing_rule import PricingRule, RuleAction, RuleType
 from models.pricing_settings import PricingSettings
 from models.product import Product
+from models.prospect_audit_event import ProspectAuditEvent
 from models.recommendation_outcome import OutcomeLabel, RecommendationOutcome
 from models.retrospective_audit import RetrospectiveAudit
 from models.sentiment import Sentiment
@@ -41,6 +42,7 @@ __all__ = [
     "PricingRule",
     "PricingSettings",
     "Product",
+    "ProspectAuditEvent",
     "RecommendationOutcome",
     "RecommendationStatus",
     "RetrospectiveAudit",

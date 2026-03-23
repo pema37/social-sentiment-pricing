@@ -3013,6 +3013,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/ws/client.ts` line 133
 - **Issue:** `console.log('[WS] Connected to', this.url)` logs the full WebSocket URL including the Railway backend domain on every successful connection. Also lines 140–141 log disconnect details. Production console logs expose infrastructure details.
 - **Impact:** Backend hostname/URL is exposed in browser console in production. In a Shopify embedded context this can leak the Railway staging or production URL to any merchant with DevTools open.
+- **Status: FIXED 2026-03-22** — Removed console.log that exposed the WebSocket URL on connect and disconnect details on close.
 
 ---
 
@@ -3020,6 +3021,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/lib/api/trend-analysis.ts` lines 75–84
 - **Issue:** `trendAnalysisKeys` is defined locally inside `trend-analysis.ts` instead of inside `lib/api/query-keys.ts`. The central `query-keys.ts` file is the single source of truth for all React Query cache keys. Locally-defined keys prevent cache invalidation from other parts of the app.
 - **Impact:** If any mutation elsewhere invalidates query keys via the central registry, trend analysis data will not be refreshed. Stale trend data persists after related mutations.
+- **Status: FALSE POSITIVE 2026-03-22** — `trendAnalysisKeys` is already defined in `query-keys.ts` (lines 124-131) and all imports in `use-trend-analysis.ts` reference `@/lib/api/query-keys`. No local definition exists in `trend-analysis.ts`.
 
 ---
 
@@ -3027,6 +3029,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `frontend/components/features/products/ProductForm.tsx` lines 206–209, 217–219
 - **Issue:** Both `updateProduct.mutate(...)` and `createProduct.mutate(...)` pass `onSuccess` callbacks inline to `.mutate(...)`. Per-call callbacks are ephemeral in React Query v5 — if the component re-renders before the mutation completes, the callbacks are silently dropped. The pattern was documented as a systemic issue in BUG-114; this file was not in the original scope.
 - **Impact:** `toast.success('Product updated')` / `toast.success('Product created')` messages and `onSuccess?.()` callbacks may be silently dropped under fast network or rapid re-renders.
+- **Status: FALSE POSITIVE 2026-03-22** — Code uses `mutateAsync().then()` (promise-based), not per-call `{ onSuccess }`. Toasts and cache invalidation are handled in the `useMutation()` config in `use-products.ts`. The `.then(() => onSuccess?.())` on `mutateAsync` is a stable promise chain, not an ephemeral callback.
 
 ---
 
@@ -3091,6 +3094,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/trend_analysis.py` (the `get_quick_stats` endpoint)
 - **Issue:** For each of three date windows (today, last 7 days, prior 7 days) the handler calls `result.scalars().all()` to pull all matching `SocialMention` ORM objects into Python memory, then returns `len(mentions)`. For a merchant with thousands of daily mentions this loads tens of thousands of ORM objects per request. The trending-products sub-query also loads all products with no LIMIT clause.
 - **Impact:** Memory and CPU spike proportional to mention volume. For high-volume merchants this endpoint can OOM the process or cause extreme latency. Should use `SELECT COUNT(*)` queries instead of `scalars().all()`.
+- **Status: FIXED 2026-03-22** — Replaced all three `scalars().all()` + `len()` patterns with `SELECT COUNT(SocialMention.id)` using `func.count()` + `scalar_one()`.
 
 ---
 
@@ -3098,6 +3102,7 @@ Ordered by severity. Fix CRITICAL issues before next staging deploy.
 - **File:** `backend/api/v1/routes/prospect_analytics.py`
 - **Issue:** The `ProspectAuditEvent` SQLModel table class is defined at the top of a route file rather than in the `models/` directory. Alembic autogenerate scans `models/` for table definitions; a table defined in a route file will not be discovered unless that route file is explicitly imported in the Alembic `env.py` scan path.
 - **Impact:** The `prospect_audit_events` table may be absent from the database after `alembic upgrade head` if the route file is not in the migration scan. All prospect analytics writes silently fail with `ProgrammingError: relation "prospect_audit_events" does not exist`.
+- **Status: FIXED 2026-03-22** — Moved `ProspectAuditEvent` to `models/prospect_audit_event.py`, added to `models/__init__.py`, route file now imports from models.
 
 ---
 

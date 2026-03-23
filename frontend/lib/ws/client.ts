@@ -130,14 +130,12 @@ export class WebSocketClient {
     if (!this.ws) return;
 
     this.ws.onopen = () => {
-      console.log('[WS] Connected to', this.url);
       this.reconnectAttempts = 0;
       this.startHeartbeat();
       this.onConnectHandlers.forEach((handler) => handler());
     };
 
-    this.ws.onclose = (event) => {
-      console.log('[WS] Disconnected:', event.code, event.reason);
+    this.ws.onclose = () => {
       this.stopHeartbeat();
       this.onDisconnectHandlers.forEach((handler) => handler());
 
