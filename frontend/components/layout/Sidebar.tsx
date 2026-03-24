@@ -34,6 +34,7 @@ import {
   ShieldAlert,
   Rocket,
   Bot,
+  Brain,
 } from 'lucide-react';
 
 // ─── Nav item type ───────────────────────────────────────────────────
