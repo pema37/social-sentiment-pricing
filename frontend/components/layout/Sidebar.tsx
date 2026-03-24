@@ -63,6 +63,7 @@ const navItems: NavItem[] = [
   { label: 'Crisis Detector', href: '/alerts/crisis', icon: ShieldAlert },
   { label: 'AI Support', href: '/support', icon: Sparkles },
   { label: 'Market Trends', href: '/trends', icon: TrendingUp },
+  { label: 'Intelligence', href: '/intelligence', icon: Brain },
 ];
 
 const pricingItems: NavItem[] = [
