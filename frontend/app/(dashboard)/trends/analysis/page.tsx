@@ -29,17 +29,15 @@ export default function TrendAnalysisPage() {
   const router = useRouter();
   const [analysisResult, setAnalysisResult] = useState<TrendAnalysisResponse | null>(null);
 
-  // Hooks
   const { data: quickStats, isLoading: statsLoading, refetch: refetchStats } = useQuickStats();
   const runAnalysis = useRunTrendAnalysis();
   const detectRisks = useDetectRisks();
   const generateInsight = useGenerateInsight();
 
-  // Handlers
   const handleRunAnalysis = async (params: { days: number; useModel: 'openai' | 'gemini' }) => {
     const result = await runAnalysis.mutateAsync({
       days: params.days,
-      use_model: params.useModel,
+      use_model: params.useModel === 'openai' ? undefined : params.useModel,
     });
     setAnalysisResult(result);
   };
@@ -157,7 +155,6 @@ export default function TrendAnalysisPage() {
 
         {/* Right Column - Opportunities & Risks */}
         <div className="space-y-6">
-          {/* Opportunities */}
           <div>
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
               <span className="text-green-500">●</span>
@@ -187,7 +184,6 @@ export default function TrendAnalysisPage() {
             </div>
           </div>
 
-          {/* Risks */}
           <div>
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
               <span className="text-orange-500">●</span>
@@ -220,5 +216,6 @@ export default function TrendAnalysisPage() {
     </div>
   );
 }
+
 
 

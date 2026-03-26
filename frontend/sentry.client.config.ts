@@ -1,12 +1,8 @@
-// frontend/sentry.client.config.ts
 import * as Sentry from "@sentry/nextjs";
 
 function stripPii(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
-  // Strip email addresses
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  // Strip Shopify shop domains
   const shopDomainRegex = /[a-zA-Z0-9-]+\.myshopify\.com/g;
-  // Strip bearer tokens and partial tokens
   const tokenRegex = /Bearer\s+[A-Za-z0-9._~+/=-]+|shpat_[A-Za-z0-9]+|shpua_[A-Za-z0-9]+|eyJ[A-Za-z0-9._-]+/g;
 
   const redact = (str: string): string =>
@@ -15,14 +11,12 @@ function stripPii(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
       .replace(shopDomainRegex, "[REDACTED_SHOP]")
       .replace(tokenRegex, "[REDACTED_TOKEN]");
 
-  // Scrub exception messages
   if (event.exception?.values) {
     for (const ex of event.exception.values) {
       if (ex.value) ex.value = redact(ex.value);
     }
   }
 
-  // Scrub breadcrumb messages and data
   if (event.breadcrumbs) {
     for (const bc of event.breadcrumbs) {
       if (bc.message) bc.message = redact(bc.message);
@@ -36,18 +30,17 @@ function stripPii(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
     }
   }
 
-  // Scrub request data
   if (event.request) {
     if (event.request.url) event.request.url = redact(event.request.url);
-    if (event.request.query_string)
+    if (typeof event.request.query_string === "string") {
       event.request.query_string = redact(event.request.query_string);
+    }
     if (event.request.headers) {
       delete event.request.headers["Authorization"];
       delete event.request.headers["Cookie"];
     }
   }
 
-  // Strip user PII — keep only id
   if (event.user) {
     event.user = { id: event.user.id };
   }
@@ -69,3 +62,5 @@ Sentry.init({
     "AbortError",
   ],
 });
+
+

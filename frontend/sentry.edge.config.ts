@@ -1,4 +1,3 @@
-// frontend/sentry.edge.config.ts
 import * as Sentry from "@sentry/nextjs";
 
 function stripPii(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
@@ -33,8 +32,9 @@ function stripPii(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
 
   if (event.request) {
     if (event.request.url) event.request.url = redact(event.request.url);
-    if (event.request.query_string)
+    if (typeof event.request.query_string === "string") {
       event.request.query_string = redact(event.request.query_string);
+    }
     if (event.request.headers) {
       delete event.request.headers["Authorization"];
       delete event.request.headers["Cookie"];
@@ -55,3 +55,7 @@ Sentry.init({
   environment: process.env.NODE_ENV,
   beforeSend: stripPii,
 });
+
+
+
+

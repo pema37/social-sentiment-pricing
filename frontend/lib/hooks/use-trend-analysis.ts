@@ -1,8 +1,3 @@
-/**
- * Trend Analysis Hooks
- * React Query hooks for the AI trend analysis feature.
- */
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   runTrendAnalysis,
@@ -15,9 +10,6 @@ import { trendAnalysisKeys } from '@/lib/api/query-keys';
 import { useToast } from '@/lib/hooks/use-toast';
 import type { TrendAnalysisRequest } from '@/types/trend-analysis';
 
-/**
- * Hook to get quick stats for the trends dashboard.
- */
 export function useQuickStats() {
   return useQuery({
     queryKey: trendAnalysisKeys.quickStats(),
@@ -27,21 +19,15 @@ export function useQuickStats() {
   });
 }
 
-/**
- * Hook to run AI trend analysis.
- */
 export function useTrendAnalysis(params?: TrendAnalysisRequest) {
   return useQuery({
-    queryKey: trendAnalysisKeys.analysis(params),
+    queryKey: trendAnalysisKeys.analysis(params as unknown as Record<string, unknown> | undefined),
     queryFn: () => runTrendAnalysis(params),
     staleTime: 5 * 60_000,
     enabled: false,
   });
 }
 
-/**
- * Hook to run AI trend analysis as a mutation (on-demand).
- */
 export function useRunTrendAnalysis() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
@@ -49,7 +35,10 @@ export function useRunTrendAnalysis() {
   return useMutation({
     mutationFn: runTrendAnalysis,
     onSuccess: (data, variables) => {
-      queryClient.setQueryData(trendAnalysisKeys.analysis(variables), data);
+      queryClient.setQueryData(
+        trendAnalysisKeys.analysis(variables as unknown as Record<string, unknown>),
+        data
+      );
       success('AI trend analysis complete');
     },
     onError: (err) => {
@@ -59,9 +48,6 @@ export function useRunTrendAnalysis() {
   });
 }
 
-/**
- * Hook to analyze a specific product for opportunities.
- */
 export function useProductOpportunity(productId: string) {
   return useQuery({
     queryKey: trendAnalysisKeys.opportunity(productId),
@@ -71,9 +57,6 @@ export function useProductOpportunity(productId: string) {
   });
 }
 
-/**
- * Hook to analyze a product opportunity as a mutation.
- */
 export function useAnalyzeProductOpportunity() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
@@ -97,9 +80,6 @@ export function useAnalyzeProductOpportunity() {
   });
 }
 
-/**
- * Hook to detect risks.
- */
 export function useRiskDetection() {
   return useQuery({
     queryKey: trendAnalysisKeys.risks(),
@@ -109,9 +89,6 @@ export function useRiskDetection() {
   });
 }
 
-/**
- * Hook to detect risks as a mutation.
- */
 export function useDetectRisks() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
@@ -129,9 +106,6 @@ export function useDetectRisks() {
   });
 }
 
-/**
- * Hook to generate a market insight.
- */
 export function useGenerateInsight() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
@@ -154,6 +128,5 @@ export function useGenerateInsight() {
     },
   });
 }
-
 
 

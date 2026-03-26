@@ -64,11 +64,11 @@ export function GenerateDescriptionModal({
 
     try {
       const data = await productsApi.generateDescription(productId, { tone, length });
-      setResult(data);
+      setResult(data as GeneratedContent);
     } catch (err: unknown) {
-      const message = err instanceof Error 
-                ? err.message 
-                : 'Failed to generate description';
+      const message = err instanceof Error
+        ? err.message
+        : 'Failed to generate description';
       setError(message);
     } finally {
       setIsLoading(false);
@@ -85,20 +85,18 @@ export function GenerateDescriptionModal({
     }
   };
 
-  // Apply individual field
   const handleApplyField = (field: 'description' | 'seo_title' | 'meta_description' | 'keywords') => {
     if (!result) return;
-    
+
     if (field === 'keywords') {
       onApply({ keywords: result.suggested_keywords });
     } else {
       onApply({ [field]: result[field] });
     }
-    
+
     setAppliedFields(prev => new Set([...prev, field]));
   };
 
-  // Apply all fields
   const handleApplyAll = () => {
     if (!result) return;
     onApply({
@@ -203,7 +201,6 @@ export function GenerateDescriptionModal({
           {/* Results */}
           {result && (
             <div className="space-y-4 mb-6">
-              {/* Description */}
               <FieldResult
                 label="Description"
                 isApplied={appliedFields.has('description')}
@@ -217,7 +214,6 @@ export function GenerateDescriptionModal({
                 />
               </FieldResult>
 
-              {/* SEO Title */}
               <FieldResult
                 label="SEO Title"
                 isApplied={appliedFields.has('seo_title')}
@@ -230,7 +226,6 @@ export function GenerateDescriptionModal({
                 </div>
               </FieldResult>
 
-              {/* Meta Description */}
               <FieldResult
                 label="Meta Description"
                 isApplied={appliedFields.has('meta_description')}
@@ -243,7 +238,6 @@ export function GenerateDescriptionModal({
                 </div>
               </FieldResult>
 
-              {/* Keywords */}
               {result.suggested_keywords.length > 0 && (
                 <FieldResult
                   label="Suggested Keywords"
@@ -281,7 +275,7 @@ export function GenerateDescriptionModal({
               <Button variant="secondary" onClick={() => { setResult(null); setAppliedFields(new Set()); }}>
                 Regenerate
               </Button>
-              <Button 
+              <Button
                 onClick={handleApplyAll}
                 disabled={appliedFields.size === 4}
                 className="bg-purple-600 hover:bg-purple-700"
@@ -310,7 +304,6 @@ export function GenerateDescriptionModal({
   );
 }
 
-// Sub-component for each field result with individual Apply button
 interface FieldResultProps {
   label: string;
   isApplied: boolean;
@@ -362,4 +355,6 @@ function FieldResult({ label, isApplied, isCopied, onApply, onCopy, children }: 
     </div>
   );
 }
+
+
 

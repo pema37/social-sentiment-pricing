@@ -18,40 +18,23 @@ import {
   GenerateDescriptionModal,
 } from '@/components/features/products';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Loading Skeleton
-// ─────────────────────────────────────────────────────────────────────────────
-
 function PageSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
-      {/* Header skeleton */}
       <div className="flex items-center gap-4">
         <div className="h-10 w-10 bg-gray-200 rounded-lg" />
         <div className="h-8 bg-gray-200 rounded w-48" />
       </div>
-      
-      {/* Info card skeleton */}
       <div className="bg-white rounded-lg border p-6 h-48" />
-      
-      {/* Keywords skeleton */}
       <div className="bg-white rounded-lg border p-6 h-32" />
-      
-      {/* Grid skeleton */}
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg border p-6 h-40" />
         <div className="bg-white rounded-lg border p-6 h-40" />
       </div>
-      
-      {/* History skeleton */}
       <div className="bg-white rounded-lg border p-6 h-64" />
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Error State
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface ErrorStateProps {
   message: string;
@@ -77,10 +60,6 @@ function ErrorState({ message, onRetry }: ErrorStateProps) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page Header
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface PageHeaderProps {
   productId: string;
   productName: string;
@@ -102,7 +81,6 @@ function PageHeader({ productId, productName, onDelete, onGenerateDescription }:
       </div>
       
       <div className="flex gap-2">
-        {/* NEW: Find Competitors Button */}
         <Link href={`/competitors/match?productId=${productId}`}>
           <Button variant="secondary">
             <Search className="h-4 w-4 mr-2" />
@@ -128,10 +106,6 @@ function PageHeader({ productId, productName, onDelete, onGenerateDescription }:
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Page
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -144,23 +118,18 @@ export default function ProductDetailPage() {
     data: product,
     isLoading,
     error,
+    refetch,
   } = useProduct(productId);
   const { mutateAsync: updateProduct } = useUpdateProduct();
 
-  // Scroll to top on page load
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Handlers
-  // ─────────────────────────────────────────────────────────────────────────
 
   const handleDeleteSuccess = () => {
     router.push('/products');
   };
 
-  // NEW: Updated handler to accept individual fields object
   const handleApplyGenerated = async (fields: {
     description?: string;
     seo_title?: string;
@@ -168,12 +137,9 @@ export default function ProductDetailPage() {
     keywords?: string[];
   }) => {
     try {
-      // Build update payload with only the fields that were applied
       const updateData: Record<string, unknown> = {};
       if (fields.description) updateData.description = fields.description;
       if (fields.keywords) updateData.keywords = fields.keywords;
-      // Note: seo_title and meta_description would need backend fields
-      // For now, they're available in the modal for copy/paste
       
       if (Object.keys(updateData).length > 0) {
         await updateProduct({ id: productId, data: updateData as UpdateProductRequest });
@@ -182,10 +148,6 @@ export default function ProductDetailPage() {
       console.error('Failed to update product:', err);
     }
   };
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render States
-  // ─────────────────────────────────────────────────────────────────────────
 
   if (isLoading) {
     return <PageSkeleton />;
@@ -200,10 +162,6 @@ export default function ProductDetailPage() {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Main Render
-  // ─────────────────────────────────────────────────────────────────────────
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -215,7 +173,6 @@ export default function ProductDetailPage() {
 
       <ProductInfoCard product={product} />
 
-      {/* Keywords Manager - for sentiment tracking */}
       <KeywordsManager
         productId={productId}
         keywords={product.keywords || []}
@@ -239,7 +196,6 @@ export default function ProductDetailPage() {
         onSuccess={handleDeleteSuccess}
       />
 
-      {/* UPDATED: Now uses handleApplyGenerated instead of handleApplyDescription */}
       <GenerateDescriptionModal
         isOpen={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
@@ -250,6 +206,5 @@ export default function ProductDetailPage() {
     </div>
   );
 }
-
 
 
