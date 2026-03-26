@@ -27,6 +27,7 @@ from services.integration.product_sync_service import ProductSyncService
 from core.deps import get_current_user
 
 router = APIRouter(prefix="/products", tags=["product-sync"])
+import_router = APIRouter(prefix="/product-sync", tags=["product-sync-import"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -396,3 +397,41 @@ async def unlink_product_from_store(
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# import_router — /product-sync prefix
+# ─────────────────────────────────────────────────────────────────────────────
+
+@import_router.post("/sync/bulk", response_model=dict)
+async def bulk_import_from_store(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Trigger a full product import from the connected e-commerce platform.
+
+    Fires a Celery task that pulls all products from Shopify/WooCommerce
+    and creates ProductIntegrationLink records for any unlinked products.
+    Fixes the BULK_PRODUCTS_UNLINKED diagnostic issue.
+    """
+    stmt = select(Integration).where(
+        Integration.user_id == current_user.id,
+        Integration.status == IntegrationStatus.ACTIVE,
+    )
+    result = await db.execute(stmt)
+    integration = result.scalars().first()
+
+    if not integration:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active integration found. Connect a store first.",
+        )
+
+    from workers.tasks.sync_tasks import sync_integration_products  # lazy import
+    sync_integration_products.delay(str(integration.id), str(current_user.id))
+
+    return {
+        "queued": True,
+        "integration_id": str(integration.id),
+        "platform": integration.platform.value,
+        "message": "Sync queued. Products will be linked in the background.",
+    }
