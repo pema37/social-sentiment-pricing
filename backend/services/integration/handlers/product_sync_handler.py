@@ -188,13 +188,14 @@ class ProductSyncHandler:
             current_price=external_product.price or product.current_price,
         )
         
-        # Update link prices
+        # Set before update_prices so the commit inside the repo persists it
+        link.sync_enabled = True
         await self.link_repo.update_prices(
             link,
             external_price=external_product.price,
             external_compare_at_price=external_product.compare_at_price,
         )
-        
+
         return 0, 1
     
     async def _create_or_link(
@@ -226,8 +227,9 @@ class ProductSyncHandler:
                 external_variant_id=variant_id,
                 external_price=external_product.price,
                 external_compare_at_price=external_product.compare_at_price,
+                sync_enabled=True,
             )
-            
+
             return 0, 1  # Count as update since product existed
         
         # Create new product
@@ -251,8 +253,9 @@ class ProductSyncHandler:
             external_variant_id=variant_id,
             external_price=external_product.price,
             external_compare_at_price=external_product.compare_at_price,
+            sync_enabled=True,
         )
-        
+
         return 1, 0
     
     def _generate_sku(

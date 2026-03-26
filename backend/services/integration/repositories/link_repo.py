@@ -79,6 +79,7 @@ class LinkRepository:
         external_variant_id: Optional[str],
         external_price: Optional[float],
         external_compare_at_price: Optional[float],
+        sync_enabled: bool = True,
     ) -> ProductIntegrationLink:
         """Create a new integration link."""
         link = ProductIntegrationLink(
@@ -88,6 +89,7 @@ class LinkRepository:
             external_variant_id=external_variant_id,
             external_price=external_price,
             external_compare_at_price=external_compare_at_price,
+            sync_enabled=sync_enabled,
             last_price_pull_at=utc_now(),
         )
         self.db.add(link)
