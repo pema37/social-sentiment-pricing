@@ -1,136 +1,79 @@
 # backend/workers/tasks/sync_tasks.py
-
 """
-Sync Tasks — On-demand full product sync from e-commerce platforms.
+Sync Tasks — Celery tasks for importing products from connected e-commerce platforms.
 
-Dispatched by the integrations API when a merchant triggers a manual sync
-or when the system detects a stale catalog (Bug 303.01 — sync never completes).
+These tasks pull products from Shopify/WooCommerce and create
+ProductIntegrationLink records for any unlinked products.
 
-IMPORTANT: Each task creates its own database session to avoid event loop
-conflicts when running in Celery's forked worker processes.
+Fixes the BULK_PRODUCTS_UNLINKED diagnostic issue (Bug 303.02).
 """
 
-import asyncio
-import re
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
 from sqlmodel import select
 
-from core.config import settings
-from core.logging import get_logger
-from models.integration import Integration
-from services.integration.sync_service import SyncService
 from workers.celery_app import celery_app
+from core.logging import get_logger
+from workers.tasks.sync_verification_tasks import get_task_session_maker, run_async
 
 logger = get_logger(__name__)
-
-
-# ==============================================================================
-# HELPERS
-# ==============================================================================
-
-def get_task_session_maker():
-    """
-    Create a fresh async session maker for Celery tasks.
-
-    Uses NullPool to prevent connection reuse across forked processes.
-    """
-    db_url = settings.DATABASE_URL
-
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-    if "sslmode=" in db_url:
-        db_url = re.sub(r'[\?&]sslmode=[^&]*', '', db_url)
-        db_url = db_url.replace('?&', '?').replace('&&', '&').rstrip('?&')
-
-    use_ssl = "neon.tech" in db_url or "railway" in db_url
-
-    engine = create_async_engine(
-        db_url,
-        echo=False,
-        poolclass=NullPool,
-        connect_args={"ssl": True} if use_ssl else {},
-    )
-
-    return sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
-
-def run_async(coro):
-    """Run async code in sync Celery task."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        try:
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                task.cancel()
-            if pending:
-                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        except Exception:
-            pass
-        finally:
-            loop.close()
 
 
 # ==============================================================================
 # ASYNC IMPLEMENTATION
 # ==============================================================================
 
-async def _sync_integration_products(integration_id_str: str, user_id_str: str) -> dict:
+async def _sync_integration_products(integration_id: str, user_id: str) -> dict:
     """
-    Run a full product sync for a given integration.
-
-    Args:
-        integration_id_str: UUID string of the integration to sync.
-        user_id_str: UUID string of the user who triggered the sync.
-
-    Returns:
-        Dict confirming success and the integration ID.
+    Pull all products from the connected platform and create
+    ProductIntegrationLink records for any that are not yet linked.
     """
+    from models.integration import Integration, IntegrationStatus
+    from services.integration.handlers.product_sync_handler import ProductSyncHandler
+    from services.integration.repositories.product_repo import ProductRepository
+    from services.integration.repositories.link_repo import LinkRepository
+
     session_maker = get_task_session_maker()
-    integration_id = UUID(integration_id_str)
-    user_id = UUID(user_id_str)
 
     async with session_maker() as db:
-        try:
-            await SyncService(db).run_sync(
+        stmt = select(Integration).where(
+            Integration.id == UUID(integration_id),
+            Integration.user_id == UUID(user_id),
+            Integration.status == IntegrationStatus.ACTIVE,
+        )
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+
+        if not integration:
+            logger.warning(
+                "sync_integration_products: no active integration found",
                 integration_id=integration_id,
-                sync_type="full",
                 user_id=user_id,
             )
-            return {"success": True, "integration_id": integration_id_str}
+            return {
+                "success": False,
+                "error": "Integration not found or not active",
+                "integration_id": integration_id,
+            }
 
-        except Exception as e:
-            logger.error(
-                f"sync_integration_products failed for integration "
-                f"{integration_id_str}: {e}"
-            )
-            # SyncService._finalize_failure already updates sync_status on the
-            # integration row; apply a task-level fallback in case it didn't.
-            try:
-                result = await db.execute(
-                    select(Integration).where(Integration.id == integration_id)
-                )
-                integration = result.scalars().first()
-                if integration:
-                    integration.sync_status = "failed"
-                    integration.error_message = str(e)
-                    db.add(integration)
-                    await db.commit()
-            except Exception:
-                pass  # best-effort; don't mask original error
+        product_repo = ProductRepository(db)
+        link_repo = LinkRepository(db)
+        handler = ProductSyncHandler(db, product_repo, link_repo)
+        created, updated, deleted = await handler.sync_all_products(integration, sync_type="full")
 
-            raise  # re-raise so Celery marks the task as FAILED
+        result_dict = {
+            "success": True,
+            "integration_id": integration_id,
+            "created": created,
+            "updated": updated,
+            "deleted": deleted,
+        }
+        logger.info(
+            "sync_integration_products complete",
+            integration_id=integration_id,
+            result=result_dict,
+        )
+        return result_dict
 
 
 # ==============================================================================
@@ -138,6 +81,12 @@ async def _sync_integration_products(integration_id_str: str, user_id_str: str) 
 # ==============================================================================
 
 @celery_app.task(name="workers.tasks.sync_tasks.sync_integration_products")
-def sync_integration_products(integration_id: str, user_id: str):
-    """Trigger a full product sync from the e-commerce platform."""
+def sync_integration_products(integration_id: str, user_id: str) -> dict:
+    """
+    Pull all products from a connected e-commerce platform and link any
+    that are not yet tracked in ActualPrice.
+
+    Enqueued by POST /api/v1/product-sync/sync/bulk.
+    Fixes Bug 303.02 — BULK_PRODUCTS_UNLINKED.
+    """
     return run_async(_sync_integration_products(integration_id, user_id))
