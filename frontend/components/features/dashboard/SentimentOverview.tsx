@@ -16,7 +16,7 @@ import { Card, CardTitle } from '@/components/ui';
 import { useSentimentTrend } from '@/lib/hooks/use-analytics';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-interface SentimentTrendChartProps {
+interface SentimentOverviewProps {
   productId?: string;
   days?: number;
 }
@@ -28,7 +28,7 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return isNaN(num) ? fallback : num;
 }
 
-export function SentimentTrendChart({ productId, days = 30 }: SentimentTrendChartProps) {
+export function SentimentOverview({ productId, days = 30 }: SentimentOverviewProps) {
   const { data, isLoading } = useSentimentTrend({ product_id: productId, days });
 
   const chartData = useMemo(() => {
