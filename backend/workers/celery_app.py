@@ -31,6 +31,7 @@ celery_app = Celery(
         "workers.tasks.ingestion_tasks",
         "workers.tasks.pricing_tasks",
         "workers.tasks.sync_verification_tasks",
+        "workers.tasks.sync_tasks",
         "workers.tasks.outcome_measurement_tasks",
         "workers.tasks.benchmark_refresh_tasks",
         "workers.tasks.intelligence_tasks",
