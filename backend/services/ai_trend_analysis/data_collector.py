@@ -7,11 +7,13 @@ Changed all self.db.exec() to await self.db.execute() with proper
 scalars() handling.
 """
 
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from models.competitor_price_history import CompetitorPriceHistory
 from models.competitor_product import CompetitorProduct
 from models.product import Product
 from models.sentiment import Sentiment
@@ -240,15 +242,80 @@ class DataCollector:
             return []
 
     # ==========================================
-    # Placeholder Methods (for future implementation)
+    # Derived / Analytical Queries
     # ==========================================
 
     async def get_sentiment_drops(self, user_id: str, days: int) -> list[dict]:
-        """Detect significant sentiment drops."""
-        # TODO: Implement sentiment drop detection
-        return []
+        """Detect significant sentiment drops.
+
+        Splits the requested period in half and compares the average
+        compound_score in the recent half against the older half.
+        Products whose score dropped by more than 0.2 are returned.
+        """
+        now = datetime.now(UTC)
+        start_date = now - timedelta(days=days)
+        midpoint = now - timedelta(days=days // 2)
+
+        query = (
+            select(Sentiment)
+            .join(Product, Sentiment.product_id == Product.id)
+            .where(Product.user_id == user_id)
+            .where(Sentiment.analyzed_at >= start_date)
+        )
+        result = await self.db.execute(query)
+        sentiments = result.scalars().all()
+
+        older: dict[str, list[float]] = defaultdict(list)
+        recent: dict[str, list[float]] = defaultdict(list)
+
+        for s in sentiments:
+            pid = str(s.product_id)
+            score = float(s.compound_score) if s.compound_score is not None else 0.0
+            if s.analyzed_at >= midpoint:
+                recent[pid].append(score)
+            else:
+                older[pid].append(score)
+
+        drops: list[dict] = []
+        for pid in older:
+            if pid not in recent:
+                continue
+            prev_avg = sum(older[pid]) / len(older[pid])
+            curr_avg = sum(recent[pid]) / len(recent[pid])
+            drop = prev_avg - curr_avg
+            if drop > 0.2:
+                drops.append({
+                    "product_id": pid,
+                    "current_avg": round(curr_avg, 4),
+                    "previous_avg": round(prev_avg, 4),
+                    "drop_amount": round(drop, 4),
+                })
+
+        return drops
 
     async def get_recent_competitor_activities(self, user_id: str) -> list[dict]:
-        """Get recent competitor price changes."""
-        # TODO: Implement competitor activity tracking
-        return []
+        """Get competitor price changes observed in the last 24 hours."""
+        since = datetime.now(UTC) - timedelta(hours=24)
+
+        query = (
+            select(CompetitorPriceHistory)
+            .join(CompetitorProduct, CompetitorPriceHistory.competitor_product_id == CompetitorProduct.id)
+            .join(Product, CompetitorProduct.product_id == Product.id)
+            .where(Product.user_id == user_id)
+            .where(CompetitorPriceHistory.observed_at >= since)
+            .order_by(CompetitorPriceHistory.observed_at.desc())
+        )
+        result = await self.db.execute(query)
+        history_entries = result.scalars().all()
+
+        return [
+            {
+                "competitor_product_id": str(h.competitor_product_id),
+                "old_price": float(h.old_price) if h.old_price is not None else None,
+                "new_price": float(h.new_price) if h.new_price is not None else 0.0,
+                "change_amount": float(h.change_amount) if h.change_amount is not None else None,
+                "change_percent": float(h.change_percent) if h.change_percent is not None else None,
+                "observed_at": h.observed_at,
+            }
+            for h in history_entries
+        ]

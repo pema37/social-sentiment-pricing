@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from api.v1.routes.auth import get_current_user
+from core.deps import get_current_user
 from models.user import User
 
 from services.ai_trend_analysis.autonomous_orchestrator import (

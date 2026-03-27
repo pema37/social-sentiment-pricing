@@ -5,7 +5,7 @@ import json
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
-from api.v1.routes.auth import get_current_user
+from core.deps import get_current_user
 from core.logging import get_logger
 from models.user import User
 from services.ai_trend_analysis.launch_detector import LaunchSignal, launch_detector

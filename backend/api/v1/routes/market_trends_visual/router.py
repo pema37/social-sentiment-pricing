@@ -15,7 +15,7 @@ import json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from api.v1.routes.auth import get_current_user
+from core.deps import get_current_user
 from core.logging import get_logger
 from models.user import User
 

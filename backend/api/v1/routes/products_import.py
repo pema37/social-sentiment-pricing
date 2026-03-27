@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.routes.auth import get_current_user
+from core.deps import get_current_user
 from core.rate_limit import BULK_RATE_LIMIT, limiter
 from db.session import get_session
 from models import Product, User

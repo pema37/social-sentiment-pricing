@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.v1.routes.auth import get_current_user
+from core.deps import get_current_user
 from models.user import User
 
 from schemas.ai_support import (
