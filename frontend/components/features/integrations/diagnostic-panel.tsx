@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@/lib/api/client";
 
@@ -91,6 +92,11 @@ export function DiagnosticPanel() {
       setIsLoading(false);
     }
   };
+
+  const bulkSyncMutation = useMutation({
+    mutationFn: () => api.post<{ queued: boolean }>("/api/v1/product-sync/sync/bulk"),
+    onSuccess: runDiagnostic,
+  });
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -276,6 +282,23 @@ export function DiagnosticPanel() {
                         <p className="text-xs mt-1 opacity-75">
                           💡 {issue.suggestion}
                         </p>
+                        {issue.type === "BULK_PRODUCTS_UNLINKED" && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => bulkSyncMutation.mutate()}
+                              disabled={bulkSyncMutation.isPending}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {bulkSyncMutation.isPending ? "Queueing sync..." : "Fix Now"}
+                            </button>
+                            {bulkSyncMutation.isSuccess && (
+                              <span className="ml-2 text-xs text-green-600">Sync queued ✓</span>
+                            )}
+                            {bulkSyncMutation.isError && (
+                              <span className="ml-2 text-xs text-red-600">Failed to queue sync</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
