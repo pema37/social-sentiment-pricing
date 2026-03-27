@@ -2,10 +2,9 @@
 
 /**
  * Integrations Page
- * 
+ *
  * Connect and manage e-commerce platform integrations.
- * Handles OAuth callback params and displays connection status.
- * NOW WITH SYNC PROGRESS TRACKING + DIAGNOSTIC PANEL
+ * Handles OAuth callback params, sync progress tracking, and diagnostic health.
  */
 
 import { Suspense, useEffect, useRef, useState } from 'react';
@@ -20,7 +19,7 @@ import { ConnectPlatformCard } from '@/components/features/integrations/ConnectP
 import { IntegrationsEmptyState } from '@/components/features/integrations/IntegrationsEmptyState';
 import { ConnectionSuccessToast } from '@/components/features/integrations/ConnectionSuccessToast';
 import { SyncProgressBanner } from '@/components/features/integrations/sync-progress-banner';
-import { DiagnosticPanel } from '@/components/features/integrations/diagnostic-panel';  // NEW
+import { DiagnosticPanel } from '@/components/features/integrations/diagnostic-panel';
 import { PLATFORM_CONFIGS, type EcommercePlatform } from '@/types/integration';
 
 export default function IntegrationsPage() {
@@ -158,8 +157,8 @@ function IntegrationsContent() {
         description="Connect your e-commerce stores to sync products and push price updates automatically."
       />
 
-      {/* NEW: Diagnostic Panel */}
-      <DiagnosticPanel />
+      {/* Diagnostic Panel — only shown when integrations exist */}
+      {hasIntegrations && <DiagnosticPanel />}
 
       {/* Loading state */}
       {isLoading && (
@@ -201,6 +200,11 @@ function IntegrationsContent() {
               <h2 className="mb-4 text-lg font-medium text-gray-900">
                 {hasIntegrations ? 'Add Another Store' : 'Connect a Store'}
               </h2>
+              {!hasIntegrations && (
+                <p className="mb-4 text-sm text-gray-500">
+                  Connect your Shopify or WooCommerce store to sync products and enable AI-powered pricing.
+                </p>
+              )}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {availablePlatforms.map((platform) => (
                   <ConnectPlatformCard
@@ -222,6 +226,3 @@ function IntegrationsContent() {
     </div>
   );
 }
-
-
-
