@@ -12,12 +12,14 @@ PATCHED (2026-02-18): Phase 5 — Added intelligence_tasks for IE learning/exper
 PATCHED (2026-03-13): Added check-integration-health beat entry (every 30 min).
     Polls ACTIVE + ERROR integrations and writes status back to DB so the
     frontend diagnostic panel reflects real connection state automatically.
+PATCHED (2026-03-28): Added sync/sentiment queues with priority routing.
 """
 
 import os
 
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue
 
 # Use Redis URL from environment (Railway provides this)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -54,6 +56,21 @@ celery_app.conf.update(
     task_acks_late=True,  # Acknowledge after task completion (safer)
 )
 
+# PATCHED (2026-03-28): Added sync/sentiment queues with priority routing.
+# All queues support message priorities 0–10 (x-max-priority).
+# Dispatch callers should set priority=8 for sync, 5 for sentiment, 3 for celery.
+celery_app.conf.task_queues = (
+    Queue('sync',      routing_key='sync',      queue_arguments={'x-max-priority': 10}),
+    Queue('sentiment', routing_key='sentiment',  queue_arguments={'x-max-priority': 10}),
+    Queue('celery',    routing_key='celery',     queue_arguments={'x-max-priority': 10}),
+)
+celery_app.conf.task_default_queue = 'celery'
+celery_app.conf.task_routes = {
+    'workers.tasks.sync_tasks.*':       {'queue': 'sync'},
+    'ingestion.*':                       {'queue': 'sentiment'},
+    'workers.tasks.ingestion_tasks.*':  {'queue': 'sentiment'},
+}
+
 # Scheduled tasks (beat schedule)
 # IMPORTANT: Task names must match the `name=` parameter in @celery_app.task decorator
 celery_app.conf.beat_schedule = {
@@ -62,13 +79,13 @@ celery_app.conf.beat_schedule = {
     "fetch-social-mentions": {
         "task": "ingestion.fetch_all_mentions",
         "schedule": crontab(minute="*/30"),
-        "options": {"queue": "celery"},
+        "options": {"queue": "sentiment"},
     },
     # Process unprocessed mentions every 5 minutes
     "process-mentions": {
         "task": "ingestion.process_pending_mentions",
         "schedule": crontab(minute="*/5"),
-        "options": {"queue": "celery"},
+        "options": {"queue": "sentiment"},
     },
     # === Pricing tasks ===
     # Generate recommendations for all products every hour (at minute 0)

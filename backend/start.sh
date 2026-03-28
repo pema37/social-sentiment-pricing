@@ -25,10 +25,12 @@ rm -f celerybeat-schedule /app/celerybeat-schedule 2>/dev/null || true
 
 # Only start Celery if Redis is available
 if [ -n "$REDIS_URL" ]; then
-    echo "Starting Celery worker..."
+    # -Q order matters: Celery drains 'sync' before 'sentiment' and 'celery'.
+    echo "Starting Celery worker (concurrency=4, queues=sync,sentiment,celery)..."
     celery -A workers.celery_app worker \
         --loglevel=info \
-        --concurrency=2 \
+        --concurrency=4 \
+        -Q sync,sentiment,celery \
         &
     CELERY_WORKER_PID=$!
     echo "Celery worker PID: $CELERY_WORKER_PID"
