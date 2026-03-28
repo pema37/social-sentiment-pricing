@@ -28,7 +28,8 @@ if [ -n "$REDIS_URL" ]; then
     echo "Starting Celery worker..."
     celery -A workers.celery_app worker \
         --loglevel=info \
-        --concurrency=2 \
+        --concurrency=4 \
+        -Q sync,celery,sentiment \
         &
     CELERY_WORKER_PID=$!
     echo "Celery worker PID: $CELERY_WORKER_PID"

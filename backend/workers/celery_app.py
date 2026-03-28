@@ -18,6 +18,7 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue
 
 # Use Redis URL from environment (Railway provides this)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -54,6 +55,18 @@ celery_app.conf.update(
     task_acks_late=True,  # Acknowledge after task completion (safer)
 )
 
+# Named queues with explicit routing
+celery_app.conf.task_queues = (
+    Queue("sync"),       # high-priority: product sync tasks
+    Queue("sentiment"),  # social mention ingestion
+    Queue("celery"),     # default for all other tasks
+)
+celery_app.conf.task_default_queue = "celery"
+celery_app.conf.task_routes = {
+    "workers.tasks.sync_tasks.*": {"queue": "sync"},
+    "ingestion.*": {"queue": "sentiment"},
+}
+
 # Scheduled tasks (beat schedule)
 # IMPORTANT: Task names must match the `name=` parameter in @celery_app.task decorator
 celery_app.conf.beat_schedule = {
@@ -62,13 +75,13 @@ celery_app.conf.beat_schedule = {
     "fetch-social-mentions": {
         "task": "ingestion.fetch_all_mentions",
         "schedule": crontab(minute="*/30"),
-        "options": {"queue": "celery"},
+        "options": {"queue": "sentiment"},
     },
     # Process unprocessed mentions every 5 minutes
     "process-mentions": {
         "task": "ingestion.process_pending_mentions",
         "schedule": crontab(minute="*/5"),
-        "options": {"queue": "celery"},
+        "options": {"queue": "sentiment"},
     },
     # === Pricing tasks ===
     # Generate recommendations for all products every hour (at minute 0)
