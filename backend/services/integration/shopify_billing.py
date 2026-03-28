@@ -155,6 +155,9 @@ class ShopifyBillingService:
     """
     Service for managing Shopify app subscriptions via the Billing API.
 
+    All billing managed via Shopify GraphQL App Subscription API — no direct Stripe
+    for Shopify merchants.
+
     Uses ShopifyService's _graphql() method for all GraphQL calls,
     maintaining consistent retry, rate limiting, and circuit breaker behavior.
     """
