@@ -74,7 +74,20 @@ async def list_shopify_plans():
     No auth required — this can be called from the embedded app
     before the merchant has logged in, to display pricing.
     """
-    plans = [
+    # Free tier has no Shopify subscription — display only
+    free_plan = ShopifyPlanInfo(
+        tier="free",
+        name="ActualPrice Free",
+        price_monthly=0.0,
+        trial_days=0,
+        product_limit=5,
+        features=[
+            "Up to 5 products",
+            "Basic competitor tracking",
+            "Manual pricing only",
+        ],
+    )
+    paid_plans = [
         ShopifyPlanInfo(
             tier=plan.tier,
             name=plan.name,
@@ -85,7 +98,7 @@ async def list_shopify_plans():
         )
         for plan in SHOPIFY_PLANS.values()
     ]
-    return ShopifyPlansListResponse(plans=plans)
+    return ShopifyPlansListResponse(plans=[free_plan] + paid_plans)
 
 
 # =============================================================================
