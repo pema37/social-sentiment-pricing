@@ -54,8 +54,8 @@ class ShopifyOrdersMixin:
         shop_domain = self._get_shop_domain(store_url)
         product_gid = self._gid("Product", external_product_id)
 
-        # Shopify's orders query filter syntax
-        # https://shopify.dev/docs/api/admin-graphql/2024-01/queries/orders
+        # Shopify GraphQL orders filter syntax (API version 2025-10).
+        # https://shopify.dev/docs/api/admin-graphql/2025-10/queries/orders
         query_filter = f"created_at:>='{created_at_min}' AND created_at:<='{created_at_max}'"
 
         query = """
@@ -96,7 +96,10 @@ class ShopifyOrdersMixin:
         try:
             async with RetryableClient(store_url, "shopify", self.retry_config, 30.0) as rc:
                 # Paginate through all orders in the date range
-                for _ in range(20):  # Safety cap: max 20 pages (1000 orders)
+                # Safety cap: 20 pages x 50 orders = 1,000 orders maximum.
+                # Prevents runaway queries on high-volume stores where the
+                # outcome-measurement window could span tens of thousands of orders.
+                for _ in range(20):
                     variables: dict = {"query": query_filter}
                     if cursor:
                         variables["cursor"] = cursor

@@ -13,6 +13,7 @@ import {
   getErrorMessage,
   parseApiError,
 } from '@/lib/api/errors'
+import { ShopifyEmbeddedProvider } from '@/lib/context/shopify-embedded'
 import '@rainbow-me/rainbowkit/styles.css'
 
 interface ProvidersProps {
@@ -112,7 +113,9 @@ export function Providers({ children }: ProvidersProps) {
             appName: 'ActualPrice',
           }}
         >
-          {children}
+          <ShopifyEmbeddedProvider>
+            {children}
+          </ShopifyEmbeddedProvider>
           <Toaster />
           <ReactQueryDevtools initialIsOpen={false} />
         </RainbowKitProvider>

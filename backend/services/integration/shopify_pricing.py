@@ -10,8 +10,6 @@ Uses from ShopifyService (via self):
   - fetch_single_product() (from ShopifyProductsMixin)
   - retry_config, PRICE_VERIFICATION_TOLERANCE
 
-Place at: backend/services/integration/shopify_pricing.py
-
 FIXED (2026-02-22): Replaced deprecated `productVariantUpdate` mutation with
 `productVariantsBulkUpdate`. Shopify removed `productVariantUpdate` after
 sunsetting API version 2025-10. The new mutation requires `productId` as a
@@ -47,34 +45,34 @@ class ShopifyPricingMixin:
         shop_domain = self._get_shop_domain(store_url)
 
         try:
-            # Resolve variant ID
+            # Resolve variant ID and capture old price in a single fetch.
             variant_id = request.external_variant_id
             if not variant_id:
                 product = await self.fetch_single_product(store_url, access_token, request.external_product_id)
                 if product and product.variants:
                     variant_id = product.variants[0].id
+                    old_price = product.price
                 else:
                     return PriceUpdateResponse(
                         result=PriceUpdateResult.PRODUCT_NOT_FOUND,
                         external_product_id=request.external_product_id,
                         error="No variant found",
                     )
-
-            # Get old price
-            current = await self.fetch_single_product(store_url, access_token, request.external_product_id)
-            old_price = current.price if current else None
+            else:
+                current = await self.fetch_single_product(store_url, access_token, request.external_product_id)
+                old_price = current.price if current else None
 
             # ══════════════════════════════════════════════════════════════
-            # FIX (2026-02-22): Use productVariantsBulkUpdate instead of
-            # the removed productVariantUpdate mutation.
+            # productVariantsBulkUpdate replaces the deprecated
+            # productVariantUpdate which was removed in Shopify API 2025-10.
             #
-            # productVariantUpdate was deprecated when Shopify sunset
-            # API version 2025-10. The replacement requires:
+            # The replacement mutation requires:
             #   - productId (GID) as a top-level argument
             #   - variants array of ProductVariantsBulkInput objects
             #
-            # Even for a single variant update, this bulk mutation is
-            # the correct approach per Shopify's documentation.
+            # Even for a single variant update this bulk mutation is the
+            # correct approach per Shopify's GraphQL Admin API docs:
+            # https://shopify.dev/docs/api/admin-graphql/latest/mutations/productVariantsBulkUpdate
             # ══════════════════════════════════════════════════════════════
             mutation = """
                 mutation ProductVariantsBulkUpdate(
@@ -98,7 +96,7 @@ class ShopifyPricingMixin:
             """
 
             # Build variant input
-            variant_input: dict = {
+            variant_input = {
                 "id": self._gid("ProductVariant", variant_id),
                 "price": str(request.new_price),
             }

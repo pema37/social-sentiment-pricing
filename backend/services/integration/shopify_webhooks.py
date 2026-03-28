@@ -1,10 +1,26 @@
 """
 Shopify Webhooks Mixin - Webhook lifecycle management.
 
+All Shopify Admin API calls use GraphQL Admin API version 2025-10.
+No REST Admin API calls are made in this module.
+
 Methods:
   - register_webhooks: Create webhook subscriptions via GraphQL
-  - unregister_webhooks: Delete webhook subscriptions by ID
+    (webhookSubscriptionCreate mutation)
+  - unregister_webhooks: Delete webhook subscriptions via GraphQL
+    (webhookSubscriptionDelete mutation)
   - verify_webhook_signature: HMAC-SHA256 validation of incoming payloads
+
+Webhook topics registered here (via ShopifyService.WEBHOOK_TOPICS_GQL):
+  PRODUCTS_CREATE, PRODUCTS_UPDATE, PRODUCTS_DELETE,
+  APP_SUBSCRIPTIONS_UPDATE, APP_UNINSTALLED
+
+GDPR webhooks (CUSTOMERS_DATA_REQUEST, CUSTOMERS_REDACT, SHOP_REDACT) are
+NOT registered here. Shopify requires GDPR webhooks to be configured via the
+Partner Dashboard or shopify.app.toml [webhooks.privacy_compliance] section —
+they cannot be registered through the webhookSubscriptionCreate API. The
+endpoint handlers live in api/v1/routes/integrations/shopify_gdpr.py and the
+URLs are declared in shopify.app.toml. This is required for App Store submission.
 
 Uses from ShopifyService (via self):
   - _graphql(), _get_shop_domain(), _gid(), _numeric_id()
@@ -107,6 +123,12 @@ class ShopifyWebhooksMixin:
         return success
 
     def verify_webhook_signature(self, payload: bytes, signature: str, secret: str) -> bool:
+        """Validate Shopify HMAC-SHA256 webhook signature.
+
+        Verification MUST happen before any payload processing.
+        Handles both plain base64 signatures and the "sha256=<base64>" prefix
+        that some Shopify webhook deliveries include.
+        """
         if signature.startswith("sha256="):
             signature = signature[7:]
         computed = base64.b64encode(hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()

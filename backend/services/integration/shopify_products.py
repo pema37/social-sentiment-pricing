@@ -1,6 +1,9 @@
 """
 Shopify Products Mixin - Product fetching and parsing.
 
+All product data fetched via Shopify GraphQL Admin API 2025-10 —
+REST /products.json is NOT used here.
+
 Methods:
   - fetch_products: Paginated product listing (cursor-based)
   - fetch_single_product: Single product by numeric ID

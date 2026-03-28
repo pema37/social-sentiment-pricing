@@ -70,7 +70,7 @@ We integrate with:
 - **Shopify** - E-commerce platform (via authorized OAuth)
 - **WooCommerce** - E-commerce platform (via API credentials)
 - **Reddit API** - Public content for sentiment analysis (read-only access)
-- **OpenAI** - AI-powered sentiment analysis and content generation
+- **Google Gemini** - AI-powered sentiment analysis and content generation
 - **Google Gemini** - AI-powered sentiment analysis (fallback)
 - **MNEE** - Cryptocurrency payment processing
 - **MetaMask/Wallet Providers** - Ethereum wallet connections
