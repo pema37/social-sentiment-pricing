@@ -140,7 +140,7 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
   const currentTier = status?.tier || null;
   const hasActiveSub = status?.has_active_subscription || false;
 
-  const handleSubscribe = (tier: 'starter' | 'professional' | 'enterprise') => {
+  const handleSubscribe = (tier: 'free' | 'starter' | 'professional') => {
     if (hasActiveSub) {
       changePlanMutation.mutate({ new_tier: tier, shop_domain: shop });
     } else {
@@ -352,9 +352,11 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
                         </span>
                         <span className="text-sm text-gray-500">/month</span>
                       </div>
-                      <p className="text-xs text-blue-600 mt-1">
-                        {plan.trial_days}-day free trial
-                      </p>
+                      {plan.trial_days > 0 && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          {plan.trial_days}-day free trial
+                        </p>
+                      )}
                     </div>
 
                     {/* Features */}
@@ -369,7 +371,7 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
 
                     <Button
                       onClick={() =>
-                        handleSubscribe(plan.tier as 'starter' | 'professional' | 'enterprise')
+                        handleSubscribe(plan.tier as 'free' | 'starter' | 'professional')
                       }
                       disabled={isCurrent || isPending}
                       variant={config?.popular ? 'primary' : 'secondary'}
@@ -379,9 +381,11 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
                     >
                       {isCurrent
                         ? 'Current Plan'
-                        : hasActiveSub
-                        ? 'Switch Plan'
-                        : 'Start Free Trial'}
+                        : plan.tier === 'free'
+                          ? hasActiveSub ? 'Downgrade to Free' : 'Start for Free'
+                          : hasActiveSub
+                            ? 'Switch Plan'
+                            : 'Start Free Trial'}
                     </Button>
                   </div>
                 );
