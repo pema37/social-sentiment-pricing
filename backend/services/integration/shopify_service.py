@@ -160,6 +160,7 @@ class ShopifyService(
     # ================================================================
 
     def generate_oauth_url(self, store_url: str, state: str, redirect_uri: str) -> str:
+        # Browser redirect — no access token exists yet, so _graphql() cannot be used.
         shop_domain = self._get_shop_domain(store_url)
         # Extract store name (e.g. "mystore" from "mystore.myshopify.com")
         store_name = shop_domain.replace(".myshopify.com", "")
@@ -177,6 +178,8 @@ class ShopifyService(
         return f"https://admin.shopify.com/store/{store_name}/oauth/authorize?{urlencode(params)}"
 
     async def exchange_oauth_code(self, store_url: str, code: str, redirect_uri: str) -> OAuthResult:
+        # OAuth 2.0 protocol-mandated endpoint — cannot be replaced with GraphQL.
+        # /admin/oauth/access_token is the only way Shopify issues access tokens.
         shop_domain = self._get_shop_domain(store_url)
 
         logger.info(
