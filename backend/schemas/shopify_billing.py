@@ -5,6 +5,8 @@ Request/response models for Shopify's appSubscriptionCreate GraphQL mutations.
 These are separate from the existing MNEE payment schemas because Shopify
 handles billing natively — no blockchain verification needed.
 
+Plans: Free (no charge), Starter ($29/mo), Professional ($99/mo), all with 14-day trial.
+
 Ref: https://shopify.dev/docs/api/admin-graphql/latest/mutations/appSubscriptionCreate
 """
 
@@ -25,7 +27,7 @@ class ShopifyPlanConfig(BaseModel):
 
     tier: str
     name: str
-    price_amount: str  # Decimal string: "49.00"
+    price_amount: str  # Decimal string e.g. "29.00"
     currency_code: str = "USD"
     interval: Literal["EVERY_30_DAYS", "ANNUAL"] = "EVERY_30_DAYS"
     trial_days: int = 14
@@ -38,7 +40,7 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
     "starter": ShopifyPlanConfig(
         tier="starter",
         name="ActualPrice Starter",
-        price_amount="49.00",
+        price_amount="29.00",
         trial_days=14,
         product_limit=50,
         features=[
@@ -52,7 +54,7 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
     "professional": ShopifyPlanConfig(
         tier="professional",
         name="ActualPrice Professional",
-        price_amount="149.00",
+        price_amount="99.00",
         trial_days=14,
         product_limit=500,
         features=[
@@ -62,21 +64,6 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
             "Hourly pricing recommendations",
             "Slack & email alerts",
             "API access",
-        ],
-    ),
-    "enterprise": ShopifyPlanConfig(
-        tier="enterprise",
-        name="ActualPrice Enterprise",
-        price_amount="499.00",
-        trial_days=14,
-        product_limit=-1,  # Unlimited
-        features=[
-            "Unlimited products",
-            "Real-time everything",
-            "Multi-store support",
-            "Custom integrations",
-            "Dedicated support",
-            "SLA guarantee",
         ],
     ),
 }
@@ -90,8 +77,8 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
 class ShopifySubscribeRequest(BaseModel):
     """Request to create a Shopify billing subscription."""
 
-    tier: Literal["starter", "professional", "enterprise"] = Field(
-        ..., description="Plan tier: starter ($49), professional ($149), enterprise ($499)"
+    tier: Literal["starter", "professional"] = Field(
+        ..., description="Plan tier: starter ($29), professional ($99)"
     )
     shop_domain: str | None = Field(
         default=None,
@@ -102,7 +89,7 @@ class ShopifySubscribeRequest(BaseModel):
 class ShopifyPlanChangeRequest(BaseModel):
     """Request to upgrade or downgrade a Shopify plan."""
 
-    new_tier: Literal["starter", "professional", "enterprise"] = Field(..., description="New plan tier to switch to")
+    new_tier: Literal["starter", "professional"] = Field(..., description="New plan tier to switch to")
     shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",
