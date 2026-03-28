@@ -16,6 +16,9 @@ RATE LIMIT FIX (2026-01-11):
 - Always marks mentions as processed (prevents infinite retry loops)
 """
 
+# PATCHED (2026-03-28): All ingestion tasks routed to 'sentiment' queue
+# to prevent sentiment processing from blocking product sync tasks.
+
 import asyncio
 import re
 from datetime import UTC, datetime
@@ -92,7 +95,7 @@ def run_async(coro):
             loop.close()
 
 
-@celery_app.task(bind=True, name="ingestion.fetch_all_mentions", track_started=True)
+@celery_app.task(bind=True, name="ingestion.fetch_all_mentions", track_started=True, queue='sentiment')
 def fetch_all_mentions(self):
     """
     Fetch social mentions for ALL products with keywords.
@@ -132,7 +135,7 @@ async def _fetch_all_mentions(task_self):
         queued_count = 0
         for product in products:
             try:
-                fetch_for_product.delay(str(product.id))
+                fetch_for_product.apply_async(args=[str(product.id)], queue='sentiment')
                 queued_count += 1
             except Exception as e:
                 logger.error(f"Failed to queue fetch for product {product.id}: {e}")
@@ -142,7 +145,7 @@ async def _fetch_all_mentions(task_self):
         return {"status": "success", "products_queued": queued_count, "timestamp": datetime.now(UTC).isoformat()}
 
 
-@celery_app.task(bind=True, name="ingestion.fetch_for_product", track_started=True)
+@celery_app.task(bind=True, name="ingestion.fetch_for_product", track_started=True, queue='sentiment')
 def fetch_for_product(self, product_id: str):
     """
     Fetch social mentions for a specific product using its keywords.
@@ -242,6 +245,7 @@ async def _fetch_for_product(task_self, product_id: str):
     track_started=True,
     soft_time_limit=270,
     time_limit=300,
+    queue='sentiment',
 )
 def process_pending_mentions(self, batch_size: int = 50, user_id: str | None = None):
     """
