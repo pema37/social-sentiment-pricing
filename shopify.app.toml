@@ -1,4 +1,3 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 client_id = "e8b514a99ecab7a30a8bb65b97e9c144"
 name = "ActualPrice Public"
 application_url = "https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/integrations/shopify/install"
@@ -19,5 +18,8 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/integrations/oauth/callback"
+  "https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/integrations/oauth/callback",
+  "https://social-sentiment-pricing.vercel.app/api/v1/integrations/oauth/callback",
+  "https://ssp-staging.vercel.app/api/v1/integrations/oauth/callback"
 ]
+
