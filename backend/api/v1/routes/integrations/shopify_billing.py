@@ -4,9 +4,12 @@ Shopify Billing API Routes
 Endpoints for Shopify-native app subscription billing.
 Separate from MNEE payment routes — these handle Shopify App Store billing.
 
+Plans: Free ($0/mo), Starter ($29/mo, 14-day trial), Professional ($99/mo, 14-day trial).
+
 Flow:
   1. GET  /plans         → list available plans (public)
-  2. POST /subscribe     → create subscription → returns confirmationUrl
+  2. POST /subscribe     → create subscription → returns confirmationUrl for paid tiers;
+                           free tier is activated locally with no Shopify redirect
   3. [Merchant approves on Shopify → redirected back to frontend with charge_id]
   4. POST /verify        → frontend calls this with charge_id to confirm activation
   5. GET  /status        → check active billing status
@@ -71,6 +74,7 @@ async def list_shopify_plans():
     """
     List available Shopify billing plans.
 
+    Returns the three tiers: Free ($0), Starter ($29/mo), Professional ($99/mo).
     No auth required — this can be called from the embedded app
     before the merchant has logged in, to display pricing.
     """
@@ -104,9 +108,12 @@ async def create_shopify_subscription(
     """
     Create a Shopify recurring subscription.
 
-    Returns a confirmation_url to redirect the merchant to Shopify's
-    billing approval page. After approval, Shopify redirects back to
-    the frontend with a charge_id param.
+    Paid tiers (starter: $29, professional: $99) return a confirmation_url to
+    redirect the merchant to Shopify's billing approval page; after approval
+    Shopify redirects back to the frontend with a charge_id param.
+
+    Free tier is activated immediately — no confirmation_url is returned and
+    no Shopify redirect occurs.
     """
     service = ShopifyBillingService(db)
     result = await service.create_subscription(
@@ -243,8 +250,12 @@ async def change_shopify_plan(
     """
     Change Shopify plan (upgrade or downgrade).
 
-    Creates a new subscription with APPLY_IMMEDIATELY replacement
-    behavior. Merchant must approve the new charge via Shopify.
+    For paid tiers, creates a new subscription that replaces the current one
+    immediately and returns a confirmation_url — merchant must approve the new charge
+    via Shopify.
+
+    When new_tier="free", the active Shopify subscription is cancelled and the
+    local record is downgraded immediately; no confirmation_url is returned.
     """
     service = ShopifyBillingService(db)
     result = await service.create_subscription(
