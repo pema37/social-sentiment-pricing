@@ -90,8 +90,8 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
 class ShopifySubscribeRequest(BaseModel):
     """Request to create a Shopify billing subscription."""
 
-    tier: Literal["starter", "professional", "enterprise"] = Field(
-        ..., description="Plan tier: starter ($49), professional ($149), enterprise ($499)"
+    tier: Literal["free", "starter", "professional", "enterprise"] = Field(
+        ..., description="Plan tier: free ($0), starter ($49), professional ($149), enterprise ($499)"
     )
     shop_domain: str | None = Field(
         default=None,
@@ -102,7 +102,7 @@ class ShopifySubscribeRequest(BaseModel):
 class ShopifyPlanChangeRequest(BaseModel):
     """Request to upgrade or downgrade a Shopify plan."""
 
-    new_tier: Literal["starter", "professional", "enterprise"] = Field(..., description="New plan tier to switch to")
+    new_tier: Literal["free", "starter", "professional", "enterprise"] = Field(..., description="New plan tier to switch to")
     shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",

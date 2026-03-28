@@ -247,7 +247,26 @@ class ShopifyBillingService:
         Returns:
             ShopifySubscribeResponse with confirmationUrl
         """
-        # Validate tier
+        # Free tier bypass — no Shopify billing charge needed
+        if tier == "free":
+            integration = await self._get_shopify_integration(user_id, shop_domain)
+            if not integration:
+                return ShopifySubscribeResponse(
+                    success=False,
+                    tier="free",
+                    message="No active Shopify integration found. Please install the app first.",
+                )
+            await self._downgrade_local_subscription(integration)
+            logger.info(f"Switched to free plan for user_id={user_id}, shop={shop_domain}")
+            return ShopifySubscribeResponse(
+                success=True,
+                confirmation_url=None,
+                shopify_subscription_id=None,
+                tier="free",
+                message="Switched to free plan.",
+            )
+
+        # Validate paid tier
         plan_config = SHOPIFY_PLANS.get(tier)
         if not plan_config:
             return ShopifySubscribeResponse(
