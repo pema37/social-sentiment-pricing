@@ -134,6 +134,9 @@ class IEHealthStatus(BaseModel):
     pipeline_version: str
 
 
+IEHealthStatus.model_rebuild()        
+
+
 class IEDashboard(BaseModel):
     """Combined dashboard payload — single API call for the frontend."""
 
@@ -141,6 +144,9 @@ class IEDashboard(BaseModel):
     top_categories: list[CategoryPerformance]
     active_drift_alerts: list[DriftAlert]
     recent_calibration: CalibrationReport | None = None
+
+
+IEDashboard.model_rebuild()          
 
 
 # ---------------------------------------------------------------------------
