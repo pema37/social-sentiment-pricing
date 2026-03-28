@@ -25,7 +25,7 @@ import {
 import { useSubscription, usePlans, paymentKeys } from '@/lib/hooks/use-payments';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import type { SubscriptionTier, PlansResponse } from '@/types/payment';
+import type { SubscriptionTier, PlansResponse, ShopifyBillingTier } from '@/types/payment';
 import { useShopifyEmbedded } from '@/lib/context/shopify-embedded';
 
 // Shopify billing (new)
@@ -140,7 +140,7 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
   const currentTier = status?.tier || null;
   const hasActiveSub = status?.has_active_subscription || false;
 
-  const handleSubscribe = (tier: 'starter' | 'professional' | 'enterprise') => {
+  const handleSubscribe = (tier: ShopifyBillingTier) => {
     if (hasActiveSub) {
       changePlanMutation.mutate({ new_tier: tier, shop_domain: shop });
     } else {
@@ -369,7 +369,7 @@ function ShopifyBillingPage({ shop }: { shop: string | null }) {
 
                     <Button
                       onClick={() =>
-                        handleSubscribe(plan.tier as 'starter' | 'professional' | 'enterprise')
+                        handleSubscribe(plan.tier as ShopifyBillingTier)
                       }
                       disabled={isCurrent || isPending}
                       variant={config?.popular ? 'primary' : 'secondary'}

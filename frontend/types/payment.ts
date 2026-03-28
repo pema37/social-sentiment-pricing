@@ -1,6 +1,6 @@
 // Payment and Subscription Types
 // AUTO-SYNCED with backend via openapi-typescript
-// Last synced: 2026-02-20
+// Last synced: 2026-03-27
 // Source: components["schemas"]["PaymentInfo"], SubscriptionInfo, etc.
 
 // ============================================
@@ -208,11 +208,11 @@ export interface WebhookResponse {
 }
 
 // ============================================
-// SHOPIFY BILLING TYPES (2026-02-20)
+// SHOPIFY BILLING TYPES (2026-03-27)
 // Matches: backend/schemas/shopify_billing.py
 // ============================================
 
-export type ShopifyBillingTier = 'starter' | 'professional' | 'enterprise';
+export type ShopifyBillingTier = 'free' | 'starter' | 'professional';
 
 /**
  * Shopify plan info for display
