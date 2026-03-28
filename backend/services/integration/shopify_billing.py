@@ -240,13 +240,24 @@ class ShopifyBillingService:
         4. Store the pending Shopify subscription ID locally
 
         Args:
-            tier: Plan tier (starter, professional, enterprise)
+            tier: Plan tier (free, starter, professional). Free skips Shopify charge.
             user_id: User ID (for authenticated flows)
             shop_domain: Shop domain (for embedded/install flows)
 
         Returns:
             ShopifySubscribeResponse with confirmationUrl
         """
+        # Handle free tier — no Shopify charge needed, just local downgrade
+        if tier == "free":
+            integration = await self._get_shopify_integration(user_id, shop_domain)
+            if integration:
+                await self._downgrade_local_subscription(integration)
+            return ShopifySubscribeResponse(
+                success=True,
+                tier="free",
+                message="Downgraded to free plan.",
+            )
+
         # Validate tier
         plan_config = SHOPIFY_PLANS.get(tier)
         if not plan_config:
