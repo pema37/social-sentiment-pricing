@@ -1,4 +1,7 @@
+# services/integration/shopify_products.py
+
 """
+
 Shopify Products Mixin - Product fetching and parsing.
 
 All product data fetched via Shopify GraphQL Admin API 2025-10 —

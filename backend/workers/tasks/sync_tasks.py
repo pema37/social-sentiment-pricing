@@ -2,55 +2,133 @@
 FILE: backend/workers/tasks/sync_tasks.py
 FULL REPLACE
 
-Changes vs previous version (cursor-based pagination fix 2026-03-28):
+Patch history:
+  2026-03-28: Cursor-based pagination — fetch_product_cursors() + parallel chord.
+              sync_status set to "idle"/"error" (not "completed"/"failed").
+  2026-03-29: [NEW] SyncBaseTask base class with on_failure + after_return hooks.
+              Guarantees sync_status always reaches a terminal state even if an
+              unhandled exception escapes all inner try/except blocks, or if the
+              worker is OOM-killed between task completion and result ack.
+              [FIXED] decrypt_token(integration.access_token_encrypted) used
+              everywhere instead of integration.access_token (AttributeError).
+              [FIXED] Chunk worker allows ACTIVE or ERROR status (not just ACTIVE).
+              [FIXED] _orchestrate_sync wrapped in top-level try/except safety net.
 
-  [CRITICAL FIX] Orchestrator now uses fetch_product_cursors() + cursor-based
-  chunk dispatch instead of offset/limit arithmetic.
+Three layers of stuck-sync defense:
+  Layer 1 — SyncBaseTask.on_failure: fires on any unhandled exception.
+  Layer 2 — SyncBaseTask.after_return: fires after any task exit (safety net).
+  Layer 3 — recover_stuck_syncs Beat task: scans DB every 5 min for integrations
+             stuck in "syncing" past 45 min. Catches OOM worker crashes where
+             neither Layer 1 nor Layer 2 had a chance to run.
 
-  Root cause of previous bug: Shopify GraphQL has NO offset pagination.
-  The previous code called sync_products_page(offset=100, limit=100) which
-  would have failed at runtime — GraphQL cursors cannot be computed from
-  an integer offset. fetch_product_cursors() already existed in
-  shopify_products.py and is purpose-built for this exact use case.
-
-  [REMOVED] _get_platform_product_count() — replaced by fetch_product_cursors()
-  which is a single GraphQL pass that returns both the count (len(cursors)) and
-  the cursor values needed for dispatch, without a separate round-trip.
-
-  [REMOVED] sync_products_page(offset, limit) requirement from ProductSyncHandler.
-  Now calls fetch_products(cursor=cursor, limit=CHUNK_SIZE) directly via
-  ShopifyService, then passes raw ExternalProduct list to the handler.
-
-  [KEPT] All PDF best practices: retry_backoff, retry_jitter, chord link_error,
-  dead-letter error callback, SoftTimeLimitExceeded handling.
-
-  [KEPT] Single-pass fallback for small stores.
-  [KEPT] Bug 303.01 + 303.02 fixes.
-
-  FIX (2026-03-29): sync_status set to "idle"/"error" on completion instead of
-  "completed"/"failed" so the UI polling (which checks sync_status == "syncing")
-  correctly stops spinning. "completed"/"failed" are not recognized by the
-  frontend's polling logic.
-
-WooCommerce note: WooCommerce REST API DOES support offset pagination
-(?offset=N&per_page=100). The cursor path is Shopify-only. WooCommerce
-stores still use single-pass (sync_all_products) until a WooCommerce
-parallel-chunk path is implemented separately.
+WooCommerce: offset pagination, single-pass only until parallel path is built.
+Shopify: cursor-based parallel chord — fetch_product_cursors() first, then dispatch.
 """
 
+import celery as celery_lib
 from celery import chord, group
 from celery.exceptions import SoftTimeLimitExceeded
 from sqlmodel import select
 from uuid import UUID
 
+from core.encryption import decrypt_token
 from core.logging import get_logger
 from workers.celery_app import celery_app
 from workers.tasks.ingestion_tasks import get_task_session_maker, run_async
 
 logger = get_logger(__name__)
 
-CHUNK_SIZE = 100   # products per parallel chunk
+CHUNK_SIZE = 100
 MAX_RETRIES = 3
+
+
+# ==============================================================================
+# LAYER 1 + 2: SyncBaseTask
+# ==============================================================================
+
+class SyncBaseTask(celery_lib.Task):
+    """
+    Custom Celery base class for sync tasks.
+
+    Guarantees sync_status always reaches "idle" or "error" regardless of
+    how the task exits — unhandled exception, worker crash, soft timeout.
+
+    on_failure: fires when an unhandled exception escapes the task.
+    after_return: fires after any exit. Final safety net — if sync_status is
+    still "syncing" after a non-success exit, force it to "error".
+    """
+
+    abstract = True
+
+    def _reset_sync_status(self, integration_id: str, error_msg: str) -> None:
+        """Reset sync_status to 'error' synchronously. Safe to call from hooks."""
+        import asyncio
+        from models.integration import Integration
+
+        async def _do_reset():
+            session_maker = get_task_session_maker()
+            async with session_maker() as db:
+                stmt = select(Integration).where(
+                    Integration.id == UUID(integration_id)
+                )
+                result = await db.execute(stmt)
+                integration = result.scalars().first()
+                if integration and integration.sync_status == "syncing":
+                    integration.sync_status = "error"
+                    integration.error_message = error_msg[:500]
+                    await db.commit()
+                    logger.info(
+                        "SyncBaseTask: reset sync_status to error",
+                        integration_id=integration_id,
+                    )
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(asyncio.run, _do_reset())
+                    future.result(timeout=10)
+            else:
+                loop.run_until_complete(_do_reset())
+        except Exception as e:
+            logger.error(
+                "SyncBaseTask: failed to reset sync_status",
+                integration_id=integration_id,
+                error=str(e),
+            )
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        """Layer 1: fires on any unhandled exception from the task."""
+        integration_id = args[0] if args else kwargs.get("integration_id")
+        if integration_id:
+            logger.error(
+                "SyncBaseTask.on_failure",
+                integration_id=integration_id,
+                exc_type=type(exc).__name__,
+                task_id=task_id,
+            )
+            self._reset_sync_status(
+                integration_id,
+                f"{type(exc).__name__}: {str(exc)}",
+            )
+
+    def after_return(self, status, retval, task_id, args, kwargs, einfo):
+        """Layer 2: fires after any task exit. Safety net for non-SUCCESS."""
+        if status in ("SUCCESS", "RETRY"):
+            return
+        integration_id = args[0] if args else kwargs.get("integration_id")
+        if integration_id:
+            logger.warning(
+                "SyncBaseTask.after_return: non-success exit",
+                integration_id=integration_id,
+                status=status,
+                task_id=task_id,
+            )
+            self._reset_sync_status(
+                integration_id,
+                f"Task ended with status: {status}",
+            )
 
 
 # ==============================================================================
@@ -60,6 +138,7 @@ MAX_RETRIES = 3
 @celery_app.task(
     name="workers.tasks.sync_tasks.sync_integration_products",
     bind=True,
+    base=SyncBaseTask,
     max_retries=MAX_RETRIES,
     retry_backoff=True,
     retry_backoff_max=300,
@@ -71,38 +150,69 @@ def sync_integration_products(self, integration_id: str, user_id: str) -> dict:
     """
     Orchestrate a full product sync for one integration.
 
-    Shopify (GraphQL, cursor-based):
-      Small stores (≤ 1 page): single-pass via sync_all_products.
-      Large stores: fetch_product_cursors() → parallel chord of chunk tasks.
-
-    WooCommerce (REST, offset-based):
-      Always single-pass via sync_all_products.
-      Parallel chunking for WooCommerce is a separate future task.
+    Shopify: fetch_product_cursors() → parallel chord of chunk tasks.
+    WooCommerce: single-pass via sync_all_products.
     """
     return run_async(_orchestrate_sync(self, integration_id, user_id))
 
 
 async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dict:
-    from models.integration import Integration, IntegrationStatus
+    from models.integration import Integration
 
     session_maker = get_task_session_maker()
 
+    try:
+        return await _orchestrate_sync_inner(
+            task_self, integration_id, user_id, session_maker,
+        )
+    except Exception as exc:
+        # Top-level safety net — belt-and-suspenders with SyncBaseTask.on_failure.
+        # If _orchestrate_sync_inner raised without resetting sync_status, fix it.
+        logger.error(
+            "sync orchestrator unhandled error — resetting sync_status",
+            integration_id=integration_id,
+            error=str(exc),
+        )
+        try:
+            async with session_maker() as db:
+                stmt = select(Integration).where(
+                    Integration.id == UUID(integration_id),
+                )
+                result = await db.execute(stmt)
+                integration = result.scalars().first()
+                if integration and integration.sync_status == "syncing":
+                    integration.sync_status = "error"
+                    integration.error_message = str(exc)[:500]
+                    await db.commit()
+        except Exception:
+            logger.exception(
+                "sync orchestrator: failed to reset sync_status after error",
+                integration_id=integration_id,
+            )
+        raise
+
+
+async def _orchestrate_sync_inner(
+    task_self, integration_id: str, user_id: str, session_maker,
+) -> dict:
+    from models.integration import Integration, IntegrationStatus
+
     async with session_maker() as db:
+        # Allow ACTIVE or ERROR — ERROR integrations should be retryable
         stmt = select(Integration).where(
             Integration.id == UUID(integration_id),
             Integration.user_id == UUID(user_id),
-            Integration.status == IntegrationStatus.ACTIVE,
+            Integration.status.in_([IntegrationStatus.ACTIVE, IntegrationStatus.ERROR]),
         )
         result = await db.execute(stmt)
         integration = result.scalars().first()
 
         if not integration:
             logger.warning(
-                "sync_integration_products: no active integration",
+                "sync_integration_products: no active/error integration found",
                 integration_id=integration_id,
                 user_id=user_id,
             )
-            # Reset sync_status so UI doesn't stay stuck
             stmt2 = select(Integration).where(Integration.id == UUID(integration_id))
             result2 = await db.execute(stmt2)
             integration2 = result2.scalars().first()
@@ -118,18 +228,13 @@ async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dic
 
         platform = getattr(integration, "platform", "").lower()
 
-        # WooCommerce: REST API supports offset but not cursor pagination.
-        # Run single-pass until a WooCommerce parallel path is built.
         if platform != "shopify":
             return await _sync_single_pass(db, integration, integration_id, user_id)
 
-        # Shopify: use cursor enumeration for parallel dispatch.
-        store_url    = integration.store_url
-        access_token = integration.access_token
+        store_url = integration.store_url
+        # FIX: decrypt inside the worker — never pass tokens as Celery task args
+        access_token = decrypt_token(integration.access_token_encrypted)
 
-    # ----------------------------------------------------------------
-    # Fetch page-boundary cursors — one lightweight GraphQL pass.
-    # ----------------------------------------------------------------
     from services.integration.shopify_service import ShopifyService
 
     shopify = ShopifyService()
@@ -146,16 +251,13 @@ async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dic
         chunk_size=CHUNK_SIZE,
     )
 
-    # Small store — single page, no parallel overhead needed
     if len(cursors) <= 1:
-        session_maker = get_task_session_maker()
         async with session_maker() as db:
             stmt = select(Integration).where(Integration.id == UUID(integration_id))
             result = await db.execute(stmt)
             integration = result.scalars().first()
             return await _sync_single_pass(db, integration, integration_id, user_id)
 
-    # Large store — dispatch parallel chunks (sync_status already "syncing")
     chunk_tasks = group(
         sync_integration_products_chunk.si(
             integration_id=integration_id,
@@ -194,6 +296,7 @@ async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dic
 @celery_app.task(
     name="workers.tasks.sync_tasks.sync_integration_products_chunk",
     bind=True,
+    base=SyncBaseTask,
     max_retries=MAX_RETRIES,
     retry_backoff=True,
     retry_backoff_max=120,
@@ -228,17 +331,19 @@ async def _sync_chunk(
     session_maker = get_task_session_maker()
 
     async with session_maker() as db:
+        # FIX: allow ACTIVE or ERROR — previously ACTIVE-only caused all ERROR
+        # integrations to return sentinel failure without attempting sync
         stmt = select(Integration).where(
             Integration.id == UUID(integration_id),
             Integration.user_id == UUID(user_id),
-            Integration.status == IntegrationStatus.ACTIVE,
+            Integration.status.in_([IntegrationStatus.ACTIVE, IntegrationStatus.ERROR]),
         )
         result = await db.execute(stmt)
         integration = result.scalars().first()
 
         if not integration:
             logger.warning(
-                "sync_chunk: integration not found",
+                "sync_chunk: integration not found or not active/error",
                 integration_id=integration_id,
                 cursor=cursor,
             )
@@ -252,7 +357,8 @@ async def _sync_chunk(
             shopify = ShopifyService()
             sync_result = await shopify.fetch_products(
                 store_url=integration.store_url,
-                access_token=integration.access_token,
+                # FIX: decrypt_token() — not integration.access_token (AttributeError)
+                access_token=decrypt_token(integration.access_token_encrypted),
                 cursor=cursor,
                 limit=limit,
             )
@@ -261,8 +367,8 @@ async def _sync_chunk(
                 raise RuntimeError(f"fetch_products failed: {sync_result.error}")
 
             product_repo = ProductRepository(db)
-            link_repo    = LinkRepository(db)
-            handler      = ProductSyncHandler(db, product_repo, link_repo)
+            link_repo = LinkRepository(db)
+            handler = ProductSyncHandler(db, product_repo, link_repo)
 
             created, updated, deleted = await handler.upsert_products(
                 integration=integration,
@@ -271,7 +377,7 @@ async def _sync_chunk(
 
         except SoftTimeLimitExceeded:
             logger.warning(
-                "sync_chunk soft timeout, retrying",
+                "sync_chunk soft timeout — retrying",
                 integration_id=integration_id,
                 cursor=cursor,
             )
@@ -308,7 +414,7 @@ def sync_integration_products_complete(
     user_id: str,
     total_chunks: int,
 ) -> dict:
-    """Aggregates chunk results and marks integration completed."""
+    """Aggregate chunk results and mark integration as idle or error."""
     return run_async(
         _mark_sync_complete(chunk_results, integration_id, user_id, total_chunks)
     )
@@ -323,10 +429,10 @@ async def _mark_sync_complete(
     from datetime import UTC, datetime
     from models.integration import Integration
 
-    safe_results   = chunk_results or []
-    total_created  = sum(r.get("created", 0) for r in safe_results if r and r.get("success"))
-    total_updated  = sum(r.get("updated", 0) for r in safe_results if r and r.get("success"))
-    total_deleted  = sum(r.get("deleted", 0) for r in safe_results if r and r.get("success"))
+    safe_results  = chunk_results or []
+    total_created = sum(r.get("created", 0) for r in safe_results if r and r.get("success"))
+    total_updated = sum(r.get("updated", 0) for r in safe_results if r and r.get("success"))
+    total_deleted = sum(r.get("deleted", 0) for r in safe_results if r and r.get("success"))
     sentinel_fails = [r for r in safe_results if not r or not r.get("success")]
 
     session_maker = get_task_session_maker()
@@ -335,7 +441,7 @@ async def _mark_sync_complete(
         result = await db.execute(stmt)
         integration = result.scalars().first()
         if integration:
-            # FIX: "idle"/"error" — recognized by UI polling and SyncService
+            # "idle"/"error" — recognized by UI polling. "completed"/"failed" are NOT.
             integration.sync_status = "error" if sentinel_fails else "idle"
             integration.products_synced = total_created + total_updated
             if not sentinel_fails:
@@ -369,8 +475,9 @@ def sync_integration_products_error(
     user_id: str,
 ) -> None:
     """
-    Fires when any chunk exhausts retries and raises (not sentinel returns).
-    Marks integration as error. PDF §Chords link_error pattern.
+    Fires when a chunk exhausts retries and raises (not sentinel returns).
+    link_error only fires on raised exceptions — sentinel returns go to the
+    success callback. This handles the hard failure path.
     """
     return run_async(_handle_sync_error(request, exc, traceback, integration_id, user_id))
 
@@ -394,14 +501,13 @@ async def _handle_sync_error(
         result = await db.execute(stmt)
         integration = result.scalars().first()
         if integration:
-            # FIX: "error" — recognized by UI and SyncService.recover_stuck_syncs
             integration.sync_status = "error"
-            integration.error_message = str(exc)
+            integration.error_message = str(exc)[:500]
             try:
                 integration.last_error = json.dumps({
-                    "failed_at":      datetime.now(UTC).isoformat(),
-                    "exc_type":       type(exc).__name__,
-                    "exc_message":    str(exc),
+                    "failed_at": datetime.now(UTC).isoformat(),
+                    "exc_type": type(exc).__name__,
+                    "exc_message": str(exc),
                     "celery_task_id": getattr(request, "id", None),
                 })
             except Exception:
@@ -411,12 +517,13 @@ async def _handle_sync_error(
 
 
 # ==============================================================================
-# HELPERS
+# SINGLE-PASS HELPER
 # ==============================================================================
 
 async def _sync_single_pass(db, integration, integration_id: str, user_id: str) -> dict:
     """
-    Original single-pass sync for small stores or non-Shopify platforms.
+    Single-pass sync for small Shopify stores or WooCommerce.
+    sync_all_products handles internal pagination.
     Sets sync_status = "idle" on success, "error" on failure.
     """
     from datetime import UTC, datetime
@@ -427,8 +534,8 @@ async def _sync_single_pass(db, integration, integration_id: str, user_id: str) 
 
     try:
         product_repo = ProductRepository(db)
-        link_repo    = LinkRepository(db)
-        handler      = ProductSyncHandler(db, product_repo, link_repo)
+        link_repo = LinkRepository(db)
+        handler = ProductSyncHandler(db, product_repo, link_repo)
 
         created, updated, deleted = await handler.sync_all_products(
             integration, sync_type="full"
@@ -441,12 +548,12 @@ async def _sync_single_pass(db, integration, integration_id: str, user_id: str) 
         await db.commit()
 
         result_dict = {
-            "success":        True,
-            "mode":           "single_pass",
+            "success": True,
+            "mode": "single_pass",
             "integration_id": integration_id,
-            "created":        created,
-            "updated":        updated,
-            "deleted":        deleted,
+            "created": created,
+            "updated": updated,
+            "deleted": deleted,
         }
         logger.info("sync_integration_products (single-pass) complete", **result_dict)
         return result_dict
@@ -463,12 +570,12 @@ async def _sync_single_pass(db, integration, integration_id: str, user_id: str) 
             integration_row = result.scalars().first()
             if integration_row:
                 integration_row.sync_status = "error"
-                integration_row.error_message = str(exc)
+                integration_row.error_message = str(exc)[:500]
                 await db.commit()
         except Exception:
             pass
         raise
 
 
-
     
+
