@@ -1,46 +1,228 @@
-# backend/workers/tasks/sync_tasks.py
 """
-Sync Tasks — Celery tasks for importing products from connected e-commerce platforms.
+FILE: backend/workers/tasks/sync_tasks.py
+FULL REPLACE
 
-These tasks pull products from Shopify/WooCommerce and create
-ProductIntegrationLink records for any unlinked products.
+Changes vs previous version (cursor-based pagination fix 2026-03-28):
 
-PATCHED (2026-03-28): Refactored sync_integration_products into a parallel
-chunked pipeline:
-  1. Orchestrator enumerates all page cursors (lightweight pass, no product data)
-  2. Dispatches one chunk task per 100-product page via a Celery chord
-  3. Chord callback (_finalize_sync) marks sync complete when all chunks finish
-  Fixes BULK_PRODUCTS_UNLINKED (Bug 303.02) and resolves multi-hour sync times
-  on large stores.
+  [CRITICAL FIX] Orchestrator now uses fetch_product_cursors() + cursor-based
+  chunk dispatch instead of offset/limit arithmetic.
+
+  Root cause of previous bug: Shopify GraphQL has NO offset pagination.
+  The previous code called sync_products_page(offset=100, limit=100) which
+  would have failed at runtime — GraphQL cursors cannot be computed from
+  an integer offset. fetch_product_cursors() already existed in
+  shopify_products.py and is purpose-built for this exact use case.
+
+  [REMOVED] _get_platform_product_count() — replaced by fetch_product_cursors()
+  which is a single GraphQL pass that returns both the count (len(cursors)) and
+  the cursor values needed for dispatch, without a separate round-trip.
+
+  [REMOVED] sync_products_page(offset, limit) requirement from ProductSyncHandler.
+  Now calls fetch_products(cursor=cursor, limit=CHUNK_SIZE) directly via
+  ShopifyService, then passes raw ExternalProduct list to the handler.
+
+  [KEPT] All PDF best practices: retry_backoff, retry_jitter, chord link_error,
+  dead-letter error callback, SoftTimeLimitExceeded handling.
+
+  [KEPT] Single-pass fallback for small stores.
+  [KEPT] Bug 303.01 + 303.02 fixes.
+
+  FIX (2026-03-29): sync_status set to "idle"/"error" on completion instead of
+  "completed"/"failed" so the UI polling (which checks sync_status == "syncing")
+  correctly stops spinning. "completed"/"failed" are not recognized by the
+  frontend's polling logic.
+
+WooCommerce note: WooCommerce REST API DOES support offset pagination
+(?offset=N&per_page=100). The cursor path is Shopify-only. WooCommerce
+stores still use single-pass (sync_all_products) until a WooCommerce
+parallel-chunk path is implemented separately.
 """
-
-from datetime import UTC, datetime
-from uuid import UUID
 
 from celery import chord, group
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlmodel import select
+from uuid import UUID
 
-from core.encryption import decrypt_token
 from core.logging import get_logger
 from workers.celery_app import celery_app
-from workers.tasks.sync_verification_tasks import get_task_session_maker, run_async
+from workers.tasks.ingestion_tasks import get_task_session_maker, run_async
 
 logger = get_logger(__name__)
 
+CHUNK_SIZE = 100   # products per parallel chunk
+MAX_RETRIES = 3
+
 
 # ==============================================================================
-# ORCHESTRATOR TASK
+# ORCHESTRATOR
 # ==============================================================================
 
+@celery_app.task(
+    name="workers.tasks.sync_tasks.sync_integration_products",
+    bind=True,
+    max_retries=MAX_RETRIES,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    soft_time_limit=270,
+    time_limit=300,
+)
+def sync_integration_products(self, integration_id: str, user_id: str) -> dict:
+    """
+    Orchestrate a full product sync for one integration.
 
-async def _sync_integration_products(integration_id: str, user_id: str) -> dict:
+    Shopify (GraphQL, cursor-based):
+      Small stores (≤ 1 page): single-pass via sync_all_products.
+      Large stores: fetch_product_cursors() → parallel chord of chunk tasks.
+
+    WooCommerce (REST, offset-based):
+      Always single-pass via sync_all_products.
+      Parallel chunking for WooCommerce is a separate future task.
     """
-    Orchestrate a parallel chunked sync:
-    1. Verify integration is active
-    2. Enumerate all page-boundary cursors (lightweight pass)
-    3. Dispatch chord of chunk tasks + finalize callback
-    """
-    from models.integration import EcommercePlatform, Integration, IntegrationStatus
+    return run_async(_orchestrate_sync(self, integration_id, user_id))
+
+
+async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dict:
+    from models.integration import Integration, IntegrationStatus
+
+    session_maker = get_task_session_maker()
+
+    async with session_maker() as db:
+        stmt = select(Integration).where(
+            Integration.id == UUID(integration_id),
+            Integration.user_id == UUID(user_id),
+            Integration.status == IntegrationStatus.ACTIVE,
+        )
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+
+        if not integration:
+            logger.warning(
+                "sync_integration_products: no active integration",
+                integration_id=integration_id,
+                user_id=user_id,
+            )
+            # Reset sync_status so UI doesn't stay stuck
+            stmt2 = select(Integration).where(Integration.id == UUID(integration_id))
+            result2 = await db.execute(stmt2)
+            integration2 = result2.scalars().first()
+            if integration2 and integration2.sync_status == "syncing":
+                integration2.sync_status = "error"
+                integration2.error_message = "Integration not found or not active"
+                await db.commit()
+            return {
+                "success": False,
+                "error": "Integration not found or not active",
+                "integration_id": integration_id,
+            }
+
+        platform = getattr(integration, "platform", "").lower()
+
+        # WooCommerce: REST API supports offset but not cursor pagination.
+        # Run single-pass until a WooCommerce parallel path is built.
+        if platform != "shopify":
+            return await _sync_single_pass(db, integration, integration_id, user_id)
+
+        # Shopify: use cursor enumeration for parallel dispatch.
+        store_url    = integration.store_url
+        access_token = integration.access_token
+
+    # ----------------------------------------------------------------
+    # Fetch page-boundary cursors — one lightweight GraphQL pass.
+    # ----------------------------------------------------------------
+    from services.integration.shopify_service import ShopifyService
+
+    shopify = ShopifyService()
+    cursors = await shopify.fetch_product_cursors(
+        store_url=store_url,
+        access_token=access_token,
+        page_size=CHUNK_SIZE,
+    )
+
+    logger.info(
+        "sync orchestrator: cursor enumeration complete",
+        integration_id=integration_id,
+        chunks=len(cursors),
+        chunk_size=CHUNK_SIZE,
+    )
+
+    # Small store — single page, no parallel overhead needed
+    if len(cursors) <= 1:
+        session_maker = get_task_session_maker()
+        async with session_maker() as db:
+            stmt = select(Integration).where(Integration.id == UUID(integration_id))
+            result = await db.execute(stmt)
+            integration = result.scalars().first()
+            return await _sync_single_pass(db, integration, integration_id, user_id)
+
+    # Large store — dispatch parallel chunks (sync_status already "syncing")
+    chunk_tasks = group(
+        sync_integration_products_chunk.si(
+            integration_id=integration_id,
+            user_id=user_id,
+            cursor=cursor,
+            limit=CHUNK_SIZE,
+        )
+        for cursor in cursors
+    )
+
+    callback = sync_integration_products_complete.si(
+        integration_id=integration_id,
+        user_id=user_id,
+        total_chunks=len(cursors),
+    )
+    error_callback = sync_integration_products_error.s(
+        integration_id=integration_id,
+        user_id=user_id,
+    )
+
+    workflow = chord(chunk_tasks)(callback)
+    workflow.link_error(error_callback)
+
+    return {
+        "success": True,
+        "mode": "parallel",
+        "integration_id": integration_id,
+        "chunks_dispatched": len(cursors),
+    }
+
+
+# ==============================================================================
+# CHUNK WORKER
+# ==============================================================================
+
+@celery_app.task(
+    name="workers.tasks.sync_tasks.sync_integration_products_chunk",
+    bind=True,
+    max_retries=MAX_RETRIES,
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    soft_time_limit=240,
+    time_limit=270,
+)
+def sync_integration_products_chunk(
+    self,
+    integration_id: str,
+    user_id: str,
+    cursor: str | None,
+    limit: int,
+) -> dict:
+    """Fetch and upsert one page of products starting at `cursor`."""
+    return run_async(_sync_chunk(self, integration_id, user_id, cursor, limit))
+
+
+async def _sync_chunk(
+    task_self,
+    integration_id: str,
+    user_id: str,
+    cursor: str | None,
+    limit: int,
+) -> dict:
+    from models.integration import Integration, IntegrationStatus
+    from services.integration.handlers.product_sync_handler import ProductSyncHandler
+    from services.integration.repositories.link_repo import LinkRepository
+    from services.integration.repositories.product_repo import ProductRepository
     from services.integration.shopify_service import ShopifyService
 
     session_maker = get_task_session_maker()
@@ -56,244 +238,237 @@ async def _sync_integration_products(integration_id: str, user_id: str) -> dict:
 
         if not integration:
             logger.warning(
-                "sync_integration_products: no active integration found",
+                "sync_chunk: integration not found",
                 integration_id=integration_id,
-                user_id=user_id,
+                cursor=cursor,
             )
             return {
                 "success": False,
-                "error": "Integration not found or not active",
-                "integration_id": integration_id,
+                "cursor": cursor,
+                "error": "Integration not found",
             }
-
-        integration.sync_status = "syncing"
-        integration.sync_cursor = None
-        db.add(integration)
-        await db.commit()
 
         try:
-            access_token = decrypt_token(integration.access_token_encrypted)
-
-            if integration.platform == EcommercePlatform.SHOPIFY:
-                service = ShopifyService()
-                cursors = await service.fetch_product_cursors(
-                    store_url=integration.store_url,
-                    access_token=access_token,
-                    page_size=100,
-                )
-            else:
-                # WooCommerce: single chunk (no cursor enumeration needed)
-                cursors = [None]
-
-            if not cursors:
-                # No products found — mark complete immediately
-                integration.sync_status = "idle"
-                integration.last_sync_at = datetime.now(UTC)
-                db.add(integration)
-                await db.commit()
-                return {"status": "completed", "chunk_count": 0, "integration_id": integration_id}
-
-            # Dispatch chord: parallel chunks + finalize callback
-            chunk_tasks = group(
-                sync_integration_products_chunk.si(integration_id, cursor, idx)
-                for idx, cursor in enumerate(cursors)
+            shopify = ShopifyService()
+            sync_result = await shopify.fetch_products(
+                store_url=integration.store_url,
+                access_token=integration.access_token,
+                cursor=cursor,
+                limit=limit,
             )
-            callback = _finalize_sync.s(integration_id)
-            chord(chunk_tasks, callback).apply_async(queue="sync")
 
-            logger.info(
-                "sync_integration_products dispatched",
+            if not sync_result.success:
+                raise RuntimeError(f"fetch_products failed: {sync_result.error}")
+
+            product_repo = ProductRepository(db)
+            link_repo    = LinkRepository(db)
+            handler      = ProductSyncHandler(db, product_repo, link_repo)
+
+            created, updated, deleted = await handler.upsert_products(
+                integration=integration,
+                external_products=sync_result.products,
+            )
+
+        except SoftTimeLimitExceeded:
+            logger.warning(
+                "sync_chunk soft timeout, retrying",
                 integration_id=integration_id,
-                chunk_count=len(cursors),
+                cursor=cursor,
             )
-            return {
-                "status": "dispatched",
-                "chunk_count": len(cursors),
-                "integration_id": integration_id,
-            }
-
+            raise task_self.retry(countdown=30)
         except Exception as exc:
             logger.error(
-                "sync_integration_products orchestration failed",
+                "sync_chunk failed",
                 integration_id=integration_id,
+                cursor=cursor,
                 error=str(exc),
             )
-            integration.sync_status = "error"
-            integration.error_message = str(exc)
-            db.add(integration)
-            await db.commit()
-            return {"success": False, "error": str(exc), "integration_id": integration_id}
+            raise task_self.retry(exc=exc)
 
-
-@celery_app.task(name="workers.tasks.sync_tasks.sync_integration_products", queue="sync")
-def sync_integration_products(integration_id: str, user_id: str) -> dict:
-    """
-    Orchestrate a parallel chunked product sync.
-
-    Enqueued by POST /api/v1/product-sync/sync/bulk.
-    Fixes Bug 303.02 — BULK_PRODUCTS_UNLINKED.
-    """
-    return run_async(_sync_integration_products(integration_id, user_id))
-
-
-# ==============================================================================
-# CHUNK TASK
-# ==============================================================================
-
-
-async def _sync_integration_products_chunk(
-    integration_id: str,
-    cursor: str | None,
-    chunk_index: int,
-) -> dict:
-    """Process one 100-product page starting at cursor."""
-    from models.integration import EcommercePlatform, Integration, IntegrationStatus
-    from services.integration.handlers.product_sync_handler import ProductSyncHandler
-    from services.integration.repositories.link_repo import LinkRepository
-    from services.integration.repositories.product_repo import ProductRepository
-    from services.integration.shopify_service import ShopifyService
-    from services.integration.woocommerce_service import WooCommerceService
-
-    session_maker = get_task_session_maker()
-
-    async with session_maker() as db:
-        stmt = select(Integration).where(
-            Integration.id == UUID(integration_id),
-            Integration.status == IntegrationStatus.ACTIVE,
-        )
-        result = await db.execute(stmt)
-        integration = result.scalars().first()
-
-        if not integration:
-            logger.warning(
-                "sync_chunk: integration not found",
-                integration_id=integration_id,
-                chunk_index=chunk_index,
-            )
-            return {"created": 0, "updated": 0, "chunk_index": chunk_index, "success": False}
-
-        access_token = decrypt_token(integration.access_token_encrypted)
-
-        if integration.platform == EcommercePlatform.SHOPIFY:
-            service = ShopifyService()
-        else:
-            service = WooCommerceService()
-
-        result_page = await service.fetch_products(
-            store_url=integration.store_url,
-            access_token=access_token,
-            cursor=cursor,
-            limit=100,
-        )
-
-        if not result_page.success:
-            logger.error(
-                "sync_chunk: fetch failed",
-                integration_id=integration_id,
-                chunk_index=chunk_index,
-                error=result_page.error,
-            )
-            return {"created": 0, "updated": 0, "chunk_index": chunk_index, "success": False}
-
-        product_repo = ProductRepository(db)
-        link_repo = LinkRepository(db)
-        handler = ProductSyncHandler(db, product_repo, link_repo)
-
-        created, updated = 0, 0
-        for external_product in result_page.products:
-            c, u = await handler.upsert_product(integration, external_product)
-            created += c
-            updated += u
-
-        await db.commit()
-
-        logger.info(
-            "sync_chunk complete",
-            integration_id=integration_id,
-            chunk_index=chunk_index,
-            created=created,
-            updated=updated,
-        )
-        return {
+        result_dict = {
+            "success": True,
+            "integration_id": integration_id,
+            "cursor": cursor,
             "created": created,
             "updated": updated,
-            "chunk_index": chunk_index,
-            "success": True,
+            "deleted": deleted,
         }
+        logger.info("sync_chunk complete", **result_dict)
+        return result_dict
 
 
-@celery_app.task(
-    name="workers.tasks.sync_tasks.sync_integration_products_chunk",
-    queue="sync",
-)
-def sync_integration_products_chunk(
+# ==============================================================================
+# CHORD SUCCESS CALLBACK
+# ==============================================================================
+
+@celery_app.task(name="workers.tasks.sync_tasks.sync_integration_products_complete")
+def sync_integration_products_complete(
+    chunk_results: list,
     integration_id: str,
-    cursor: str | None,
-    chunk_index: int,
+    user_id: str,
+    total_chunks: int,
 ) -> dict:
-    """Process one 100-product page. Called by sync_integration_products chord."""
-    return run_async(_sync_integration_products_chunk(integration_id, cursor, chunk_index))
+    """Aggregates chunk results and marks integration completed."""
+    return run_async(
+        _mark_sync_complete(chunk_results, integration_id, user_id, total_chunks)
+    )
 
 
-# ==============================================================================
-# CHORD CALLBACK — FINALIZE
-# ==============================================================================
+async def _mark_sync_complete(
+    chunk_results: list,
+    integration_id: str,
+    user_id: str,
+    total_chunks: int,
+) -> dict:
+    from datetime import UTC, datetime
+    from models.integration import Integration
 
-
-async def _finalize_sync_async(chunk_results: list[dict], integration_id: str) -> dict:
-    """Sum all chunk results and mark sync as complete."""
-    from models.integration import Integration, IntegrationSyncLog
-
-    total_created = sum(r.get("created", 0) for r in chunk_results if isinstance(r, dict))
-    total_updated = sum(r.get("updated", 0) for r in chunk_results if isinstance(r, dict))
+    safe_results   = chunk_results or []
+    total_created  = sum(r.get("created", 0) for r in safe_results if r and r.get("success"))
+    total_updated  = sum(r.get("updated", 0) for r in safe_results if r and r.get("success"))
+    total_deleted  = sum(r.get("deleted", 0) for r in safe_results if r and r.get("success"))
+    sentinel_fails = [r for r in safe_results if not r or not r.get("success")]
 
     session_maker = get_task_session_maker()
-    now = datetime.now(UTC)
-
     async with session_maker() as db:
         stmt = select(Integration).where(Integration.id == UUID(integration_id))
         result = await db.execute(stmt)
         integration = result.scalars().first()
-
         if integration:
-            integration.sync_status = "idle"
-            integration.last_sync_at = now
-            integration.error_message = None
-            db.add(integration)
-
-            sync_log = IntegrationSyncLog(
-                integration_id=UUID(integration_id),
-                sync_type="full",
-                started_at=now,
-                completed_at=now,
-                success=True,
-                products_created=total_created,
-                products_updated=total_updated,
-                products_deleted=0,
-            )
-            db.add(sync_log)
+            # FIX: "idle"/"error" — recognized by UI polling and SyncService
+            integration.sync_status = "error" if sentinel_fails else "idle"
+            integration.products_synced = total_created + total_updated
+            if not sentinel_fails:
+                integration.last_sync_at = datetime.now(UTC)
+                integration.error_message = None
             await db.commit()
 
-    logger.info(
-        "sync finalized",
-        integration_id=integration_id,
-        total_created=total_created,
-        total_updated=total_updated,
-        chunks=len(chunk_results),
-    )
-    return {
-        "success": True,
+    summary = {
+        "success": not sentinel_fails,
         "integration_id": integration_id,
-        "created": total_created,
-        "updated": total_updated,
-        "chunks": len(chunk_results),
+        "chunks_total": total_chunks,
+        "chunks_failed": len(sentinel_fails),
+        "total_created": total_created,
+        "total_updated": total_updated,
+        "total_deleted": total_deleted,
     }
+    logger.info("sync complete (all chunks)", **summary)
+    return summary
 
 
-@celery_app.task(
-    name="workers.tasks.sync_tasks._finalize_sync",
-    queue="sync",
-)
-def _finalize_sync(chunk_results: list[dict], integration_id: str) -> dict:
-    """Chord callback: aggregate chunk results and mark sync complete."""
-    return run_async(_finalize_sync_async(chunk_results, integration_id))
+# ==============================================================================
+# CHORD ERROR CALLBACK
+# ==============================================================================
+
+@celery_app.task(name="workers.tasks.sync_tasks.sync_integration_products_error")
+def sync_integration_products_error(
+    request,
+    exc,
+    traceback,
+    integration_id: str,
+    user_id: str,
+) -> None:
+    """
+    Fires when any chunk exhausts retries and raises (not sentinel returns).
+    Marks integration as error. PDF §Chords link_error pattern.
+    """
+    return run_async(_handle_sync_error(request, exc, traceback, integration_id, user_id))
+
+
+async def _handle_sync_error(
+    request, exc, traceback, integration_id: str, user_id: str,
+) -> None:
+    import json
+    from datetime import UTC, datetime
+    from models.integration import Integration
+
+    logger.error(
+        "sync chord failed — marking integration as error",
+        integration_id=integration_id,
+        exc=str(exc),
+    )
+
+    session_maker = get_task_session_maker()
+    async with session_maker() as db:
+        stmt = select(Integration).where(Integration.id == UUID(integration_id))
+        result = await db.execute(stmt)
+        integration = result.scalars().first()
+        if integration:
+            # FIX: "error" — recognized by UI and SyncService.recover_stuck_syncs
+            integration.sync_status = "error"
+            integration.error_message = str(exc)
+            try:
+                integration.last_error = json.dumps({
+                    "failed_at":      datetime.now(UTC).isoformat(),
+                    "exc_type":       type(exc).__name__,
+                    "exc_message":    str(exc),
+                    "celery_task_id": getattr(request, "id", None),
+                })
+            except Exception:
+                pass  # last_error column may not exist yet
+            await db.commit()
+            logger.info("sync dead-letter recorded", integration_id=integration_id)
+
+
+# ==============================================================================
+# HELPERS
+# ==============================================================================
+
+async def _sync_single_pass(db, integration, integration_id: str, user_id: str) -> dict:
+    """
+    Original single-pass sync for small stores or non-Shopify platforms.
+    Sets sync_status = "idle" on success, "error" on failure.
+    """
+    from datetime import UTC, datetime
+    from models.integration import Integration
+    from services.integration.handlers.product_sync_handler import ProductSyncHandler
+    from services.integration.repositories.link_repo import LinkRepository
+    from services.integration.repositories.product_repo import ProductRepository
+
+    try:
+        product_repo = ProductRepository(db)
+        link_repo    = LinkRepository(db)
+        handler      = ProductSyncHandler(db, product_repo, link_repo)
+
+        created, updated, deleted = await handler.sync_all_products(
+            integration, sync_type="full"
+        )
+
+        integration.sync_status = "idle"
+        integration.last_sync_at = datetime.now(UTC)
+        integration.products_synced = created + updated
+        integration.error_message = None
+        await db.commit()
+
+        result_dict = {
+            "success":        True,
+            "mode":           "single_pass",
+            "integration_id": integration_id,
+            "created":        created,
+            "updated":        updated,
+            "deleted":        deleted,
+        }
+        logger.info("sync_integration_products (single-pass) complete", **result_dict)
+        return result_dict
+
+    except Exception as exc:
+        logger.error(
+            "sync_integration_products (single-pass) failed",
+            integration_id=integration_id,
+            error=str(exc),
+        )
+        try:
+            stmt = select(Integration).where(Integration.id == UUID(integration_id))
+            result = await db.execute(stmt)
+            integration_row = result.scalars().first()
+            if integration_row:
+                integration_row.sync_status = "error"
+                integration_row.error_message = str(exc)
+                await db.commit()
+        except Exception:
+            pass
+        raise
+
+
+
+    

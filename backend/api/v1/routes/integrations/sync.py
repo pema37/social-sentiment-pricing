@@ -5,13 +5,17 @@ Sync operation endpoints - WITH PROGRESS TRACKING.
 Updated to include:
 - GET /{integration_id}/sync/progress - Detailed progress with user-friendly messaging
 - GET /sync/status/all - Status across all user's integrations
+
+FIX (2026-03-29): trigger_sync now dispatches to Celery sync_integration_products
+task via the sync queue instead of FastAPI BackgroundTasks. This ensures the sync
+runs in a Celery worker with proper error handling, retries, and status reset.
 """
 
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -34,44 +38,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def run_sync_background(
-    integration_id: UUID,
-    sync_type: str,
-    user_id: UUID,
-):
-    """Background task wrapper for running product sync."""
-    async with async_session() as db:
-        try:
-            sync_service = SyncService(db)
-            sync_log = await sync_service.run_sync(
-                integration_id=integration_id,
-                sync_type=sync_type,
-                user_id=user_id,
-            )
-            logger.info(
-                f"Sync completed for integration {integration_id}: "
-                f"created={sync_log.products_created}, "
-                f"updated={sync_log.products_updated}, "
-                f"deleted={sync_log.products_deleted}"
-            )
-        except Exception as e:
-            logger.exception(f"Background sync failed for integration {integration_id}: {e}")
-
-
 @router.post("/{integration_id}/sync", response_model=SyncStatusResponse)
 @limiter.limit(BULK_RATE_LIMIT)
 async def trigger_sync(
     request: Request,
     integration_id: UUID,
     sync_request: SyncTriggerRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
     Trigger a product sync from the e-commerce platform.
 
-    The sync runs in the background - it's safe to refresh or navigate away.
+    The sync runs in a Celery worker via the sync queue.
     Poll GET /{integration_id}/sync/progress for real-time updates.
     """
     stmt = select(Integration).where(
@@ -90,18 +69,23 @@ async def trigger_sync(
     if integration.sync_status == "syncing":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sync already in progress")
 
+    # Mark syncing immediately so the UI starts polling
     integration.sync_status = "syncing"
     db.add(integration)
     await db.commit()
 
-    background_tasks.add_task(
-        run_sync_background,
-        integration_id=integration_id,
-        sync_type=sync_request.sync_type,
-        user_id=current_user.id,
+    # Dispatch to Celery sync queue — proper retries, error handling, status reset
+    from workers.tasks.sync_tasks import sync_integration_products
+
+    sync_integration_products.apply_async(
+        args=[str(integration_id), str(current_user.id)],
+        queue="sync",
     )
 
-    logger.info(f"Sync triggered for integration {integration_id} by user {current_user.id}")
+    logger.info(
+        f"Sync dispatched to Celery for integration {integration_id} "
+        f"by user {current_user.id}"
+    )
 
     return SyncStatusResponse(
         integration_id=integration.id,
@@ -282,7 +266,7 @@ def _get_status_message(
     if sync_status == "error":
         return f"Sync failed: {error_message or 'Unknown error'}"
 
-    if sync_status == "idle":
+    if sync_status in ("idle", "completed"):
         return "Ready to sync"
 
     if sync_status == "syncing":
@@ -439,3 +423,7 @@ async def recover_stuck_sync(
         "message": f"Recovered {recovered} stuck sync(s)" if recovered > 0 else "No stuck syncs found to recover",
         "sync_status": "error" if recovered > 0 else integration.sync_status,
     }
+
+
+
+
