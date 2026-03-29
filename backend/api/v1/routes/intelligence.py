@@ -18,6 +18,7 @@ All endpoints require authentication via get_current_user dependency.
 from __future__ import annotations
 
 import logging
+from datetime import datetime  # moved out of TYPE_CHECKING so model_rebuild() can resolve it
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -27,8 +28,6 @@ from core.deps import get_current_user
 from db.session import get_session
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -134,7 +133,7 @@ class IEHealthStatus(BaseModel):
     pipeline_version: str
 
 
-IEHealthStatus.model_rebuild()        
+IEHealthStatus.model_rebuild()
 
 
 class IEDashboard(BaseModel):
@@ -146,7 +145,7 @@ class IEDashboard(BaseModel):
     recent_calibration: CalibrationReport | None = None
 
 
-IEDashboard.model_rebuild()          
+IEDashboard.model_rebuild()
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +431,6 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
     """Build the IE health status by checking component availability."""
     from sqlalchemy import text
 
-    # Check scoring engine importability
     scoring_healthy = True
     try:
         from services.scoring.engine import ScoringEngine  # noqa: F401
@@ -457,7 +455,6 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
     except Exception:
         context_healthy = False
 
-    # Count experiments (scoped to user's product categories)
     try:
         result = await db.execute(
             text("""
@@ -479,7 +476,6 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
         converged_cats = 0
         active_experiments = 0
 
-    # Overall status
     all_healthy = all([scoring_healthy, experiment_healthy, calibrator_healthy, context_healthy])
     some_healthy = any([scoring_healthy, experiment_healthy, calibrator_healthy, context_healthy])
     status = "healthy" if all_healthy else ("degraded" if some_healthy else "unhealthy")
@@ -493,7 +489,7 @@ async def _build_health_status(db: AsyncSession, user: Any) -> IEHealthStatus:
         active_experiments=active_experiments,
         converged_categories=converged_cats,
         total_categories=total_cats,
-        drift_alerts_active=0,  # TODO: count from drift detector
+        drift_alerts_active=0,
         pipeline_version="ie-v1.0",
     )
 
@@ -540,7 +536,7 @@ async def _get_top_categories(
                     confidence_accuracy_corr=round(row.confidence_accuracy_corr, 3)
                     if row.confidence_accuracy_corr
                     else None,
-                    active_experiment=False,  # Enriched later if needed
+                    active_experiment=False,
                     data_quality_score=min(1.0, total / 50),
                     merchant_count=1,
                 )
@@ -560,8 +556,6 @@ async def _get_active_drift_alerts(db: AsyncSession, user: Any, severity: str | 
     during the weekly Celery task. Phase 5+ should persist alerts
     to a drift_alerts table.
     """
-    # TODO: Query drift_alerts table once created
-    # For now, return empty — drift detection runs but doesn't persist
     return []
 
 
@@ -611,7 +605,6 @@ async def _get_calibration_reports(
                 )
             ]
 
-        # Compute per-band accuracy
         bands: dict[str, dict] = {}
         confidences = []
         outcomes = []
@@ -626,7 +619,6 @@ async def _get_calibration_reports(
             confidences.append(conf)
             outcomes.append(success)
 
-            # Bin into 0.1-wide bands
             band_lower = int(conf * 10) / 10
             band_upper = band_lower + 0.1
             band_key = f"{band_lower:.1f}-{band_upper:.1f}"
@@ -637,7 +629,6 @@ async def _get_calibration_reports(
             bands[band_key]["actual_sum"] += success
             bands[band_key]["count"] += 1
 
-        # Pearson r (simple)
         n = len(confidences)
         pearson_r = None
         if n >= 10:
@@ -692,3 +683,7 @@ async def _get_latest_calibration(db: AsyncSession, user: Any) -> CalibrationRep
     """Get the most recent global calibration report."""
     reports = await _get_calibration_reports(db, user, category_id=None)
     return reports[0] if reports else None
+
+
+
+
