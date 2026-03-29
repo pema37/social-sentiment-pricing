@@ -13,12 +13,18 @@ Dashboard endpoints for:
 Location: backend/api/v1/routes/intelligence.py
 
 All endpoints require authentication via get_current_user dependency.
+
+FIXED (2026-03-28): Moved `datetime` import out of TYPE_CHECKING block so
+  that IEHealthStatus.model_rebuild() and IEDashboard.model_rebuild() can
+  resolve the `datetime` annotation at runtime. With `from __future__ import
+  annotations`, all annotations are strings — model_rebuild() evaluates them
+  at call time and needs `datetime` in scope.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime  # moved out of TYPE_CHECKING so model_rebuild() can resolve it
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -77,7 +83,9 @@ class CalibrationReport(BaseModel):
         description="Per-band accuracy: [{band: '0.7-0.8', predicted: 0.75, actual: 0.68, count: 42}]",
     )
     is_reliable: bool = Field(description="True if sample_count >= 30")
-    overconfidence_score: float | None = Field(None, description="Positive = overconfident, negative = underconfident")
+    overconfidence_score: float | None = Field(
+        None, description="Positive = overconfident, negative = underconfident"
+    )
     last_calibrated: datetime | None = None
 
 
@@ -86,7 +94,9 @@ class DriftAlert(BaseModel):
 
     alert_id: str
     category_id: str
-    drift_type: str = Field(description="correlation_drop | distribution_shift | acceptance_change | lift_decline")
+    drift_type: str = Field(
+        description="correlation_drop | distribution_shift | acceptance_change | lift_decline"
+    )
     severity: str = Field(description="info | warning | critical")
     metric_name: str
     current_value: float
@@ -270,11 +280,10 @@ async def get_experiment_statuses(
                     pulls=state.get("pulls", 0),
                     wins=state.get("wins", 0),
                     expected_reward=round(expected, 4),
-                    is_leader=False,  # Set below
+                    is_leader=False,
                 )
             )
 
-        # Mark the leader
         for arm in arms:
             if arm.expected_reward == max_reward and max_reward > 0:
                 arm.is_leader = True
@@ -358,7 +367,9 @@ async def get_category_performance(
 
     Reads from mv_category_benchmarks materialized view for fast lookups.
     """
-    categories = await _get_top_categories(db, current_user, limit=100, min_recommendations=min_recommendations)
+    categories = await _get_top_categories(
+        db, current_user, limit=100, min_recommendations=min_recommendations
+    )
     return categories
 
 
@@ -400,9 +411,9 @@ async def get_category_detail(
     total = row.total_recommendations or 1
     acceptance_rate = (row.accepted or 0) / total
 
-    # Check experiment status
     exp_result = await db.execute(
-        text("SELECT converged_arm FROM bandit_state WHERE category_id = :cid"), {"cid": category_id}
+        text("SELECT converged_arm FROM bandit_state WHERE category_id = :cid"),
+        {"cid": category_id},
     )
     exp_row = exp_result.fetchone()
 
@@ -414,11 +425,15 @@ async def get_category_detail(
         avg_revenue_lift_7d=round(row.avg_revenue_lift_7d, 3) if row.avg_revenue_lift_7d else None,
         avg_revenue_lift_14d=round(row.avg_revenue_lift_14d, 3) if row.avg_revenue_lift_14d else None,
         avg_revenue_lift_30d=round(row.avg_revenue_lift_30d, 3) if row.avg_revenue_lift_30d else None,
-        confidence_accuracy_corr=round(row.confidence_accuracy_corr, 3) if row.confidence_accuracy_corr else None,
-        active_experiment=exp_row is not None and exp_row.converged_arm is None if exp_row else False,
+        confidence_accuracy_corr=(
+            round(row.confidence_accuracy_corr, 3) if row.confidence_accuracy_corr else None
+        ),
+        active_experiment=(
+            exp_row is not None and exp_row.converged_arm is None if exp_row else False
+        ),
         converged_strategy=exp_row.converged_arm if exp_row else None,
-        data_quality_score=min(1.0, total / 50),  # Simple heuristic: 50+ recs = 1.0
-        merchant_count=1,  # TODO: compute from materialized view
+        data_quality_score=min(1.0, total / 50),
+        merchant_count=1,
     )
 
 
@@ -503,22 +518,22 @@ async def _get_top_categories(
     try:
         result = await db.execute(
             text("""
-            SELECT
-                cb.category_id,
-                cb.total_recommendations,
-                cb.accepted,
-                cb.avg_confidence,
-                cb.avg_revenue_lift_7d,
-                cb.confidence_accuracy_corr
-            FROM mv_category_benchmarks cb
-            WHERE cb.total_recommendations >= :min_recs
-            AND cb.category_id IN (
-                SELECT DISTINCT p.category FROM products p
-                WHERE p.user_id = :user_id AND p.category IS NOT NULL
-            )
-            ORDER BY cb.total_recommendations DESC
-            LIMIT :lim
-        """),
+                SELECT
+                    cb.category_id,
+                    cb.total_recommendations,
+                    cb.accepted,
+                    cb.avg_confidence,
+                    cb.avg_revenue_lift_7d,
+                    cb.confidence_accuracy_corr
+                FROM mv_category_benchmarks cb
+                WHERE cb.total_recommendations >= :min_recs
+                AND cb.category_id IN (
+                    SELECT DISTINCT p.category FROM products p
+                    WHERE p.user_id = :user_id AND p.category IS NOT NULL
+                )
+                ORDER BY cb.total_recommendations DESC
+                LIMIT :lim
+            """),
             {"min_recs": min_recommendations, "lim": limit, "user_id": str(user.id)},
         )
 
@@ -532,10 +547,14 @@ async def _get_top_categories(
                     total_recommendations=total,
                     acceptance_rate=round((row.accepted or 0) / total, 3),
                     avg_confidence=round(row.avg_confidence or 0, 3),
-                    avg_revenue_lift_7d=round(row.avg_revenue_lift_7d, 3) if row.avg_revenue_lift_7d else None,
-                    confidence_accuracy_corr=round(row.confidence_accuracy_corr, 3)
-                    if row.confidence_accuracy_corr
-                    else None,
+                    avg_revenue_lift_7d=(
+                        round(row.avg_revenue_lift_7d, 3) if row.avg_revenue_lift_7d else None
+                    ),
+                    confidence_accuracy_corr=(
+                        round(row.confidence_accuracy_corr, 3)
+                        if row.confidence_accuracy_corr
+                        else None
+                    ),
                     active_experiment=False,
                     data_quality_score=min(1.0, total / 50),
                     merchant_count=1,
@@ -547,14 +566,14 @@ async def _get_top_categories(
         return []
 
 
-async def _get_active_drift_alerts(db: AsyncSession, user: Any, severity: str | None = None) -> list[DriftAlert]:
+async def _get_active_drift_alerts(
+    db: AsyncSession, user: Any, severity: str | None = None
+) -> list[DriftAlert]:
     """
     Get active drift alerts.
 
-    NOTE: Until the drift_detector has a persistence layer,
-    this returns empty. The drift_detector currently runs in-memory
-    during the weekly Celery task. Phase 5+ should persist alerts
-    to a drift_alerts table.
+    NOTE: Until the drift_detector has a persistence layer this returns empty.
+    Phase 5+ should persist alerts to a drift_alerts table.
     """
     return []
 
