@@ -1,7 +1,7 @@
 # backend/core/config.py
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).parent.parent
@@ -49,9 +49,57 @@ class Settings(BaseSettings):
                 "Minimum 32 characters required to prevent token forgery."
             )
         return self
+
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
-    ENCRYPTION_KEY: str
+    ENCRYPTION_KEY: str  # Required — no default. Missing key = startup crash (intentional).
+
+    @field_validator("ENCRYPTION_KEY", mode="before")
+    @classmethod
+    def _validate_encryption_key(cls, v: str) -> str:
+        """
+        Reject misconfigured keys at settings load time so the error surfaces
+        during startup, not on the first OAuth callback in production.
+
+        Valid key format: URL-safe base64-encoded 32-byte Fernet key.
+        Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+        Common mistake: secrets.token_hex(32) produces a 64-char hex string —
+        that is NOT a valid Fernet key and will fail this check.
+        """
+        import base64
+        import binascii
+
+        if not v:
+            raise ValueError(
+                "ENCRYPTION_KEY is required.\n"
+                "Generate a valid key with:\n"
+                "  python -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\""
+            )
+
+        # urlsafe_b64decode is strict about padding — normalise before checking length.
+        try:
+            padding_needed = (4 - len(v) % 4) % 4
+            padded = v.encode() + b"=" * padding_needed
+            decoded = base64.urlsafe_b64decode(padded)
+        except (binascii.Error, ValueError):
+            raise ValueError(
+                "ENCRYPTION_KEY is not valid base64url. "
+                "Did you use secrets.token_hex()? That produces a hex string — not a Fernet key.\n"
+                "Fix: python -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\""
+            )
+
+        if len(decoded) != 32:
+            raise ValueError(
+                f"ENCRYPTION_KEY decodes to {len(decoded)} bytes — Fernet requires exactly 32.\n"
+                "Generate a fresh key:\n"
+                "  python -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\""
+            )
+
+        return v
 
     # ===================
     # CORS
@@ -148,5 +196,6 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
 
 
