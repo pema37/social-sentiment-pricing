@@ -9,6 +9,12 @@ Updated to include:
 FIX (2026-03-29): trigger_sync now dispatches to Celery sync_integration_products
 task via the sync queue instead of FastAPI BackgroundTasks. This ensures the sync
 runs in a Celery worker with proper error handling, retries, and status reset.
+
+FIX (2026-03-29): AP-005 BUG 303.01 — trigger_sync now creates an IntegrationSyncLog
+before dispatching to Celery. Without a log record, recover_stuck_syncs falls to a
+fragile else branch that silently skips integrations that have previously synced
+successfully. The Celery task closes the log via _close_open_sync_log() in all
+terminal paths (success, failure, chord error, orchestrator safety net).
 """
 
 import logging
@@ -69,9 +75,25 @@ async def trigger_sync(
     if integration.sync_status == "syncing":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sync already in progress")
 
+    now = datetime.now(UTC)
+
     # Mark syncing immediately so the UI starts polling
     integration.sync_status = "syncing"
     db.add(integration)
+
+    # AP-005 BUG 303.01: Create IntegrationSyncLog here so recover_stuck_syncs
+    # has a reliable anchor to detect and recover stuck syncs.
+    # Without a log record, recover_stuck_syncs falls to a fragile else branch
+    # that only recovers when there is no recent completed log — it silently
+    # skips integrations that have successfully synced before.
+    # The Celery task closes this log (success=True/False, completed_at) via
+    # _close_open_sync_log() in _mark_sync_complete and _sync_single_pass.
+    sync_log = IntegrationSyncLog(
+        integration_id=integration.id,
+        sync_type="full",
+        started_at=now,
+    )
+    db.add(sync_log)
     await db.commit()
 
     # Dispatch to Celery sync queue — proper retries, error handling, status reset
@@ -96,7 +118,7 @@ async def trigger_sync(
 
 
 # ============================================
-# NEW: PROGRESS TRACKING ENDPOINTS
+# PROGRESS TRACKING ENDPOINTS
 # ============================================
 
 
@@ -151,17 +173,14 @@ async def get_sync_progress(
         started_at = latest_log.started_at
         products_processed = (latest_log.products_created or 0) + (latest_log.products_updated or 0)
 
-        # Calculate elapsed time
         if started_at:
             elapsed_seconds = (datetime.now(UTC) - started_at).total_seconds()
 
-        # Estimate total based on previous syncs
         if integration.products_synced and integration.products_synced > 0:
             products_total = integration.products_synced
             if products_total > 0:
                 progress_percent = min(100, (products_processed / products_total) * 100)
 
-        # Determine phase
         if products_processed == 0:
             current_phase = "fetching"
         elif progress_percent and progress_percent >= 95:
@@ -169,7 +188,6 @@ async def get_sync_progress(
         else:
             current_phase = "processing"
 
-    # Generate status message
     status_message = _get_status_message(
         sync_status=integration.sync_status,
         products_processed=products_processed,
@@ -178,7 +196,6 @@ async def get_sync_progress(
         error_message=integration.error_message,
     )
 
-    # Get results from last completed sync
     products_created = 0
     products_updated = 0
     products_deleted = 0
@@ -207,7 +224,7 @@ async def get_sync_progress(
         "products_deleted": products_deleted,
         "error_message": integration.error_message if integration.sync_status == "error" else None,
         "status_message": status_message,
-        "can_refresh_safely": True,  # ALWAYS true!
+        "can_refresh_safely": True,
     }
 
 
@@ -219,7 +236,6 @@ async def get_all_sync_status(
     """
     Get sync status for ALL user's integrations.
 
-    Use on dashboard or integrations list to show which stores are syncing.
     Frontend should poll this every 3 seconds if any_syncing is true.
     """
     stmt = select(Integration).where(Integration.user_id == current_user.id)
@@ -283,7 +299,7 @@ def _get_status_message(
 
 
 # ============================================
-# EXISTING ENDPOINTS (unchanged)
+# EXISTING ENDPOINTS
 # ============================================
 
 
