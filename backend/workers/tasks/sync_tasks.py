@@ -13,13 +13,30 @@ Patch history:
               everywhere instead of integration.access_token (AttributeError).
               [FIXED] Chunk worker allows ACTIVE or ERROR status (not just ACTIVE).
               [FIXED] _orchestrate_sync wrapped in top-level try/except safety net.
+  2026-03-29: AP-002 — validate_token_or_raise() called in _orchestrate_sync_inner()
+              before dispatching the chunk chord.
+  2026-03-29: AP-005 — Two sync completion bugs fixed:
+
+  BUG 303.02 (PRODUCT NOT LINKED): _sync_chunk had no await db.commit() after
+    handler.upsert_products(). The async session exited without a commit →
+    implicit ROLLBACK. All db.add() calls inside upsert_products were discarded.
+    Products got flushed (to get their UUID) but ProductIntegrationLink records
+    were never persisted. Fix: await db.commit() after upsert_products().
+
+  BUG 303.01 (SYNC NEVER COMPLETES): trigger_sync (sync.py) now creates an
+    IntegrationSyncLog before dispatching. The Celery task closes it via
+    _close_open_sync_log() in all terminal paths: _sync_single_pass (success
+    and failure), _mark_sync_complete (chord success), _handle_sync_error
+    (chord failure), and the orchestrator top-level safety net.
+    This gives recover_stuck_syncs a reliable anchor — previously it fell to
+    a fragile else branch for integrations with no open log, silently skipping
+    integrations that had previously synced successfully.
 
 Three layers of stuck-sync defense:
   Layer 1 — SyncBaseTask.on_failure: fires on any unhandled exception.
   Layer 2 — SyncBaseTask.after_return: fires after any task exit (safety net).
   Layer 3 — recover_stuck_syncs Beat task: scans DB every 5 min for integrations
-             stuck in "syncing" past 45 min. Catches OOM worker crashes where
-             neither Layer 1 nor Layer 2 had a chance to run.
+             stuck in "syncing" past 15 min.
 
 WooCommerce: offset pagination, single-pass only until parallel path is built.
 Shopify: cursor-based parallel chord — fetch_product_cursors() first, then dispatch.
@@ -33,6 +50,7 @@ from uuid import UUID
 
 from core.encryption import decrypt_token
 from core.logging import get_logger
+from services.integration.exceptions import CredentialsInvalidError
 from workers.celery_app import celery_app
 from workers.tasks.ingestion_tasks import get_task_session_maker, run_async
 
@@ -52,10 +70,6 @@ class SyncBaseTask(celery_lib.Task):
 
     Guarantees sync_status always reaches "idle" or "error" regardless of
     how the task exits — unhandled exception, worker crash, soft timeout.
-
-    on_failure: fires when an unhandled exception escapes the task.
-    after_return: fires after any exit. Final safety net — if sync_status is
-    still "syncing" after a non-success exit, force it to "error".
     """
 
     abstract = True
@@ -132,6 +146,66 @@ class SyncBaseTask(celery_lib.Task):
 
 
 # ==============================================================================
+# SYNC LOG HELPER (AP-005 BUG 303.01)
+# ==============================================================================
+
+async def _close_open_sync_log(
+    db,
+    integration_id: str,
+    success: bool,
+    created: int = 0,
+    updated: int = 0,
+    deleted: int = 0,
+    error_details: str | None = None,
+) -> None:
+    """
+    Close the most recent open IntegrationSyncLog for this integration.
+
+    Called from all terminal sync paths so that:
+    - recover_stuck_syncs sees a completed log and stops treating this
+      integration as stuck (previously it fell to a fragile else branch
+      that silently skipped integrations with prior completed syncs).
+    - get_sync_progress can show accurate results from the latest sync.
+
+    The log is created by trigger_sync in sync.py. If no open log exists
+    (e.g. direct Celery invocation without going through trigger_sync),
+    this is a no-op. Caller is responsible for the commit.
+    """
+    from datetime import UTC, datetime
+    from models.integration import IntegrationSyncLog
+
+    try:
+        stmt = (
+            select(IntegrationSyncLog)
+            .where(IntegrationSyncLog.integration_id == UUID(integration_id))
+            .where(IntegrationSyncLog.completed_at.is_(None))
+            .order_by(IntegrationSyncLog.started_at.desc())
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        sync_log = result.scalars().first()
+
+        if sync_log:
+            now = datetime.now(UTC)
+            sync_log.success = success
+            sync_log.completed_at = now
+            sync_log.products_created = created
+            sync_log.products_updated = updated
+            sync_log.products_deleted = deleted
+            sync_log.duration_seconds = (now - sync_log.started_at).total_seconds()
+            if error_details:
+                sync_log.error_details = error_details[:1000]
+            db.add(sync_log)
+    except Exception as exc:
+        # Never let log-closing failures propagate — sync result is already committed.
+        logger.warning(
+            "_close_open_sync_log failed (non-fatal)",
+            integration_id=integration_id,
+            error=str(exc),
+        )
+
+
+# ==============================================================================
 # ORCHESTRATOR
 # ==============================================================================
 
@@ -157,8 +231,6 @@ def sync_integration_products(self, integration_id: str, user_id: str) -> dict:
 
 
 async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dict:
-    from models.integration import Integration
-
     session_maker = get_task_session_maker()
 
     try:
@@ -166,23 +238,24 @@ async def _orchestrate_sync(task_self, integration_id: str, user_id: str) -> dic
             task_self, integration_id, user_id, session_maker,
         )
     except Exception as exc:
-        # Top-level safety net — belt-and-suspenders with SyncBaseTask.on_failure.
-        # If _orchestrate_sync_inner raised without resetting sync_status, fix it.
         logger.error(
             "sync orchestrator unhandled error — resetting sync_status",
             integration_id=integration_id,
             error=str(exc),
         )
         try:
+            from models.integration import Integration
             async with session_maker() as db:
-                stmt = select(Integration).where(
-                    Integration.id == UUID(integration_id),
-                )
+                stmt = select(Integration).where(Integration.id == UUID(integration_id))
                 result = await db.execute(stmt)
                 integration = result.scalars().first()
                 if integration and integration.sync_status == "syncing":
                     integration.sync_status = "error"
                     integration.error_message = str(exc)[:500]
+                    await _close_open_sync_log(
+                        db, integration_id, success=False,
+                        error_details=f"Orchestrator error: {exc}",
+                    )
                     await db.commit()
         except Exception:
             logger.exception(
@@ -198,7 +271,6 @@ async def _orchestrate_sync_inner(
     from models.integration import Integration, IntegrationStatus
 
     async with session_maker() as db:
-        # Allow ACTIVE or ERROR — ERROR integrations should be retryable
         stmt = select(Integration).where(
             Integration.id == UUID(integration_id),
             Integration.user_id == UUID(user_id),
@@ -219,6 +291,10 @@ async def _orchestrate_sync_inner(
             if integration2 and integration2.sync_status == "syncing":
                 integration2.sync_status = "error"
                 integration2.error_message = "Integration not found or not active"
+                await _close_open_sync_log(
+                    db, integration_id, success=False,
+                    error_details="Integration not found or not active",
+                )
                 await db.commit()
             return {
                 "success": False,
@@ -232,12 +308,45 @@ async def _orchestrate_sync_inner(
             return await _sync_single_pass(db, integration, integration_id, user_id)
 
         store_url = integration.store_url
-        # FIX: decrypt inside the worker — never pass tokens as Celery task args
         access_token = decrypt_token(integration.access_token_encrypted)
 
     from services.integration.shopify_service import ShopifyService
 
     shopify = ShopifyService()
+
+    # AP-002: validate token before dispatching chord
+    try:
+        await shopify.validate_token_or_raise(
+            store_url=store_url,
+            access_token=access_token,
+            integration_id=integration_id,
+        )
+    except CredentialsInvalidError:
+        logger.warning(
+            "sync orchestrator: token invalid — marking ERROR, skipping chord dispatch",
+            integration_id=integration_id,
+        )
+        async with session_maker() as db:
+            from models.integration import Integration, IntegrationStatus
+            stmt = select(Integration).where(Integration.id == UUID(integration_id))
+            result = await db.execute(stmt)
+            integration = result.scalars().first()
+            if integration:
+                integration.status = IntegrationStatus.ERROR
+                integration.error_message = CredentialsInvalidError.DEFAULT_MESSAGE
+                integration.sync_status = "idle"
+                await _close_open_sync_log(
+                    db, integration_id, success=False,
+                    error_details=CredentialsInvalidError.DEFAULT_MESSAGE,
+                )
+                await db.commit()
+        return {
+            "success": False,
+            "error": CredentialsInvalidError.DEFAULT_MESSAGE,
+            "integration_id": integration_id,
+            "requires_reconnect": True,
+        }
+
     cursors = await shopify.fetch_product_cursors(
         store_url=store_url,
         access_token=access_token,
@@ -331,8 +440,6 @@ async def _sync_chunk(
     session_maker = get_task_session_maker()
 
     async with session_maker() as db:
-        # FIX: allow ACTIVE or ERROR — previously ACTIVE-only caused all ERROR
-        # integrations to return sentinel failure without attempting sync
         stmt = select(Integration).where(
             Integration.id == UUID(integration_id),
             Integration.user_id == UUID(user_id),
@@ -357,7 +464,6 @@ async def _sync_chunk(
             shopify = ShopifyService()
             sync_result = await shopify.fetch_products(
                 store_url=integration.store_url,
-                # FIX: decrypt_token() — not integration.access_token (AttributeError)
                 access_token=decrypt_token(integration.access_token_encrypted),
                 cursor=cursor,
                 limit=limit,
@@ -374,6 +480,15 @@ async def _sync_chunk(
                 integration=integration,
                 external_products=sync_result.products,
             )
+
+            # AP-005 BUG 303.02: commit all upserts for this chunk.
+            # Without this, the async session exits the `async with` block
+            # without a commit → SQLAlchemy implicit ROLLBACK. Every db.add()
+            # call inside upsert_products is discarded. Products may get
+            # flushed (to get their UUID) but ProductIntegrationLink records
+            # are never written to the DB — which is exactly why products
+            # appeared in the products table with no linked integration records.
+            await db.commit()
 
         except SoftTimeLimitExceeded:
             logger.warning(
@@ -429,7 +544,7 @@ async def _mark_sync_complete(
     from datetime import UTC, datetime
     from models.integration import Integration
 
-    safe_results  = chunk_results or []
+    safe_results = chunk_results or []
     total_created = sum(r.get("created", 0) for r in safe_results if r and r.get("success"))
     total_updated = sum(r.get("updated", 0) for r in safe_results if r and r.get("success"))
     total_deleted = sum(r.get("deleted", 0) for r in safe_results if r and r.get("success"))
@@ -441,13 +556,26 @@ async def _mark_sync_complete(
         result = await db.execute(stmt)
         integration = result.scalars().first()
         if integration:
-            # "idle"/"error" — recognized by UI polling. "completed"/"failed" are NOT.
             integration.sync_status = "error" if sentinel_fails else "idle"
             integration.products_synced = total_created + total_updated
             if not sentinel_fails:
                 integration.last_sync_at = datetime.now(UTC)
                 integration.error_message = None
-            await db.commit()
+
+        # AP-005 BUG 303.01: close the open sync log created by trigger_sync.
+        error_details = (
+            f"{len(sentinel_fails)} of {total_chunks} chunks failed"
+            if sentinel_fails else None
+        )
+        await _close_open_sync_log(
+            db, integration_id,
+            success=not sentinel_fails,
+            created=total_created,
+            updated=total_updated,
+            deleted=total_deleted,
+            error_details=error_details,
+        )
+        await db.commit()
 
     summary = {
         "success": not sentinel_fails,
@@ -476,8 +604,7 @@ def sync_integration_products_error(
 ) -> None:
     """
     Fires when a chunk exhausts retries and raises (not sentinel returns).
-    link_error only fires on raised exceptions — sentinel returns go to the
-    success callback. This handles the hard failure path.
+    link_error only fires on raised exceptions. Handles the hard failure path.
     """
     return run_async(_handle_sync_error(request, exc, traceback, integration_id, user_id))
 
@@ -511,9 +638,16 @@ async def _handle_sync_error(
                     "celery_task_id": getattr(request, "id", None),
                 })
             except Exception:
-                pass  # last_error column may not exist yet
-            await db.commit()
-            logger.info("sync dead-letter recorded", integration_id=integration_id)
+                pass
+
+        # AP-005 BUG 303.01: close the open sync log on chord hard failure.
+        await _close_open_sync_log(
+            db, integration_id,
+            success=False,
+            error_details=f"Chord error: {type(exc).__name__}: {str(exc)[:400]}",
+        )
+        await db.commit()
+        logger.info("sync dead-letter recorded", integration_id=integration_id)
 
 
 # ==============================================================================
@@ -523,7 +657,6 @@ async def _handle_sync_error(
 async def _sync_single_pass(db, integration, integration_id: str, user_id: str) -> dict:
     """
     Single-pass sync for small Shopify stores or WooCommerce.
-    sync_all_products handles internal pagination.
     Sets sync_status = "idle" on success, "error" on failure.
     """
     from datetime import UTC, datetime
@@ -545,6 +678,15 @@ async def _sync_single_pass(db, integration, integration_id: str, user_id: str) 
         integration.last_sync_at = datetime.now(UTC)
         integration.products_synced = created + updated
         integration.error_message = None
+
+        # AP-005 BUG 303.01: close the open sync log on success.
+        await _close_open_sync_log(
+            db, integration_id,
+            success=True,
+            created=created,
+            updated=updated,
+            deleted=deleted,
+        )
         await db.commit()
 
         result_dict = {
@@ -571,11 +713,18 @@ async def _sync_single_pass(db, integration, integration_id: str, user_id: str) 
             if integration_row:
                 integration_row.sync_status = "error"
                 integration_row.error_message = str(exc)[:500]
-                await db.commit()
+            # AP-005 BUG 303.01: close the open sync log on failure.
+            await _close_open_sync_log(
+                db, integration_id,
+                success=False,
+                error_details=f"{type(exc).__name__}: {str(exc)[:400]}",
+            )
+            await db.commit()
         except Exception:
             pass
         raise
 
 
-    
 
+
+    
