@@ -12,8 +12,12 @@ FIXED (2025-01-30): Added products_import router - CSV import was returning 404
 NEW (2026-02-18): Phase 5 — Intelligence Environment dashboard routes
 FIXED (2026-02-19): Made x402 and autonomous pipeline imports conditional
 FIXED (2026-03-29): AP-031 — removed bare os.getenv() call, use settings.PAY_TO_ADDRESS
+FIXED (2026-03-29): AP-032 — WebSocket heartbeat started in lifespan to prune
+                    stale connections every 30s.
 """
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -106,7 +110,21 @@ async def lifespan(app: FastAPI):
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
     )
+
+    # AP-032: Start WebSocket heartbeat as a background task.
+    # Pings all active connections every 30s and removes stale ones
+    # (dead browser tabs, network drops, mobile sleep) so they don't
+    # accumulate unboundedly in active_connections.
+    from core.websocket import start_heartbeat
+    heartbeat_task = asyncio.create_task(start_heartbeat())
+
     yield
+
+    # Clean shutdown: cancel the heartbeat and wait for it to finish.
+    heartbeat_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await heartbeat_task
+
     logger.info("Application shutting down")
 
 
@@ -121,7 +139,6 @@ app = FastAPI(
 
 # ── Optional: Initialize x402 payment middleware ──────────
 # AP-031: Use settings.PAY_TO_ADDRESS instead of bare os.getenv().
-# All env var access must go through core/config.py (project rule).
 if HAS_X402 and settings.PAY_TO_ADDRESS:
     init_x402(app, network="base-sepolia")
 
@@ -211,5 +228,6 @@ async def root():
         "docs": "/docs",
         "x402_enabled": HAS_X402_ROUTER,
     }
+
 
 
