@@ -38,11 +38,84 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # AP-019: Added ENCRYPTION_KEY and JWT_SECRET_KEY — previously missing,
+      # causing startup crash (Settings validator rejects empty values).
+      # AP-019: Renamed SHOPIFY_API_KEY/SECRET → SHOPIFY_CLIENT_ID/SECRET to
+      # match core/config.py field names. Wrong names caused Shopify OAuth to
+      # silently use None for client credentials.
       - DATABASE_URL=postgresql://ssp_user:ssp_password@db:5432/ssp_db
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - ENVIRONMENT=development
       - DEBUG=true
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - SHOPIFY_CLIENT_ID=${SHOPIFY_CLIENT_ID}
+      - SHOPIFY_CLIENT_SECRET=${SHOPIFY_CLIENT_SECRET}
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Worker
+  # AP-019: Added Celery worker service — previously missing from docker-compose.
+  # Without it, background tasks (sync, pricing, sentiment ingestion) never run
+  # in the Docker stack. Uses the same image as backend (built once, run twice).
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      celery -A workers.celery_app worker
+      --pool=prefork
+      --concurrency=4
+      --max-tasks-per-child=1000
+      --without-gossip
+      --without-mingle
+      --prefetch-multiplier=1
+      --loglevel=info
+      -Q celery,sync,sentiment
+    environment:
+      - DATABASE_URL=postgresql://ssp_user:ssp_password@db:5432/ssp_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - SHOPIFY_CLIENT_ID=${SHOPIFY_CLIENT_ID}
+      - SHOPIFY_CLIENT_SECRET=${SHOPIFY_CLIENT_SECRET}
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Beat (scheduler)
+  # Runs scheduled tasks (sync verification, health checks, pricing generation).
+  # IMPORTANT: Never scale this above 1 replica — duplicate beat processes
+  # cause double-execution of every scheduled task.
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      celery -A workers.celery_app beat
+      --loglevel=info
+      --pidfile=/tmp/celerybeat.pid
+    environment:
+      - DATABASE_URL=postgresql://ssp_user:ssp_password@db:5432/ssp_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     env_file:
       - ./backend/.env
     depends_on:
@@ -67,3 +140,5 @@ volumes:
   postgres_data:
   redis_data:
 
+
+  

@@ -4,12 +4,12 @@ on:
   push:
     branches: [develop]
 
-# Cancel in-progress runs on the same branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
+  # AP-020: Normalised to 3.13 (matches ci.yml)
   PYTHON_VERSION: "3.13"
   NODE_VERSION: "20"
 
@@ -55,13 +55,12 @@ jobs:
 
       - name: MyPy type check
         run: mypy . --ignore-missing-imports --no-error-summary || true
-        # `|| true` for now — remove once type errors are cleaned up
 
   # ──────────────────────────────────────────────
   # Backend: Pytest Suite
   # ──────────────────────────────────────────────
   backend-tests:
-    name: Backend Tests (2,100+ tests)
+    name: Backend Tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -93,19 +92,22 @@ jobs:
           --health-retries 5
 
     env:
-      # Test database config
       DATABASE_URL: postgresql://actualprice_test:test_password@localhost:5432/actualprice_test
       REDIS_URL: redis://localhost:6379/0
-      # Prevent tests from hitting real services
       TESTING: "true"
       ENVIRONMENT: "test"
-      # Dummy secrets so config doesn't crash on import
-      SECRET_KEY: "test-secret-key-not-for-production"
-      JWT_SECRET_KEY: "test-jwt-secret-not-for-production"
+      SECRET_KEY: "test-secret-key-not-for-production-xx"
+      # AP-020: JWT_SECRET_KEY must be 32+ chars
+      JWT_SECRET_KEY: "test-jwt-secret-not-for-production-xx"
       GEMINI_API_KEY: "test-gemini-key"
       OPENAI_API_KEY: "test-openai-key"
-      SHOPIFY_API_KEY: "test-shopify-key"
-      SHOPIFY_API_SECRET: "test-shopify-secret"
+      # AP-020: Corrected SHOPIFY_CLIENT_ID/SECRET (was SHOPIFY_API_KEY/SECRET)
+      SHOPIFY_CLIENT_ID: "test-shopify-client-id"
+      SHOPIFY_CLIENT_SECRET: "test-shopify-client-secret"
+      # AP-020: ENCRYPTION_KEY must be a valid Fernet key stored as a repo secret.
+      # Add CI_ENCRYPTION_KEY to GitHub repo secrets:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      ENCRYPTION_KEY: ${{ secrets.CI_ENCRYPTION_KEY }}
 
     steps:
       - name: Checkout code
@@ -193,7 +195,6 @@ jobs:
 
       - name: ESLint check
         run: npx eslint . --max-warnings=0 || true
-        # `|| true` for now — remove once lint errors are cleaned up
 
       - name: TypeScript type check
         run: npx tsc --noEmit
@@ -204,7 +205,6 @@ jobs:
             npx vitest run --reporter=verbose
           else
             echo "⚠️  No frontend tests found yet — skipping Vitest"
-            echo "📝 Frontend test setup is ready. Add tests to src/__tests__/ or colocate as *.test.tsx"
           fi
 
       - name: Next.js build check
@@ -245,5 +245,7 @@ jobs:
           fi
 
           echo "✅ Pipeline complete"
+
+
 
           
