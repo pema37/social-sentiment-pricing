@@ -774,6 +774,188 @@ class TestFetchSingleProduct:
             assert payload.get("variables", {}).get("id") == "gid://shopify/Product/123"
 
 
+class TestFetchProductSalesData:
+    """Tests for ShopifyOrdersMixin.fetch_product_sales_data (GraphQL 2025-10)."""
+
+    def _orders_response(self, line_items, has_next=False, cursor="cur1"):
+        """Build a minimal GraphQL orders response for one order."""
+        return {
+            "data": {
+                "orders": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "gid://shopify/Order/1",
+                                "lineItems": {
+                                    "edges": [
+                                        {"node": li}
+                                        for li in line_items
+                                    ]
+                                },
+                            },
+                            "cursor": cursor,
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": has_next},
+                }
+            }
+        }
+
+    @pytest.mark.asyncio
+    async def test_aggregates_revenue_and_units(self):
+        svc = ShopifyService()
+        product_gid = "gid://shopify/Product/42"
+
+        li = {
+            "product": {"id": product_gid},
+            "quantity": 3,
+            "originalTotalSet": {"shopMoney": {"amount": "59.97"}},
+        }
+
+        with patch("services.integration.shopify_orders.RetryableClient") as MockRC:
+            mock_rc = _FakeRetryableClient()
+            mock_rc.post.return_value = _mock_httpx_response(self._orders_response([li]))
+            MockRC.return_value = mock_rc
+
+            result = await svc.fetch_product_sales_data(
+                "myshop.myshopify.com", "token", "42",
+                "2025-01-01T00:00:00Z", "2025-01-31T23:59:59Z",
+            )
+
+        assert result is not None
+        assert result["units"] == 3
+        assert result["revenue"] == Decimal("59.97")
+
+    @pytest.mark.asyncio
+    async def test_skips_line_items_for_other_products(self):
+        svc = ShopifyService()
+
+        li_match = {
+            "product": {"id": "gid://shopify/Product/42"},
+            "quantity": 2,
+            "originalTotalSet": {"shopMoney": {"amount": "20.00"}},
+        }
+        li_other = {
+            "product": {"id": "gid://shopify/Product/99"},
+            "quantity": 5,
+            "originalTotalSet": {"shopMoney": {"amount": "50.00"}},
+        }
+
+        with patch("services.integration.shopify_orders.RetryableClient") as MockRC:
+            mock_rc = _FakeRetryableClient()
+            mock_rc.post.return_value = _mock_httpx_response(
+                self._orders_response([li_match, li_other])
+            )
+            MockRC.return_value = mock_rc
+
+            result = await svc.fetch_product_sales_data(
+                "myshop.myshopify.com", "token", "42",
+                "2025-01-01T00:00:00Z", "2025-01-31T23:59:59Z",
+            )
+
+        assert result["units"] == 2
+        assert result["revenue"] == Decimal("20.00")
+
+    @pytest.mark.asyncio
+    async def test_skips_line_items_with_no_product(self):
+        svc = ShopifyService()
+
+        li_no_product = {
+            "product": None,
+            "quantity": 1,
+            "originalTotalSet": {"shopMoney": {"amount": "10.00"}},
+        }
+
+        with patch("services.integration.shopify_orders.RetryableClient") as MockRC:
+            mock_rc = _FakeRetryableClient()
+            mock_rc.post.return_value = _mock_httpx_response(
+                self._orders_response([li_no_product])
+            )
+            MockRC.return_value = mock_rc
+
+            result = await svc.fetch_product_sales_data(
+                "myshop.myshopify.com", "token", "42",
+                "2025-01-01T00:00:00Z", "2025-01-31T23:59:59Z",
+            )
+
+        assert result["units"] == 0
+        assert result["revenue"] == Decimal("0")
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_exception(self):
+        svc = ShopifyService()
+
+        with patch("services.integration.shopify_orders.RetryableClient") as MockRC:
+            mock_rc = _FakeRetryableClient()
+            mock_rc.post.side_effect = ValueError("GraphQL error: Throttled")
+            MockRC.return_value = mock_rc
+
+            result = await svc.fetch_product_sales_data(
+                "myshop.myshopify.com", "token", "42",
+                "2025-01-01T00:00:00Z", "2025-01-31T23:59:59Z",
+            )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_date_filter_uses_created_at_syntax(self):
+        """Verify GraphQL query uses created_at:>='...' AND created_at:<='...' format."""
+        svc = ShopifyService()
+
+        empty_resp = {
+            "data": {
+                "orders": {
+                    "edges": [],
+                    "pageInfo": {"hasNextPage": False},
+                }
+            }
+        }
+
+        with patch("services.integration.shopify_orders.RetryableClient") as MockRC:
+            mock_rc = _FakeRetryableClient()
+            mock_rc.post.return_value = _mock_httpx_response(empty_resp)
+            MockRC.return_value = mock_rc
+
+            await svc.fetch_product_sales_data(
+                "myshop.myshopify.com", "token", "42",
+                "2025-01-01T00:00:00Z", "2025-01-31T23:59:59Z",
+            )
+
+            call_kwargs = mock_rc.post.call_args
+            payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json", {})
+            query_var = payload.get("variables", {}).get("query", "")
+            assert "created_at:>=" in query_var
+            assert "created_at:<=" in query_var
+            assert "2025-01-01T00:00:00Z" in query_var
+
+    @pytest.mark.asyncio
+    async def test_zero_results_for_no_matching_orders(self):
+        svc = ShopifyService()
+
+        empty_resp = {
+            "data": {
+                "orders": {
+                    "edges": [],
+                    "pageInfo": {"hasNextPage": False},
+                }
+            }
+        }
+
+        with patch("services.integration.shopify_orders.RetryableClient") as MockRC:
+            mock_rc = _FakeRetryableClient()
+            mock_rc.post.return_value = _mock_httpx_response(empty_resp)
+            MockRC.return_value = mock_rc
+
+            result = await svc.fetch_product_sales_data(
+                "myshop.myshopify.com", "token", "42",
+                "2025-01-01T00:00:00Z", "2025-01-31T23:59:59Z",
+            )
+
+        assert result is not None
+        assert result["units"] == 0
+        assert result["revenue"] == Decimal("0")
+
+
 class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_healthy(self):

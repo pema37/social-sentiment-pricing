@@ -102,7 +102,13 @@ async def _detect_platform(client: httpx.AsyncClient, base_url: str) -> str:
 
 
 async def _scan_shopify(client: httpx.AsyncClient, base_url: str) -> list[ScannedProduct]:
-    """Fetch products from Shopify's public /products.json endpoint."""
+    """
+    Fetch products from Shopify's public /products.json endpoint.
+
+    NOTE: Uses Shopify's public storefront /products.json — NOT the Admin API.
+    No OAuth token available for prospect stores (they haven't installed the app yet).
+    The authenticated Admin GraphQL API (2025-10) is used separately for installed merchants.
+    """
     url = f"{base_url}/products.json?limit={MAX_PRODUCTS}"
     r = await client.get(url, follow_redirects=True)
     r.raise_for_status()

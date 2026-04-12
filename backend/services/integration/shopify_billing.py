@@ -155,6 +155,9 @@ class ShopifyBillingService:
     """
     Service for managing Shopify app subscriptions via the Billing API.
 
+    All billing managed via Shopify GraphQL App Subscription API — no direct Stripe
+    for Shopify merchants.
+
     Uses ShopifyService's _graphql() method for all GraphQL calls,
     maintaining consistent retry, rate limiting, and circuit breaker behavior.
     """
@@ -240,14 +243,14 @@ class ShopifyBillingService:
         4. Store the pending Shopify subscription ID locally
 
         Args:
-            tier: Plan tier (starter, professional, enterprise)
+            tier: Plan tier (free, starter, professional)
             user_id: User ID (for authenticated flows)
             shop_domain: Shop domain (for embedded/install flows)
 
         Returns:
             ShopifySubscribeResponse with confirmationUrl
         """
-        # Free tier bypass — no Shopify billing charge needed
+        # Short-circuit: "free" tier = cancel existing subscription + downgrade locally
         if tier == "free":
             integration = await self._get_shopify_integration(user_id, shop_domain)
             if not integration:
@@ -256,17 +259,21 @@ class ShopifyBillingService:
                     tier="free",
                     message="No active Shopify integration found. Please install the app first.",
                 )
-            await self._downgrade_local_subscription(integration)
-            logger.info(f"Switched to free plan for user_id={user_id}, shop={shop_domain}")
+            # Best-effort: cancel any active Shopify subscription first
+            status_resp = await self.get_subscription_status(user_id, shop_domain)
+            if status_resp.has_active_subscription and status_resp.shopify_subscription_id:
+                await self.cancel_subscription(prorate=True, user_id=user_id, shop_domain=shop_domain)
+            else:
+                await self._downgrade_local_subscription(integration)
             return ShopifySubscribeResponse(
                 success=True,
                 confirmation_url=None,
                 shopify_subscription_id=None,
                 tier="free",
-                message="Switched to free plan.",
+                message="Downgraded to free tier.",
             )
 
-        # Validate paid tier
+        # Validate tier
         plan_config = SHOPIFY_PLANS.get(tier)
         if not plan_config:
             return ShopifySubscribeResponse(

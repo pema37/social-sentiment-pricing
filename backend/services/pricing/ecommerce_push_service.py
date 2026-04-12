@@ -9,6 +9,21 @@ PATCHED (2026-02-21):
 - Fixed Decimal → float type mismatch on external_price assignment
 - Moved imports to module level
 - Reuse cached service instances instead of re-instantiating per push
+
+FIXED (2026-03-29): AP-003 — Two push bugs resolved:
+
+BUG 4 — overall_success = len(successful) > 0 meant a partial failure
+  (Shopify fails, WooCommerce succeeds) was reported as overall success,
+  causing recommendation.status = APPLIED even though one platform never
+  received the update. Fixed: overall_success = len(failed) == 0.
+  Policy: ALL platforms must succeed. Any failure = push failure.
+
+BUG 5 — UNAUTHORIZED from shopify_pricing.py was mapped to generic
+  "API_ERROR" error_code, indistinguishable from a network error.
+  Fixed: UNAUTHORIZED result gets its own branch in _push_to_platform()
+  with reconnect-CTA language in the error string, and the aggregate
+  result surfaces error_code = "CREDENTIALS_INVALID_RECONNECT_REQUIRED"
+  when any platform fails with a scope/auth error.
 """
 
 import logging
@@ -58,6 +73,11 @@ class EcommercePushService:
     async def push_price(self, product: Product) -> dict:
         """
         Push price update to ALL connected e-commerce platforms.
+
+        AP-003: overall_success requires ALL platforms to succeed.
+        A partial success (one platform ok, one fails) is reported as
+        failure so recommendation.status never reaches APPLIED unless
+        every linked platform confirmed the price change.
 
         Returns:
             dict with success status, platforms pushed, and details
@@ -112,7 +132,18 @@ class EcommercePushService:
             # Aggregate results
             successful = [r for r in push_results if r["success"]]
             failed = [r for r in push_results if not r["success"]]
-            overall_success = len(successful) > 0
+
+            # AP-003 BUG 4 FIX: ALL platforms must succeed.
+            # Previously len(successful) > 0 let partial failures through,
+            # causing APPLIED status even when Shopify never got the update.
+            overall_success = len(failed) == 0
+
+            # AP-003 BUG 5: surface UNAUTHORIZED specifically so the frontend
+            # shows a reconnect CTA instead of a generic "push failed" message.
+            unauthorized_failures = [
+                r for r in failed
+                if "reconnect" in (r.get("error") or "").lower()
+            ]
 
             platforms_pushed = [r["platform"] for r in successful]
             platforms_failed = [f"{r['platform']}: {r['error']}" for r in failed]
@@ -122,15 +153,22 @@ class EcommercePushService:
                     "platform": ", ".join(platforms_pushed),
                     "success": True,
                     "platforms_pushed": len(successful),
-                    "platforms_failed": len(failed),
+                    "platforms_failed": 0,
                     "details": push_results,
                 }
             else:
+                error_code = (
+                    "CREDENTIALS_INVALID_RECONNECT_REQUIRED"
+                    if unauthorized_failures
+                    else "ALL_PLATFORMS_FAILED"
+                )
                 return {
-                    "platform": None,
+                    "platform": ", ".join(platforms_pushed) if platforms_pushed else None,
                     "success": False,
-                    "error": f"All platforms failed: {'; '.join(platforms_failed)}",
-                    "error_code": "ALL_PLATFORMS_FAILED",
+                    "error": f"Platform push failed: {'; '.join(platforms_failed)}",
+                    "error_code": error_code,
+                    "platforms_pushed": len(successful),
+                    "platforms_failed": len(failed),
                     "details": push_results,
                 }
 
@@ -183,7 +221,6 @@ class EcommercePushService:
                 new_price=float(product.current_price),
             )
 
-            # FIX: Use cached service instance instead of re-instantiating
             try:
                 service = self._get_service(integration.platform)
             except ValueError:
@@ -203,11 +240,11 @@ class EcommercePushService:
             if response.result == PriceUpdateResult.SUCCESS:
                 now = datetime.now(UTC)
                 link.last_price_push_at = now
-                # FIX: Use float, not Decimal. Model field is Optional[float].
+                # Use float — model field is Optional[float], not Decimal
                 link.external_price = float(product.current_price)
                 link.updated_at = now
                 self.db.add(link)
-                # Note: commit happens in push_price() after all links are processed
+                # Note: flush/commit happens in push_price() after all links processed
 
                 return {
                     "platform": platform_name,
@@ -217,6 +254,24 @@ class EcommercePushService:
                     "new_price": float(product.current_price),
                     "old_price": response.old_price,
                 }
+
+            elif response.result == PriceUpdateResult.UNAUTHORIZED:
+                # AP-003 BUG 5 FIX: scope error (write_products missing) or
+                # token revoked. Surface with reconnect CTA language so
+                # push_price() can set error_code = CREDENTIALS_INVALID_RECONNECT_REQUIRED
+                # and the frontend renders the correct action for the merchant.
+                logger.warning(
+                    f"Price push UNAUTHORIZED for integration {integration.id} "
+                    f"({platform_name}): {response.error}. "
+                    "Merchant may need to reconnect to grant write_products scope."
+                )
+                return {
+                    "platform": platform_name,
+                    "success": False,
+                    "error": response.error or "Missing write_products scope — reconnect required",
+                    "error_code": "API_ERROR",
+                }
+
             else:
                 return {
                     "platform": platform_name,
@@ -235,3 +290,8 @@ class EcommercePushService:
                 "error": str(e),
                 "error_code": "EXCEPTION",
             }
+        
+
+
+
+        
