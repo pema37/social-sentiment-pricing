@@ -17,28 +17,24 @@ export const productKeys = {
   priceHistory: (id: string, params?: { days?: number; limit?: number }) =>
     [...productKeys.all, 'price-history', id, params] as const,
   priceSuggestion: (id: string) => [...productKeys.all, 'suggestion', id] as const,
-  // Product sync status keys
   syncStatus: () => [...productKeys.all, 'sync-status'] as const,
   syncStatusDetail: (id: string) => [...productKeys.syncStatus(), id] as const,
 };
 
 export const pricingKeys = {
   all: ['pricing'] as const,
-  
-  // Rules
+
   rules: () => [...pricingKeys.all, 'rules'] as const,
   rulesList: (params?: { page?: number; page_size?: number; rule_type?: string; is_active?: boolean }) =>
     [...pricingKeys.rules(), 'list', params] as const,
   ruleDetail: (id: string) => [...pricingKeys.rules(), 'detail', id] as const,
 
-  // Recommendations
   recommendations: () => [...pricingKeys.all, 'recommendations'] as const,
   recommendationsList: (params?: { page?: number; page_size?: number; status?: string; product_id?: string }) =>
     [...pricingKeys.recommendations(), 'list', params] as const,
   recommendationDetail: (id: string) => [...pricingKeys.recommendations(), 'detail', id] as const,
   recommendationStats: () => [...pricingKeys.recommendations(), 'stats'] as const,
 
-  // Settings
   settings: () => [...pricingKeys.all, 'settings'] as const,
 };
 
@@ -49,13 +45,11 @@ export const competitorKeys = {
     [...competitorKeys.lists(), params] as const,
   details: () => [...competitorKeys.all, 'detail'] as const,
   detail: (id: string) => [...competitorKeys.details(), id] as const,
-  // Products - works with or without competitorId
-  products: (competitorId?: string) => 
-    competitorId 
+  products: (competitorId?: string) =>
+    competitorId
       ? [...competitorKeys.detail(competitorId), 'products'] as const
       : [...competitorKeys.all, 'products'] as const,
   analysis: (productId: string) => [...competitorKeys.all, 'comparison', productId] as const,
-  // Competitor matching keys
   matching: () => [...competitorKeys.all, 'matching'] as const,
   matchingProviders: () => [...competitorKeys.matching(), 'providers'] as const,
   matchingSearch: (query: string) => [...competitorKeys.matching(), 'search', query] as const,
@@ -130,6 +124,53 @@ export const trendAnalysisKeys = {
   risks: () => [...trendAnalysisKeys.all, 'risks'] as const,
   insight: (days: number) => [...trendAnalysisKeys.all, 'insight', days] as const,
 };
+
+// AP-023: Added missing query keys for 5 domains.
+// Without these, cache invalidation in the corresponding hooks had no key to
+// invalidate, causing stale data after mutations in these areas.
+
+export const outcomeKeys = {
+  all: ['outcomes'] as const,
+  lists: () => [...outcomeKeys.all, 'list'] as const,
+  list: (params?: Record<string, unknown>) => [...outcomeKeys.lists(), params] as const,
+  detail: (id: string) => [...outcomeKeys.all, 'detail', id] as const,
+  accuracy: (days?: number) => [...outcomeKeys.all, 'accuracy', days] as const,
+  calibration: () => [...outcomeKeys.all, 'calibration'] as const,
+  merchantPatterns: () => [...outcomeKeys.all, 'merchant-patterns'] as const,
+  categoryBenchmarks: (category?: string) => [...outcomeKeys.all, 'benchmarks', category] as const,
+  dataGaps: () => [...outcomeKeys.all, 'data-gaps'] as const,
+  elasticityAccuracy: () => [...outcomeKeys.all, 'elasticity-accuracy'] as const,
+  rulePerformance: () => [...outcomeKeys.all, 'rule-performance'] as const,
+};
+
+export const intelligenceKeys = {
+  all: ['intelligence'] as const,
+  dashboard: () => [...intelligenceKeys.all, 'dashboard'] as const,
+  health: () => [...intelligenceKeys.all, 'health'] as const,
+  experiments: () => [...intelligenceKeys.all, 'experiments'] as const,
+  experiment: (id: string) => [...intelligenceKeys.all, 'experiment', id] as const,
+  calibration: () => [...intelligenceKeys.all, 'calibration'] as const,
+  driftAlerts: () => [...intelligenceKeys.all, 'drift-alerts'] as const,
+  categories: () => [...intelligenceKeys.all, 'categories'] as const,
+  category: (name: string) => [...intelligenceKeys.all, 'category', name] as const,
+};
+
+export const shopifyBillingKeys = {
+  all: ['shopify-billing'] as const,
+  plans: () => [...shopifyBillingKeys.all, 'plans'] as const,
+  status: () => [...shopifyBillingKeys.all, 'status'] as const,
+};
+
+export const trustScoringKeys = {
+  all: ['trust-scoring'] as const,
+  stats: () => [...trustScoringKeys.all, 'stats'] as const,
+};
+
+export const retrospectiveAuditKeys = {
+  all: ['retrospective-audit'] as const,
+  latest: (days?: number) => [...retrospectiveAuditKeys.all, 'latest', days] as const,
+};
+
 
 
 

@@ -25,7 +25,7 @@ class ShopifyPlanConfig(BaseModel):
 
     tier: str
     name: str
-    price_amount: str  # Decimal string, e.g. "29.00"
+    price_amount: str  # Decimal string e.g. "0.00", "29.00", "99.00"
     currency_code: str = "USD"
     interval: Literal["EVERY_30_DAYS", "ANNUAL"] = "EVERY_30_DAYS"
     trial_days: int = 14
@@ -35,6 +35,19 @@ class ShopifyPlanConfig(BaseModel):
 
 # Shopify-specific pricing tiers (replaces MNEE tiers for Shopify merchants)
 SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
+    "free": ShopifyPlanConfig(
+        tier="free",
+        name="ActualPrice Free",
+        price_amount="0.00",
+        trial_days=0,
+        product_limit=5,
+        features=[
+            "Up to 5 products",
+            "Basic competitor tracking",
+            "Manual pricing",
+            "Community support",
+        ],
+    ),
     "starter": ShopifyPlanConfig(
         tier="starter",
         name="ActualPrice Starter",
@@ -87,7 +100,9 @@ class ShopifySubscribeRequest(BaseModel):
 class ShopifyPlanChangeRequest(BaseModel):
     """Request to upgrade or downgrade a Shopify plan."""
 
-    new_tier: Literal["free", "starter", "professional"] = Field(..., description="New plan tier to switch to: free, starter, or professional")
+    new_tier: Literal["free", "starter", "professional"] = Field(
+        ..., description="New plan tier to switch to: free ($0), starter ($29), professional ($99)"
+    )
     shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",
