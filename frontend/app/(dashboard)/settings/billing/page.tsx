@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 // frontend/app/(dashboard)/settings/billing/page.tsx
 'use client';
 

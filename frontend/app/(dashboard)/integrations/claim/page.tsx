@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 // frontend/app/(dashboard)/integrations/claim/page.tsx
 'use client';
 

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 // Create New Pricing Rule Page
 // Form for creating a new pricing rule
 

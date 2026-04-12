@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 // frontend/app/(dashboard)/competitors/match/page.tsx
 
 'use client';
