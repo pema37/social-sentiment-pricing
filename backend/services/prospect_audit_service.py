@@ -122,6 +122,10 @@ class ProspectAuditService:
         """
         Fetch products from a Shopify store's public /products.json endpoint.
 
+        Fetches from public /products.json (no auth) — distinct from the authenticated
+        Admin GraphQL API (2025-10) used for installed merchants via ShopifyService.
+        Prospect stores have not installed the app, so no OAuth token exists for them.
+
         Returns (store_name, products).
         """
         # Normalize URL
