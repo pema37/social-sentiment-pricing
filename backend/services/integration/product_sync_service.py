@@ -22,6 +22,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import httpx
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -140,8 +142,6 @@ class ProductSyncService:
         integration: Integration,
     ) -> dict[str, Any]:
         """Push product to WooCommerce via REST API (WooCommerce still uses REST)."""
-        import httpx
-
         try:
             credentials = decrypt_token(integration.access_token_encrypted)
 
@@ -227,8 +227,8 @@ class ProductSyncService:
         """
         Push product to Shopify via GraphQL Admin API.
 
-        MIGRATED from: POST /admin/api/2024-01/products.json
-        MIGRATED to:   POST /admin/api/2024-01/graphql.json (productCreate mutation)
+        MIGRATED from: POST /admin/api/2024-01/products.json (REST)
+        MIGRATED to:   POST /admin/api/2025-10/graphql.json (productCreate mutation)
         """
         from services.integration.http_client import RetryableClient
 

@@ -11,4 +11,14 @@ export { Toaster } from './Toaster';
 export { AIBadge } from './ai-badge';
 export { FeatureError } from './feature-error';
 export { FeatureNotFound } from './feature-not-found';
-export { Skeleton, SkeletonCard, SkeletonChart, SkeletonMention, SkeletonKpiGrid, SkeletonChartGrid, SkeletonMentionsFeed } from './skeleton';
+export {
+  Skeleton,
+  SkeletonCard,
+  SkeletonChart,
+  SkeletonMention,
+  SkeletonKpiGrid,
+  SkeletonChartGrid,
+  SkeletonMentionsFeed,
+} from './skeleton';
+
+

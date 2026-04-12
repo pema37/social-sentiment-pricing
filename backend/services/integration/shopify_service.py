@@ -29,6 +29,19 @@ forces Shopify to use the correct store regardless of session state.
 
 DEBUG (2026-03-21): Added detailed logging to exchange_oauth_code to capture
 the exact Shopify error response when token exchange fails.
+
+FIXED (2026-03-29): AP-002 — Added validate_token_or_raise().
+Previously, operations (sync, price push) called the Shopify API directly
+without first checking if the stored token was still accepted. A revoked
+or expired token produced a generic 401 deep inside a mixin, which was
+either swallowed or surfaced as an opaque 500. Now:
+  - validate_token_or_raise() runs a lightweight { shop { id } } GraphQL call
+  - On 401 → raises CredentialsInvalidError (typed, not ValueError)
+  - Callers (sync_service, price_push_service, Celery health check) catch
+    CredentialsInvalidError and set integration.status = ERROR with
+    error_message = CREDENTIALS_INVALID_RECONNECT_REQUIRED
+  - Frontend IntegrationCard.tsx shows reconnect CTA when status == ERROR
+  - OAuth init already allows reconnect from ERROR state (oauth.py line ~60)
 """
 
 import logging
@@ -41,13 +54,12 @@ import httpx
 from core.config import settings
 
 from .base import EcommerceService
+from .exceptions import CredentialsInvalidError, RateLimitedError
 from .http_client import RetryableClient
 from .retry import RetryConfig, execute_with_retry
 from .schemas import ConnectionStatus, OAuthResult
 from .shopify_orders import ShopifyOrdersMixin
 from .shopify_pricing import ShopifyPricingMixin
-
-# Mixins
 from .shopify_products import ShopifyProductsMixin
 from .shopify_webhooks import ShopifyWebhooksMixin
 
@@ -156,12 +168,11 @@ class ShopifyService(
         return gid.rsplit("/", 1)[-1] if gid else gid
 
     # ================================================================
-    # OAuth (unchanged – OAuth endpoints are NOT Admin API)
+    # OAuth
     # ================================================================
 
     def generate_oauth_url(self, store_url: str, state: str, redirect_uri: str) -> str:
         shop_domain = self._get_shop_domain(store_url)
-        # Extract store name (e.g. "mystore" from "mystore.myshopify.com")
         store_name = shop_domain.replace(".myshopify.com", "")
         params = {
             "client_id": settings.SHOPIFY_CLIENT_ID,
@@ -170,10 +181,6 @@ class ShopifyService(
             "state": state,
         }
         # FIXED (2026-03-20): Use admin.shopify.com/store/{name} format.
-        # The old format (https://{shop}.myshopify.com/admin/oauth/authorize)
-        # gets intercepted by Shopify's unified admin and routed based on
-        # the merchant's active browser session, causing installs to land on
-        # the wrong store. The explicit store path bypasses this.
         return f"https://admin.shopify.com/store/{store_name}/oauth/authorize?{urlencode(params)}"
 
     async def exchange_oauth_code(self, store_url: str, code: str, redirect_uri: str) -> OAuthResult:
@@ -199,7 +206,11 @@ class ShopifyService(
                 return response.json()
 
         try:
-            data = await execute_with_retry(_exchange, config=self.retry_config, operation_name="shopify_oauth")
+            data = await execute_with_retry(
+                _exchange,
+                config=self.retry_config,
+                operation_name="shopify_oauth",
+            )
             logger.info(f"OAuth exchange succeeded for shop={shop_domain}")
             return OAuthResult(
                 success=True,
@@ -220,21 +231,99 @@ class ShopifyService(
             return OAuthResult(success=False, error=str(e))
 
     async def refresh_access_token(self, store_url: str, refresh_token: str) -> OAuthResult:
-        """No-op for Shopify: offline access tokens do not expire.
-
-        Shopify offline tokens are valid until the merchant uninstalls the app
-        or the token is explicitly revoked. This method exists to satisfy the
-        shared integration interface. Callers (e.g. WooCommerce token-refresh
-        logic) should check the returned ``success`` flag and fall back to
-        re-authentication when it is ``False``.
-        """
+        """No-op for Shopify: offline access tokens do not expire."""
         return OAuthResult(success=False, error="Shopify tokens don't expire")
 
     # ================================================================
-    # Verify credentials
+    # AP-002: Token validation — call before any sync/push operation
+    # ================================================================
+
+    async def validate_token_or_raise(
+        self,
+        store_url: str,
+        access_token: str,
+        integration_id: str | None = None,
+    ) -> None:
+        """
+        Validate that the stored token is still accepted by Shopify.
+
+        Runs a minimal { shop { id } } GraphQL query — cheapest possible call
+        (1 cost point). On success, returns None. On failure, raises a typed
+        exception so the caller can update integration.status and surface a
+        reconnect CTA to the merchant instead of a generic 500.
+
+        Call this at the start of any operation that requires a valid token:
+          - sync_service.py: before starting a product sync
+          - price_push_service.py: before pushing a price update
+          - Celery health check: already called via health_check(), see below
+
+        Raises:
+            CredentialsInvalidError: token rejected by Shopify (HTTP 401).
+                Caller must set integration.status = ERROR and
+                error_message = CREDENTIALS_INVALID_RECONNECT_REQUIRED.
+            RateLimitedError: Shopify returned HTTP 429. Caller should
+                reschedule the operation.
+            httpx.RequestError: network failure. Caller may retry.
+
+        Example usage in sync_service.py:
+            from services.integration.exceptions import CredentialsInvalidError
+
+            try:
+                await service.validate_token_or_raise(
+                    store_url=integration.store_url,
+                    access_token=decrypted_token,
+                    integration_id=str(integration.id),
+                )
+            except CredentialsInvalidError:
+                integration.status = IntegrationStatus.ERROR
+                integration.error_message = CredentialsInvalidError.DEFAULT_MESSAGE
+                db.add(integration)
+                await db.commit()
+                return  # caller surfaces reconnect CTA via ERROR status
+        """
+        shop_domain = self._get_shop_domain(store_url)
+        query = "{ shop { id } }"
+
+        try:
+            async with RetryableClient(
+                store_url, "shopify", RetryConfig(max_retries=1), timeout=10.0
+            ) as rc:
+                await self._graphql(rc, shop_domain, access_token, query)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                logger.warning(
+                    f"validate_token_or_raise: 401 from Shopify for "
+                    f"store={store_url} integration_id={integration_id}. "
+                    "Token is revoked or expired — merchant must reconnect."
+                )
+                raise CredentialsInvalidError(
+                    store_url=store_url,
+                    integration_id=integration_id,
+                )
+            if e.response.status_code == 429:
+                retry_after = int(e.response.headers.get("Retry-After", 60))
+                raise RateLimitedError(store_url=store_url, retry_after=retry_after)
+            # Other HTTP errors (500, 503, etc.) — let caller handle
+            raise
+        except ValueError as e:
+            # GraphQL-level error on a { shop { id } } query is unusual —
+            # log it but don't treat as a credential failure
+            logger.warning(
+                f"validate_token_or_raise: GraphQL error for store={store_url}: {e}"
+            )
+            raise
+
+    # ================================================================
+    # Verify credentials (used by WooCommerce connect flow + PATCH endpoint)
     # ================================================================
 
     async def verify_credentials(self, store_url: str, access_token: str) -> bool:
+        """
+        Boolean credential check for use in connect/update flows.
+
+        For runtime operation guards, prefer validate_token_or_raise() which
+        raises a typed exception with context instead of returning bool.
+        """
         shop_domain = self._get_shop_domain(store_url)
         query = "{ shop { name } }"
         try:
@@ -245,18 +334,36 @@ class ShopifyService(
             return False
 
     # ================================================================
-    # Health check
+    # Health check (called by Celery check_all_integration_health task)
     # ================================================================
 
     async def health_check(self, store_url: str, access_token: str) -> ConnectionStatus:
+        """
+        Lightweight liveness check — called by Celery every 30 minutes.
+
+        Returns ConnectionStatus.UNAUTHORIZED when the token is revoked.
+        The Celery task (sync_tasks.py: check_all_integration_health) must
+        handle UNAUTHORIZED by setting:
+            integration.status = IntegrationStatus.ERROR
+            integration.error_message = CredentialsInvalidError.DEFAULT_MESSAGE
+
+        This causes the frontend IntegrationCard.tsx to render a reconnect CTA.
+        The OAuth init already allows reconnect from ERROR state — see
+        _RECONNECTABLE_STATUSES in oauth.py.
+        """
         shop_domain = self._get_shop_domain(store_url)
         query = "{ shop { name } }"
         try:
-            async with RetryableClient(store_url, "shopify", RetryConfig(max_retries=1), 10.0) as rc:
+            async with RetryableClient(
+                store_url, "shopify", RetryConfig(max_retries=1), 10.0
+            ) as rc:
                 await self._graphql(rc, shop_domain, access_token, query)
                 return ConnectionStatus.HEALTHY
         except httpx.HTTPStatusError as e:
-            status_map = {401: ConnectionStatus.UNAUTHORIZED, 429: ConnectionStatus.RATE_LIMITED}
+            status_map = {
+                401: ConnectionStatus.UNAUTHORIZED,
+                429: ConnectionStatus.RATE_LIMITED,
+            }
             return status_map.get(e.response.status_code, ConnectionStatus.UNHEALTHY)
         except (httpx.RequestError, ValueError):
             return ConnectionStatus.UNHEALTHY
@@ -272,7 +379,10 @@ class ShopifyService(
         return url
 
     def _auth_headers(self, access_token: str) -> dict:
-        return {"X-Shopify-Access-Token": access_token, "Content-Type": "application/json"}
+        return {
+            "X-Shopify-Access-Token": access_token,
+            "Content-Type": "application/json",
+        }
 
     def _parse_datetime(self, date_str: str | None) -> datetime | None:
         if not date_str:
@@ -282,5 +392,6 @@ class ShopifyService(
         except ValueError:
             return None
         
+
 
         

@@ -18,7 +18,7 @@ ActualPrice is a SaaS platform that helps e-commerce merchants optimize their pr
 
 ## 🤖 Powered by Google Gemini 3
 
-ActualPrice uses **Gemini 3 Flash** (`gemini-3-flash-preview`) as the primary AI engine across all features:
+ActualPrice uses **Gemini 3 Flash** (`gemini-2.0-flash`) as the primary AI engine across all features:
 
 | Feature | Gemini 3 Capability | Description |
 |---------|---------------------|-------------|
@@ -42,7 +42,7 @@ ActualPrice uses **Gemini 3 Flash** (`gemini-3-flash-preview`) as the primary AI
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Gemini 3 Flash                           │
-│               (gemini-3-flash-preview)                      │
+│               (gemini-2.0-flash)                      │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
 │  │   Vision    │  │  Language   │  │  Streaming  │         │
