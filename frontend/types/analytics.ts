@@ -6,6 +6,13 @@
 import type { SentimentDataPoint, SentimentTrendDirection } from './sentiment';
 import type { ProductSummary } from './product';
 
+// AP-013/sprint-1: RulePerformanceSummary was defined here AND in outcome.ts,
+// causing a duplicate export collision when both are re-exported from types/index.ts.
+// Removed local definition — import from outcome.ts as the single source of truth.
+// AccuracyStatsResponse uses RulePerformanceSummary, so we import it here for use below.
+import type { RulePerformanceSummary } from './outcome';
+export type { RulePerformanceSummary };
+
 // ============================================
 // DASHBOARD OVERVIEW
 // ============================================
@@ -23,7 +30,7 @@ export interface DashboardOverview {
   pending_recommendations: number;
   applied_recommendations_7d: number;
   average_sentiment: number | null;
-  sentiment_trend: 'improving' | 'declining' | 'stable';  // Default: 'stable'
+  sentiment_trend: 'improving' | 'declining' | 'stable';
   total_mentions_24h: number;
 }
 
@@ -94,17 +101,6 @@ export interface RuleTypeStats {
 }
 
 /**
- * Individual rule performance summary
- */
-export interface RulePerformanceSummary {
-  rule_id: string;
-  rule_name: string;
-  rule_type: string;
-  avg_score: number;
-  outcome_count: number;
-}
-
-/**
  * Accuracy statistics for recommendations
  * Matches: components["schemas"]["AccuracyStatsResponse"]
  */
@@ -126,3 +122,6 @@ export interface AccuracyStatsResponse {
 
 // Re-export ProductSummary for convenience
 export type { ProductSummary };
+
+
+

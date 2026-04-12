@@ -4,7 +4,7 @@ application_url = "https://social-sentiment-pricing-staging-2ecd.up.railway.app/
 embedded = true
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-01"
 
   [webhooks.privacy_compliance]
   customer_deletion_url = "https://social-sentiment-pricing-staging-2ecd.up.railway.app/api/v1/integrations/shopify/gdpr/customers/redact"
@@ -22,4 +22,5 @@ redirect_urls = [
   "https://social-sentiment-pricing.vercel.app/api/v1/integrations/oauth/callback",
   "https://ssp-staging.vercel.app/api/v1/integrations/oauth/callback"
 ]
+
 
