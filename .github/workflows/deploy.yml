@@ -3,36 +3,71 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # ─────────────────────────────────────────
+  # Backend → Railway
+  # Staging:    develop → Railway staging service
+  # Production: main    → Railway production service
+  # ─────────────────────────────────────────
   deploy-backend:
     runs-on: ubuntu-latest
-    environment: production
-    
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Deploy to Railway
-        if: ${{ vars.RAILWAY_TOKEN != '' }}
-        run: |
-          echo "Deploy backend to Railway"
-          # railway up --service backend
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy backend to Railway (staging)
+        if: github.ref_name == 'develop'
+        run: railway up --service social-sentiment-pricing --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
+      - name: Deploy backend to Railway (production)
+        if: github.ref_name == 'main'
+        run: railway up --service social-sentiment-pricing --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
+
+  # ─────────────────────────────────────────
+  # Frontend → Vercel
+  # Staging:    develop → Vercel preview/staging
+  # Production: main    → Vercel production
+  # ─────────────────────────────────────────
   deploy-frontend:
     runs-on: ubuntu-latest
-    environment: production
-    
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Deploy to Vercel
-        if: ${{ vars.VERCEL_TOKEN != '' }}
-        run: |
-          echo "Deploy frontend to Vercel"
-          # vercel --prod
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy frontend to Vercel (staging)
+        if: github.ref_name == 'develop'
+        run: vercel --yes --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy frontend to Vercel (production)
+        if: github.ref_name == 'main'
+        run: vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+
+

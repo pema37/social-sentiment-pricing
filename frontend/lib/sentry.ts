@@ -1,0 +1,59 @@
+// frontend/lib/sentry.ts
+// AP-027: Extracted stripPii from all three Sentry config files.
+// Previously defined identically in sentry.client.config.ts,
+// sentry.server.config.ts, and sentry.edge.config.ts — any regex
+// update had to be made in three places.
+
+import type * as Sentry from "@sentry/nextjs";
+
+export function stripPii(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const shopDomainRegex = /[a-zA-Z0-9-]+\.myshopify\.com/g;
+  const tokenRegex =
+    /Bearer\s+[A-Za-z0-9._~+/=-]+|shpat_[A-Za-z0-9]+|shpua_[A-Za-z0-9]+|eyJ[A-Za-z0-9._-]+/g;
+
+  const redact = (str: string): string =>
+    str
+      .replace(emailRegex, "[REDACTED_EMAIL]")
+      .replace(shopDomainRegex, "[REDACTED_SHOP]")
+      .replace(tokenRegex, "[REDACTED_TOKEN]");
+
+  if (event.exception?.values) {
+    for (const ex of event.exception.values) {
+      if (ex.value) ex.value = redact(ex.value);
+    }
+  }
+
+  if (event.breadcrumbs) {
+    for (const bc of event.breadcrumbs) {
+      if (bc.message) bc.message = redact(bc.message);
+      if (bc.data) {
+        for (const key of Object.keys(bc.data)) {
+          if (typeof bc.data[key] === "string") {
+            bc.data[key] = redact(bc.data[key]);
+          }
+        }
+      }
+    }
+  }
+
+  if (event.request) {
+    if (event.request.url) event.request.url = redact(event.request.url);
+    if (typeof event.request.query_string === "string") {
+      event.request.query_string = redact(event.request.query_string);
+    }
+    if (event.request.headers) {
+      delete event.request.headers["Authorization"];
+      delete event.request.headers["Cookie"];
+    }
+  }
+
+  if (event.user) {
+    event.user = { id: event.user.id };
+  }
+
+  return event;
+}
+
+
+

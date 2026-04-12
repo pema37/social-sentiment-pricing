@@ -13,6 +13,10 @@ the integration to avoid foreign key constraint violations.
 FIX (2026-01-27): PATCH now supports credential updates for WooCommerce
 (consumer_key + consumer_secret) to allow reconnection without deleting.
 
+FIX (2026-03-29): Moved UUID import out of TYPE_CHECKING block so FastAPI
+can resolve path parameter annotations at runtime (from __future__ import
+annotations turns all annotations into strings).
+
 Now:
 - Active/Paused integrations → Soft delete (status = DISCONNECTED)
 - Already Disconnected integrations → Hard delete (removed from database)
@@ -23,6 +27,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlmodel import select
@@ -46,8 +51,6 @@ from schemas.integration import (
 from services.integration import WebhookRegistrationService, WooCommerceService
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from models.user import User
@@ -263,3 +266,6 @@ async def disconnect_integration(
     await db.commit()
 
     logger.info(f"Integration {integration_id} disconnected by user {current_user.id}")
+
+
+    
