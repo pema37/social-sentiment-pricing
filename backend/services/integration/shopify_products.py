@@ -1,8 +1,15 @@
+# services/integration/shopify_products.py
+
 """
+
 Shopify Products Mixin - Product fetching and parsing.
+
+All product data fetched via Shopify GraphQL Admin API 2025-10 —
+REST /products.json is NOT used here.
 
 Methods:
   - fetch_products: Paginated product listing (cursor-based)
+  - fetch_product_cursors: Lightweight cursor enumeration for parallel dispatch
   - fetch_single_product: Single product by numeric ID
   - _parse_graphql_product: Parse GraphQL node → ExternalProduct
 
@@ -110,6 +117,61 @@ class ShopifyProductsMixin:
             )
         except (httpx.RequestError, ValueError) as e:
             return ProductSyncResult(success=False, error=str(e))
+
+    async def fetch_product_cursors(
+        self,
+        store_url: str,
+        access_token: str,
+        page_size: int = 100,
+    ) -> list[str | None]:
+        """
+        Enumerate all page-boundary cursors for parallel chunk dispatch.
+
+        Makes a lightweight pass through all products fetching only cursor values
+        (no full product data). Returns one cursor per chunk where each cursor
+        is the starting point for that chunk:
+          [None, cursor_after_page1, cursor_after_page2, ...]
+
+        The first entry is always None (start from beginning).
+        """
+        shop_domain = self._get_shop_domain(store_url)
+        safe_size = min(page_size, 250)
+
+        cursors: list[str | None] = [None]  # First chunk always starts at None
+        current_cursor: str | None = None
+
+        while True:
+            after_clause = f', after: "{current_cursor}"' if current_cursor else ""
+            query = f"""
+                query {{
+                    products(first: {safe_size}{after_clause}) {{
+                        edges {{ cursor }}
+                        pageInfo {{ hasNextPage }}
+                    }}
+                }}
+            """
+            try:
+                async with RetryableClient(store_url, "shopify", self.retry_config, 30.0) as rc:
+                    data = await self._graphql(rc, shop_domain, access_token, query)
+            except Exception as exc:
+                logger.warning("fetch_product_cursors: graphql error %s", exc)
+                break
+
+            products_data = data.get("products", {})
+            edges = products_data.get("edges", [])
+            page_info = products_data.get("pageInfo", {})
+
+            if not edges:
+                break
+
+            current_cursor = edges[-1]["cursor"]
+
+            if page_info.get("hasNextPage", False):
+                cursors.append(current_cursor)
+            else:
+                break
+
+        return cursors
 
     async def fetch_single_product(
         self,

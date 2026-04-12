@@ -5,13 +5,23 @@ Sync operation endpoints - WITH PROGRESS TRACKING.
 Updated to include:
 - GET /{integration_id}/sync/progress - Detailed progress with user-friendly messaging
 - GET /sync/status/all - Status across all user's integrations
+
+FIX (2026-03-29): trigger_sync now dispatches to Celery sync_integration_products
+task via the sync queue instead of FastAPI BackgroundTasks. This ensures the sync
+runs in a Celery worker with proper error handling, retries, and status reset.
+
+FIX (2026-03-29): AP-005 BUG 303.01 — trigger_sync now creates an IntegrationSyncLog
+before dispatching to Celery. Without a log record, recover_stuck_syncs falls to a
+fragile else branch that silently skips integrations that have previously synced
+successfully. The Celery task closes the log via _close_open_sync_log() in all
+terminal paths (success, failure, chord error, orchestrator safety net).
 """
 
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -34,44 +44,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def run_sync_background(
-    integration_id: UUID,
-    sync_type: str,
-    user_id: UUID,
-):
-    """Background task wrapper for running product sync."""
-    async with async_session() as db:
-        try:
-            sync_service = SyncService(db)
-            sync_log = await sync_service.run_sync(
-                integration_id=integration_id,
-                sync_type=sync_type,
-                user_id=user_id,
-            )
-            logger.info(
-                f"Sync completed for integration {integration_id}: "
-                f"created={sync_log.products_created}, "
-                f"updated={sync_log.products_updated}, "
-                f"deleted={sync_log.products_deleted}"
-            )
-        except Exception as e:
-            logger.exception(f"Background sync failed for integration {integration_id}: {e}")
-
-
 @router.post("/{integration_id}/sync", response_model=SyncStatusResponse)
 @limiter.limit(BULK_RATE_LIMIT)
 async def trigger_sync(
     request: Request,
     integration_id: UUID,
     sync_request: SyncTriggerRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
     Trigger a product sync from the e-commerce platform.
 
-    The sync runs in the background - it's safe to refresh or navigate away.
+    The sync runs in a Celery worker via the sync queue.
     Poll GET /{integration_id}/sync/progress for real-time updates.
     """
     stmt = select(Integration).where(
@@ -90,18 +75,39 @@ async def trigger_sync(
     if integration.sync_status == "syncing":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sync already in progress")
 
+    now = datetime.now(UTC)
+
+    # Mark syncing immediately so the UI starts polling
     integration.sync_status = "syncing"
     db.add(integration)
+
+    # AP-005 BUG 303.01: Create IntegrationSyncLog here so recover_stuck_syncs
+    # has a reliable anchor to detect and recover stuck syncs.
+    # Without a log record, recover_stuck_syncs falls to a fragile else branch
+    # that only recovers when there is no recent completed log — it silently
+    # skips integrations that have successfully synced before.
+    # The Celery task closes this log (success=True/False, completed_at) via
+    # _close_open_sync_log() in _mark_sync_complete and _sync_single_pass.
+    sync_log = IntegrationSyncLog(
+        integration_id=integration.id,
+        sync_type="full",
+        started_at=now,
+    )
+    db.add(sync_log)
     await db.commit()
 
-    background_tasks.add_task(
-        run_sync_background,
-        integration_id=integration_id,
-        sync_type=sync_request.sync_type,
-        user_id=current_user.id,
+    # Dispatch to Celery sync queue — proper retries, error handling, status reset
+    from workers.tasks.sync_tasks import sync_integration_products
+
+    sync_integration_products.apply_async(
+        args=[str(integration_id), str(current_user.id)],
+        queue="sync",
     )
 
-    logger.info(f"Sync triggered for integration {integration_id} by user {current_user.id}")
+    logger.info(
+        f"Sync dispatched to Celery for integration {integration_id} "
+        f"by user {current_user.id}"
+    )
 
     return SyncStatusResponse(
         integration_id=integration.id,
@@ -112,7 +118,7 @@ async def trigger_sync(
 
 
 # ============================================
-# NEW: PROGRESS TRACKING ENDPOINTS
+# PROGRESS TRACKING ENDPOINTS
 # ============================================
 
 
@@ -167,17 +173,14 @@ async def get_sync_progress(
         started_at = latest_log.started_at
         products_processed = (latest_log.products_created or 0) + (latest_log.products_updated or 0)
 
-        # Calculate elapsed time
         if started_at:
             elapsed_seconds = (datetime.now(UTC) - started_at).total_seconds()
 
-        # Estimate total based on previous syncs
         if integration.products_synced and integration.products_synced > 0:
             products_total = integration.products_synced
             if products_total > 0:
                 progress_percent = min(100, (products_processed / products_total) * 100)
 
-        # Determine phase
         if products_processed == 0:
             current_phase = "fetching"
         elif progress_percent and progress_percent >= 95:
@@ -185,7 +188,6 @@ async def get_sync_progress(
         else:
             current_phase = "processing"
 
-    # Generate status message
     status_message = _get_status_message(
         sync_status=integration.sync_status,
         products_processed=products_processed,
@@ -194,7 +196,6 @@ async def get_sync_progress(
         error_message=integration.error_message,
     )
 
-    # Get results from last completed sync
     products_created = 0
     products_updated = 0
     products_deleted = 0
@@ -223,7 +224,7 @@ async def get_sync_progress(
         "products_deleted": products_deleted,
         "error_message": integration.error_message if integration.sync_status == "error" else None,
         "status_message": status_message,
-        "can_refresh_safely": True,  # ALWAYS true!
+        "can_refresh_safely": True,
     }
 
 
@@ -235,7 +236,6 @@ async def get_all_sync_status(
     """
     Get sync status for ALL user's integrations.
 
-    Use on dashboard or integrations list to show which stores are syncing.
     Frontend should poll this every 3 seconds if any_syncing is true.
     """
     stmt = select(Integration).where(Integration.user_id == current_user.id)
@@ -282,7 +282,7 @@ def _get_status_message(
     if sync_status == "error":
         return f"Sync failed: {error_message or 'Unknown error'}"
 
-    if sync_status == "idle":
+    if sync_status in ("idle", "completed"):
         return "Ready to sync"
 
     if sync_status == "syncing":
@@ -299,7 +299,7 @@ def _get_status_message(
 
 
 # ============================================
-# EXISTING ENDPOINTS (unchanged)
+# EXISTING ENDPOINTS
 # ============================================
 
 
@@ -439,3 +439,7 @@ async def recover_stuck_sync(
         "message": f"Recovered {recovered} stuck sync(s)" if recovered > 0 else "No stuck syncs found to recover",
         "sync_status": "error" if recovered > 0 else integration.sync_status,
     }
+
+
+
+

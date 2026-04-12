@@ -5,8 +5,6 @@ Request/response models for Shopify's appSubscriptionCreate GraphQL mutations.
 These are separate from the existing MNEE payment schemas because Shopify
 handles billing natively — no blockchain verification needed.
 
-Plans: Free (no charge), Starter ($29/mo), Professional ($99/mo), all with 14-day trial.
-
 Ref: https://shopify.dev/docs/api/admin-graphql/latest/mutations/appSubscriptionCreate
 """
 
@@ -27,7 +25,7 @@ class ShopifyPlanConfig(BaseModel):
 
     tier: str
     name: str
-    price_amount: str  # Decimal string e.g. "29.00"
+    price_amount: str  # Decimal string, e.g. "29.00"
     currency_code: str = "USD"
     interval: Literal["EVERY_30_DAYS", "ANNUAL"] = "EVERY_30_DAYS"
     trial_days: int = 14
@@ -77,8 +75,8 @@ SHOPIFY_PLANS: dict[str, ShopifyPlanConfig] = {
 class ShopifySubscribeRequest(BaseModel):
     """Request to create a Shopify billing subscription."""
 
-    tier: Literal["starter", "professional"] = Field(
-        ..., description="Plan tier: starter ($29), professional ($99)"
+    tier: Literal["free", "starter", "professional"] = Field(
+        ..., description="Plan tier: free ($0), starter ($29), professional ($99)"
     )
     shop_domain: str | None = Field(
         default=None,
@@ -89,7 +87,7 @@ class ShopifySubscribeRequest(BaseModel):
 class ShopifyPlanChangeRequest(BaseModel):
     """Request to upgrade or downgrade a Shopify plan."""
 
-    new_tier: Literal["starter", "professional"] = Field(..., description="New plan tier to switch to")
+    new_tier: Literal["free", "starter", "professional"] = Field(..., description="New plan tier to switch to: free, starter, or professional")
     shop_domain: str | None = Field(
         default=None,
         description="Shop domain (auto-detected from integration if not provided)",

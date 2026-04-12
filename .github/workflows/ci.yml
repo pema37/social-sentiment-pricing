@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────
-  # BACKEND: lint + actually run pytest
+  # BACKEND: lint + pytest
   # ─────────────────────────────────────────
   backend:
     runs-on: ubuntu-latest
@@ -47,7 +47,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          # AP-020: Normalised to 3.13 (matches test.yml)
+          python-version: "3.13"
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
 
@@ -60,20 +61,24 @@ jobs:
       - name: Ruff lint
         run: |
           cd backend
-          ruff check . --output-format=github || true
-        # NOTE: Remove || true once lint is clean
+          # AP-020: Removed || true — lint failures now block CI
+          ruff check . --output-format=github
 
       - name: Verify app loads
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
-          JWT_SECRET_KEY: test-secret-key
-          ENCRYPTION_KEY: test-encryption-key-32chars00
+          # AP-020: JWT_SECRET_KEY must be 32+ chars (validated at startup)
+          JWT_SECRET_KEY: test-jwt-secret-key-minimum-32-chars
+          # AP-020: ENCRYPTION_KEY must be a valid Fernet key, not a hex string.
+          # Generated with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+          ENCRYPTION_KEY: ${{ secrets.CI_ENCRYPTION_KEY }}
           ENVIRONMENT: test
           OPENAI_API_KEY: sk-test-fake
           GEMINI_API_KEY: test-fake
-          SHOPIFY_API_KEY: test-fake
-          SHOPIFY_API_SECRET: test-fake
+          # AP-020: Corrected SHOPIFY_CLIENT_ID/SECRET (was SHOPIFY_API_KEY/SECRET)
+          SHOPIFY_CLIENT_ID: test-fake
+          SHOPIFY_CLIENT_SECRET: test-fake
           SENTRY_DSN: ""
         run: |
           cd backend
@@ -83,20 +88,17 @@ jobs:
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
-          JWT_SECRET_KEY: test-secret-key
-          ENCRYPTION_KEY: test-encryption-key-32chars00
+          JWT_SECRET_KEY: test-jwt-secret-key-minimum-32-chars
+          ENCRYPTION_KEY: ${{ secrets.CI_ENCRYPTION_KEY }}
           ENVIRONMENT: test
           OPENAI_API_KEY: sk-test-fake
           GEMINI_API_KEY: test-fake
-          SHOPIFY_API_KEY: test-fake
-          SHOPIFY_API_SECRET: test-fake
+          SHOPIFY_CLIENT_ID: test-fake
+          SHOPIFY_CLIENT_SECRET: test-fake
           SENTRY_DSN: ""
         run: |
           cd backend
-          # pytest \
-           pytest --cov=. --cov-report=term-missing:skip-covered --junitxml=test-results.xml 2>&1 | tail -100 
-        # -x = stop on first failure (fast feedback on PRs)
-        # tail -100 = keep GHA log readable
+          pytest --cov=. --cov-report=term-missing:skip-covered --junitxml=test-results.xml 2>&1 | tail -100
 
       - name: Upload test results
         if: always()
@@ -126,23 +128,24 @@ jobs:
         run: |
           cd frontend
           npm ci
-        # npm ci = deterministic, respects lockfile, uses cache
 
       - name: ESLint
         run: |
           cd frontend
-          npm run lint || true
+          # AP-020: Removed || true — lint failures now block CI
+          npm run lint
 
       - name: TypeScript typecheck
         run: |
           cd frontend
-          npx tsc --noEmit || true
-        # Separate from build so you see WHICH types broke
+          # AP-020: Removed || true — type errors now block CI
+          npx tsc --noEmit
 
       - name: Vitest unit tests
         run: |
           cd frontend
-          npx vitest run --reporter=verbose || true
+          # AP-020: Removed || true — test failures now block CI
+          npx vitest run --reporter=verbose
 
       - name: Build
         run: |
@@ -150,8 +153,6 @@ jobs:
           npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
-        # No more NEXT_TYPESCRIPT_IGNORE_BUILD_ERRORS
-        # Type errors in build = real bugs, fix them
 
   # ─────────────────────────────────────────
   # DOCKER: build test (only after tests pass)

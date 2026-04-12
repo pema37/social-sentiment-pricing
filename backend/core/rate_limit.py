@@ -4,6 +4,10 @@ Rate limiting configuration for API endpoints.
 Uses slowapi with Redis backend for distributed rate limiting.
 
 FIX (2026-01-24): Added explicit type annotations for Limiter to fix Pylance warnings.
+FIX (2026-03-29): AP-033 — Close Redis test connection after ping.
+Previously the test Redis client `r` was created, pinged, and then abandoned
+without calling r.close(). Each app startup leaked one connection from the
+connection pool. Fixed: call r.close() in a finally block after the ping.
 """
 
 import logging
@@ -20,7 +24,6 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Type variable for preserving function signatures
 F = TypeVar("F", bound=Callable[..., Any])
 
 
@@ -34,8 +37,6 @@ def get_client_ip(request: Request) -> str:
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        # Rightmost entry is added by our trusted proxy (Railway/load balancer).
-        # Leftmost is client-controlled and trivially spoofable.
         ips = [ip.strip() for ip in forwarded.split(",") if ip.strip()]
         if ips:
             return ips[-1]
@@ -45,18 +46,24 @@ def get_client_ip(request: Request) -> str:
 def _create_limiter() -> Limiter:
     """
     Create rate limiter with Redis if available, otherwise memory.
-    Actually tests Redis connection before using it.
+    Tests the Redis connection before using it.
     """
     redis_url = settings.REDIS_URL
 
-    # Check if Redis URL is configured and not localhost (won't work in production)
     if redis_url and "localhost" not in redis_url and "127.0.0.1" not in redis_url:
         try:
-            # Test the connection before committing to Redis
             import redis
 
+            # AP-033: Use a context variable so we can close it in finally.
             r = redis.from_url(redis_url, socket_connect_timeout=2)
-            r.ping()
+            try:
+                r.ping()
+            finally:
+                # AP-033: Always close the test connection — previously leaked.
+                # Without this, each app restart consumed one connection from
+                # the pool and never returned it.
+                r.close()
+
             logger.info("Rate limiter initialized with Redis backend")
             return Limiter(
                 key_func=get_client_ip,
@@ -71,7 +78,6 @@ def _create_limiter() -> Limiter:
                 e,
             )
 
-    # Fallback to in-memory storage
     logger.warning(
         "Rate limiter initialized with in-memory backend — "
         "rate limits are per-worker and reset on restart"
@@ -84,15 +90,12 @@ def _create_limiter() -> Limiter:
     )
 
 
-# Initialize the limiter with explicit type
 limiter: Limiter = _create_limiter()
 
 
 def rate_limit(limit_string: str) -> Callable[[F], F]:
     """
     Typed rate limit decorator.
-
-    Wraps slowapi's limiter.limit() with proper type hints.
 
     Usage:
         @rate_limit(WRITE_RATE_LIMIT)
@@ -101,7 +104,6 @@ def rate_limit(limit_string: str) -> Callable[[F], F]:
     """
 
     def decorator(func: F) -> F:
-        # Apply slowapi's limiter and cast to preserve the function type
         return cast("F", limiter.limit(limit_string)(func))
 
     return decorator
@@ -111,30 +113,26 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
     """Custom handler for rate limit exceeded errors."""
     return JSONResponse(
         status_code=429,
-        content={
-            "detail": "Too many requests. Please try again later.",
-        },
+        content={"detail": "Too many requests. Please try again later."},
         headers={"Retry-After": "60"},
     )
 
 
 # ───────────────────── Rate Limit Tiers ───────────────────── #
 
-# Auth endpoints - strictest limits (prevent brute force)
 AUTH_RATE_LIMIT: str = "5/minute"
 REGISTER_RATE_LIMIT: str = "3/minute"
 PASSWORD_RESET_RATE_LIMIT: str = "3/minute"
 
-# Write operations - moderate limits
-WRITE_RATE_LIMIT: str = "30/minute"  # POST, PUT, PATCH, DELETE
-BULK_RATE_LIMIT: str = "10/minute"  # Bulk operations, imports, syncs
+WRITE_RATE_LIMIT: str = "30/minute"
+BULK_RATE_LIMIT: str = "10/minute"
 
-# Read operations - lighter limits
-READ_RATE_LIMIT: str = "100/minute"  # GET requests (default)
+READ_RATE_LIMIT: str = "100/minute"
 
-# Expensive operations - strict limits
-ANALYSIS_RATE_LIMIT: str = "20/minute"  # Sentiment analysis, AI calls
-EXPORT_RATE_LIMIT: str = "5/minute"  # CSV exports, reports
+ANALYSIS_RATE_LIMIT: str = "20/minute"
+EXPORT_RATE_LIMIT: str = "5/minute"
 
-# Webhooks - allow more (external services)
 WEBHOOK_RATE_LIMIT: str = "200/minute"
+
+
+

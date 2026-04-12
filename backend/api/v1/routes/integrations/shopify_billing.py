@@ -4,14 +4,19 @@ Shopify Billing API Routes
 Endpoints for Shopify-native app subscription billing.
 Separate from MNEE payment routes — these handle Shopify App Store billing.
 
+Plans:
+  - Free         ($0/mo)   — no Shopify recurring charge created
+  - Starter      ($29/mo)  — 14-day free trial via appSubscriptionCreate
+  - Professional ($99/mo)  — 14-day free trial via appSubscriptionCreate
+
 Flow:
-  1. GET  /plans         → list available plans (public)
+  1. GET  /plans         → list available plans including Free/$0 (public)
   2. POST /subscribe     → create subscription → returns confirmationUrl
   3. [Merchant approves on Shopify → redirected back to frontend with charge_id]
   4. POST /verify        → frontend calls this with charge_id to confirm activation
   5. GET  /status        → check active billing status
-  6. POST /change-plan   → upgrade/downgrade
-  7. POST /cancel        → cancel subscription
+  6. POST /change-plan   → upgrade/downgrade between Free, Starter, Professional
+  7. POST /cancel        → cancel subscription (downgrades to Free)
 """
 
 import logging
@@ -71,10 +76,28 @@ async def list_shopify_plans():
     """
     List available Shopify billing plans.
 
+    Returns all three tiers:
+      - Free ($0/mo): no Shopify recurring charge is created for this tier
+      - Starter ($29/mo): recurring charge with 14-day free trial
+      - Professional ($99/mo): recurring charge with 14-day free trial
+
     No auth required — this can be called from the embedded app
     before the merchant has logged in, to display pricing.
     """
-    plans = [
+    # Free tier has no Shopify subscription — display only
+    free_plan = ShopifyPlanInfo(
+        tier="free",
+        name="ActualPrice Free",
+        price_monthly=0.0,
+        trial_days=0,
+        product_limit=5,
+        features=[
+            "Up to 5 products",
+            "Basic competitor tracking",
+            "Manual pricing only",
+        ],
+    )
+    paid_plans = [
         ShopifyPlanInfo(
             tier=plan.tier,
             name=plan.name,
@@ -85,7 +108,7 @@ async def list_shopify_plans():
         )
         for plan in SHOPIFY_PLANS.values()
     ]
-    return ShopifyPlansListResponse(plans=plans)
+    return ShopifyPlansListResponse(plans=[free_plan] + paid_plans)
 
 
 # =============================================================================
@@ -103,6 +126,13 @@ async def create_shopify_subscription(
 ):
     """
     Create a Shopify recurring subscription.
+
+    Supported paid tiers (both include a 14-day free trial):
+      - starter      ($29/mo)
+      - professional ($99/mo)
+
+    For the free tier no Shopify charge is created — the subscription is
+    activated locally without a confirmationUrl redirect.
 
     Returns a confirmation_url to redirect the merchant to Shopify's
     billing approval page. After approval, Shopify redirects back to
@@ -243,8 +273,14 @@ async def change_shopify_plan(
     """
     Change Shopify plan (upgrade or downgrade).
 
+    Supported transitions:
+      - Any tier → starter ($29/mo, 14-day free trial)
+      - Any tier → professional ($99/mo, 14-day free trial)
+      - Any paid tier → free ($0/mo, cancels existing Shopify charge)
+
     Creates a new subscription with APPLY_IMMEDIATELY replacement
-    behavior. Merchant must approve the new charge via Shopify.
+    behavior. Merchant must approve the new charge via Shopify for
+    paid tiers (starter/professional).
     """
     service = ShopifyBillingService(db)
     result = await service.create_subscription(
