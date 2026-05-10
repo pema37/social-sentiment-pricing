@@ -56,7 +56,6 @@ jobs:
       - name: Deploy frontend to Vercel (staging)
         if: github.ref_name == 'develop'
         run: vercel --yes --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: frontend
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -64,7 +63,6 @@ jobs:
       - name: Deploy frontend to Vercel (production)
         if: github.ref_name == 'main'
         run: vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: frontend
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
