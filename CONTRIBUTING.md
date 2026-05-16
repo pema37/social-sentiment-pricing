@@ -82,7 +82,7 @@ Every PR must include:
 
 1. **Title** following commit convention (e.g., `feat: add competitor price comparison endpoint`)
 2. **Description** — What changed and why. 2-3 sentences minimum.
-3. **Tests pass locally** — Run `pytest` from the backend directory. All 4,268+ tests must pass.
+3. **Tests pass locally** — Run `pytest` from the backend directory. All 4,900+ tests must pass.
 4. **No lint errors** — Backend and frontend should have zero errors.
 5. **Screenshot** — Required for any frontend/UI changes.
 
@@ -101,14 +101,14 @@ social-sentiment-pricing/
 │   │   └── security.py         # JWT, password hashing, auth
 │   ├── db/
 │   │   └── session.py          # Database engine + session dependency
-│   ├── models/                 # SQLModel database tables (14 models)
-│   ├── schemas/                # Pydantic request/response DTOs (12 files)
-│   ├── api/v1/routes/          # HTTP endpoints (11 route files, 118+ endpoints)
-│   ├── services/               # Business logic layer (20+ services)
+│   ├── models/                 # SQLModel database tables (21 models)
+│   ├── schemas/                # Pydantic request/response DTOs (22 files)
+│   ├── api/v1/routes/          # HTTP endpoints (32 route files + 8 sub-packages, ~150 endpoints)
+│   ├── services/               # Business logic layer (100+ files across ~15 domain folders)
 │   ├── integrations/           # Shopify, WooCommerce, MNEE
 │   ├── workers/                # Celery background tasks
 │   └── alembic/                # Database migrations
-├── frontend/                   # Next.js 14 + TypeScript
+├── frontend/                   # Next.js 16 + TypeScript
 │   ├── app/
 │   │   ├── (auth)/             # Login, register, forgot password
 │   │   └── (dashboard)/        # All protected pages
@@ -226,7 +226,7 @@ cd backend
 pytest
 ```
 
-All 4,268+ tests must pass. If your changes break existing tests, fix them before opening the PR.
+All 4,900+ tests must pass. If your changes break existing tests, fix them before opening the PR.
 
 To run a specific test file:
 ```bash
@@ -283,7 +283,7 @@ Before your first PR, confirm:
 
 - [ ] You can run the backend locally (`uvicorn backend.main:app --reload`)
 - [ ] You can run the frontend locally (`npm run dev` from `frontend/`)
-- [ ] You can run the test suite and all 4,268+ tests pass
+- [ ] You can run the test suite and all 4,900+ tests pass
 - [ ] You've read this entire document
 - [ ] You've read `DEVELOPER_SETUP.md`
 - [ ] You understand the branch workflow (feature branch → PR → develop)

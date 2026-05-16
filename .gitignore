@@ -120,6 +120,17 @@ Thumbs.db
 .idea/
 *.pem
 
+##############################################
+# macOS Finder duplicates
+##############################################
+
+* 2.*
+* 2
+*\ 2.*
+
+##############################################
+# Personal Claude Code context (not for repo)
+##############################################
 
 CLAUDE.local.md
 backend/backend__CLAUDE.md
@@ -129,5 +140,18 @@ BUGS_REORG.md
 reorganize_bugs.py
 .claude/
 
+##############################################
+# Personal architecture & state docs (not for repo)
+##############################################
+
+/CLAUDE.md
+docs/
+STATE.md
+
+##############################################
+# Backups from sed -i
+##############################################
+
+*.bak
 
 
