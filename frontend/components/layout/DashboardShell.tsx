@@ -1,9 +1,9 @@
+'use client';
+
 // frontend/components/layout/DashboardShell.tsx
 // DashboardShell Component
 // Wraps all dashboard pages with Sidebar + Topbar + content area
 // Updated Feb 21, 2026 — Shopify embedded context awareness
-
-'use client';
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';

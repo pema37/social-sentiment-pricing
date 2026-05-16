@@ -1,6 +1,6 @@
-// frontend/app/(dashboard)/sentiment/trust/page.tsx
-
 'use client';
+
+// frontend/app/(dashboard)/sentiment/trust/page.tsx
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';

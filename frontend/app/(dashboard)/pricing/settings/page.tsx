@@ -1,7 +1,7 @@
+'use client';
+
 // Pricing Settings Page
 // Configure auto-approve thresholds and notifications
-
-'use client';
 
 /* eslint-disable react-hooks/set-state-in-effect */
 

@@ -1,3 +1,5 @@
+'use client';
+
 // User profile hooks
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/lib/api';

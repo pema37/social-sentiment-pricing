@@ -1,6 +1,6 @@
-// Forgot Password Page
 'use client';
 
+// Forgot Password Page
 import { useState } from 'react';
 import Link from 'next/link';
 import { Button, Input } from '@/components/ui';

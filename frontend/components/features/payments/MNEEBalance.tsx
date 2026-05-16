@@ -1,11 +1,11 @@
+'use client';
+
 /**
  * MNEE Balance Component
  * 
  * Displays the user's MNEE stablecoin balance.
  * 1 MNEE = 1 USD
 **/
-
-'use client'
 
 import { useMNEE } from '@/lib/web3'
 import { useAccount } from 'wagmi'

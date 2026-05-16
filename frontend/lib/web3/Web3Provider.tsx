@@ -1,11 +1,11 @@
+'use client';
+
 /**
  * Web3 Provider Component
  * 
  * Wraps the application with wagmi and RainbowKit providers
  * to enable wallet connections and MNEE interactions.
 **/
-
-'use client'
 
 import { ReactNode } from 'react'
 import { WagmiProvider } from 'wagmi'

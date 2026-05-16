@@ -1,7 +1,7 @@
+'use client';
+
 // Analytics Page
 // Charts and deeper insights into pricing, sentiment, and alerts
-
-'use client';
 
 import { useState } from 'react';
 import { SectionHeader, Card, CardTitle } from '@/components/ui';

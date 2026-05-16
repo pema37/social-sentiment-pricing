@@ -1,6 +1,6 @@
-// Profile Settings Page
 'use client';
 
+// Profile Settings Page
 import { useState } from 'react';
 import { Card, CardTitle } from '@/components/ui';
 import { Button } from '@/components/ui/Button';

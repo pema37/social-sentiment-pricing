@@ -1,7 +1,7 @@
-// frontend/components/features/alerts/AlertConfigurationForm.tsx
-// Enhanced alert configuration form with threshold, product selection, and channel URL fields
 'use client';
 
+// frontend/components/features/alerts/AlertConfigurationForm.tsx
+// Enhanced alert configuration form with threshold, product selection, and channel URL fields
 import { useState, useCallback, useMemo } from 'react';
 import { X, Info, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';

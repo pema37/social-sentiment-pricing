@@ -1,6 +1,6 @@
-// Notification bell component for header with real-time WebSocket support
 'use client';
 
+// Notification bell component for header with real-time WebSocket support
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Wifi, WifiOff } from 'lucide-react';

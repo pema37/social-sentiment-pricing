@@ -1,6 +1,6 @@
-// Competitor form component
 'use client';
 
+// Competitor form component
 import { useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';

@@ -1,7 +1,7 @@
+'use client';
+
 // Recommendation Detail Page
 // Full details of a price recommendation with actions
-
-'use client';
 
 import { useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';

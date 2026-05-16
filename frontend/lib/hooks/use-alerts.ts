@@ -1,3 +1,5 @@
+'use client';
+
 // Alert hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { alertsApi } from '@/lib/api';

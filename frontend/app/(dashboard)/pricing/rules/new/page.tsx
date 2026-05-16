@@ -1,8 +1,8 @@
+'use client';
+
 export const dynamic = 'force-dynamic';
 // Create New Pricing Rule Page
 // Form for creating a new pricing rule
-
-'use client';
 
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';

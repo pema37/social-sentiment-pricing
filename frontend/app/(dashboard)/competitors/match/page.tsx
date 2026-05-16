@@ -1,7 +1,7 @@
+'use client';
+
 export const dynamic = 'force-dynamic';
 // frontend/app/(dashboard)/competitors/match/page.tsx
-
-'use client';
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';

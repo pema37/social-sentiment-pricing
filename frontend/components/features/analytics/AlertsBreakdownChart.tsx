@@ -1,6 +1,6 @@
-// Alerts breakdown charts
 'use client';
 
+// Alerts breakdown charts
 import { useMemo } from 'react';
 import {
   PieChart,

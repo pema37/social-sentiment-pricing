@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/hooks/use-trust-scoring.ts
 
 /**

@@ -1,6 +1,6 @@
-// Link product to competitor form
 'use client';
 
+// Link product to competitor form
 import { useState, useEffect } from 'react';
 import { X, AlertCircle, RefreshCw } from 'lucide-react';
 import { useProducts } from '@/lib/hooks/use-products';

@@ -1,6 +1,6 @@
-// app/(dashboard)/products/page.tsx
 'use client';
 
+// app/(dashboard)/products/page.tsx
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search, Upload, Filter } from 'lucide-react';

@@ -1,3 +1,5 @@
+'use client';
+
 // ============================================
 // OUTCOME HOOKS (React Query)
 //

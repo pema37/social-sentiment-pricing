@@ -1,3 +1,5 @@
+'use client';
+
 // Competitor hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { competitorsApi } from '@/lib/api';

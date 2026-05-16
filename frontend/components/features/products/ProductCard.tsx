@@ -1,6 +1,6 @@
-// components/features/products/ProductCard.tsx
 'use client';
 
+// components/features/products/ProductCard.tsx
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';

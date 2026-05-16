@@ -1,6 +1,6 @@
-export const dynamic = 'force-dynamic';
-// Notification Settings Page
 'use client';
+
+// Notification Settings Page
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardTitle } from '@/components/ui';

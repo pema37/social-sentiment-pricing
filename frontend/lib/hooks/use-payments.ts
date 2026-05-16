@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/hooks/use-payments.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {

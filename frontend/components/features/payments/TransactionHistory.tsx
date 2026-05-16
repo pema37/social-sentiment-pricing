@@ -1,10 +1,10 @@
+'use client';
+
 /**
  * Transaction History Component
  * 
  * Displays recent MNEE transactions for the connected wallet.
 * */
-
-'use client'
 
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'

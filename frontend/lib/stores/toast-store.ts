@@ -1,3 +1,5 @@
+'use client';
+
 // Toast notification store using Zustand
 import { create } from 'zustand';
 

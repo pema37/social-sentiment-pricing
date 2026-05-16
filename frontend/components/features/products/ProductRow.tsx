@@ -1,8 +1,8 @@
+'use client';
+
 // components/features/products/ProductRow.tsx
 // FIX (2026-02-21): Added platform badges showing Shopify/WooCommerce
 // connections per product. See BUG-005 in audit report.
-'use client';
-
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import {

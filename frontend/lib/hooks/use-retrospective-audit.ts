@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Retrospective Audit Hooks
  */

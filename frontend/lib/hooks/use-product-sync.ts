@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/hooks/use-product-sync.ts
 // Hooks for product synchronization with e-commerce stores
 

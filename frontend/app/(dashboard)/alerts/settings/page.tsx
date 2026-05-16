@@ -1,6 +1,6 @@
-// Alert settings page
 'use client';
 
+// Alert settings page
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus } from 'lucide-react';

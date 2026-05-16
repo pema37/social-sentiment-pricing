@@ -1,6 +1,6 @@
-// frontend/components/features/payments/BsvWalletCard.tsx
-
 'use client';
+
+// frontend/components/features/payments/BsvWalletCard.tsx
 
 import { useState } from 'react';
 import { Wallet, Check, X, RefreshCw, ExternalLink, Copy } from 'lucide-react';

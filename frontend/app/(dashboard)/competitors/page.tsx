@@ -1,6 +1,6 @@
-// Competitors Page
 'use client';
 
+// Competitors Page
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, Sparkles } from 'lucide-react';

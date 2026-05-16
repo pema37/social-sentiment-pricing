@@ -1,3 +1,5 @@
+'use client';
+
 // Pricing hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pricingApi } from '@/lib/api';

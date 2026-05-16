@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * MNEE Token Hook
  * 
@@ -6,8 +8,6 @@
  * - Transfer tokens
  * - Approve spending
  */
-
-'use client'
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi'
 import { formatUnits, parseUnits, isAddress } from 'viem'

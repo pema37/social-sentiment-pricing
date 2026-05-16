@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/hooks/use-intelligence.ts
 // React Query hooks for Intelligence Environment dashboard
 // Pattern: matches use-outcomes.ts, use-analytics.ts

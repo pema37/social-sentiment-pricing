@@ -1,6 +1,6 @@
-// frontend/components/features/trust-scoring/TrustScoreGauge.tsx
-
 'use client';
+
+// frontend/components/features/trust-scoring/TrustScoreGauge.tsx
 
 import { useMemo } from 'react';
 import type { TrustLevel } from '@/types/trust-scoring';

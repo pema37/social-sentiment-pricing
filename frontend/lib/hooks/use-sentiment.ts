@@ -1,3 +1,5 @@
+'use client';
+
 // Sentiment hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sentimentApi } from '@/lib/api';

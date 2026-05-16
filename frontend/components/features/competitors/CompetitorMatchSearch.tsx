@@ -1,6 +1,6 @@
-// frontend/components/features/competitors/CompetitorMatchSearch.tsx
-
 'use client';
+
+// frontend/components/features/competitors/CompetitorMatchSearch.tsx
 
 import { useState, useCallback } from 'react';
 import {

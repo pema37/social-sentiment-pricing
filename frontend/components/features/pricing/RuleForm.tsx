@@ -1,6 +1,6 @@
-// frontend/components/features/pricing/RuleForm.tsx
-
 'use client';
+
+// frontend/components/features/pricing/RuleForm.tsx
 
 import { useState, useCallback, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';

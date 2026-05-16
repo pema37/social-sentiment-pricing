@@ -1,3 +1,5 @@
+'use client';
+
 // Pricing Rules Page
 // Lists all pricing rules with filtering and management actions
 //
@@ -5,8 +7,6 @@
 // Previously only competitorNames was passed to RulesList, causing
 // rules scoped to specific products to show "Unknown" instead of
 // the product name. See BUG-008 in audit report.
-
-'use client';
 
 import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';

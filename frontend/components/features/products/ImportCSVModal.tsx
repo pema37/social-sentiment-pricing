@@ -1,6 +1,6 @@
-// components/features/products/ImportCSVModal.tsx
 'use client';
 
+// components/features/products/ImportCSVModal.tsx
 import { useState, useCallback, useRef } from 'react';
 import { Upload, X, FileText, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/Button';

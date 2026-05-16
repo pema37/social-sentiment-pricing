@@ -1,7 +1,7 @@
+'use client';
+
 // Rules List Component
 // List container with filtering, empty states, and loading skeleton
-
-'use client';
 
 import { useMemo } from 'react';
 import { Inbox, Filter } from 'lucide-react';

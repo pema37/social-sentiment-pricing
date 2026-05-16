@@ -1,6 +1,6 @@
-// app/(dashboard)/products/[id]/edit/page.tsx
 'use client';
 
+// app/(dashboard)/products/[id]/edit/page.tsx
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';

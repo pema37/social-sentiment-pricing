@@ -1,6 +1,6 @@
-// frontend/components/features/intelligence/CategoryPerformanceTable.tsx
 'use client';
 
+// frontend/components/features/intelligence/CategoryPerformanceTable.tsx
 import { useState, useMemo } from 'react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';

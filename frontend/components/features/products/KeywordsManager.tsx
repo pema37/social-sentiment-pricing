@@ -1,6 +1,6 @@
-// components/features/products/KeywordsManager.tsx
 'use client';
 
+// components/features/products/KeywordsManager.tsx
 import { useState, useCallback, KeyboardEvent } from 'react';
 import { Tag, X, Plus, Loader2, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/Card';

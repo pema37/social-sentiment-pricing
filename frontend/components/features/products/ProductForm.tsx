@@ -1,6 +1,6 @@
-// components/products/ProductForm.tsx
 'use client';
 
+// components/products/ProductForm.tsx
 import { useState, useMemo, useCallback } from 'react';
 import { Package, DollarSign, Zap, Tag, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';

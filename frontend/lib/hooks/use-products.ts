@@ -1,3 +1,5 @@
+'use client';
+
 // lib/hooks/use-products.ts
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

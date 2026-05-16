@@ -1,6 +1,6 @@
-// Alert configuration card component
 'use client';
 
+// Alert configuration card component
 import { useState } from 'react';
 import { Trash2, Pencil } from 'lucide-react';
 import {

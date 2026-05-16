@@ -1,6 +1,6 @@
-// frontend/components/features/competitors/AutoLinkModal.tsx
-
 'use client';
+
+// frontend/components/features/competitors/AutoLinkModal.tsx
 
 import { useState } from 'react';
 import {

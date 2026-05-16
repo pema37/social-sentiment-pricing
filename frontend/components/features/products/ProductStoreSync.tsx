@@ -1,7 +1,7 @@
-// frontend/components/features/products/ProductStoreSync.tsx
-// Component for syncing products to e-commerce stores (WooCommerce/Shopify)
 'use client';
 
+// frontend/components/features/products/ProductStoreSync.tsx
+// Component for syncing products to e-commerce stores (WooCommerce/Shopify)
 import { useState } from 'react';
 import { 
   Store, 

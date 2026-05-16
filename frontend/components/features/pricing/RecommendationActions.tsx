@@ -1,7 +1,7 @@
+'use client';
+
 // Recommendation Actions Component
 // Approve/reject buttons with rejection reason modal
-
-'use client';
 
 import { useState, useCallback } from 'react';
 import { Check, X, Loader2 } from 'lucide-react';

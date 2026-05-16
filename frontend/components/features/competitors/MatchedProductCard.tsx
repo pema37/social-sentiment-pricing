@@ -1,6 +1,6 @@
-// frontend/components/features/competitors/MatchedProductCard.tsx
-
 'use client';
+
+// frontend/components/features/competitors/MatchedProductCard.tsx
 
 import { useState } from 'react';
 import Image from 'next/image';

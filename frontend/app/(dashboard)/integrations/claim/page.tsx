@@ -1,6 +1,6 @@
-export const dynamic = 'force-dynamic';
-// frontend/app/(dashboard)/integrations/claim/page.tsx
 'use client';
+
+// frontend/app/(dashboard)/integrations/claim/page.tsx
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';

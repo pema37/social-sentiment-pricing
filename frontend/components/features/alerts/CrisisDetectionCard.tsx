@@ -1,6 +1,6 @@
-// components/features/alerts/CrisisDetectionCard.tsx
 'use client';
 
+// components/features/alerts/CrisisDetectionCard.tsx
 import { useState } from 'react';
 import { 
   AlertTriangle, 

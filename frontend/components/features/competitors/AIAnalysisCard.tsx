@@ -1,6 +1,6 @@
-// components/features/competitors/AIAnalysisCard.tsx
 'use client';
 
+// components/features/competitors/AIAnalysisCard.tsx
 import { useState } from 'react';
 import { Brain, RefreshCw, TrendingUp, TrendingDown, Minus, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/Card';

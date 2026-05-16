@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/stores/auth-store.ts
 
 /**

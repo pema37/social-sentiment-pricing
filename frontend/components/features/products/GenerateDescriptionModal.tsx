@@ -1,6 +1,6 @@
-// components/features/products/GenerateDescriptionModal.tsx
 'use client';
 
+// components/features/products/GenerateDescriptionModal.tsx
 import { useState } from 'react';
 import { Button, Card } from '@/components/ui';
 import { AIBadge } from '@/components/ui/ai-badge';

@@ -1,6 +1,7 @@
+'use client';
+
 export const dynamic = 'force-dynamic';
 // frontend/app/(dashboard)/settings/billing/page.tsx
-'use client';
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';

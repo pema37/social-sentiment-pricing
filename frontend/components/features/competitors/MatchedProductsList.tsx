@@ -1,6 +1,6 @@
-// frontend/components/features/competitors/MatchedProductsList.tsx
-
 'use client';
+
+// frontend/components/features/competitors/MatchedProductsList.tsx
 
 import { useState, useMemo } from 'react';
 import {

@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/ws/hooks.ts
 /**
  * WebSocket React Hooks

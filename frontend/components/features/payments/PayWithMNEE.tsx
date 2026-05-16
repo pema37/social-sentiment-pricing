@@ -1,11 +1,11 @@
+'use client';
+
 /**
  * Pay with MNEE Component
  * 
  * Payment button that handles MNEE stablecoin transfers.
  * Supports single payments and split payments.
 **/
-
-'use client'
 
 import { useState, useCallback, useEffect } from 'react'
 import { useAccount } from 'wagmi'

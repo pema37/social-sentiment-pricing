@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/components/ui/feature-error.tsx
 
 /**
@@ -19,8 +21,6 @@
  *     return <FeatureError error={error} reset={reset} feature="Products" backHref="/dashboard" />;
  *   }
  */
-
-'use client';
 
 import { useEffect } from 'react';
 import Link from 'next/link';

@@ -1,6 +1,6 @@
-// Alerts inbox page
 'use client';
 
+// Alerts inbox page
 import { useState } from 'react';
 import { useAlerts, useAlertStats, useAcknowledgeAllAlerts } from '@/lib/hooks/use-alerts';
 import { AlertsList, CrisisDetectionCard } from '@/components/features/alerts';

@@ -1,6 +1,6 @@
-// frontend/components/features/competitors/MatchConfidenceBadge.tsx
-
 'use client';
+
+// frontend/components/features/competitors/MatchConfidenceBadge.tsx
 
 import { useMemo } from 'react';
 

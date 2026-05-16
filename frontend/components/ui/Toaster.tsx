@@ -1,6 +1,6 @@
-// Toast notification display component
 'use client';
 
+// Toast notification display component
 import { useEffect, useState } from 'react';
 import { X, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
 import { useToastStore, type Toast, type ToastType } from '@/lib/stores/toast-store';

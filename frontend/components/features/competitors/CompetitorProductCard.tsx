@@ -1,6 +1,6 @@
-// Competitor product card component
 'use client';
 
+// Competitor product card component
 import { useState } from 'react';
 import { ExternalLink, Trash2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';

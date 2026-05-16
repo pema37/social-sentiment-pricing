@@ -1,6 +1,6 @@
-// frontend/components/features/intelligence/ExperimentStatusCard.tsx
 'use client';
 
+// frontend/components/features/intelligence/ExperimentStatusCard.tsx
 import { useState } from 'react';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';

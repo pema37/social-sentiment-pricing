@@ -1,6 +1,6 @@
-// components/ui/CategorySelect.tsx
 'use client';
 
+// components/ui/CategorySelect.tsx
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/Input';

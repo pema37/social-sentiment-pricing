@@ -1,6 +1,6 @@
-// Competitor card component
 'use client';
 
+// Competitor card component
 import { useState } from 'react';
 import Link from 'next/link';
 import { Globe, Trash2, Pencil, ExternalLink } from 'lucide-react';

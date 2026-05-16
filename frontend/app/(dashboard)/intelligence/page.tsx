@@ -1,6 +1,6 @@
-// frontend/app/(dashboard)/intelligence/page.tsx
 'use client';
 
+// frontend/app/(dashboard)/intelligence/page.tsx
 import { useState } from 'react';
 import { SectionHeader } from '@/components/ui';
 import { Button } from '@/components/ui/Button';

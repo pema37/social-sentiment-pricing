@@ -1,6 +1,6 @@
-// Competitor detail page
 'use client';
 
+// Competitor detail page
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';

@@ -1,6 +1,6 @@
-// Sentiment trend line chart
 'use client';
 
+// Sentiment trend line chart
 import { useMemo } from 'react';
 import {
   LineChart,
