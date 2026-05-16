@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/lib/context/shopify-embedded.tsx
 
 /**
@@ -15,8 +17,6 @@
  * - Exposes isEmbedded flag so billing, payments, auth pages can conditionally render
  * - Keeps standalone (non-Shopify) auth flow untouched
  */
-
-'use client';
 
 import {
   createContext,

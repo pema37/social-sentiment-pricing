@@ -1,3 +1,5 @@
+'use client';
+
 // frontend/app/(dashboard)/layout.tsx
 
 /**
@@ -10,8 +12,6 @@
  *
  * Updated Feb 21, 2026 — Shopify App Store compliance
  */
-
-'use client';
 
 import { Suspense, useEffect } from 'react';
 import { useRouter } from 'next/navigation';

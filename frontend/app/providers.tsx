@@ -13,7 +13,8 @@ import {
   getErrorMessage,
   parseApiError,
 } from '@/lib/api/errors'
-import { ShopifyEmbeddedProvider } from '@/lib/context/shopify-embedded'
+
+// @ts-expect-error CSS imports handled by Next.js, not TS
 import '@rainbow-me/rainbowkit/styles.css'
 
 interface ProvidersProps {
@@ -113,9 +114,7 @@ export function Providers({ children }: ProvidersProps) {
             appName: 'ActualPrice',
           }}
         >
-          <ShopifyEmbeddedProvider>
-            {children}
-          </ShopifyEmbeddedProvider>
+          {children}
           <Toaster />
           <ReactQueryDevtools initialIsOpen={false} />
         </RainbowKitProvider>
