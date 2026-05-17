@@ -1,23 +1,26 @@
 """
 Market Intelligence API Routes
 
-Public demo endpoints for DeveloperWeek 2026 Hackathon - You.com Challenge Track.
-No authentication required - this is a public demo.
+Multi-agent market position analysis powered by You.com (search) + Gemini (synthesis).
+Wired into the (dashboard)/analytics/market/ page — JWT auth required to prevent
+unauthenticated callers from draining the paid You.com API quota.
 
 Endpoints:
-- POST /api/v1/market-intelligence/analyze - Streaming multi-agent analysis via SSE
-- GET  /api/v1/market-intelligence/analyze - Same as POST (easy browser/curl testing)
-- GET  /api/v1/market-intelligence/health  - Health check for demo
+- POST /api/v1/market-intelligence/analyze - Streaming multi-agent analysis via SSE (auth required)
+- GET  /api/v1/market-intelligence/analyze - Same as POST, query-param variant (auth required)
+- GET  /api/v1/market-intelligence/health  - Health check (public)
 """
 
 import json
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.config import settings
+from core.deps import get_current_user
 from core.logging import get_logger
+from models.user import User
 from services.market_intelligence import (
     IntelligenceRequest,
     MarketIntelligencePipeline,
@@ -25,7 +28,7 @@ from services.market_intelligence import (
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/market-intelligence", tags=["Market Intelligence Demo"])
+router = APIRouter(prefix="/market-intelligence", tags=["Market Intelligence"])
 
 
 # =============================================================================
@@ -88,16 +91,16 @@ async def generate_sse_stream(request: IntelligenceRequest):
 @router.get("/health", response_model=IntelligenceHealthResponse)
 async def intelligence_health_check():
     """
-    Health check for the Market Intelligence demo.
+    Health check for the Market Intelligence service.
 
-    Verifies that You.com and Gemini APIs are configured.
+    Verifies that You.com and Gemini APIs are configured. Public — no auth.
     """
     youcom_ok = bool(getattr(settings, "YOUCOM_API_KEY", None))
     gemini_ok = bool(settings.GEMINI_API_KEY)
     demo_ready = youcom_ok  # Gemini is optional (fallback exists)
 
     if demo_ready:
-        msg = "Market Intelligence demo is ready!"
+        msg = "Market Intelligence is ready."
         if not gemini_ok:
             msg += " (Gemini not configured — using heuristic fallback)"
     else:
@@ -113,7 +116,10 @@ async def intelligence_health_check():
 
 
 @router.post("/analyze")
-async def analyze_market_streaming(body: IntelligenceQueryRequest):
+async def analyze_market_streaming(
+    body: IntelligenceQueryRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Analyze a product's market position with streaming multi-agent response.
 
@@ -122,13 +128,13 @@ async def analyze_market_streaming(body: IntelligenceQueryRequest):
     2. Analyst synthesizes market position via Gemini
     3. Strategist recommends optimal price with confidence score
 
-    Returns Server-Sent Events (SSE) stream.
+    Returns Server-Sent Events (SSE) stream. Requires authentication.
     """
     youcom_key = getattr(settings, "YOUCOM_API_KEY", None)
     if not youcom_key:
         raise HTTPException(
             status_code=503,
-            detail="Market Intelligence demo not available — YOUCOM_API_KEY not configured.",
+            detail="Market Intelligence not available — YOUCOM_API_KEY not configured.",
         )
 
     request = IntelligenceRequest(
@@ -141,6 +147,7 @@ async def analyze_market_streaming(body: IntelligenceQueryRequest):
 
     logger.info(
         "Starting market intelligence analysis",
+        user_id=str(current_user.id),
         product=body.product_name,
         price=body.current_price,
         brand=body.brand,
@@ -164,18 +171,20 @@ async def analyze_market_streaming_get(
     current_price: float | None = Query(default=None, gt=0, description="Your current price"),
     brand: str | None = Query(default=None, max_length=100, description="Brand name"),
     category: str | None = Query(default=None, max_length=100, description="Product category"),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    GET version of /analyze for easy browser and curl testing.
+    GET version of /analyze for easy browser and curl testing. Requires authentication.
 
     Example:
-        curl -N "http://localhost:8000/api/v1/market-intelligence/analyze?product_name=Nike+Air+Max+90&current_price=130"
+        curl -N -H "Authorization: Bearer <jwt>" \\
+            "http://localhost:8000/api/v1/market-intelligence/analyze?product_name=Nike+Air+Max+90&current_price=130"
     """
     youcom_key = getattr(settings, "YOUCOM_API_KEY", None)
     if not youcom_key:
         raise HTTPException(
             status_code=503,
-            detail="Market Intelligence demo not available — YOUCOM_API_KEY not configured.",
+            detail="Market Intelligence not available — YOUCOM_API_KEY not configured.",
         )
 
     request = IntelligenceRequest(
@@ -183,6 +192,13 @@ async def analyze_market_streaming_get(
         current_price=current_price,
         brand=brand,
         category=category,
+    )
+
+    logger.info(
+        "Starting market intelligence analysis (GET)",
+        user_id=str(current_user.id),
+        product=product_name,
+        price=current_price,
     )
 
     return StreamingResponse(
@@ -194,3 +210,6 @@ async def analyze_market_streaming_get(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+    

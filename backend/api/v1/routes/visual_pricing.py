@@ -2,20 +2,33 @@
 Visual Pricing Intelligence API Routes
 
 Endpoints:
-- POST /api/v1/visual-pricing/analyze - Upload screenshot + get streaming analysis
-- POST /api/v1/visual-pricing/analyze-sync - Non-streaming version
-- GET /api/v1/visual-pricing/health - Health check for demo
+- POST /api/v1/visual-pricing/analyze       - Upload screenshot + streaming analysis (auth)
+- POST /api/v1/visual-pricing/analyze-sync  - Non-streaming version (auth)
+- WS   /api/v1/visual-pricing/ws/analyze    - WebSocket variant (auth via ?token= or cookie)
+- GET  /api/v1/visual-pricing/health        - Health check (public)
 """
 
 import contextlib
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.deps import get_current_user
 from core.logging import get_logger
+from core.security import decode_access_token
 from models.user import User
 from services.ai_trend_analysis import (
     AgentMessage,
@@ -117,6 +130,36 @@ async def generate_sse_stream(
 
 
 # =============================================================================
+# WS AUTH HELPER
+# =============================================================================
+# Mirrors _authenticate_websocket in api/v1/routes/websockets.py. Worth deduping
+# into a shared core/ws_auth.py module once a third WS endpoint needs it — for
+# now, keeping it inline avoids touching the recently-shipped websockets.py file.
+
+
+async def _authenticate_websocket(websocket: WebSocket, token: str | None) -> str | None:
+    """Validate JWT on the WebSocket handshake. Returns user_id if authenticated, None otherwise.
+
+    Auth resolution order:
+      1. ``?token=<jwt>`` query param (App Bridge / non-browser clients)
+      2. ``ssp_access_token`` cookie (regular browser flow)
+    """
+    if not token:
+        token = websocket.cookies.get("ssp_access_token")
+
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing authentication token")
+        return None
+
+    payload = decode_access_token(token)
+    if payload is None or payload.get("sub") is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid or expired token")
+        return None
+
+    return str(payload["sub"])
+
+
+# =============================================================================
 # ENDPOINTS
 # =============================================================================
 
@@ -126,7 +169,7 @@ async def demo_health_check():
     """
     Health check for the Visual Pricing demo.
 
-    Verifies that Gemini 3 is available and the demo is ready.
+    Verifies that Gemini 3 is available and the demo is ready. Public — no auth.
     """
     from services.ai_trend_analysis import ai_clients
 
@@ -267,16 +310,26 @@ async def analyze_competitor_sync(
 
 
 @router.websocket("/ws/analyze")
-async def analyze_websocket(websocket: WebSocket):
+async def analyze_websocket(
+    websocket: WebSocket,
+    token: str | None = Query(default=None),
+):
     """
     WebSocket endpoint for real-time analysis.
 
+    Requires JWT authentication via either the `token` query parameter or the
+    `ssp_access_token` httpOnly cookie (mirrors the pattern in routes/websockets.py).
+
     Protocol:
-    1. Client connects
+    1. Client connects with auth (cookie or ?token=<jwt>)
     2. Client sends JSON: {"image_base64": "...", "image_type": "png", "product_name": "...", ...}
     3. Server streams AgentMessage objects
     4. Server sends {"done": true} when complete
     """
+    user_id = await _authenticate_websocket(websocket, token)
+    if not user_id:
+        return
+
     await websocket.accept()
 
     try:
@@ -325,7 +378,7 @@ async def analyze_websocket(websocket: WebSocket):
         await websocket.send_json({"done": True})
 
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
+        logger.info(f"WebSocket client disconnected (user_id={user_id})")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         with contextlib.suppress(BaseException):
@@ -333,3 +386,6 @@ async def analyze_websocket(websocket: WebSocket):
     finally:
         with contextlib.suppress(BaseException):
             await websocket.close()
+
+
+            
