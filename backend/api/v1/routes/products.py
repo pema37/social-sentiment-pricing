@@ -31,6 +31,14 @@ from models.user import User
 from schemas.common import PaginatedResponse
 from schemas.product import PlatformLink, PriceSuggestion, ProductCreate, ProductRead, ProductUpdate
 
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
+from sqlalchemy import update
+
+from models.price_history import PriceHistory
+from models.product import Product
+
 # Import services
 from services.products import ProductImportService, ProductService
 from services.products.import_service import ImportProductRow
@@ -449,3 +457,92 @@ async def generate_description(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PRICE HISTORY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class PriceHistoryEntry(BaseModel):
+    """Single row in a product's price-change audit trail."""
+
+    id: UUID
+    product_id: UUID
+    old_price: Decimal
+    new_price: Decimal
+    change_percent: Decimal
+    change_reason: str
+    recommendation_id: UUID | None
+    revenue_before: Decimal | None
+    revenue_after: Decimal | None
+    revenue_impact: Decimal | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{product_id}/price-history", response_model=list[PriceHistoryEntry])
+async def get_price_history(
+    request: Request,
+    product_id: UUID,
+    days: int | None = Query(default=None, ge=1, le=365, description="Limit to last N days"),
+    limit: int | None = Query(default=None, ge=1, le=1000, description="Max rows to return"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return the price change audit trail for a product owned by the current user."""
+    stmt = select(PriceHistory).where(
+        PriceHistory.user_id == current_user.id,
+        PriceHistory.product_id == product_id,
+    )
+    if days is not None:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        stmt = stmt.where(PriceHistory.created_at >= cutoff)
+    stmt = stmt.order_by(PriceHistory.created_at.desc())
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BULK AUTO-PRICING TOGGLE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class BulkAutoPricingRequest(BaseModel):
+    """Body for the bulk auto-pricing toggle."""
+
+    product_ids: list[UUID] = Field(..., min_length=1, max_length=1000)
+    enabled: bool
+
+
+class BulkAutoPricingResponse(BaseModel):
+    """Result of the bulk auto-pricing toggle."""
+
+    updated_count: int
+
+
+@router.post("/bulk/auto-pricing", response_model=BulkAutoPricingResponse)
+@limiter.limit(BULK_RATE_LIMIT)
+async def bulk_set_auto_pricing(
+    request: Request,
+    payload: BulkAutoPricingRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Enable or disable auto-pricing for a batch of the current user's products."""
+    # TODO: move into ProductService once a bulk-update method exists there;
+    # inlined for now to keep this PR focused on closing the frontend ghost endpoint.
+    stmt = (
+        update(Product)
+        .where(Product.user_id == current_user.id)
+        .where(Product.id.in_(payload.product_ids))
+        .values(auto_pricing_enabled=payload.enabled)
+    )
+    result = await session.execute(stmt)
+    await session.commit()
+    return BulkAutoPricingResponse(updated_count=result.rowcount or 0)
+
+
