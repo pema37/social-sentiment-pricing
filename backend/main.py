@@ -86,6 +86,11 @@ from api.v1.routes.crisis_detection import router as crisis_detection_router
 from api.v1.routes.launch_detection import router as launch_detection_router
 from api.v1.routes.market_trends_visual import router as market_trends_visual_router
 from api.v1.routes.market_intelligence import router as market_intelligence_router
+from api.v1.routes.prospect_audit import router as prospect_audit_router
+from api.v1.routes.prospect_analytics import router as prospect_analytics_router
+from api.v1.routes.retrospective_audit import router as retrospective_audit_router
+from api.v1.routes.audit_email import router as audit_email_router
+from api.v1.routes.price_check import router as price_check_router
 
 # ── Optional: x402 Agent API ──────────────────────────────
 try:
@@ -203,6 +208,12 @@ app.include_router(outcomes_router, prefix="/api/v1/outcomes", tags=["outcomes"]
 app.include_router(intelligence_router, prefix="/api/v1")
 
 # Gemini 3 Hackathon Demo Routes
+# Marketing funnel (public, rate-limited) + retrospective audit feature
+app.include_router(prospect_audit_router, prefix="/api/v1")
+app.include_router(prospect_analytics_router, prefix="/api/v1")
+app.include_router(retrospective_audit_router, prefix="/api/v1")
+app.include_router(audit_email_router, prefix="/api/v1")
+app.include_router(price_check_router, prefix="/api/v1")
 app.include_router(visual_pricing_router, prefix="/api/v1")
 app.include_router(crisis_detection_router, prefix="/api/v1")
 app.include_router(launch_detection_router, prefix="/api/v1")
