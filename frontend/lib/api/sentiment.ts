@@ -4,7 +4,6 @@ import type {
   AnalyzeRequest,
   AnalyzeResponse,
   PaginatedMentions,
-  SocialMention,
   AIStatusResponse,
 } from '@/types';
 
@@ -38,22 +37,9 @@ export const sentimentApi = {
   getMentions: (productId: string, params?: { page?: number; page_size?: number }) =>
     api.get<PaginatedMentions>(`/api/v1/sentiment/mentions/${productId}`, params),
 
-  // Get a single mention
-  getMention: (mentionId: string) =>
-    api.get<SocialMention>(`/api/v1/sentiment/mentions/detail/${mentionId}`),
-
-  // Manually add a mention
-  addMention: (data: {
-    product_id: string;
-    content: string;
-    source: string;
-    author?: string;
-    url?: string;
-  }) =>
-    api.post<SocialMention>('/api/v1/sentiment/mentions', data),
-
   // Check AI status
   getAIStatus: () =>
     api.get<AIStatusResponse>('/api/v1/sentiment/ai-status'),
 };
+
 
