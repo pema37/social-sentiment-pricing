@@ -1,16 +1,31 @@
-// frontend/lib/ws/client.ts
 /**
  * WebSocket Client Manager
- * 
+ *
  * Handles WebSocket connections for real-time updates.
  * Supports automatic reconnection, heartbeat, and multiple channels.
+ *
+ * Auth model:
+ *  - Regular browser flow: the backend sets the `ssp_access_token` httpOnly
+ *    cookie, which the browser sends automatically on the WS upgrade request.
+ *    No JS-side token handling needed.
+ *  - Shopify embedded / App Bridge flow: the bearer is held in JS memory by
+ *    `lib/auth/token.ts`. It is attached as `?token=<jwt>` on the handshake URL
+ *    and re-resolved on every (re)connect, so token rotation is picked up.
  */
+
+import { getBearerToken } from '@/lib/auth/token';
 
 type MessageHandler = (data: unknown) => void;
 type ConnectionHandler = () => void;
 
 interface WebSocketClientOptions {
-  url: string;
+  /**
+   * The WS URL to connect to. May be a string (resolved once at construction)
+   * or a thunk (resolved on every connect — use this when the auth bearer or
+   * any other URL component can change between reconnects, e.g. App Bridge
+   * session token rotation).
+   */
+  url: string | (() => string);
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   heartbeatInterval?: number;
@@ -18,7 +33,7 @@ interface WebSocketClientOptions {
 
 export class WebSocketClient {
   private ws: WebSocket | null = null;
-  private url: string;
+  private url: string | (() => string);
   private reconnectInterval: number;
   private maxReconnectAttempts: number;
   private heartbeatInterval: number;
@@ -51,7 +66,8 @@ export class WebSocketClient {
     this.isIntentionallyClosed = false;
 
     try {
-      this.ws = new WebSocket(this.url);
+      const resolvedUrl = typeof this.url === 'function' ? this.url() : this.url;
+      this.ws = new WebSocket(resolvedUrl);
       this.setupEventListeners();
     } catch (error) {
       console.error('[WS] Connection error:', error);
@@ -229,27 +245,50 @@ export class WebSocketClient {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Factory functions for creating channel-specific clients
+// URL helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getWebSocketBaseUrl(): string {
   if (typeof window === 'undefined') {
     return '';
   }
-  
+
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  
+
   // Convert http(s) to ws(s)
   return apiUrl.replace(/^http/, 'ws');
 }
 
 /**
+ * Build the full WS URL for a channel.
+ *
+ * - Path: backend mounts the WS router under `/api/v1` (see backend/main.py).
+ * - Auth:
+ *     • Shopify embedded / App Bridge → bearer is in JS memory; attach as `?token=`.
+ *     • Regular browser flow → rely on the `ssp_access_token` httpOnly cookie,
+ *       which the browser sends automatically on the upgrade request.
+ *
+ * Re-evaluated on every (re)connect via the thunk passed into WebSocketClient.
+ */
+function buildChannelUrl(channel: string): string {
+  const baseUrl = getWebSocketBaseUrl();
+  const path = `/api/v1/ws/${channel}`;
+  const bearer = getBearerToken();
+  return bearer
+    ? `${baseUrl}${path}?token=${encodeURIComponent(bearer)}`
+    : `${baseUrl}${path}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Factory functions for creating channel-specific clients
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
  * Create alerts WebSocket client
  */
 export function createAlertsClient(): WebSocketClient {
-  const baseUrl = getWebSocketBaseUrl();
   return new WebSocketClient({
-    url: `${baseUrl}/ws/alerts`,
+    url: () => buildChannelUrl('alerts'),
   });
 }
 
@@ -257,9 +296,8 @@ export function createAlertsClient(): WebSocketClient {
  * Create prices WebSocket client
  */
 export function createPricesClient(): WebSocketClient {
-  const baseUrl = getWebSocketBaseUrl();
   return new WebSocketClient({
-    url: `${baseUrl}/ws/prices`,
+    url: () => buildChannelUrl('prices'),
   });
 }
 
@@ -267,9 +305,8 @@ export function createPricesClient(): WebSocketClient {
  * Create sentiment WebSocket client for a specific product
  */
 export function createSentimentClient(productId: string): WebSocketClient {
-  const baseUrl = getWebSocketBaseUrl();
   return new WebSocketClient({
-    url: `${baseUrl}/ws/sentiment/${productId}`,
+    url: () => buildChannelUrl(`sentiment/${productId}`),
   });
 }
 

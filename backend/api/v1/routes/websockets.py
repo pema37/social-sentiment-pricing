@@ -1,9 +1,12 @@
-# backend/api/v1/routes/websockets.py
 """
 WebSocket endpoint handlers.
 
-All endpoints require JWT authentication via a ``token`` query parameter
-on the WebSocket handshake URL (e.g. ``/ws/prices?token=<jwt>``).
+All endpoints require JWT authentication. Auth is resolved from either:
+  - the ``token`` query parameter on the handshake URL
+    (e.g. ``/ws/prices?token=<jwt>`` — used by App Bridge / non-browser
+    clients that hold the bearer in JS memory), or
+  - the ``ssp_access_token`` httpOnly cookie, which the browser sends
+    automatically on the upgrade request (regular browser flow).
 """
 
 import json
@@ -20,7 +23,15 @@ router = APIRouter()
 
 
 async def _authenticate_websocket(websocket: WebSocket, token: str | None) -> str | None:
-    """Validate JWT on the WebSocket handshake. Returns user_id if authenticated, None otherwise."""
+    """Validate JWT on the WebSocket handshake. Returns user_id if authenticated, None otherwise.
+
+    Auth resolution order:
+      1. ``?token=<jwt>`` query param (App Bridge / non-browser clients)
+      2. ``ssp_access_token`` cookie (regular browser flow)
+    """
+    if not token:
+        token = websocket.cookies.get("ssp_access_token")
+
     if not token:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing authentication token")
         return None
@@ -122,3 +133,7 @@ async def websocket_sentiment(websocket: WebSocket, product_id: str, token: str 
                 await manager.send_personal(websocket, {"error": "Invalid JSON"})
     except WebSocketDisconnect:
         manager.disconnect_sentiment(websocket, product_id, user_id)
+
+
+
+        
