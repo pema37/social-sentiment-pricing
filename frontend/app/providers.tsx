@@ -14,7 +14,6 @@ import {
   parseApiError,
 } from '@/lib/api/errors'
 
-// @ts-expect-error CSS imports handled by Next.js, not TS
 import '@rainbow-me/rainbowkit/styles.css'
 
 interface ProvidersProps {
