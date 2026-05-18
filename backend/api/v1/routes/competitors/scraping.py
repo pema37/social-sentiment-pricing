@@ -95,37 +95,3 @@ async def scrape_competitor_price(
     )
 
 
-@router.get("/products/{competitor_product_id}/history", response_model=CompetitorPriceHistoryListResponse)
-async def get_price_history(
-    request: Request,
-    competitor_product_id: uuid_lib.UUID,
-    days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Get price history for a competitor product."""
-    result = await db.execute(
-        select(CompetitorProduct)
-        .join(Product)
-        .where(CompetitorProduct.id == competitor_product_id)
-        .where(Product.user_id == current_user.id)
-    )
-    cp = result.scalars().first()
-
-    if not cp:
-        raise HTTPException(status_code=404, detail="Competitor product not found")
-
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-
-    hist_result = await db.execute(
-        select(CompetitorPriceHistory)
-        .where(CompetitorPriceHistory.competitor_product_id == competitor_product_id)
-        .where(CompetitorPriceHistory.observed_at >= cutoff)
-        .order_by(CompetitorPriceHistory.observed_at.desc())
-    )
-    history = hist_result.scalars().all()
-
-    return CompetitorPriceHistoryListResponse(
-        items=history,
-        total=len(history),
-    )

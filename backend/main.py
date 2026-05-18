@@ -71,7 +71,6 @@ from api.v1.routes.support import router as support_router
 from api.v1.routes.market_trends import router as market_trends_router
 from api.v1.routes.trend_analysis import router as trend_analysis_router
 from api.v1.routes.diagnostic import router as diagnostic_router
-from api.v1.routes.products_import import router as products_import_router
 from api.v1.routes.product_sync import router as product_sync_router, import_router as product_sync_import_router
 
 # Intelligence Environment — standalone at /api/v1/outcomes
@@ -183,7 +182,6 @@ app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
-app.include_router(products_import_router, prefix="/api/v1")
 app.include_router(product_sync_router, prefix="/api/v1")
 app.include_router(product_sync_import_router, prefix="/api/v1")
 app.include_router(pricing_router, prefix="/api/v1")
