@@ -12,9 +12,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.deps import get_current_user
 from core.logging import get_logger
 from db.session import get_session
+from core.deps import require_admin
 
 logger = get_logger(__name__)
 
@@ -150,8 +150,8 @@ async def detailed_health_check(session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/test-alert")
-async def test_alert(severity: str = "info", current_user=Depends(get_current_user)):
-    """Test alerting system (dev only). Requires authentication."""
+async def test_alert(severity: str = "info", current_user=Depends(require_admin)):
+    """Test alerting system (dev only, admin only). Requires admin role."""
     if settings.ENVIRONMENT == "production":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
