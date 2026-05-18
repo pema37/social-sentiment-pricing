@@ -205,40 +205,77 @@ async def start_heartbeat() -> None:
     """
     await manager.heartbeat()
 
-
 # ───────────────────── Broadcast Helpers ───────────────────── #
+#
+# These helpers route through the Redis-backed ws_bridge instead of calling
+# manager.broadcast(...) directly. That makes them safe to call from any
+# process (Celery workers as well as FastAPI request handlers): ConnectionManager
+# holds WS clients in an in-process dict, so only the FastAPI process can
+# dispatch to live clients. The subscriber task (started in main.py lifespan)
+# receives envelopes from Redis and calls manager.broadcast / .broadcast_sentiment.
+#
+# Helpers are best-effort: Redis errors are logged and swallowed so a transient
+# pub/sub failure never breaks the upstream operation (a price apply must not
+# fail just because a WS broadcast couldn't go out).
+
+
+async def _publish_best_effort(envelope: dict) -> None:
+    """Publish via the WS bridge, swallowing Redis errors. Broadcasts are
+    fire-and-forget; never propagate failure to the caller."""
+    # Deferred import to avoid circular dependency with ws_bridge.
+    from core.ws_bridge import publish
+    try:
+        await publish(envelope)
+    except Exception:
+        logger.exception("ws broadcast publish failed (swallowed)")
 
 
 async def broadcast_price_update(product_id: str, data: dict, user_id: str):
     """Call from pricing service when prices change."""
-    await manager.broadcast(
-        "prices",
-        {"type": "price_update", "product_id": product_id, "data": data},
-        user_id,
-    )
+    await _publish_best_effort({
+        "method": "broadcast",
+        "kwargs": {
+            "channel": "prices",
+            "message": {"type": "price_update", "product_id": product_id, "data": data},
+            "user_id": user_id,
+        },
+    })
 
 
 async def broadcast_alert(alert_data: dict, user_id: str):
     """Call from alert service when new alerts are created."""
-    await manager.broadcast("alerts", {"type": "new_alert", "data": alert_data}, user_id)
+    await _publish_best_effort({
+        "method": "broadcast",
+        "kwargs": {
+            "channel": "alerts",
+            "message": {"type": "new_alert", "data": alert_data},
+            "user_id": user_id,
+        },
+    })
 
 
 async def broadcast_sentiment_update(product_id: str, sentiment_data: dict, user_id: str):
     """Call from sentiment service when new analysis is complete."""
-    await manager.broadcast_sentiment(
-        product_id,
-        {"type": "sentiment_update", "product_id": product_id, "data": sentiment_data},
-        user_id,
-    )
+    await _publish_best_effort({
+        "method": "broadcast_sentiment",
+        "kwargs": {
+            "product_id": product_id,
+            "message": {"type": "sentiment_update", "product_id": product_id, "data": sentiment_data},
+            "user_id": user_id,
+        },
+    })
 
 
 async def broadcast_mention_received(product_id: str, mention_data: dict, user_id: str):
     """Call when a new social mention is received."""
-    await manager.broadcast_sentiment(
-        product_id,
-        {"type": "new_mention", "product_id": product_id, "data": mention_data},
-        user_id,
-    )
+    await _publish_best_effort({
+        "method": "broadcast_sentiment",
+        "kwargs": {
+            "product_id": product_id,
+            "message": {"type": "new_mention", "product_id": product_id, "data": mention_data},
+            "user_id": user_id,
+        },
+    })
 
 
 
