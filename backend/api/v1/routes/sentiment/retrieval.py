@@ -1,6 +1,7 @@
 # backend/api/v1/routes/sentiment/retrieval.py
 """Sentiment retrieval endpoints."""
 
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -21,6 +22,15 @@ from schemas.sentiment import (
 )
 
 router = APIRouter()
+
+
+def _compound_to_label(compound: Decimal) -> str:
+    """Map a VADER compound score to a sentiment label using standard thresholds."""
+    if compound >= Decimal("0.05"):
+        return "positive"
+    if compound <= Decimal("-0.05"):
+        return "negative"
+    return "neutral"
 
 
 async def _verify_product_ownership(
@@ -54,13 +64,7 @@ async def get_sentiment(
     if not record:
         raise HTTPException(status_code=404, detail="Sentiment record not found")
 
-    return SentimentResponse(
-        sentiment_id=record.id,
-        sentiment_score=record.sentiment_score,
-        sentiment_label=record.sentiment_label,
-        confidence=record.confidence,
-        emotions=record.emotions,
-    )
+    return SentimentResponse.model_validate(record, from_attributes=True)
 
 
 @router.get("/product/{product_id}", response_model=PaginatedResponse[SentimentResponse])
@@ -87,13 +91,7 @@ async def get_product_sentiments(
     records = list(result.scalars().all())
 
     items = [
-        SentimentResponse(
-            sentiment_id=r.id,
-            sentiment_score=r.sentiment_score,
-            sentiment_label=r.sentiment_label,
-            confidence=r.confidence,
-            emotions=r.emotions,
-        )
+        SentimentResponse.model_validate(r, from_attributes=True)
         for r in records
     ]
 
@@ -119,22 +117,26 @@ async def get_product_sentiment_summary(
     await _verify_product_ownership(product_id, current_user.id, session)
 
     result = await session.execute(select(Sentiment).where(Sentiment.product_id == product_id))
-    records = result.scalars().all()
+    records = list(result.scalars().all())
 
     if not records:
         raise HTTPException(status_code=404, detail="No sentiment data found")
 
-    scores = [r.sentiment_score for r in records]
+    scores = [r.compound_score for r in records]
     avg_score = sum(scores) / len(scores)
 
-    label_counts = {}
+    label_counts: dict[str, int] = {"positive": 0, "negative": 0, "neutral": 0}
     for r in records:
-        label_counts[r.sentiment_label] = label_counts.get(r.sentiment_label, 0) + 1
+        label_counts[_compound_to_label(r.compound_score)] += 1
 
     return SentimentSummary(
         product_id=product_id,
         total_records=len(records),
+        average_compound=avg_score,
         average_score=avg_score,
+        positive_count=label_counts["positive"],
+        negative_count=label_counts["negative"],
+        neutral_count=label_counts["neutral"],
         label_distribution=label_counts,
     )
 
@@ -203,3 +205,6 @@ async def get_product_mentions(
         page_size=pagination.page_size,
         total_pages=total_pages,
     )
+
+
+
