@@ -155,3 +155,9 @@ STATE.md
 *.bak
 
 
+
+# Lockfile guard — canonical lockfile is frontend/package-lock.json only.
+# Don't track yarn.lock or root-level package-lock.json (they break Vercel).
+/package-lock.json
+/yarn.lock
+/frontend/yarn.lock
