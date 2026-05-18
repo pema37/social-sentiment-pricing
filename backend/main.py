@@ -14,6 +14,10 @@ FIXED (2026-02-19): Made x402 and autonomous pipeline imports conditional
 FIXED (2026-03-29): AP-031 — removed bare os.getenv() call, use settings.PAY_TO_ADDRESS
 FIXED (2026-03-29): AP-032 — WebSocket heartbeat started in lifespan to prune
                     stale connections every 30s.
+NEW (2026-05-17): WS event bridge subscriber added to lifespan. Allows
+                  Celery workers (and any out-of-process producers) to
+                  reach in-process WS connections via Redis pub/sub.
+                  See backend/core/ws_bridge.py.
 """
 
 import asyncio
@@ -122,12 +126,22 @@ async def lifespan(app: FastAPI):
     from core.websocket import start_heartbeat
     heartbeat_task = asyncio.create_task(start_heartbeat())
 
+    # WS event bridge: subscribes to Redis pub/sub and dispatches
+    # broadcast envelopes to the in-process ConnectionManager. Required
+    # so producers in Celery workers can reach connected WS clients.
+    from core.ws_bridge import subscribe_loop
+    ws_bridge_task = asyncio.create_task(subscribe_loop())
+
     yield
 
-    # Clean shutdown: cancel the heartbeat and wait for it to finish.
-    heartbeat_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await heartbeat_task
+    # Clean shutdown: cancel all background tasks first, then await them.
+    # Two-pass pattern (cancel all, then await all) so one slow task
+    # doesn't delay cancellation of the others.
+    for task in (heartbeat_task, ws_bridge_task):
+        task.cancel()
+    for task in (heartbeat_task, ws_bridge_task):
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
     logger.info("Application shutting down")
 
