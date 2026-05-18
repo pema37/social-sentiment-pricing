@@ -10,14 +10,16 @@ NEW (2025-01-29): Added Visual Pricing Intelligence demo for Gemini 3 Hackathon
 NEW (2025-01-30): Added Crisis Detection, Launch Detection, Market Trends Visual demos
 FIXED (2025-01-30): Added products_import router - CSV import was returning 404
 NEW (2026-02-18): Phase 5 — Intelligence Environment dashboard routes
-FIXED (2026-02-19): Made x402 and autonomous pipeline imports conditional
-FIXED (2026-03-29): AP-031 — removed bare os.getenv() call, use settings.PAY_TO_ADDRESS
+FIXED (2026-02-19): Made autonomous pipeline imports conditional
 FIXED (2026-03-29): AP-032 — WebSocket heartbeat started in lifespan to prune
                     stale connections every 30s.
 NEW (2026-05-17): WS event bridge subscriber added to lifespan. Allows
                   Celery workers (and any out-of-process producers) to
                   reach in-process WS connections via Redis pub/sub.
                   See backend/core/ws_bridge.py.
+REMOVED (2026-05-17): x402 payment middleware and /api/v1/agent endpoints
+                      (SF Agentic Commerce hackathon dead code). Drops
+                      fastapi_x402 dependency and PAY_TO_ADDRESS setting.
 """
 
 import asyncio
@@ -39,13 +41,6 @@ from core.exception_handlers import (
     unhandled_exception_handler,
     database_exception_handler,
 )
-
-# ── Optional: x402 import ─────────────────────────────────
-try:
-    from fastapi_x402 import init_x402
-    HAS_X402 = True
-except ImportError:
-    HAS_X402 = False
 
 # Configure logging first
 configure_logging()
@@ -94,13 +89,6 @@ from api.v1.routes.prospect_analytics import router as prospect_analytics_router
 from api.v1.routes.retrospective_audit import router as retrospective_audit_router
 from api.v1.routes.audit_email import router as audit_email_router
 from api.v1.routes.price_check import router as price_check_router
-
-# ── Optional: x402 Agent API ──────────────────────────────
-try:
-    from api.v1.routes.x402_agent_api import router as x402_agent_router
-    HAS_X402_ROUTER = True
-except ImportError:
-    HAS_X402_ROUTER = False
 
 # ── Optional: Autonomous pipeline ─────────────────────────
 try:
@@ -154,11 +142,6 @@ app = FastAPI(
     redoc_url="/redoc",
     redirect_slashes=False,
 )
-
-# ── Optional: Initialize x402 payment middleware ──────────
-# AP-031: Use settings.PAY_TO_ADDRESS instead of bare os.getenv().
-if HAS_X402 and settings.PAY_TO_ADDRESS:
-    init_x402(app, network="base-sepolia")
 
 # ───────────────────── Exception Handlers ───────────────────── #
 app.state.limiter = limiter
@@ -232,10 +215,6 @@ app.include_router(launch_detection_router, prefix="/api/v1")
 app.include_router(market_trends_visual_router, prefix="/api/v1")
 app.include_router(market_intelligence_router, prefix="/api/v1")
 
-# ── Optional: x402 Agent API Routes ───────────────────────
-if HAS_X402_ROUTER:
-    app.include_router(x402_agent_router)  # /api/v1/agent/*
-
 # ── Optional: Autonomous pipeline Routes ──────────────────
 if HAS_AUTONOMOUS:
     app.include_router(autonomous_pipeline_router, prefix="/api/v1")
@@ -249,8 +228,6 @@ async def root():
         "version": settings.APP_VERSION,
         "status": "running",
         "docs": "/docs",
-        "x402_enabled": HAS_X402_ROUTER,
     }
-
 
 

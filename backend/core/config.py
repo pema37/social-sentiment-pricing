@@ -192,8 +192,8 @@ class Settings(BaseSettings):
     # ===================
     # x402 Payment Middleware
     # ===================
+   
     PAY_TO_ADDRESS: str | None = None
-
 
 settings = Settings()
 
